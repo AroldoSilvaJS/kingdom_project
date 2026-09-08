@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%]">
+    <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-2">
+        <h2 class="text-xl font-semibold text-vip-gold">Mis Idols</h2>
+        <a href="/" class="text-sm text-vip-text/60 hover:text-vip-text">⬅ Volver</a>
+    </div>
+
+    {% if idols %}
+        <div class="flex flex-col gap-3">
+            {% for idol in idols %}
+            <div class="bg-vip-base border border-vip-gold/20 p-4 rounded-lg flex justify-between items-center">
+                
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-full border-2 border-vip-gold overflow-hidden bg-vip-panel flex-shrink-0">
+                        {% if idol.photo %}
+                            <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover">
+                        {% else %}
+                            <span class="w-full h-full flex items-center justify-center text-vip-gold text-[10px] text-center leading-tight">Sin<br>Foto</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <h3 class="font-semibold text-vip-gold">{{ idol.stage_name }}</h3>
+                        <p class="text-xs text-vip-text/70">{{ idol.group|default:"Solista" }}</p>
+                    </div>
+                </div>
+
+                <!-- Modificado: Añadimos botones de acción -->
+                <div class="text-right text-xs flex flex-col items-end gap-2">
+                    <div>
+                        <p>⭐ {{ idol.rating }}</p>
+                        <p class="text-vip-text/50">Servicios: {{ idol.services_done }}</p>
+                    </div>
+                    <div class="flex gap-3 mt-1">
+                        <!-- Botones Editar y Eliminar -->
+                        <button onclick="goToEdit({{ idol.id }})" class="text-vip-gold hover:text-yellow-400 text-base" title="Editar">✏️</button>
+                        <button onclick="goToDelete({{ idol.id }})" class="text-red-500 hover:text-red-400 text-base" title="Eliminar">🗑️</button>
+                    </div>
+                </div>
+
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="text-center text-sm text-vip-text/60 py-4">Aún no tienes Idols registradas.</p>
+    {% endif %}
+
+    {% if can_add_more %}
+        <button onclick="goToCreate()" class="mt-4 w-full bg-vip-gold text-vip-base font-bold py-2 rounded hover:bg-yellow-600 transition-colors">
+            + Registrar Nueva Idol
+        </button>
+    {% else %}
+        <p class="text-center text-xs text-red-400 mt-4">Has alcanzado el límite de 3 Idols.</p>
+    {% endif %}
+</div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    
+    // Creamos una única función que nos devuelve tanto el ID como el Nombre procesado
+    function getTgData() {
+        const user = tg.initDataUnsafe?.user;
+        const tgId = user ? user.id : '123456789';
+        
+        let tgName = 'Roller VIP';
+        if (user) {
+            tgName = user.username ? `@${user.username}` : user.first_name;
+        }
+        
+        // Retornamos el string ya formateado para pegarlo al final de las URLs
+        return `tg_id=${tgId}&tg_username=${encodeURIComponent(tgName)}`;
+    }
+
+    // Ahora las funciones quedan súper limpias y apuntando a las rutas correctas
+    function goToCreate() {
+        // Fíjate que aquí apunta a /idols/create/
+        window.location.href = `/idols/create/?${getTgData()}`;
+    }
+
+    function goToEdit(idolId) {
+        window.location.href = `/idols/edit/${idolId}/?${getTgData()}`;
+    }
+
+    function goToDelete(idolId) {
+        window.location.href = `/idols/delete/${idolId}/?${getTgData()}`;
+    }
+</script>
+{% endblock %}

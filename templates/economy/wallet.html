@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%]">
+    <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-2">
+        <h2 class="text-xl font-semibold text-vip-gold">Mi Bóveda</h2>
+        <a href="/" class="text-sm text-vip-text/60 hover:text-vip-text">⬅ Menú</a>
+    </div>
+
+    <!-- Tarjeta de Saldo -->
+    <div class="bg-gradient-to-br from-[#1E112A] to-[#130A1F] border border-vip-gold p-6 rounded-xl flex flex-col items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.1)] mb-4">
+        <p class="text-sm text-vip-text/70 uppercase tracking-widest mb-1">Saldo Disponible</p>
+        <div class="flex items-center gap-2">
+            <span class="text-3xl">🪙</span>
+            <span class="text-4xl font-bold text-vip-gold tracking-wider">{{ wallet.balance|default:"0" }}</span>
+        </div>
+    </div>
+
+    <!-- Botones a futuros módulos -->
+    <div class="grid grid-cols-2 gap-3">
+        <!-- Estos botones los conectaremos en los próximos pasos -->
+      <button onclick="goToCasino()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 cursor-pointer">
+            <span class="text-2xl">🎰</span>
+            <span class="text-xs font-semibold">Ir al Casino</span>
+        </button>
+        
+        <button class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1">
+            <span class="text-2xl">🛍️</span>
+            <span class="text-xs font-semibold">Boutique VIP</span>
+        </button>
+    </div>
+</div>
+
+<script>
+    function goToCasino() {
+        const tg = window.Telegram.WebApp;
+        const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '123456789';
+        window.location.href = `/economy/casino/?tg_id=${tgId}`;
+    }
+</script>
+{% endblock %}

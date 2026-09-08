@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%]">
+    <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-2">
+        <!-- Título dinámico -->
+        <h2 class="text-xl font-semibold text-vip-gold">
+            {% if idol %}Editar Ficha{% else %}Nueva Ficha{% endif %}
+        </h2>
+        <a href="javascript:history.back()" class="text-sm text-vip-text/60 hover:text-vip-text">Cancelar</a>
+    </div>
+
+    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-4">
+        {% csrf_token %}
+        <input type="hidden" name="tg_id" id="hidden_tg_id" value="{{ tg_id }}">
+
+        <div>
+            <label class="block text-sm text-vip-gold mb-1">Nombre Artístico</label>
+            <!-- value="{{ idol.stage_name }}" rellena el campo si estamos editando -->
+            <input type="text" name="stage_name" value="{{ idol.stage_name|default:'' }}" required 
+                   class="w-full bg-vip-base border border-vip-gold/30 rounded p-2 text-vip-text focus:outline-none focus:border-vip-gold">
+        </div>
+
+        <div>
+            <label class="block text-sm text-vip-gold mb-1">Grupo (Opcional)</label>
+            <input type="text" name="group" value="{{ idol.group|default:'' }}" placeholder="Ej. BLACKPINK o dejar vacío" 
+                   class="w-full bg-vip-base border border-vip-gold/30 rounded p-2 text-vip-text focus:outline-none focus:border-vip-gold">
+        </div>
+
+        <div>
+            <label class="block text-sm text-vip-gold mb-1">Biografía / Presentación</label>
+            <textarea name="bio" rows="3" required
+                      class="w-full bg-vip-base border border-vip-gold/30 rounded p-2 text-vip-text focus:outline-none focus:border-vip-gold resize-none">{{ idol.bio|default:'' }}</textarea>
+        </div>
+
+        <div>
+            <label class="block text-sm text-vip-gold mb-1">Foto de Perfil</label>
+            {% if idol and idol.photo %}
+                <p class="text-xs text-vip-text/70 mb-2">Ya tienes una foto. Sube otra solo si quieres cambiarla.</p>
+            {% endif %}
+            <input type="file" name="photo" accept="image/*"
+                   class="w-full bg-vip-base border border-vip-gold/30 rounded p-2 text-vip-text focus:outline-none focus:border-vip-gold file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-vip-gold file:text-vip-base hover:file:bg-yellow-600">
+        </div>
+
+        <button type="submit" class="mt-2 w-full bg-vip-gold text-vip-base font-bold py-2 rounded hover:bg-yellow-600 transition-colors">
+            {% if idol %}Guardar Cambios{% else %}Guardar Ficha{% endif %}
+        </button>
+    </form>
+</div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    if (!document.getElementById('hidden_tg_id').value) {
+        const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '123456789';
+        document.getElementById('hidden_tg_id').value = tgId;
+    }
+</script>
+{% endblock %}

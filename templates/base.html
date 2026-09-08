@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kingdom of Pleasure - VIP</title>
+    
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Script Oficial de Telegram WebApps -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <!-- Configuración personalizada de Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        vip: {
+                            base: '#0B0612',   /* Fondo mate oscuro */
+                            panel: '#130A1F',  /* Paneles */
+                            gold: '#D4AF37',   /* Detalles dorados */
+                            text: '#E2E0E5'    /* Blanco roto / Gris claro */
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Estilos extra para pulir la UI en móvil -->
+    <style>
+        body {
+            background-color: var(--tg-theme-bg-color, #0B0612);
+            color: var(--tg-theme-text-color, #E2E0E5);
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* Contenedor principal estilo VIP */
+        .vip-panel {
+            background-color: #130A1F;
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-vip-base text-vip-text min-h-screen font-sans antialiased flex flex-col items-center p-4">
+
+    <!-- Header / Logo -->
+    <header class="w-full max-w-md text-center py-6">
+        <h1 class="text-2xl font-light tracking-widest text-vip-gold uppercase border-b border-vip-gold/30 pb-2 inline-block">
+            Kingdom of Pleasure
+        </h1>
+    </header>
+
+    <!-- Contenedor Dinámico de Vistas -->
+    <main class="w-full max-w-md flex-1">
+        {% block content %}
+        <!-- Aquí inyectaremos el contenido de cada módulo -->
+        {% endblock %}
+    </main>
+
+    <script>
+        // Inicializar la WebApp de Telegram
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Expande la app a pantalla completa
+        tg.ready();
+    </script>
+</body>
+</html>

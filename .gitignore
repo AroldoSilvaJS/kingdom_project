@@ -1,0 +1,16 @@
+# Entornos Virtuales
+venv/
+env/
+
+# Archivos de caché de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos del sistema operativo
+.DS_Store
+
+# Nota: Normalmente aquí se ignoran 'db.sqlite3' y 'media/', 
+# pero como quieres seguir probando en casa con tus mismas 
+# Idols y fotos, dejaremos que se suban por esta vez.

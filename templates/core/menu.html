@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%]">
+    <!-- Le pusimos un ID al H2 para cambiarlo con JavaScript -->
+    <h2 id="username-display" class="text-xl font-semibold text-vip-gold text-center mb-2">Bienvenido, Invitado</h2>
+    
+    <p class="text-sm text-center text-vip-text/70 mb-6">
+        Selecciona tu destino dentro del Kingdom...
+    </p>
+    
+    <button onclick="window.location.href='/idols/gallery/'" class="w-full mb-2 bg-gradient-to-r from-vip-base to-[#1f1033] border border-vip-gold text-vip-gold py-4 rounded-lg hover:brightness-125 transition-all duration-300 font-bold flex items-center justify-center gap-3 shadow-[0_0_10px_rgba(212,175,55,0.2)]">
+        <span class="text-2xl">✨</span> 
+        <span class="tracking-wider">VER ELENCO (GALERÍA)</span>
+        <span class="text-2xl">✨</span>
+    </button>
+
+    <!-- Botones de Navegación -->
+    <button onclick="goToMisIdols()" class="w-full bg-vip-base border border-vip-gold/50 text-vip-gold py-3 rounded-lg hover:bg-vip-gold hover:text-vip-base transition-colors duration-300 font-medium flex items-center justify-center gap-2">
+        <span>🎭</span> Mis Idols
+    </button>
+    
+    <button onclick="goToWallet()" class="w-full bg-vip-base border border-vip-gold/50 text-vip-gold py-3 rounded-lg hover:bg-vip-gold hover:text-vip-base transition-colors duration-300 font-medium flex items-center justify-center gap-2">
+        <span>💰</span> Mi Bóveda VIP
+    </button>
+
+</div>
+
+<!-- Script para leer Telegram WebApp -->
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        // Objeto global de Telegram
+        const tg = window.Telegram.WebApp;
+        
+        // Si la app se abre dentro de Telegram, initDataUnsafe tendrá los datos
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            const firstName = tg.initDataUnsafe.user.first_name;
+            document.getElementById('username-display').innerText = `Bienvenido, ${firstName}`;
+        }
+    });
+
+function goToMisIdols() {
+        const tg = window.Telegram.WebApp;
+        const user = tg.initDataUnsafe?.user;
+        
+        const tgId = user ? user.id : '123456789';
+        
+        // Extraemos el @username, si no tiene, usamos su primer nombre
+        let tgName = 'Roller VIP';
+        if (user) {
+            tgName = user.username ? `@${user.username}` : user.first_name;
+        }
+        
+        // Lo enviamos por la URL (encodeURIComponent asegura que los caracteres especiales como el @ no rompan el link)
+        window.location.href = `/idols/?tg_id=${tgId}&tg_username=${encodeURIComponent(tgName)}`;
+    }
+
+function goToWallet() {
+        const tg = window.Telegram.WebApp;
+        const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '123456789';
+        window.location.href = `/economy/wallet/?tg_id=${tgId}`;
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%] text-center">
+    <h2 class="text-xl font-semibold text-red-500">¿Eliminar Ficha?</h2>
+    
+    <p class="text-sm text-vip-text mt-4">
+        Estás a punto de despedir a <strong class="text-vip-gold">{{ idol.stage_name }}</strong>. 
+    </p>
+    <p class="text-xs text-vip-text/70 mb-4">
+        Esta acción es permanente y se perderán sus estadísticas (Servicios y Calificación).
+    </p>
+
+    <form method="POST">
+        {% csrf_token %}
+        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+        
+        <div class="flex gap-4 w-full mt-4">
+            <a href="javascript:history.back()" class="w-1/2 bg-vip-base border border-vip-gold/50 text-vip-gold py-2 rounded font-medium hover:bg-vip-gold hover:text-vip-base transition-colors duration-300">
+                Cancelar
+            </a>
+            
+            <button type="submit" class="w-1/2 bg-red-600/20 border border-red-500 text-red-500 py-2 rounded font-medium hover:bg-red-600 hover:text-white transition-colors duration-300">
+                Sí, Eliminar
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
