@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%] max-w-md border border-vip-gold/50 rounded-2xl">
+    
+    <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-4">
+        <h2 class="text-xl font-bold text-vip-gold uppercase tracking-widest">Nuevo Post</h2>
+        <a href="{% url 'idols:social_feed' %}?tg_id={{ tg_id }}" class="text-sm text-vip-text/60 hover:text-vip-gold">⬅ Cancelar</a>
+    </div>
+
+    <!-- MUY IMPORTANTE: enctype="multipart/form-data" permite subir archivos -->
+    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-4">
+        {% csrf_token %}
+        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+        <!-- Elegir Idol -->
+        <div>
+            <label class="block text-xs text-vip-gold mb-1 uppercase">¿Quién publica?</label>
+            <select name="idol_id" required class="w-full bg-vip-base border border-vip-gold/50 rounded-lg p-3 text-vip-text focus:outline-none focus:border-vip-gold">
+                {% for idol in mis_idols %}
+                    <option value="{{ idol.id }}">{{ idol.stage_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Elegir Red Social -->
+        <div>
+            <label class="block text-xs text-vip-gold mb-1 uppercase">Destino</label>
+            <select name="network" id="network-select" required class="w-full bg-vip-base border border-vip-gold/50 rounded-lg p-3 text-vip-text focus:outline-none focus:border-vip-gold" onchange="togglePriceField()">
+                <option value="gram">📸 KingdomGram (Público y Gratis)</option>
+                <option value="fans">🔞 KingdomFans (VIP / Cobrar Oro)</option>
+            </select>
+        </div>
+
+        <!-- Precio (Oculto por defecto) -->
+        <div id="price-container" class="hidden">
+            <label class="block text-xs text-vip-gold mb-1 uppercase">Precio a cobrar (Oro)</label>
+            <input type="number" name="price" id="price-input" min="1" value="50" class="w-full bg-black/50 border border-vip-gold/50 rounded-lg p-3 text-vip-text text-xl focus:outline-none focus:border-vip-gold">
+        </div>
+
+        <!-- Subir Foto -->
+        <div>
+            <label class="block text-xs text-vip-gold mb-1 uppercase">Fotografía</label>
+            <input type="file" name="image" accept="image/*" required class="w-full bg-vip-base border border-vip-gold/50 rounded-lg p-2 text-sm text-vip-text file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-vip-gold file:text-black hover:file:bg-yellow-500 cursor-pointer">
+        </div>
+
+        <!-- Descripción -->
+        <div>
+            <label class="block text-xs text-vip-gold mb-1 uppercase">Descripción (Caption)</label>
+            <textarea name="caption" rows="3" required placeholder="Escribe algo atrevido o tierno..." class="w-full bg-vip-base border border-vip-gold/50 rounded-lg p-3 text-vip-text focus:outline-none focus:border-vip-gold resize-none"></textarea>
+        </div>
+
+        <button type="submit" class="w-full mt-2 bg-gradient-to-r from-vip-gold to-yellow-600 text-black font-bold py-4 rounded-xl hover:brightness-125 transition-all shadow-[0_4px_0_rgba(184,134,11,1)] active:translate-y-1 active:shadow-none uppercase tracking-widest text-sm">
+            🚀 Publicar
+        </button>
+    </form>
+</div>
+
+<script>
+    function togglePriceField() {
+        const network = document.getElementById('network-select').value;
+        const priceContainer = document.getElementById('price-container');
+        
+        if (network === 'fans') {
+            priceContainer.classList.remove('hidden');
+        } else {
+            priceContainer.classList.add('hidden');
+        }
+    }
+</script>
+{% endblock %}

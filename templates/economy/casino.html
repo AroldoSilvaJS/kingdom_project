@@ -1,71 +1,119 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%] text-center">
-    <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-2">
-        <h2 class="text-xl font-semibold text-vip-gold">Casino VIP</h2>
-        <a href="javascript:goToWallet()" class="text-sm text-vip-text/60 hover:text-vip-text">⬅ Bóveda</a>
+<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%] text-center border border-vip-gold/50 rounded-2xl">
+    
+    <div class="flex justify-between items-center mb-2 border-b border-vip-gold/30 pb-2">
+        <h2 class="text-xl font-bold text-vip-gold">Ruleta VIP (Dados)</h2>
+        <a href="/economy/wallet/?tg_id={{ tg_id }}" class="text-sm text-vip-text/60 hover:text-vip-text">⬅ Bóveda</a>
     </div>
 
-    <!-- Mostrar el Saldo Actual -->
-    <div class="bg-vip-base rounded p-3 mb-2 border border-vip-gold/20">
+    <div class="bg-vip-base rounded p-2 mb-2 border border-vip-gold/20">
         <p class="text-xs text-vip-text/70 uppercase">Tu Oro Disponible</p>
         <p class="text-2xl font-bold text-vip-gold">🪙 {{ wallet.balance }}</p>
     </div>
 
-    <!-- Mensajes de Error (si apuesta más de lo que tiene) -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="bg-red-900/50 border border-red-500 text-red-200 p-2 rounded text-sm mb-4">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
+    <!-- Zona de Animación del Dado -->
+    <div class="bg-[#1a0f2e] border-4 border-vip-gold p-6 rounded-xl shadow-[0_0_20px_rgba(212,175,55,0.3)] my-2 flex flex-col items-center justify-center min-h-[150px]">
+        <!-- Aquí es donde ocurrirá la magia -->
+        <div id="dice-icon" class="text-7xl drop-shadow-[0_0_15px_rgba(212,175,55,0.8)] transition-colors duration-300">🎲</div>
+    </div>
 
-    <!-- Resultados del Juego -->
-    {% if resultado == 'win' %}
-        <div class="bg-green-900/40 border border-green-500 p-4 rounded-lg mb-4 animate-pulse">
-            <h3 class="text-green-400 font-bold text-lg">¡GANASTE! 🎉</h3>
-            <p class="text-sm text-green-200">+ {{ ganancia }} de oro añadidos a tu bóveda.</p>
-        </div>
-    {% elif resultado == 'lose' %}
-        <div class="bg-red-900/40 border border-red-500 p-4 rounded-lg mb-4">
-            <h3 class="text-red-400 font-bold text-lg">PERDISTE 💀</h3>
-            <p class="text-sm text-red-200">- {{ ganancia }} de oro descontados.</p>
-        </div>
-    {% endif %}
+   <!-- Contenedor de Resultados (Oculto al inicio si hay animación) -->
+    <div id="result-box" class="hidden">
+        {% if resultado == 'win' %}
+            <div class="p-4 rounded-lg mb-4 bg-green-900/40 border border-green-500 text-green-400">
+                <h3 class="font-bold text-lg">¡GANASTE! 🎉</h3>
+                <p class="text-sm text-white/80">+ {{ ganancia }} de oro.</p>
+            </div>
+        {% elif resultado == 'lose' %}
+            <div class="p-4 rounded-lg mb-4 bg-red-900/40 border border-red-500 text-red-400">
+                <h3 class="font-bold text-lg">PERDISTE 💀</h3>
+                <p class="text-sm text-white/80">- {{ ganancia }} de oro.</p>
+            </div>
+        {% endif %}
+
+        <!-- Mensajes de Error (por si apuesta 0 o más de lo que tiene) -->
+        {% if messages %}
+            {% for message in messages %}
+                <div class="p-3 rounded-lg mb-4 bg-red-900/40 border border-red-500 text-red-400 text-sm">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
 
     <!-- Formulario de Apuesta -->
-    <form method="POST" class="flex flex-col gap-4 mt-2">
+    <form method="POST" id="bet-form" class="flex flex-col gap-3 mt-2">
         {% csrf_token %}
         <input type="hidden" name="tg_id" id="hidden_tg_id" value="{{ tg_id }}">
         
-        <div class="text-left">
-            <label class="block text-sm text-vip-gold mb-1">¿Cuánto Oro deseas apostar?</label>
+        <div>
+            <label class="block text-xs text-vip-gold mb-1 text-left">Apuesta de Oro:</label>
             <input type="number" name="bet_amount" min="1" max="{{ wallet.balance }}" required
-                   class="w-full bg-vip-base border border-vip-gold/50 rounded p-3 text-vip-text text-xl text-center focus:outline-none focus:border-vip-gold"
-                   placeholder="Ej. 50">
+                   class="w-full bg-vip-base border border-vip-gold/50 rounded-lg p-3 text-vip-text text-xl text-center focus:outline-none focus:border-vip-gold"
+                   placeholder="Ej. 100">
         </div>
 
-        <button type="submit" class="w-full bg-gradient-to-r from-vip-gold to-yellow-600 text-vip-base font-bold py-3 rounded-lg hover:from-yellow-600 hover:to-yellow-700 transition-all shadow-[0_0_15px_rgba(212,175,55,0.3)]">
-            🎰 TIRAR LA RULETA (50/50)
+        <button type="submit" id="roll-btn" class="w-full bg-gradient-to-r from-vip-gold to-yellow-600 text-black font-bold py-4 rounded-xl hover:brightness-125 transition-all shadow-[0_4px_0_rgba(184,134,11,1)] active:translate-y-1 active:shadow-none uppercase tracking-widest text-lg">
+            🎲 Lanzar Dado
         </button>
     </form>
 </div>
 
+<!-- Script de Animación -->
 <script>
     const tg = window.Telegram.WebApp;
-    
-    // Rellenar el ID oculto si entramos directo
     if (!document.getElementById('hidden_tg_id').value) {
         const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '123456789';
         document.getElementById('hidden_tg_id').value = tgId;
     }
 
-    // Función para volver a la bóveda
-    function goToWallet() {
-        const tgId = document.getElementById('hidden_tg_id').value;
-        window.location.href = `/economy/wallet/?tg_id=${tgId}`;
+    
+// Leemos las variables como texto para que VS Code no marque error
+    const strResultado = "{{ resultado|default_if_none:'' }}";
+    const strMessages = "{{ messages|yesno:'true,false' }}";
+
+    const hasPlayed = strResultado !== "None" && strResultado !== "";
+    const isSuccess = strResultado === "win";
+    const hasErrors = strMessages === "true";
+    
+    const resultBox = document.getElementById('result-box');
+    const dice = document.getElementById('dice-icon');
+    const rollBtn = document.getElementById('roll-btn');
+
+    if (hasErrors) {
+        // Si hay error (ej. sin saldo), mostramos la caja de inmediato sin animar
+        resultBox.classList.remove('hidden');
+    } else if (hasPlayed) {
+        const caras = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+        
+        // Bloqueamos el botón
+        rollBtn.disabled = true;
+        rollBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+        // Efecto de rebote
+        dice.classList.add('animate-bounce', 'text-yellow-400');
+
+        // Cambio de caras
+        let spinInterval = setInterval(() => {
+            dice.innerText = caras[Math.floor(Math.random() * caras.length)];
+        }, 100);
+
+        // Detener a los 1.5s
+        setTimeout(() => {
+            clearInterval(spinInterval);
+            dice.classList.remove('animate-bounce');
+            
+            // 6 verde si gana, 1 rojo si pierde
+            dice.innerText = isSuccess ? '⚅' : '⚀';
+            dice.classList.add(isSuccess ? 'text-green-400' : 'text-red-500');
+            dice.classList.remove('text-yellow-400');
+
+            resultBox.classList.remove('hidden');
+            rollBtn.disabled = false;
+            rollBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }, 1500);
     }
 </script>
 {% endblock %}

@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="vip-panel p-6 mt-12 flex flex-col gap-6 mx-auto w-[90%] max-w-md border border-vip-gold/50 rounded-2xl text-center">
+    
+    <h2 class="text-2xl font-bold text-vip-gold uppercase tracking-widest mb-2">Tu Destino</h2>
+    <p class="text-sm text-vip-text/80 mb-4">Bienvenido a Kingdom of Pleasure. Antes de entrar, debes elegir tu camino...</p>
+
+    <form method="POST" class="flex flex-col gap-4">
+        {% csrf_token %}
+        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+        
+        <!-- Opcion Cliente -->
+        <button type="submit" name="role" value="cliente" class="w-full bg-gradient-to-r from-gray-900 to-black border border-vip-gold/50 text-vip-gold py-5 rounded-xl hover:bg-vip-gold hover:text-black transition-all duration-300 shadow-[0_0_15px_rgba(212,175,55,0.1)] group">
+            <span class="block text-3xl mb-2 group-hover:scale-110 transition-transform">🥂</span>
+            <span class="block font-bold text-lg uppercase tracking-wider">Ser un Cliente VIP</span>
+            <span class="block text-xs font-normal opacity-70 mt-1">Gastar oro, ver el Muro VIP y disfrutar.</span>
+        </button>
+
+        <div class="flex items-center gap-4 my-2 opacity-50">
+            <div class="h-px bg-vip-gold flex-1"></div>
+            <span class="text-vip-gold text-xs uppercase">O</span>
+            <div class="h-px bg-vip-gold flex-1"></div>
+        </div>
+
+        <!-- Opcion Idol -->
+        <button type="submit" name="role" value="idol" class="w-full bg-gradient-to-r from-purple-900/40 to-black border border-purple-500/50 text-purple-300 py-5 rounded-xl hover:bg-purple-600 hover:text-white transition-all duration-300 shadow-[0_0_15px_rgba(168,85,247,0.2)] group">
+            <span class="block text-3xl mb-2 group-hover:scale-110 transition-transform">✨</span>
+            <span class="block font-bold text-lg uppercase tracking-wider">Ser una Idol</span>
+            <span class="block text-xs font-normal opacity-70 mt-1">Crear perfil, subir fotos y ganar oro.</span>
+        </button>
+    </form>
+
+</div>
+{% endblock %}

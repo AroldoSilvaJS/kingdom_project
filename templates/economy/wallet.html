@@ -15,14 +15,56 @@
             <span class="text-4xl font-bold text-vip-gold tracking-wider">{{ wallet.balance|default:"0" }}</span>
         </div>
     </div>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-lg text-sm mb-4 {% if message.tags == 'success' %}bg-green-900/60 border border-green-500 text-green-200{% else %}bg-red-900/60 border border-red-500 text-red-200{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
 
-    <!-- Botones a futuros módulos -->
-    <div class="grid grid-cols-2 gap-3">
-        <!-- Estos botones los conectaremos en los próximos pasos -->
-      <button onclick="goToCasino()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 cursor-pointer">
-            <span class="text-2xl">🎰</span>
-            <span class="text-xs font-semibold">Ir al Casino</span>
+    <!-- SECCIÓN: Bono Diario VIP -->
+    <div class="bg-vip-base border border-vip-gold/30 rounded-xl p-4 mb-4 flex justify-between items-center shadow-[0_0_10px_rgba(212,175,55,0.1)]">
+        <div class="text-left flex flex-col">
+            <span class="text-vip-gold font-bold text-lg">Bono Diario</span>
+            <span class="text-vip-text/60 text-xs">+100 🪙 de Oro (cada 24h)</span>
+        </div>
+        
+        <form action="{% url 'economy:claim_bonus' %}" method="POST" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="tg_id" id="hidden_tg_id" value="{{ tg_id }}">
+            
+            {% if wallet.can_claim_bonus %}
+                <button type="submit" class="bg-gradient-to-r from-vip-gold to-yellow-600 text-vip-base font-bold px-4 py-2 rounded-lg hover:brightness-110 transition-all shadow-[0_0_10px_rgba(212,175,55,0.4)]">
+                    🎁 Reclamar
+                </button>
+            {% else %}
+                <button type="button" disabled class="bg-vip-panel border border-vip-text/20 text-vip-text/40 font-bold px-4 py-2 rounded-lg cursor-not-allowed">
+                    ⏳ En espera
+                </button>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="grid grid-cols-3 gap-2 mt-4">
+        <!-- Ruleta -->
+        <button onclick="goToCasino()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded-lg hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
+            <span class="text-2xl">🎲</span>
+            <span class="text-[10px] font-bold uppercase">Ruleta</span>
         </button>
+        
+        <!-- Slots -->
+        <button onclick="goToSlots()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded-lg hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
+            <span class="text-2xl">🎰</span>
+            <span class="text-[10px] font-bold uppercase">Slots</span>
+        </button>
+
+        <!-- Blackjack -->
+        <button onclick="goToBlackjack()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded-lg hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
+            <span class="text-2xl">🃏</span>
+            <span class="text-[10px] font-bold uppercase">Blackjack</span>
+        </button>
+    </div>
         
         <button class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1">
             <span class="text-2xl">🛍️</span>
@@ -33,9 +75,18 @@
 
 <script>
     function goToCasino() {
-        const tg = window.Telegram.WebApp;
-        const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '123456789';
+        const tgId = document.getElementById('hidden_tg_id').value;
         window.location.href = `/economy/casino/?tg_id=${tgId}`;
+    }
+
+    function goToSlots() {
+        const tgId = document.getElementById('hidden_tg_id').value;
+        window.location.href = `/economy/slots/?tg_id=${tgId}`;
+    }
+    
+    function goToBlackjack() {
+        const tgId = document.getElementById('hidden_tg_id').value;
+        window.location.href = `/economy/blackjack/?tg_id=${tgId}`;
     }
 </script>
 {% endblock %}

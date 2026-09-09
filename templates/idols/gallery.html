@@ -15,7 +15,7 @@
     <!-- Cuadrícula de Tarjetas (2 columnas en móvil) -->
     <div class="grid grid-cols-2 gap-4">
         {% for idol in all_idols %}
-            <div class="relative rounded-xl overflow-hidden border border-vip-gold/40 shadow-[0_0_10px_rgba(212,175,55,0.15)] aspect-[3/4] group">
+            <div onclick="goToDetail('{{ idol.id }}')" class="relative rounded-xl overflow-hidden border border-vip-gold/40 shadow-[0_0_10px_rgba(212,175,55,0.15)] aspect-[3/4] group cursor-pointer hover:border-vip-gold transition-all">
                 
                 <!-- Imagen de la Idol -->
                 {% if idol.photo %}
@@ -39,10 +39,12 @@
                     <!-- Pequeña info extra -->
                     <div class="mt-2 flex justify-between items-center text-[10px] text-vip-text/60 border-t border-vip-gold/30 pt-1">
                         <span>⭐ {{ idol.rating }}</span>
-                        <!-- Mostramos el nombre en lugar del ID -->
+                        <!-- Aquí mostramos el nombre del Roller -->
                         <span class="truncate max-w-[100px] text-right">Roller: {{ idol.owner_username|default:"Anónimo" }}</span>
                     </div>
-            </div>
+                </div> <!-- FIN DE LOS TEXTOS -->
+                
+            </div> <!-- FIN DE LA TARJETA (¡Este era el div que faltaba!) -->
         {% empty %}
             <div class="col-span-2 text-center py-10 text-vip-text/50 text-sm">
                 Aún no hay ninguna Idol registrada en el Kingdom.
@@ -50,4 +52,17 @@
         {% endfor %}
     </div>
 </div>
+
+<script>
+    function goToDetail(idolId) {
+        const tg = window.Telegram.WebApp;
+        const user = tg.initDataUnsafe?.user;
+        const tgId = user ? user.id : '123456789';
+        let tgName = 'Roller VIP';
+        if (user) {
+            tgName = user.username ? `@${user.username}` : user.first_name;
+        }
+        window.location.href = `/idols/${idolId}/?tg_id=${tgId}&tg_username=${encodeURIComponent(tgName)}`;
+    }
+</script>
 {% endblock %}

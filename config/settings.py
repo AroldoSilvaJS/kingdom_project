@@ -25,8 +25,12 @@ SECRET_KEY = 'django-insecure-b_gxt!(b-)8=@2gj^1@2hs7bfy!ck@=d7&@_$+x!i*)hs)m4yy
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.lhr.life',
+    'https://*.pinggy.link',
+    'https://*.serveo.net',
+]
 
 # Application definition
 
@@ -140,3 +144,6 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+# Configuraciones de Telegram
+TELEGRAM_BOT_TOKEN = '8966798192:AAHTaCsfbW9Mlzrkoa8PiZJT-DrlryD4dP8'
