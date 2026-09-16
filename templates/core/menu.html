@@ -15,6 +15,13 @@
         <span class="text-2xl">✨</span>
     </button>
 
+    {% if is_admin %}
+    <!-- 👑 ESTE BOTÓN SOLO LO VE EL ADMIN (TÚ) -->
+    <button onclick="window.location.href='/admin-panel/?tg_id={{ tg_id }}'" class="w-full bg-gradient-to-r from-yellow-600 to-yellow-900 border border-vip-gold text-white py-4 rounded-lg hover:brightness-125 transition-all duration-300 font-black flex items-center justify-center gap-3 shadow-[0_0_15px_rgba(212,175,55,0.4)] mb-4 tracking-widest">
+        <span class="text-2xl">👑</span> PANEL DE CONTROL VIP
+    </button>
+    {% endif %}
+
     
     <!-- Botones de Navegación -->
     <button onclick="goToFeed()" class="w-full bg-gradient-to-r from-purple-900/40 to-vip-base border border-purple-500/50 text-purple-200 py-3 rounded-lg hover:bg-purple-900 hover:text-white transition-colors duration-300 font-medium flex items-center justify-center gap-2 shadow-[0_0_10px_rgba(168,85,247,0.1)]">

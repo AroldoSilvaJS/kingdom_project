@@ -88,15 +88,13 @@
             </div>
 
             <!-- Pie del Post (Descripción) -->
-            <div class="p-4">
-                <p class="text-sm text-vip-text/90 leading-relaxed"><span class="font-bold text-vip-gold mr-1">{{ post.idol.stage_name }}</span>{{ post.caption }}</p>
-                
-                <div class="mt-3 flex gap-4 text-vip-text/50 text-sm">
-                    <button class="hover:text-red-500 transition-colors flex items-center gap-1">
-                        <span>❤️</span> {{ post.likes }}
+            <div class="mt-3 flex gap-4 text-sm">
+                    <button id="like-btn-{{ post.id }}" onclick="handleLike({{ post.id }})" 
+                            class="transition-all duration-200 flex items-center gap-1.5 px-3 py-1 rounded-full border border-vip-gold/20 {% if post.id in liked_ids %}text-red-500 bg-red-500/10 border-red-500/40{% else %}text-vip-text/60 bg-black/30 hover:text-red-400{% endif %}">
+                        <span id="like-icon-{{ post.id }}">{% if post.id in liked_ids %}❤️{% else %}🤍{% endif %}</span>
+                        <span id="like-count-{{ post.id }}" class="font-semibold text-xs">{{ post.likes }}</span>
                     </button>
                 </div>
-            </div>
         </div>
     {% empty %}
         <div class="text-center text-vip-text/50 mt-10 p-6 border border-vip-gold/20 rounded-xl">
@@ -105,4 +103,48 @@
         </div>
     {% endfor %}
 </div>
+
+<script>
+    async function handleLike(postId) {
+        const tg = window.Telegram.WebApp;
+        const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '{{ tg_id }}';
+        
+        const btn = document.getElementById(`like-btn-${postId}`);
+        const icon = document.getElementById(`like-icon-${postId}`);
+        const count = document.getElementById(`like-count-${postId}`);
+        
+        // Efecto visual instantáneo mientras responde el servidor
+        btn.classList.add('scale-110');
+        setTimeout(() => btn.classList.remove('scale-110'), 150);
+
+        try {
+            const formData = new FormData();
+            formData.append('tg_id', tgId);
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+            const response = await fetch(`/idols/feed/like/${postId}/`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                count.innerText = data.likes;
+
+                if (data.liked) {
+                    icon.innerText = '❤️';
+                    btn.classList.remove('text-vip-text/60', 'bg-black/30', 'border-vip-gold/20');
+                    btn.classList.add('text-red-500', 'bg-red-500/10', 'border-red-500/40');
+                } else {
+                    icon.innerText = '🤍';
+                    btn.classList.remove('text-red-500', 'bg-red-500/10', 'border-red-500/40');
+                    btn.classList.add('text-vip-text/60', 'bg-black/30', 'border-vip-gold/20');
+                }
+            }
+        } catch (e) {
+            console.error('Error al dar like:', e);
+        }
+    }
+</script>
 {% endblock %}
+

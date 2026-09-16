@@ -56,6 +56,19 @@
             <div class="text-[11px] text-vip-text/50">
                 Roller a cargo: <span class="text-vip-gold">{{ idol.owner_username|default:"Anónimo" }}</span>
             </div>
+
+            <!-- BOTÓN: Contactar / Contratar Idol en Telegram -->
+            {% if idol.owner_username %}
+            <button onclick="contactIdol('{{ idol.owner_username }}')" 
+                    class="w-full mt-2 bg-gradient-to-r from-purple-900/60 to-vip-base border-2 border-purple-500/70 text-purple-200 py-3.5 rounded-xl hover:bg-purple-800 hover:text-white transition-all duration-300 font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)] group">
+                <span class="text-xl group-hover:scale-125 transition-transform">💬</span>
+                <span class="tracking-wider uppercase text-xs">Solicitar Rol / Contactar a {{ idol.stage_name }}</span>
+            </button>
+            {% else %}
+            <div class="text-center text-xs text-vip-text/40 italic py-2">
+                Esta Idol no tiene un usuario de Telegram configurado aún.
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -134,6 +147,22 @@
         const tgName = user ? (user.username ? `@${user.username}` : user.first_name) : 'Cliente Anónimo';
         document.getElementById('detail_tg_id').value = tgId;
         document.getElementById('detail_tg_username').value = tgName;
+    }
+
+    function contactIdol(rawUsername) {
+        // Limpiamos el '@' si viene incluido
+        const cleanUser = rawUsername.replace('@', '').trim();
+        if (!cleanUser) return;
+        
+        const telegramUrl = `https://t.me/${cleanUser}`;
+        
+        // Si estamos en la WebApp oficial de Telegram, usamos su método nativo
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink) {
+            window.Telegram.WebApp.openTelegramLink(telegramUrl);
+        } else {
+            // Fallback para navegador normal
+            window.open(telegramUrl, '_blank');
+        }
     }
 </script>
 {% endblock %}

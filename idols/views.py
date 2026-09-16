@@ -1,7 +1,8 @@
 from urllib.parse import quote as encode_param # <- Añade esto al inicio
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse
 from django.contrib import messages
-from .models import IdolProfile, Review, Post, PostUnlock
+from .models import IdolProfile, Review, Post, PostUnlock, PostLike
 from economy.models import Wallet  # Importamos la billetera para cobrar
 
 def idol_list(request):
@@ -132,17 +133,32 @@ def social_feed(request):
     # Traemos todos los posts, del más nuevo al más viejo
     posts = Post.objects.all().select_related('idol')
     
-    # Lista de IDs de posts VIP que este usuario ya pagó
+    # Lista de IDs de posts VIP que este usuario ya pagó o que son de sus propias Idols
     unlocked_ids = []
     if tg_id:
-        unlocked_ids = PostUnlock.objects.filter(
+        # Posts pagados por el cliente
+        pagados = list(PostUnlock.objects.filter(
             client_telegram_id=tg_id
-        ).values_list('post_id', flat=True)
+        ).values_list('post_id', flat=True))
+        
+        # Posts que le pertenecen a las Idols del usuario actual (gratis para el creador)
+        propios = list(Post.objects.filter(
+            idol__telegram_user_id=tg_id
+        ).values_list('id', flat=True))
+        
+        unlocked_ids = set(pagados + propios)
+    
+    # IDs de posts a los que este usuario ya dio like
+    
+        liked_ids = list(PostLike.objects.filter(
+            client_telegram_id=tg_id
+        ).values_list('post_id', flat=True))
         
     return render(request, 'idols/feed.html', {
         'posts': posts,
         'tg_id': tg_id,
-        'unlocked_ids': list(unlocked_ids)
+        'unlocked_ids': list(unlocked_ids),
+        'liked_ids': liked_ids  # <- AGREGAR ESTA LÍNEA
     })
 
 def unlock_post(request, post_id):
@@ -150,19 +166,26 @@ def unlock_post(request, post_id):
         tg_id = request.POST.get('tg_id')
         post = get_object_or_404(Post, id=post_id)
         
+        # Validación: si es el dueño de la Idol, no se cobra
+        if tg_id and int(tg_id) == post.idol.telegram_user_id:
+            messages.info(request, "Esta publicación es de tu Idol, ya la tienes desbloqueada.")
+            return redirect(f'/idols/feed/?tg_id={tg_id}')
+        
         # Buscamos la bóveda del cliente
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         
         # Verificamos que sea de pago y tenga saldo
         if post.network == 'fans':
             if wallet.balance >= post.price:
-                # 1. Le restamos el oro al cliente
+                # 1. Descontamos el oro al cliente
                 wallet.remove_funds(post.price)
                 
-                # 2. Registramos que ya desbloqueó esta foto
+                # 2. Registramos que el cliente desbloqueó la foto
                 PostUnlock.objects.get_or_create(post=post, client_telegram_id=tg_id)
                 
-                # (Opcional a futuro: Aquí podrías sumarle el oro al dueño de la Idol)
+                # 3. 💰 TRANSFERENCIA DE ORO A LA IDOL:
+                idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
+                idol_wallet.add_funds(post.price)
                 
                 messages.success(request, f"¡Foto desbloqueada con éxito! (-{post.price} 🪙)")
             else:
@@ -214,4 +237,48 @@ def create_post(request):
     return render(request, 'idols/create_post.html', {
         'tg_id': tg_id,
         'mis_idols': mis_idols
+    })
+    
+def toggle_like(request, post_id):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        if not tg_id:
+            return JsonResponse({'error': 'No user ID provided'}, status=400)
+            
+        post = get_object_or_404(Post, id=post_id)
+        
+        # Verificamos si ya dio like
+        existing_like = PostLike.objects.filter(post=post, client_telegram_id=tg_id).first()
+        
+        if existing_like:
+            # Si ya existía, lo quitamos
+            existing_like.delete()
+            if post.likes > 0:
+                post.likes -= 1
+                post.save()
+            liked = False
+        else:
+            # Si no existía, lo creamos
+            PostLike.objects.create(post=post, client_telegram_id=tg_id)
+            post.likes += 1
+            post.save()
+            liked = True
+            
+        return JsonResponse({'liked': liked, 'likes': post.likes})
+        
+    return JsonResponse({'error': 'Invalid method'}, status=405)
+
+def my_collection(request):
+    tg_id = request.GET.get('tg_id') or request.session.get('tg_id')
+    unlocked_posts = []
+    
+    if tg_id:
+        # Buscamos todos los registros de PostUnlock del usuario con sus posts e idols
+        unlocked_posts = Post.objects.filter(
+            unlocks__client_telegram_id=tg_id
+        ).select_related('idol').order_by('-unlocks__unlocked_at')
+        
+    return render(request, 'idols/collection.html', {
+        'tg_id': tg_id,
+        'posts': unlocked_posts
     })

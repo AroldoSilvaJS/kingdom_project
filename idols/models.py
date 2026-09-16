@@ -109,6 +109,19 @@ class PostUnlock(models.Model):
 
     def __str__(self):
         return f"Post #{self.post.id} desbloqueado por {self.client_telegram_id}"
+
+# --- AGREGAR AL FINAL DE idols/models.py ---
+class PostLike(models.Model):
+    """Registra qué usuario le dio like a qué publicación"""
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='user_likes')
+    client_telegram_id = models.BigIntegerField("ID del Usuario", db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('post', 'client_telegram_id')
+
+    def __str__(self):
+        return f"Like en Post #{self.post.id} por {self.client_telegram_id}"
     
 class UserRole(models.Model):
     telegram_id = models.CharField(max_length=100, unique=True)

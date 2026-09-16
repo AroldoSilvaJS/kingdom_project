@@ -41,3 +41,11 @@ class Wallet(models.Model):
         if not self.last_bonus_claim:
             return True # Si nunca ha reclamado, puede hacerlo
         return timezone.now() >= self.last_bonus_claim + timedelta(hours=24)
+    
+    # NUEVO MÉTODO: Calcula los segundos exactos que faltan para el próximo bono
+    def seconds_until_next_bonus(self):
+        if self.can_claim_bonus():
+            return 0
+        proximo_reclamo = self.last_bonus_claim + timedelta(hours=24)
+        restante = (proximo_reclamo - timezone.now()).total_seconds()
+        return max(0, int(restante))

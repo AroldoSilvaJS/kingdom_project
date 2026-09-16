@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%]">
+    <h2 class="text-2xl font-black text-yellow-500 text-center mb-2 tracking-widest">👑 PANEL VIP</h2>
+    <p class="text-center text-gray-400 text-sm mb-4">Gestión de Usuarios de Kingdom of Pleasure</p>
+    
+    <!-- Botón para volver -->
+    <button onclick="window.location.href='/?tg_id={{ tg_id }}'" class="mb-2 bg-gray-800 border border-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 w-full transition-colors flex items-center justify-center gap-2">
+        <span>⬅️</span> Volver al Menú
+    </button>
+
+    <div class="w-full h-px bg-vip-gold/30 my-2"></div>
+
+    <!-- Lista de Usuarios -->
+    <h3 class="text-lg font-bold text-white mb-2">Ciudadanos del Reino:</h3>
+    
+    <div class="flex flex-col gap-3">
+        {% for user in usuarios %}
+        <div class="bg-black/50 border border-vip-gold/30 p-4 rounded-lg flex flex-col gap-2 shadow-[0_0_10px_rgba(212,175,55,0.05)]">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-white font-bold text-sm">ID: {{ user.telegram_id }}</p>
+                    <p class="text-xs text-gray-400 mt-1">Rol actual: 
+                        <span class="{% if user.role == 'idol' %}text-purple-400{% else %}text-vip-gold{% endif %} font-bold uppercase tracking-wider">
+                            {{ user.role }}
+                        </span>
+                    </p>
+                    <p class="text-xs text-vip-gold mt-1 font-semibold">Bóveda: 🪙 {{ user.balance }}</p>
+                </div>
+            </div>
+            
+            <!-- CONTROLES DE ADMIN -->
+            <div class="flex gap-2 mt-2 pt-3 border-t border-vip-gold/10">
+                <!-- Botón Cambiar Rol -->
+                <form method="POST" class="flex-1">
+                    {% csrf_token %}
+                    <input type="hidden" name="target_id" value="{{ user.telegram_id }}">
+                    <input type="hidden" name="action" value="toggle_role">
+                    <button type="submit" class="w-full bg-blue-900/40 border border-blue-500/50 text-blue-200 py-2 rounded text-xs hover:bg-blue-600 hover:text-white transition-colors font-semibold tracking-wider">
+                        🔄 CAMBIAR ROL
+                    </button>
+                </form>
+                
+                <!-- Botón Expulsar -->
+                <form method="POST" class="flex-1" onsubmit="return confirm('¿Estás seguro de expulsar a este usuario del reino?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="target_id" value="{{ user.telegram_id }}">
+                    <input type="hidden" name="action" value="delete">
+                    <button type="submit" class="w-full bg-red-900/40 border border-red-500/50 text-red-200 py-2 rounded text-xs hover:bg-red-600 hover:text-white transition-colors font-semibold tracking-wider">
+                        ⚔️ EXPULSAR
+                    </button>
+                </form>
+            </div>
+
+            <!-- Inyectar / Quitar Oro VIP -->
+            <form method="POST" class="flex items-center gap-2 mt-2 pt-2 border-t border-vip-gold/10">
+                {% csrf_token %}
+                <input type="hidden" name="target_id" value="{{ user.telegram_id }}">
+                <input type="number" name="amount" min="1" placeholder="Oro" required
+                       class="w-24 bg-vip-base border border-vip-gold/40 text-white text-xs px-2 py-1.5 rounded focus:outline-none focus:border-vip-gold text-center">
+                <button type="submit" name="action" value="add_gold" 
+                        class="flex-1 bg-yellow-600/30 border border-vip-gold text-vip-gold py-1.5 rounded text-xs hover:bg-vip-gold hover:text-black transition-colors font-bold tracking-wider">
+                    ➕ INYECTAR
+                </button>
+                <button type="submit" name="action" value="remove_gold" 
+                        class="flex-1 bg-red-900/30 border border-red-500/50 text-red-300 py-1.5 rounded text-xs hover:bg-red-600 hover:text-white transition-colors font-bold tracking-wider">
+                    ➖ QUITAR
+                </button>
+            </form>
+        </div>
+        {% empty %}
+        <div class="text-center py-6 text-gray-500 italic">
+            Aún no hay ciudadanos registrados en la base de datos.
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

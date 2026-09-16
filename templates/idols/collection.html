@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="p-4 mt-4 flex flex-col gap-4 mx-auto w-full max-w-md pb-16">
+    
+    <!-- Encabezado -->
+    <div class="flex justify-between items-center mb-2 px-2 border-b border-vip-gold/30 pb-3">
+        <div>
+            <h2 class="text-xl font-bold text-vip-gold tracking-wide">💎 Mi Colección Privada</h2>
+            <p class="text-xs text-vip-text/60">Tus fotos y antojos VIP desbloqueados</p>
+        </div>
+        <a href="/economy/wallet/?tg_id={{ tg_id }}" class="text-xs text-vip-text/70 hover:text-vip-text bg-vip-panel px-3 py-1.5 rounded-full border border-vip-gold/30">
+            ⬅ Bóveda
+        </a>
+    </div>
+
+    <!-- Estadísticas de la colección -->
+    <div class="bg-vip-panel border border-vip-gold/20 p-3 rounded-xl flex items-center justify-between px-4">
+        <span class="text-xs text-vip-text/70 uppercase tracking-wider">Antojos en tu poder</span>
+        <span class="text-sm font-bold text-vip-gold font-mono bg-black/40 px-2.5 py-1 rounded-lg border border-vip-gold/30">
+            {{ posts|length }} fotos 🔞
+        </span>
+    </div>
+
+    <!-- Cuadrícula de Fotos Desbloqueadas -->
+    {% if posts %}
+        <div class="grid grid-cols-2 gap-3 mt-2">
+            {% for post in posts %}
+                <div class="relative rounded-xl overflow-hidden border border-vip-gold/30 aspect-[3/4] group bg-black shadow-md flex flex-col justify-end">
+                    <!-- Foto en alta calidad sin censura -->
+                    <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    
+                    <!-- Sombra para leer datos -->
+                    <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
+                    
+                    <!-- Datos de la foto -->
+                    <div class="relative z-10 p-2.5 flex flex-col">
+                        <span class="text-[10px] text-purple-400 font-bold uppercase tracking-wider">VIP</span>
+                        <h4 class="text-xs font-bold text-vip-gold truncate">{{ post.idol.stage_name }}</h4>
+                        <p class="text-[10px] text-vip-text/70 line-clamp-1 italic">"{{ post.caption }}"</p>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center py-12 px-4 border border-vip-gold/10 rounded-2xl bg-vip-panel/40 flex flex-col items-center gap-3 mt-4">
+            <span class="text-4xl">🔐</span>
+            <p class="text-sm text-vip-text/70 font-semibold">Tu colección aún está vacía.</p>
+            <p class="text-xs text-vip-text/50 max-w-xs">
+                Cuando desbloquees fotos exclusivas en el Muro VIP, aparecerán aquí para siempre.
+            </p>
+            <a href="/idols/feed/?tg_id={{ tg_id }}" class="mt-2 bg-gradient-to-r from-vip-gold to-yellow-600 text-black text-xs font-bold px-4 py-2.5 rounded-xl uppercase tracking-wider hover:brightness-110 transition-all shadow-md">
+                Ir al Muro VIP
+            </a>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}
