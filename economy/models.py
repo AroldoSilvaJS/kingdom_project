@@ -6,8 +6,8 @@ class Wallet(models.Model):
     # Usamos unique=True porque cada usuario solo debe tener una billetera
     telegram_user_id = models.BigIntegerField(unique=True, db_index=True)
     
-    # Saldo del usuario. Empezamos con 500 de oro como regalo inicial
-    balance = models.IntegerField("Monedas de Oro", default=500)
+    # Saldo del usuario. Empezamos con 150 de oro como regalo inicial equilibrado
+    balance = models.IntegerField("Monedas de Oro", default=150)
     
     # NUEVO CAMPO: Recuerda cuándo reclamó su último bono
     last_bonus_claim = models.DateTimeField("Último bono", null=True, blank=True)
