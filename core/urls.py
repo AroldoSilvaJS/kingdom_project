@@ -7,4 +7,5 @@ urlpatterns = [
     path('', views.main_menu, name='menu'),
     # Conectamos tu nueva habitación VIP:
     path('admin-panel/', views.admin_panel, name='admin_panel'),
+    path('salon-de-la-fama/', views.leaderboard, name='leaderboard'),
 ]

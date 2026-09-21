@@ -1,0 +1,335 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="p-4 flex flex-col gap-4 mx-auto w-full max-w-md pb-24 relative overflow-hidden">
+    
+    <!-- Encabezado de Lujo -->
+    <div class="flex justify-between items-center px-1 border-b border-vip-gold/30 pb-3">
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="text-xl">🐾</span>
+                <h2 class="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-vip-gold via-yellow-200 to-yellow-600 tracking-wider uppercase">
+                    Santuario Real
+                </h2>
+            </div>
+            <p class="text-[11px] text-vip-text/60">Compañeros del inframundo y la alta nobleza</p>
+        </div>
+        <a href="/?tg_id={{ tg_id }}" class="text-xs text-vip-gold hover:text-white bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/40 shadow">
+            ⬅ Menú
+        </a>
+    </div>
+
+    {% if pet %}
+        <!-- ALTAR DE LA MASCOTA -->
+        <div class="relative rounded-3xl border-2 border-vip-gold/60 p-5 flex flex-col items-center text-center shadow-[0_0_35px_rgba(212,175,55,0.25)] bg-gradient-to-b from-[#180d24] via-[#0e0716] to-[#08030c] overflow-hidden">
+            
+            <!-- Resplandor místico de fondo -->
+            <div class="absolute top-10 w-48 h-48 bg-purple-600/20 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
+            <div class="absolute bottom-16 w-56 h-32 bg-yellow-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+            <!-- Corona / Nivel Superior -->
+            <div class="w-full flex justify-between items-center z-10 mb-2">
+                <span class="bg-black/80 border border-vip-gold/50 text-vip-gold text-xs font-black px-3 py-1 rounded-full font-mono shadow-[0_0_10px_rgba(212,175,55,0.3)]">
+                    👑 RANGO {{ pet.level }}
+                </span>
+                <span class="text-[11px] font-bold text-purple-300 uppercase tracking-widest bg-purple-950/60 border border-purple-500/40 px-2.5 py-0.5 rounded-full">
+                    {{ pet.get_species_display }}
+                </span>
+            </div>
+
+            <!-- PEDESTAL CON ILUSTRACIÓN DE FANTASÍA Y EFECTO FLOTANTE -->
+            <div class="relative my-3 z-10 flex flex-col items-center">
+                <!-- Partículas flotantes de amor/caricia (Contenedor dinámico) -->
+                <div id="heart-particles" class="absolute inset-0 pointer-events-none z-30 flex items-center justify-center"></div>
+
+                <!-- Marco del Altar -->
+                <div class="w-48 h-48 rounded-2xl p-1 bg-gradient-to-tr from-vip-gold via-yellow-200 to-purple-600 shadow-[0_0_30px_rgba(212,175,55,0.5)]">
+                    <div class="w-full h-full rounded-[14px] overflow-hidden bg-black relative group">
+                        
+                        <!-- Imagen Dinámica de la Mascota -->
+                        <img src="{{ pet.get_image_url }}" alt="{{ pet.name }}"
+                             class="w-full h-full object-cover brightness-95 contrast-125 saturate-125 group-hover:scale-105 transition-all duration-700">
+
+                        <!-- Filtro de atmósfera oscura -->
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none"></div>
+                    </div>
+                </div>
+
+                <!-- Runas del Pedestal Inferior -->
+                <div class="w-40 h-2.5 bg-gradient-to-r from-transparent via-vip-gold to-transparent opacity-80 mt-2 blur-[1px]"></div>
+            </div>
+
+            <!-- Nombre de la Mascota -->
+            <h3 class="text-2xl font-black text-white tracking-widest uppercase drop-shadow-[0_0_12px_rgba(255,255,255,0.4)] z-10">
+                {{ pet.name }}
+            </h3>
+
+            <!-- HABILIDAD PASIVA VIP (BUFF) -->
+            <div class="w-full mt-3 bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 flex items-center justify-between text-left z-10 shadow-inner">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-2xl">
+                        {% if pet.species == 'panther' %}⚡{% elif pet.species == 'fox' %}⏳{% elif pet.species == 'viper' %}💎{% elif pet.species == 'raven' %}🦅{% else %}🐺{% endif %}
+                    </span>
+                    <div>
+                        <p class="text-[10px] text-vip-gold uppercase font-bold tracking-wider">Bendición Real Activa</p>
+                        <p class="text-xs text-white/90 font-medium">
+                            {{ pet.get_buff_description }}
+                        </p>
+                    </div>
+                </div>
+                <span class="text-[10px] bg-green-950 border border-green-500/50 text-green-300 font-bold px-2 py-0.5 rounded-full">
+                    ACTIVO
+                </span>
+            </div>
+
+            <!-- BARRAS DE ESTADO (ENERGÍA Y XP) -->
+            <div class="w-full flex flex-col gap-3 mt-4 z-10 bg-black/40 p-3 rounded-xl border border-vip-gold/15">
+                <!-- Energía -->
+                <div>
+                    <div class="flex justify-between text-[11px] font-bold mb-1">
+                        <span class="text-yellow-400 flex items-center gap-1">⚡ Saciedad / Vitalidad</span>
+                        <span class="text-vip-gold font-mono">{{ pet.energy }}%</span>
+                    </div>
+                    <div class="w-full bg-black/80 h-2.5 rounded-full overflow-hidden border border-yellow-500/30 p-0.5">
+                        <div class="bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-200 h-full rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(234,179,8,0.5)]" style="width: {{ pet.energy }}%;"></div>
+                    </div>
+                </div>
+
+                <!-- XP -->
+                <div>
+                    <div class="flex justify-between text-[11px] font-bold mb-1">
+                        <span class="text-purple-300 flex items-center gap-1">✨ Poder Cósmico (XP)</span>
+                        <span class="text-purple-300 font-mono">{{ pet.xp }} / {{ pet.xp_needed_for_next_level }}</span>
+                    </div>
+                    <div class="w-full bg-black/80 h-2.5 rounded-full overflow-hidden border border-purple-500/30 p-0.5">
+                        <div class="bg-gradient-to-r from-purple-800 via-purple-500 to-fuchsia-400 h-full rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(168,85,247,0.5)]" style="width: {% widthratio pet.xp pet.xp_needed_for_next_level 100 %}%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BOTONES DE CUIDADO INTERACTIVO -->
+            <div class="grid grid-cols-2 gap-3 w-full mt-4 z-10">
+                <!-- Alimentar con festín -->
+                <form action="{% url 'pets:interact' %}" method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="action" value="feed">
+                    <button type="submit" class="w-full bg-gradient-to-r from-yellow-700 via-vip-gold to-yellow-600 text-black font-black py-3 rounded-xl hover:brightness-110 active:scale-95 transition-all flex flex-col items-center justify-center gap-0.5 shadow-[0_0_15px_rgba(212,175,55,0.3)]">
+                        <span class="text-lg">🍖</span>
+                        <span class="text-xs uppercase tracking-wider">Dar Banquete</span>
+                        <span class="text-[9px] bg-black/30 text-black px-2 py-0.2 rounded-full font-mono font-bold">10 🪙</span>
+                    </button>
+                </form>
+
+                <!-- Acariciar con partículas -->
+                <form action="{% url 'pets:interact' %}" method="POST" class="m-0" onsubmit="spawnHearts(event)">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="action" value="pet">
+                    <button type="submit" class="w-full bg-gradient-to-r from-purple-950 via-purple-900 to-[#2d123d] border border-purple-500/60 text-purple-200 font-black py-3 rounded-xl hover:brightness-125 active:scale-95 transition-all flex flex-col items-center justify-center gap-0.5 shadow-[0_0_15px_rgba(168,85,247,0.3)]">
+                        <span class="text-lg">💖</span>
+                        <span class="text-xs uppercase tracking-wider">Acariciar</span>
+                        <span class="text-[9px] text-purple-300 font-mono font-bold">+10 XP</span>
+                    </button>
+                </form>
+
+                <!-- BOTÓN CAMBIAR MASCOTA (RITUAL DE TRANSMUTACIÓN) -->
+            <button type="button" onclick="toggleChangeModal()" 
+                    class="w-full mt-4 bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-text/70 hover:text-vip-gold py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2">
+                <span>🔄</span>
+                <span>Cambiar de Mascota (250 🪙)</span>
+            </button>
+
+            <!-- MODAL / FORMULARIO DESPLEGABLE DE CAMBIO -->
+            <div id="change-pet-modal" class="hidden w-full mt-3 p-4 bg-black/90 border border-vip-gold/50 rounded-2xl flex flex-col gap-3 text-left">
+                <div class="text-center border-b border-vip-gold/20 pb-2">
+                    <h4 class="text-xs font-black text-vip-gold uppercase tracking-wider">Ritual de Reencarnación</h4>
+                    <p class="text-[10px] text-vip-text/60">Transmuta tu compañero actual a otra especie por <span class="text-yellow-400 font-bold">250 🪙</span>.</p>
+                </div>
+
+                <form action="{% url 'pets:change_pet' %}" method="POST" class="flex flex-col gap-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+                    <!-- Selector de nueva especie -->
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-[10px] text-vip-gold font-bold uppercase">Nueva Especie:</label>
+                        
+                        <label class="flex items-center gap-2 p-2 rounded-lg bg-vip-base border border-vip-gold/20 text-xs text-white cursor-pointer hover:border-vip-gold">
+                            <input type="radio" name="new_species" value="panther" {% if pet.species != 'panther' %}checked{% endif %} class="accent-vip-gold">
+                            <span>🐈‍⬛ Pantera de Ébano (+10% Casino)</span>
+                        </label>
+                        
+                        <label class="flex items-center gap-2 p-2 rounded-lg bg-vip-base border border-vip-gold/20 text-xs text-white cursor-pointer hover:border-vip-gold">
+                            <input type="radio" name="new_species" value="fox" {% if pet.species != 'fox' %}checked{% endif %} class="accent-vip-gold">
+                            <span>🦊 Zorro Kitsune Dorado (Bono 22h)</span>
+                        </label>
+
+                        <label class="flex items-center gap-2 p-2 rounded-lg bg-vip-base border border-vip-gold/20 text-xs text-white cursor-pointer hover:border-vip-gold">
+                            <input type="radio" name="new_species" value="viper" {% if pet.species != 'viper' %}checked{% endif %} class="accent-vip-gold">
+                            <span>🐍 Víbora de Esmeralda (-15% Fotos)</span>
+                        </label>
+
+                        <label class="flex items-center gap-2 p-2 rounded-lg bg-vip-base border border-vip-gold/20 text-xs text-white cursor-pointer hover:border-vip-gold">
+                            <input type="radio" name="new_species" value="raven" {% if pet.species != 'raven' %}checked{% endif %} class="accent-vip-gold">
+                            <span>🦅 Cuervo de Medianoche (Suerte Slots)</span>
+                        </label>
+
+                        <label class="flex items-center gap-2 p-2 rounded-lg bg-vip-base border border-vip-gold/20 text-xs text-white cursor-pointer hover:border-vip-gold">
+                            <input type="radio" name="new_species" value="wolf" {% if pet.species != 'wolf' %}checked{% endif %} class="accent-vip-gold">
+                            <span>🐺 Lobo Espectral de Plata (Escudo Blackjack)</span>
+                        </label>
+                    </div>
+
+                    <!-- Nuevo nombre -->
+                    <div>
+                        <label class="text-[10px] text-vip-gold font-bold uppercase block mb-1">Nuevo Nombre:</label>
+                        <input type="text" name="new_name" placeholder="Bautiza tu nuevo compañero..." required maxlength="30"
+                               class="w-full bg-vip-base border border-vip-gold/40 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-vip-gold text-center font-bold">
+                    </div>
+
+                    <button type="submit" class="w-full bg-gradient-to-r from-yellow-700 via-vip-gold to-yellow-600 text-black font-black py-2.5 rounded-xl uppercase tracking-wider text-xs hover:brightness-110 shadow-md">
+                        Transmutar por 250 🪙
+                    </button>
+                </form>
+            </div>
+
+            </div>
+
+        </div>
+
+    {% else %}
+        <!-- CÁMARA DE ADOPCIÓN (SELECCIÓN VISUAL DE LAS 5 CRIATURAS) -->
+        <div class="bg-vip-panel border border-vip-gold/40 rounded-3xl p-5 flex flex-col gap-4 shadow-[0_0_25px_rgba(212,175,55,0.15)]">
+            <div class="text-center">
+                <span class="text-4xl">🔮</span>
+                <h3 class="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-vip-gold to-yellow-300 uppercase tracking-widest mt-1">
+                    Cámara de Invocación
+                </h3>
+                <p class="text-xs text-vip-text/70 mt-1">
+                    Elige el guardián de tus placeres y fortuna en el Reino.
+                </p>
+            </div>
+
+            <form action="{% url 'pets:adopt' %}" method="POST" class="flex flex-col gap-4 mt-2">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+                <!-- Selector Visual de Especies (5 Mascotas) -->
+                <div class="flex flex-col gap-2.5">
+                    
+                    <!-- 1. Pantera -->
+                    <label class="relative flex items-center gap-3 p-3 rounded-2xl border-2 border-vip-gold/30 bg-black/60 cursor-pointer hover:border-vip-gold transition-all group overflow-hidden">
+                        <input type="radio" name="species" value="panther" checked class="accent-vip-gold scale-125 ml-1">
+                        <div class="w-12 h-12 rounded-xl bg-purple-950/80 border border-vip-gold/50 flex items-center justify-center text-2xl flex-shrink-0">
+                            🐈‍⬛
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs font-black text-vip-gold tracking-wide">Pantera de Ébano</p>
+                            <p class="text-[10px] text-purple-300 font-semibold">⚡ +10% Oro en Casino</p>
+                            <p class="text-[10px] text-vip-text/50">Acecha las sombras del Reino con ojos amatista.</p>
+                        </div>
+                    </label>
+
+                    <!-- 2. Kitsune -->
+                    <label class="relative flex items-center gap-3 p-3 rounded-2xl border-2 border-vip-gold/30 bg-black/60 cursor-pointer hover:border-vip-gold transition-all group overflow-hidden">
+                        <input type="radio" name="species" value="fox" class="accent-vip-gold scale-125 ml-1">
+                        <div class="w-12 h-12 rounded-xl bg-yellow-950/80 border border-vip-gold/50 flex items-center justify-center text-2xl flex-shrink-0">
+                            🦊
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs font-black text-vip-gold tracking-wide">Zorro Kitsune Dorado</p>
+                            <p class="text-[10px] text-yellow-300 font-semibold">⏳ Bono Diario cada 22h</p>
+                            <p class="text-[10px] text-vip-text/50">Fuego espiritual que atrae la buena fortuna.</p>
+                        </div>
+                    </label>
+
+                    <!-- 3. Víbora -->
+                    <label class="relative flex items-center gap-3 p-3 rounded-2xl border-2 border-vip-gold/30 bg-black/60 cursor-pointer hover:border-vip-gold transition-all group overflow-hidden">
+                        <input type="radio" name="species" value="viper" class="accent-vip-gold scale-125 ml-1">
+                        <div class="w-12 h-12 rounded-xl bg-emerald-950/80 border border-vip-gold/50 flex items-center justify-center text-2xl flex-shrink-0">
+                            🐍
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs font-black text-vip-gold tracking-wide">Víbora de Esmeralda</p>
+                            <p class="text-[10px] text-green-400 font-semibold">💎 -15% en KingdomFans</p>
+                            <p class="text-[10px] text-vip-text/50">Escamas de joyas imperiales y seducción letal.</p>
+                        </div>
+                    </label>
+
+                    <!-- 4. Cuervo -->
+                    <label class="relative flex items-center gap-3 p-3 rounded-2xl border-2 border-vip-gold/30 bg-black/60 cursor-pointer hover:border-vip-gold transition-all group overflow-hidden">
+                        <input type="radio" name="species" value="raven" class="accent-vip-gold scale-125 ml-1">
+                        <div class="w-12 h-12 rounded-xl bg-indigo-950/80 border border-vip-gold/50 flex items-center justify-center text-2xl flex-shrink-0">
+                            🦅
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs font-black text-vip-gold tracking-wide">Cuervo de Medianoche</p>
+                            <p class="text-[10px] text-indigo-300 font-semibold">🎰 +20% Suerte en Slots</p>
+                            <p class="text-[10px] text-vip-text/50">Plumaje azabache y secretos de los dioses antiguos.</p>
+                        </div>
+                    </label>
+
+                    <!-- 5. Lobo -->
+                    <label class="relative flex items-center gap-3 p-3 rounded-2xl border-2 border-vip-gold/30 bg-black/60 cursor-pointer hover:border-vip-gold transition-all group overflow-hidden">
+                        <input type="radio" name="species" value="wolf" class="accent-vip-gold scale-125 ml-1">
+                        <div class="w-12 h-12 rounded-xl bg-slate-900 border border-vip-gold/50 flex items-center justify-center text-2xl flex-shrink-0">
+                            🐺
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs font-black text-vip-gold tracking-wide">Lobo Espectral de Plata</p>
+                            <p class="text-[10px] text-blue-300 font-semibold">🛡️ Protección en Blackjack</p>
+                            <p class="text-[10px] text-vip-text/50">Leal, feroz y guardián de la fortuna imperial.</p>
+                        </div>
+                    </label>
+
+                </div>
+
+                <!-- Input Nombre -->
+                <div>
+                    <label class="text-xs font-bold text-vip-gold uppercase block mb-1">Nombre de tu Criatura:</label>
+                    <input type="text" name="name" placeholder="Bautiza a tu compañero..." required maxlength="30"
+                           class="w-full bg-vip-base border border-vip-gold/40 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-vip-gold text-center font-bold tracking-wider">
+                </div>
+
+                <button type="submit" class="w-full bg-gradient-to-r from-vip-gold via-yellow-400 to-yellow-600 text-black font-black py-3.5 rounded-xl uppercase tracking-widest text-xs hover:brightness-110 transition-all shadow-[0_0_20px_rgba(212,175,55,0.4)]">
+                    ⚔️ Iniciar Juramento Clandestino
+                </button>
+            </form>
+        </div>
+    {% endif %}
+
+</div>
+
+<!-- Script de Partículas Místicas al Acariciar -->
+<script>
+    function spawnHearts(e) {
+        const container = document.getElementById('heart-particles');
+        if (!container) return;
+
+        for (let i = 0; i < 7; i++) {
+            const heart = document.createElement('span');
+            heart.innerText = ['💖', '✨', '🐾', '⭐'][Math.floor(Math.random() * 4)];
+            heart.className = 'absolute text-xl animate-bounce';
+            heart.style.left = `${40 + Math.random() * 20}%`;
+            heart.style.top = `${40 + Math.random() * 20}%`;
+            heart.style.opacity = '1';
+            heart.style.transition = 'all 0.8s ease-out';
+
+            container.appendChild(heart);
+
+            setTimeout(() => {
+                heart.style.transform = `translate(${(Math.random() - 0.5) * 80}px, -${60 + Math.random() * 40}px) scale(1.4)`;
+                heart.style.opacity = '0';
+            }, 50);
+
+            setTimeout(() => heart.remove(), 850);
+        }
+    }
+
+    function toggleChangeModal() {
+        const modal = document.getElementById('change-pet-modal');
+        modal.classList.toggle('hidden');
+    }
+</script>
+{% endblock %}

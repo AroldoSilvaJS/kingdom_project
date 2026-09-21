@@ -15,6 +15,14 @@
         <span class="text-2xl">✨</span>
     </button>
 
+    <!-- 🏆 SALÓN DE LA FAMA -->
+    <button onclick="window.location.href='/salon-de-la-fama/?tg_id={{ tg_id }}'" 
+            class="w-full mb-2 bg-gradient-to-r from-[#1c1204] via-vip-panel to-vip-base border border-yellow-500/60 text-yellow-400 py-3.5 rounded-lg hover:brightness-125 transition-all duration-300 font-bold flex items-center justify-center gap-2.5 shadow-[0_0_12px_rgba(212,175,55,0.15)]">
+        <span class="text-xl">🏆</span>
+        <span class="tracking-wider uppercase text-xs">Salón de la Fama</span>
+        <span class="text-xl">👑</span>
+    </button>
+
     {% if is_admin %}
     <!-- 👑 ESTE BOTÓN SOLO LO VE EL ADMIN (TÚ) -->
     <button onclick="window.location.href='/admin-panel/?tg_id={{ tg_id }}'" class="w-full bg-gradient-to-r from-yellow-600 to-yellow-900 border border-vip-gold text-white py-4 rounded-lg hover:brightness-125 transition-all duration-300 font-black flex items-center justify-center gap-3 shadow-[0_0_15px_rgba(212,175,55,0.4)] mb-4 tracking-widest">
@@ -36,6 +44,13 @@
     
     <button onclick="goToWallet()" class="w-full bg-vip-base border border-vip-gold/50 text-vip-gold py-3 rounded-lg hover:bg-vip-gold hover:text-vip-base transition-colors duration-300 font-medium flex items-center justify-center gap-2">
         <span>💰</span> Mi Bóveda VIP
+    </button>
+
+   <!-- 🐾 SANTUARIO DE MASCOTAS -->
+    <button onclick="goToPets()" 
+            class="w-full mb-2 bg-gradient-to-r from-[#1c0e2a] via-vip-panel to-vip-base border border-purple-500/50 text-purple-300 py-3 rounded-lg hover:brightness-125 transition-all duration-300 font-bold flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(168,85,247,0.15)]">
+        <span class="text-lg">🐾</span>
+        <span class="tracking-wider uppercase text-xs">Mascotas Reales</span>
     </button>
 
 </div>
@@ -79,6 +94,12 @@
         const tg = window.Telegram.WebApp;
         const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '123456789';
         window.location.href = `/economy/wallet/?tg_id=${tgId}`;
+    }
+
+    function goToPets() {
+        const tg = window.Telegram.WebApp;
+        const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '123456789';
+        window.location.href = `/pets/?tg_id=${tgId}`;
     }
 </script>
 {% endblock %}

@@ -16,4 +16,7 @@ urlpatterns = [
     path('feed/unlock/<int:post_id>/', views.unlock_post, name='unlock_post'),
     path('feed/like/<int:post_id>/', views.toggle_like, name='toggle_like'),
     path('collection/', views.my_collection, name='my_collection'),
+    path('feed/tip/<int:post_id>/', views.send_tip, name='send_tip'),
+    path('<int:idol_id>/custom-request/', views.create_custom_request, name='create_custom_request'),
+    path('feed/comment/<int:post_id>/', views.add_comment, name='add_comment'),
 ]

@@ -2,26 +2,71 @@ from urllib.parse import quote as encode_param # <- Añade esto al inicio
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.contrib import messages
-from .models import IdolProfile, Review, Post, PostUnlock, PostLike
+from .models import IdolProfile, Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
 from economy.models import Wallet  # Importamos la billetera para cobrar
 
 def idol_list(request):
     tg_id = request.GET.get('tg_id')
-    tg_username = request.GET.get('tg_username') # Recibimos el nombre actual
+    tg_username = request.GET.get('tg_username')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        # 1. Actualizar estado
+        if action == 'update_status':
+            idol_id = request.POST.get('idol_id')
+            new_status = request.POST.get('status')
+            if idol_id and new_status and tg_id:
+                IdolProfile.objects.filter(id=idol_id, telegram_user_id=tg_id).update(status=new_status)
+            return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username or "")}')
+            
+        # 2. Responder Petición de Antojo
+        elif action in ['accept_request', 'reject_request']:
+            req_id = request.POST.get('request_id')
+            req_obj = get_object_or_404(CustomRequest, id=req_id, idol__telegram_user_id=tg_id)
+            
+            if action == 'reject_request':
+                # Devolvemos el oro en garantía al cliente
+                client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=req_obj.client_telegram_id)
+                client_wallet.add_funds(req_obj.bounty)
+                req_obj.status = 'rejected'
+                req_obj.save()
+                messages.info(request, f"Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al cliente.")
+                
+            elif action == 'accept_request':
+                delivered_photo = request.FILES.get('delivered_photo')
+                if not delivered_photo:
+                    messages.error(request, "Debes adjuntar la foto del antojo para completar la entrega.")
+                else:
+                    req_obj.delivered_photo = delivered_photo
+                    req_obj.status = 'accepted'
+                    req_obj.save()
+                    
+                    # Pagamos el oro a la Bóveda de la Idol
+                    idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+                    idol_wallet.add_funds(req_obj.bounty)
+                    messages.success(request, f"¡Antojo entregado con éxito! Recibiste +{req_obj.bounty} 🪙 en tu Bóveda.")
+                    
+            return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username or "")}')
     
     idols = []
+    pending_requests = []
     if tg_id:
         idols = IdolProfile.objects.filter(telegram_user_id=tg_id)
-        
-        # EL TRUCO: Si recibimos un nombre, actualizamos todas las fichas de este usuario de golpe
         if tg_username:
             idols.update(owner_username=tg_username)
+        # Peticiones pendientes para las Idols de esta Roller
+        pending_requests = CustomRequest.objects.filter(
+            idol__telegram_user_id=tg_id,
+            status='pending'
+        ).select_related('idol')
             
     context = {
         'idols': idols,
         'can_add_more': len(idols) < 3,
         'tg_id': tg_id,
-        'tg_username': tg_username # Lo pasamos al template
+        'tg_username': tg_username,
+        'pending_requests': pending_requests
     }
     return render(request, 'idols/list.html', context)
 
@@ -131,7 +176,7 @@ def social_feed(request):
     tg_id = request.GET.get('tg_id') or request.POST.get('tg_id')
     
     # Traemos todos los posts, del más nuevo al más viejo
-    posts = Post.objects.all().select_related('idol')
+    posts = Post.objects.all().select_related('idol').prefetch_related('comments')
     
     # Lista de IDs de posts VIP que este usuario ya pagó o que son de sus propias Idols
     unlocked_ids = []
@@ -153,12 +198,15 @@ def social_feed(request):
         liked_ids = list(PostLike.objects.filter(
             client_telegram_id=tg_id
         ).values_list('post_id', flat=True))
+
+        tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or 'Ciudadano VIP'
         
     return render(request, 'idols/feed.html', {
         'posts': posts,
         'tg_id': tg_id,
         'unlocked_ids': list(unlocked_ids),
-        'liked_ids': liked_ids  # <- AGREGAR ESTA LÍNEA
+        'liked_ids': liked_ids,  # <- AGREGAR ESTA LÍNEA
+        'tg_username': tg_username
     })
 
 def unlock_post(request, post_id):
@@ -282,3 +330,96 @@ def my_collection(request):
         'tg_id': tg_id,
         'posts': unlocked_posts
     })
+
+def send_tip(request, post_id):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        post = get_object_or_404(Post, id=post_id)
+        
+        try:
+            amount = int(request.POST.get('tip_amount', 0))
+        except ValueError:
+            amount = 0
+            
+        if amount <= 0:
+            messages.error(request, "El monto de la propina debe ser mayor a 0.")
+            return redirect(f'/idols/feed/?tg_id={tg_id}')
+            
+        # Validación: No puedes darte propina a tu propia Idol
+        if tg_id and int(tg_id) == post.idol.telegram_user_id:
+            messages.info(request, "No puedes enviarte propinas a ti mismo.")
+            return redirect(f'/idols/feed/?tg_id={tg_id}')
+            
+        # Buscar la billetera del cliente
+        client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        
+        if client_wallet.remove_funds(amount):
+            # Transferir el oro a la Idol
+            idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
+            idol_wallet.add_funds(amount)
+            messages.success(request, f"🥂 ¡Le has invitado un trago de {amount} 🪙 a {post.idol.stage_name}!")
+        else:
+            messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+            
+        return redirect(f'/idols/feed/?tg_id={tg_id}')
+
+def create_custom_request(request, idol_id):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        tg_username = request.POST.get('tg_username') or 'Cliente VIP'
+        idol = get_object_or_404(IdolProfile, id=idol_id)
+        
+        try:
+            bounty = int(request.POST.get('bounty', 100))
+        except ValueError:
+            bounty = 100
+            
+        description = request.POST.get('description', '').strip()
+        
+        if bounty <= 0 or not description:
+            messages.error(request, "Por favor completa la descripción y una oferta válida.")
+            return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+            
+        # Comprobar si el cliente tiene saldo suficiente
+        client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        if not client_wallet.remove_funds(bounty):
+            messages.error(request, f"No tienes suficiente oro ({bounty} 🪙) en tu Bóveda.")
+            return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+            
+        # Crear la petición reteniendo el oro
+        CustomRequest.objects.create(
+            idol=idol,
+            client_telegram_id=tg_id,
+            client_username=tg_username,
+            description=description,
+            bounty=bounty,
+            status='pending'
+        )
+        messages.success(request, f"¡Petición enviada a {idol.stage_name}! Tu oro ({bounty} 🪙) quedó en custodia hasta que sea aceptada.")
+        
+    return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+def add_comment(request, post_id):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        tg_username = request.POST.get('tg_username') or 'Cliente VIP'
+        text = request.POST.get('text', '').strip()
+        
+        post = get_object_or_404(Post, id=post_id)
+        
+        if text:
+            # Si el que comenta es el dueño de la Idol, guardamos el nombre con corona
+            if tg_id and int(tg_id) == post.idol.telegram_user_id:
+                nombre_final = f"{post.idol.stage_name} (Idol)"
+            else:
+                nombre_final = tg_username
+                
+            PostComment.objects.create(
+                post=post,
+                author_telegram_id=tg_id if tg_id else 0,
+                author_name=nombre_final,
+                text=text
+            )
+            messages.success(request, "Comentario publicado.")
+            
+        return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')

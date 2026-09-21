@@ -1,6 +1,9 @@
 from django.shortcuts import render, redirect
 from idols.models import UserRole
 from economy.models import Wallet
+from django.db.models import Count, Sum
+from idols.models import IdolProfile, Post, PostUnlock
+from economy.models import Wallet
 
 # 👑 Tu ID Maestro de Telegram
 ADMIN_TG_ID = '7474444797'
@@ -95,4 +98,37 @@ def admin_panel(request):
     return render(request, 'core/admin_panel.html', {
         'usuarios': todos_los_usuarios,
         'tg_id': tg_id
+    })
+
+def leaderboard(request):
+    tg_id = request.GET.get('tg_id') or request.session.get('tg_id')
+
+    # 1. TOP IDOLS: Ordenadas por desbloqueos de sus fotos VIP y likes
+    top_idols = IdolProfile.objects.annotate(
+        total_unlocks=Count('posts__unlocks'),
+        total_likes=Sum('posts__likes')
+    ).order_by('-total_unlocks', '-rating')[:10]
+
+    # Aseguramos que total_likes no sea None
+    for idol in top_idols:
+        idol.likes_count = idol.total_likes or 0
+
+    # 2. TOP MAGNATES: Clientes con más oro en su Bóveda
+    top_wallets = Wallet.objects.order_by('-balance')[:10]
+    
+    # Asignamos títulos nobiliarios dinámicos según posición
+    titulos = ["👑 Emperador Clandestino", "💎 Duque de Oro", "🥂 Lord del Placer", "✨ Barón VIP", "🎩 Caballero del Reino"]
+    magnates = []
+    for idx, w in enumerate(top_wallets):
+        magnates.append({
+            'telegram_id': str(w.telegram_user_id)[-4:], # Ocultamos parte del ID por privacidad VIP (ej: ...4797)
+            'full_id': w.telegram_user_id,
+            'balance': w.balance,
+            'titulo': titulos[idx] if idx < len(titulos) else "Ciudadano Honorable"
+        })
+
+    return render(request, 'core/leaderboard.html', {
+        'tg_id': tg_id,
+        'top_idols': top_idols,
+        'magnates': magnates
     })

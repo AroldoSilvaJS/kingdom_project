@@ -24,6 +24,7 @@ urlpatterns = [
     path('idols/', include('idols.urls')),
     path('economy/', include('economy.urls')), # <- AÑADIR ESTA LÍNEA
     path('', include('core.urls')),
+    path('pets/', include('pets.urls')),
 ]
 
 # Añadir esto al final:

@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     'core',
     'idols',
     'economy',
+    'pets',
     
     # Librerías externas
     'corsheaders',
@@ -233,6 +234,7 @@ urlpatterns = [
     path('idols/', include('idols.urls')),
     path('economy/', include('economy.urls')), # <- AÑADIR ESTA LÍNEA
     path('', include('core.urls')),
+    path('pets/', include('pets.urls')),
 ]
 
 # Añadir esto al final:
@@ -318,6 +320,7 @@ urlpatterns = [
     path('', views.main_menu, name='menu'),
     # Conectamos tu nueva habitación VIP:
     path('admin-panel/', views.admin_panel, name='admin_panel'),
+    path('salon-de-la-fama/', views.leaderboard, name='leaderboard'),
 ]
 
 ==================================================
@@ -326,6 +329,10 @@ ARCHIVO: .\core\views.py
 
 from django.shortcuts import render, redirect
 from idols.models import UserRole
+from economy.models import Wallet
+from django.db.models import Count, Sum
+from idols.models import IdolProfile, Post, PostUnlock
+from economy.models import Wallet
 
 # 👑 Tu ID Maestro de Telegram
 ADMIN_TG_ID = '7474444797'
@@ -385,20 +392,74 @@ def admin_panel(request):
                 if action == 'toggle_role':
                     usuario_target.role = 'cliente' if usuario_target.role == 'idol' else 'idol'
                     usuario_target.save()
-                # Si apretaste "Expulsar"
+            # Si apretaste "Expulsar"
                 elif action == 'delete':
                     usuario_target.delete()
+                
+                # --- AGREGAR DESDE AQUÍ (GESTIÓN DE ORO) ---
+                elif action in ['add_gold', 'remove_gold']:
+                    try:
+                        amount = int(request.POST.get('amount', 0))
+                        if amount > 0:
+                            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=target_id)
+                            if action == 'add_gold':
+                                wallet.add_funds(amount)
+                            elif action == 'remove_gold':
+                                wallet.remove_funds(amount)
+                    except ValueError:
+                        pass
+                # --- HASTA AQUÍ ---
+                
         
         # Recargamos la página para ver los cambios
         return redirect(f"/admin-panel/?tg_id={tg_id}")
     # -------------------------------
 
-    # Traemos a todos los usuarios de la base de datos
+  # Traemos a todos los usuarios de la base de datos
     todos_los_usuarios = UserRole.objects.all()
+
+    # --- AGREGAR ESTAS LÍNEAS PARA LEER EL SALDO EN VIVO ---
+    for u in todos_los_usuarios:
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=u.telegram_id)
+        u.balance = wallet.balance
+    # -------------------------------------------------------
     
     return render(request, 'core/admin_panel.html', {
         'usuarios': todos_los_usuarios,
         'tg_id': tg_id
+    })
+
+def leaderboard(request):
+    tg_id = request.GET.get('tg_id') or request.session.get('tg_id')
+
+    # 1. TOP IDOLS: Ordenadas por desbloqueos de sus fotos VIP y likes
+    top_idols = IdolProfile.objects.annotate(
+        total_unlocks=Count('posts__unlocks'),
+        total_likes=Sum('posts__likes')
+    ).order_by('-total_unlocks', '-rating')[:10]
+
+    # Aseguramos que total_likes no sea None
+    for idol in top_idols:
+        idol.likes_count = idol.total_likes or 0
+
+    # 2. TOP MAGNATES: Clientes con más oro en su Bóveda
+    top_wallets = Wallet.objects.order_by('-balance')[:10]
+    
+    # Asignamos títulos nobiliarios dinámicos según posición
+    titulos = ["👑 Emperador Clandestino", "💎 Duque de Oro", "🥂 Lord del Placer", "✨ Barón VIP", "🎩 Caballero del Reino"]
+    magnates = []
+    for idx, w in enumerate(top_wallets):
+        magnates.append({
+            'telegram_id': str(w.telegram_user_id)[-4:], # Ocultamos parte del ID por privacidad VIP (ej: ...4797)
+            'full_id': w.telegram_user_id,
+            'balance': w.balance,
+            'titulo': titulos[idx] if idx < len(titulos) else "Ciudadano Honorable"
+        })
+
+    return render(request, 'core/leaderboard.html', {
+        'tg_id': tg_id,
+        'top_idols': top_idols,
+        'magnates': magnates
     })
 
 ==================================================
@@ -478,6 +539,14 @@ class Wallet(models.Model):
         if not self.last_bonus_claim:
             return True # Si nunca ha reclamado, puede hacerlo
         return timezone.now() >= self.last_bonus_claim + timedelta(hours=24)
+    
+    # NUEVO MÉTODO: Calcula los segundos exactos que faltan para el próximo bono
+    def seconds_until_next_bonus(self):
+        if self.can_claim_bonus():
+            return 0
+        proximo_reclamo = self.last_bonus_claim + timedelta(hours=24)
+        restante = (proximo_reclamo - timezone.now()).total_seconds()
+        return max(0, int(restante))
 
 ==================================================
 ARCHIVO: .\economy\tests.py
@@ -798,6 +867,13 @@ from django.db.models import Avg
 from django.core.exceptions import ValidationError
 
 class IdolProfile(models.Model):
+
+    STATUS_CHOICES = [
+        ('online', '🟢 Chateando en Telegram'),
+        ('antojos', '🔥 Sesión de Antojos'),
+        ('offline', '🌙 Descansando'),
+    ]
+
     # Relacionamos este perfil directamente con el ID numérico de Telegram del usuario
     telegram_user_id = models.BigIntegerField(db_index=True)
     owner_username = models.CharField("Usuario de Telegram", max_length=100, blank=True, null=True)
@@ -806,7 +882,8 @@ class IdolProfile(models.Model):
     stage_name = models.CharField("Nombre Artístico", max_length=100)
     group = models.CharField("Grupo/Solista", max_length=100, blank=True, null=True)
     bio = models.TextField("Biografía / Presentación", max_length=500)
-    
+    status = models.CharField("Estado Actual", max_length=10, choices=STATUS_CHOICES, default='online')
+
     photo = models.ImageField("Foto de Perfil", upload_to='idols_photos/', blank=True, null=True)
     
     # Estadísticas básicas para la ficha
@@ -904,6 +981,19 @@ class PostUnlock(models.Model):
 
     def __str__(self):
         return f"Post #{self.post.id} desbloqueado por {self.client_telegram_id}"
+
+# --- AGREGAR AL FINAL DE idols/models.py ---
+class PostLike(models.Model):
+    """Registra qué usuario le dio like a qué publicación"""
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='user_likes')
+    client_telegram_id = models.BigIntegerField("ID del Usuario", db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('post', 'client_telegram_id')
+
+    def __str__(self):
+        return f"Like en Post #{self.post.id} por {self.client_telegram_id}"
     
 class UserRole(models.Model):
     telegram_id = models.CharField(max_length=100, unique=True)
@@ -911,6 +1001,49 @@ class UserRole(models.Model):
 
     def __str__(self):
         return f"{self.telegram_id} - {self.role}"
+
+# --- MODELO PETICIONES PERSONALIZADAS DE ANTOJOS ---
+class CustomRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('accepted', 'Entregada'),
+        ('rejected', 'Rechazada'),
+    ]
+    
+    idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='custom_requests')
+    client_telegram_id = models.BigIntegerField("ID del Cliente", db_index=True)
+    client_username = models.CharField("Cliente", max_length=100)
+    
+    description = models.TextField("Detalle del Antojo", max_length=300)
+    bounty = models.PositiveIntegerField("Oro Ofrecido", default=100)
+    status = models.CharField("Estado", max_length=10, choices=STATUS_CHOICES, default='pending')
+    
+    delivered_photo = models.ImageField("Foto Entregada", upload_to='custom_antojos/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Petición de Antojo"
+        verbose_name_plural = "Peticiones de Antojos"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Antojo para {self.idol.stage_name} de {self.client_username} ({self.bounty} 🪙)"
+
+# --- MODELO DE COMENTARIOS EN EL FEED ---
+class PostComment(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    author_telegram_id = models.BigIntegerField("ID del Autor", db_index=True)
+    author_name = models.CharField("Nombre o @ de Usuario", max_length=100)
+    text = models.TextField("Comentario", max_length=250)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Comentario de Post"
+        verbose_name_plural = "Comentarios de Posts"
+        ordering = ['created_at'] # Del más antiguo al más reciente
+
+    def __str__(self):
+        return f"Comentario de {self.author_name} en Post #{self.post.id}"
 
 ==================================================
 ARCHIVO: .\idols\tests.py
@@ -941,6 +1074,11 @@ urlpatterns = [
     path('feed/unlock/<int:post_id>/', views.unlock_post, name='unlock_post'),
     path('feed/new/', views.create_post, name='create_post'), # <- AÑADIR ESTA
     path('feed/unlock/<int:post_id>/', views.unlock_post, name='unlock_post'),
+    path('feed/like/<int:post_id>/', views.toggle_like, name='toggle_like'),
+    path('collection/', views.my_collection, name='my_collection'),
+    path('feed/tip/<int:post_id>/', views.send_tip, name='send_tip'),
+    path('<int:idol_id>/custom-request/', views.create_custom_request, name='create_custom_request'),
+    path('feed/comment/<int:post_id>/', views.add_comment, name='add_comment'),
 ]
 
 
@@ -950,27 +1088,73 @@ ARCHIVO: .\idols\views.py
 
 from urllib.parse import quote as encode_param # <- Añade esto al inicio
 from django.shortcuts import render, redirect, get_object_or_404
+from django.http import JsonResponse
 from django.contrib import messages
-from .models import IdolProfile, Review, Post, PostUnlock
+from .models import IdolProfile, Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
 from economy.models import Wallet  # Importamos la billetera para cobrar
 
 def idol_list(request):
     tg_id = request.GET.get('tg_id')
-    tg_username = request.GET.get('tg_username') # Recibimos el nombre actual
+    tg_username = request.GET.get('tg_username')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        # 1. Actualizar estado
+        if action == 'update_status':
+            idol_id = request.POST.get('idol_id')
+            new_status = request.POST.get('status')
+            if idol_id and new_status and tg_id:
+                IdolProfile.objects.filter(id=idol_id, telegram_user_id=tg_id).update(status=new_status)
+            return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username or "")}')
+            
+        # 2. Responder Petición de Antojo
+        elif action in ['accept_request', 'reject_request']:
+            req_id = request.POST.get('request_id')
+            req_obj = get_object_or_404(CustomRequest, id=req_id, idol__telegram_user_id=tg_id)
+            
+            if action == 'reject_request':
+                # Devolvemos el oro en garantía al cliente
+                client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=req_obj.client_telegram_id)
+                client_wallet.add_funds(req_obj.bounty)
+                req_obj.status = 'rejected'
+                req_obj.save()
+                messages.info(request, f"Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al cliente.")
+                
+            elif action == 'accept_request':
+                delivered_photo = request.FILES.get('delivered_photo')
+                if not delivered_photo:
+                    messages.error(request, "Debes adjuntar la foto del antojo para completar la entrega.")
+                else:
+                    req_obj.delivered_photo = delivered_photo
+                    req_obj.status = 'accepted'
+                    req_obj.save()
+                    
+                    # Pagamos el oro a la Bóveda de la Idol
+                    idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+                    idol_wallet.add_funds(req_obj.bounty)
+                    messages.success(request, f"¡Antojo entregado con éxito! Recibiste +{req_obj.bounty} 🪙 en tu Bóveda.")
+                    
+            return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username or "")}')
     
     idols = []
+    pending_requests = []
     if tg_id:
         idols = IdolProfile.objects.filter(telegram_user_id=tg_id)
-        
-        # EL TRUCO: Si recibimos un nombre, actualizamos todas las fichas de este usuario de golpe
         if tg_username:
             idols.update(owner_username=tg_username)
+        # Peticiones pendientes para las Idols de esta Roller
+        pending_requests = CustomRequest.objects.filter(
+            idol__telegram_user_id=tg_id,
+            status='pending'
+        ).select_related('idol')
             
     context = {
         'idols': idols,
         'can_add_more': len(idols) < 3,
         'tg_id': tg_id,
-        'tg_username': tg_username # Lo pasamos al template
+        'tg_username': tg_username,
+        'pending_requests': pending_requests
     }
     return render(request, 'idols/list.html', context)
 
@@ -1080,19 +1264,37 @@ def social_feed(request):
     tg_id = request.GET.get('tg_id') or request.POST.get('tg_id')
     
     # Traemos todos los posts, del más nuevo al más viejo
-    posts = Post.objects.all().select_related('idol')
+    posts = Post.objects.all().select_related('idol').prefetch_related('comments')
     
-    # Lista de IDs de posts VIP que este usuario ya pagó
+    # Lista de IDs de posts VIP que este usuario ya pagó o que son de sus propias Idols
     unlocked_ids = []
     if tg_id:
-        unlocked_ids = PostUnlock.objects.filter(
+        # Posts pagados por el cliente
+        pagados = list(PostUnlock.objects.filter(
             client_telegram_id=tg_id
-        ).values_list('post_id', flat=True)
+        ).values_list('post_id', flat=True))
+        
+        # Posts que le pertenecen a las Idols del usuario actual (gratis para el creador)
+        propios = list(Post.objects.filter(
+            idol__telegram_user_id=tg_id
+        ).values_list('id', flat=True))
+        
+        unlocked_ids = set(pagados + propios)
+    
+    # IDs de posts a los que este usuario ya dio like
+    
+        liked_ids = list(PostLike.objects.filter(
+            client_telegram_id=tg_id
+        ).values_list('post_id', flat=True))
+
+        tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or 'Ciudadano VIP'
         
     return render(request, 'idols/feed.html', {
         'posts': posts,
         'tg_id': tg_id,
-        'unlocked_ids': list(unlocked_ids)
+        'unlocked_ids': list(unlocked_ids),
+        'liked_ids': liked_ids,  # <- AGREGAR ESTA LÍNEA
+        'tg_username': tg_username
     })
 
 def unlock_post(request, post_id):
@@ -1100,19 +1302,26 @@ def unlock_post(request, post_id):
         tg_id = request.POST.get('tg_id')
         post = get_object_or_404(Post, id=post_id)
         
+        # Validación: si es el dueño de la Idol, no se cobra
+        if tg_id and int(tg_id) == post.idol.telegram_user_id:
+            messages.info(request, "Esta publicación es de tu Idol, ya la tienes desbloqueada.")
+            return redirect(f'/idols/feed/?tg_id={tg_id}')
+        
         # Buscamos la bóveda del cliente
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         
         # Verificamos que sea de pago y tenga saldo
         if post.network == 'fans':
             if wallet.balance >= post.price:
-                # 1. Le restamos el oro al cliente
+                # 1. Descontamos el oro al cliente
                 wallet.remove_funds(post.price)
                 
-                # 2. Registramos que ya desbloqueó esta foto
+                # 2. Registramos que el cliente desbloqueó la foto
                 PostUnlock.objects.get_or_create(post=post, client_telegram_id=tg_id)
                 
-                # (Opcional a futuro: Aquí podrías sumarle el oro al dueño de la Idol)
+                # 3. 💰 TRANSFERENCIA DE ORO A LA IDOL:
+                idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
+                idol_wallet.add_funds(post.price)
                 
                 messages.success(request, f"¡Foto desbloqueada con éxito! (-{post.price} 🪙)")
             else:
@@ -1165,9 +1374,347 @@ def create_post(request):
         'tg_id': tg_id,
         'mis_idols': mis_idols
     })
+    
+def toggle_like(request, post_id):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        if not tg_id:
+            return JsonResponse({'error': 'No user ID provided'}, status=400)
+            
+        post = get_object_or_404(Post, id=post_id)
+        
+        # Verificamos si ya dio like
+        existing_like = PostLike.objects.filter(post=post, client_telegram_id=tg_id).first()
+        
+        if existing_like:
+            # Si ya existía, lo quitamos
+            existing_like.delete()
+            if post.likes > 0:
+                post.likes -= 1
+                post.save()
+            liked = False
+        else:
+            # Si no existía, lo creamos
+            PostLike.objects.create(post=post, client_telegram_id=tg_id)
+            post.likes += 1
+            post.save()
+            liked = True
+            
+        return JsonResponse({'liked': liked, 'likes': post.likes})
+        
+    return JsonResponse({'error': 'Invalid method'}, status=405)
+
+def my_collection(request):
+    tg_id = request.GET.get('tg_id') or request.session.get('tg_id')
+    unlocked_posts = []
+    
+    if tg_id:
+        # Buscamos todos los registros de PostUnlock del usuario con sus posts e idols
+        unlocked_posts = Post.objects.filter(
+            unlocks__client_telegram_id=tg_id
+        ).select_related('idol').order_by('-unlocks__unlocked_at')
+        
+    return render(request, 'idols/collection.html', {
+        'tg_id': tg_id,
+        'posts': unlocked_posts
+    })
+
+def send_tip(request, post_id):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        post = get_object_or_404(Post, id=post_id)
+        
+        try:
+            amount = int(request.POST.get('tip_amount', 0))
+        except ValueError:
+            amount = 0
+            
+        if amount <= 0:
+            messages.error(request, "El monto de la propina debe ser mayor a 0.")
+            return redirect(f'/idols/feed/?tg_id={tg_id}')
+            
+        # Validación: No puedes darte propina a tu propia Idol
+        if tg_id and int(tg_id) == post.idol.telegram_user_id:
+            messages.info(request, "No puedes enviarte propinas a ti mismo.")
+            return redirect(f'/idols/feed/?tg_id={tg_id}')
+            
+        # Buscar la billetera del cliente
+        client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        
+        if client_wallet.remove_funds(amount):
+            # Transferir el oro a la Idol
+            idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
+            idol_wallet.add_funds(amount)
+            messages.success(request, f"🥂 ¡Le has invitado un trago de {amount} 🪙 a {post.idol.stage_name}!")
+        else:
+            messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+            
+        return redirect(f'/idols/feed/?tg_id={tg_id}')
+
+def create_custom_request(request, idol_id):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        tg_username = request.POST.get('tg_username') or 'Cliente VIP'
+        idol = get_object_or_404(IdolProfile, id=idol_id)
+        
+        try:
+            bounty = int(request.POST.get('bounty', 100))
+        except ValueError:
+            bounty = 100
+            
+        description = request.POST.get('description', '').strip()
+        
+        if bounty <= 0 or not description:
+            messages.error(request, "Por favor completa la descripción y una oferta válida.")
+            return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+            
+        # Comprobar si el cliente tiene saldo suficiente
+        client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        if not client_wallet.remove_funds(bounty):
+            messages.error(request, f"No tienes suficiente oro ({bounty} 🪙) en tu Bóveda.")
+            return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+            
+        # Crear la petición reteniendo el oro
+        CustomRequest.objects.create(
+            idol=idol,
+            client_telegram_id=tg_id,
+            client_username=tg_username,
+            description=description,
+            bounty=bounty,
+            status='pending'
+        )
+        messages.success(request, f"¡Petición enviada a {idol.stage_name}! Tu oro ({bounty} 🪙) quedó en custodia hasta que sea aceptada.")
+        
+    return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+def add_comment(request, post_id):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        tg_username = request.POST.get('tg_username') or 'Cliente VIP'
+        text = request.POST.get('text', '').strip()
+        
+        post = get_object_or_404(Post, id=post_id)
+        
+        if text:
+            # Si el que comenta es el dueño de la Idol, guardamos el nombre con corona
+            if tg_id and int(tg_id) == post.idol.telegram_user_id:
+                nombre_final = f"{post.idol.stage_name} (Idol)"
+            else:
+                nombre_final = tg_username
+                
+            PostComment.objects.create(
+                post=post,
+                author_telegram_id=tg_id if tg_id else 0,
+                author_name=nombre_final,
+                text=text
+            )
+            messages.success(request, "Comentario publicado.")
+            
+        return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
 
 ==================================================
 ARCHIVO: .\idols\__init__.py
+==================================================
+
+
+
+==================================================
+ARCHIVO: .\pets\admin.py
+==================================================
+
+from django.contrib import admin
+
+# Register your models here.
+
+
+==================================================
+ARCHIVO: .\pets\apps.py
+==================================================
+
+from django.apps import AppConfig
+
+
+class PetsConfig(AppConfig):
+    name = 'pets'
+
+
+==================================================
+ARCHIVO: .\pets\models.py
+==================================================
+
+from django.db import models
+from django.utils import timezone
+from datetime import timedelta
+
+class Pet(models.Model):
+    SPECIES_CHOICES = [
+        ('panther', 'Pantera de Ébano'),
+        ('fox', 'Zorro Kitsune Dorado'),
+        ('viper', 'Víbora de Esmeralda'),
+        ('raven', 'Cuervo de Medianoche'),
+        ('wolf', 'Lobo Espectral de Plata'),
+    ]
+
+    telegram_user_id = models.BigIntegerField("ID del Dueño", db_index=True, unique=True)
+    name = models.CharField("Nombre de la Mascota", max_length=50)
+    species = models.CharField("Especie", max_length=20, choices=SPECIES_CHOICES)
+    
+    level = models.PositiveIntegerField("Nivel", default=1)
+    xp = models.PositiveIntegerField("Experiencia", default=0)
+    energy = models.PositiveIntegerField("Energía / Saciedad", default=80)
+    
+    last_fed = models.DateTimeField(auto_now_add=True)
+    last_petted = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def xp_needed_for_next_level(self):
+        return self.level * 100
+
+    def feed(self):
+        self.energy = min(100, self.energy + 25)
+        self.xp += 30
+        if self.xp >= self.xp_needed_for_next_level():
+            self.xp -= self.xp_needed_for_next_level()
+            self.level += 1
+        self.last_fed = timezone.now()
+        self.save()
+
+    def pet_action(self):
+        self.xp += 10
+        if self.xp >= self.xp_needed_for_next_level():
+            self.xp -= self.xp_needed_for_next_level()
+            self.level += 1
+        self.last_petted = timezone.now()
+        self.save()
+
+    def get_image_url(self):
+        return f"/media/pets/{self.species}.png"
+
+    def get_buff_description(self):
+        buffs = {
+            'panther': '+10% de Oro extra en victorias de Casino',
+            'fox': 'Bono Diario cada 22h (en vez de 24h)',
+            'viper': '15% de Descuento en fotos de KingdomFans',
+            'raven': '+20% de probabilidad de Jackpots en Slots',
+            'wolf': '10% de Protección contra derrotas en Blackjack',
+        }
+        return buffs.get(self.species, 'Bendición Real Activa')
+
+    def __str__(self):
+        return f"{self.name} ({self.get_species_display()}) - Nivel {self.level}"
+
+==================================================
+ARCHIVO: .\pets\tests.py
+==================================================
+
+from django.test import TestCase
+
+# Create your tests here.
+
+
+==================================================
+ARCHIVO: .\pets\urls.py
+==================================================
+
+from django.urls import path
+from . import views
+
+app_name = 'pets'
+
+urlpatterns = [
+    path('', views.pet_sanctuary, name='sanctuary'),
+    path('adopt/', views.adopt_pet, name='adopt'),
+    path('interact/', views.interact_pet, name='interact'),
+    path('change/', views.change_pet, name='change_pet'),
+]
+
+==================================================
+ARCHIVO: .\pets\views.py
+==================================================
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from .models import Pet
+from economy.models import Wallet
+
+def pet_sanctuary(request):
+    tg_id = request.GET.get('tg_id') or request.session.get('tg_id')
+    pet = None
+    
+    if tg_id:
+        pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+
+    return render(request, 'pets/sanctuary.html', {
+        'tg_id': tg_id,
+        'pet': pet
+    })
+
+def adopt_pet(request):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        name = request.POST.get('name', '').strip()
+        species = request.POST.get('species')
+        
+        if tg_id and name and species:
+            if not Pet.objects.filter(telegram_user_id=tg_id).exists():
+                Pet.objects.create(
+                    telegram_user_id=tg_id,
+                    name=name,
+                    species=species
+                )
+                messages.success(request, f"¡Has adoptado a {name}! Bienvenido a tu Santuario.")
+                
+        return redirect(f'/pets/?tg_id={tg_id}')
+
+def interact_pet(request):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        action = request.POST.get('action')
+        pet = get_object_or_404(Pet, telegram_user_id=tg_id)
+        
+        if action == 'feed':
+            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+            if wallet.remove_funds(10):
+                pet.feed()
+                messages.success(request, f"🍖 ¡Alimentaste a {pet.name}! (+25 Energía, +30 XP) (-10 🪙)")
+            else:
+                messages.error(request, "No tienes suficientes monedas de oro (10 🪙) para comprar alimento.")
+                
+        elif action == 'pet':
+            pet.pet_action()
+            messages.success(request, f"✨ ¡Acariciaste a {pet.name}! Se siente feliz y amado (+10 XP)")
+            
+        return redirect(f'/pets/?tg_id={tg_id}')
+
+def change_pet(request):
+    if request.method == 'POST':
+        tg_id = request.POST.get('tg_id')
+        new_species = request.POST.get('new_species')
+        new_name = request.POST.get('new_name', '').strip()
+        cost = 250 # Costo por cambiar de mascota
+        
+        pet = get_object_or_404(Pet, telegram_user_id=tg_id)
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        
+        if not new_name:
+            messages.error(request, "Debes ingresar un nombre para tu nueva mascota.")
+            return redirect(f'/pets/?tg_id={tg_id}')
+            
+        if wallet.remove_funds(cost):
+            pet.species = new_species
+            pet.name = new_name
+            pet.level = 1
+            pet.xp = 0
+            pet.energy = 100
+            pet.save()
+            messages.success(request, f"✨ ¡Ritual completado! Has transmutado tu mascota a {new_name} ({pet.get_species_display()}) por {cost} 🪙.")
+        else:
+            messages.error(request, f"No tienes suficiente oro ({cost} 🪙) para realizar el ritual de cambio.")
+            
+    return redirect(f'/pets/?tg_id={tg_id}')
+
+==================================================
+ARCHIVO: .\pets\__init__.py
 ==================================================
 
 
@@ -1283,20 +1830,7 @@ ARCHIVO: .\templates\core\admin_panel.html
                             {{ user.role }}
                         </span>
                     </p>
-                </div>
-            </div>
-            <!-- Aquí pondremos los botones de banear/cambiar rol después -->
-             <div class="flex flex-col gap-3">
-        {% for user in usuarios %}
-        <div class="bg-black/50 border border-vip-gold/30 p-4 rounded-lg flex flex-col gap-2 shadow-[0_0_10px_rgba(212,175,55,0.05)]">
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="text-white font-bold text-sm">ID: {{ user.telegram_id }}</p>
-                    <p class="text-xs text-gray-400 mt-1">Rol actual: 
-                        <span class="{% if user.role == 'idol' %}text-purple-400{% else %}text-vip-gold{% endif %} font-bold uppercase tracking-wider">
-                            {{ user.role }}
-                        </span>
-                    </p>
+                    <p class="text-xs text-vip-gold mt-1 font-semibold">Bóveda: 🪙 {{ user.balance }}</p>
                 </div>
             </div>
             
@@ -1322,14 +1856,22 @@ ARCHIVO: .\templates\core\admin_panel.html
                     </button>
                 </form>
             </div>
-            
-        </div>
-        {% empty %}
-        <div class="text-center py-6 text-gray-500 italic">
-            Aún no hay ciudadanos registrados en la base de datos.
-        </div>
-        {% endfor %}
-    </div>
+
+            <!-- Inyectar / Quitar Oro VIP -->
+            <form method="POST" class="flex items-center gap-2 mt-2 pt-2 border-t border-vip-gold/10">
+                {% csrf_token %}
+                <input type="hidden" name="target_id" value="{{ user.telegram_id }}">
+                <input type="number" name="amount" min="1" placeholder="Oro" required
+                       class="w-24 bg-vip-base border border-vip-gold/40 text-white text-xs px-2 py-1.5 rounded focus:outline-none focus:border-vip-gold text-center">
+                <button type="submit" name="action" value="add_gold" 
+                        class="flex-1 bg-yellow-600/30 border border-vip-gold text-vip-gold py-1.5 rounded text-xs hover:bg-vip-gold hover:text-black transition-colors font-bold tracking-wider">
+                    ➕ INYECTAR
+                </button>
+                <button type="submit" name="action" value="remove_gold" 
+                        class="flex-1 bg-red-900/30 border border-red-500/50 text-red-300 py-1.5 rounded text-xs hover:bg-red-600 hover:text-white transition-colors font-bold tracking-wider">
+                    ➖ QUITAR
+                </button>
+            </form>
         </div>
         {% empty %}
         <div class="text-center py-6 text-gray-500 italic">
@@ -1338,6 +1880,144 @@ ARCHIVO: .\templates\core\admin_panel.html
         {% endfor %}
     </div>
 </div>
+{% endblock %}
+
+==================================================
+ARCHIVO: .\templates\core\leaderboard.html
+==================================================
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="p-4 mt-4 flex flex-col gap-5 mx-auto w-full max-w-md pb-20">
+    
+    <!-- Encabezado -->
+    <div class="flex justify-between items-center px-1 border-b border-vip-gold/30 pb-3">
+        <div>
+            <h2 class="text-xl font-black text-vip-gold uppercase tracking-widest drop-shadow-[0_0_10px_rgba(212,175,55,0.4)]">
+                🏆 Salón de la Fama
+            </h2>
+            <p class="text-xs text-vip-text/60">El podio de las estrellas y magnates del Reino</p>
+        </div>
+        <a href="/?tg_id={{ tg_id }}" class="text-xs text-vip-text/70 hover:text-vip-text bg-vip-panel px-3 py-1.5 rounded-full border border-vip-gold/30">
+            ⬅ Menú
+        </a>
+    </div>
+
+    <!-- Pestañas de Navegación -->
+    <div class="grid grid-cols-2 gap-2 bg-black/40 p-1 rounded-xl border border-vip-gold/20">
+        <button id="tab-idols-btn" onclick="showTab('idols')" 
+                class="py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-vip-gold text-black shadow-md">
+            🔥 Top Idols
+        </button>
+        <button id="tab-magnates-btn" onclick="showTab('magnates')" 
+                class="py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all text-vip-text/60 hover:text-vip-gold">
+            💰 Top Magnates
+        </button>
+    </div>
+
+    <!-- SECCIÓN 1: TOP IDOLS -->
+    <div id="section-idols" class="flex flex-col gap-3">
+        {% for idol in top_idols %}
+            <div class="bg-vip-panel border {% if forloop.counter == 1 %}border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.25)]{% elif forloop.counter == 2 %}border-gray-400{% elif forloop.counter == 3 %}border-amber-700{% else %}border-vip-gold/20{% endif %} p-3.5 rounded-2xl flex items-center justify-between transition-all">
+                
+                <div class="flex items-center gap-3">
+                    <!-- Medalla / Número -->
+                    <span class="w-8 text-center font-black text-lg">
+                        {% if forloop.counter == 1 %}🥇
+                        {% elif forloop.counter == 2 %}🥈
+                        {% elif forloop.counter == 3 %}🥉
+                        {% else %}<span class="text-xs text-vip-text/40 font-mono">#{{ forloop.counter }}</span>
+                        {% endif %}
+                    </span>
+
+                    <!-- Foto de la Idol -->
+                    <div class="w-12 h-12 rounded-full border-2 border-vip-gold/60 overflow-hidden bg-black flex-shrink-0">
+                        {% if idol.photo %}
+                            <img src="{{ idol.photo.url }}" class="w-full h-full object-cover">
+                        {% else %}
+                            <span class="w-full h-full flex items-center justify-center text-xl">🎭</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Datos -->
+                    <div>
+                        <h3 class="font-bold text-sm text-vip-gold leading-none">{{ idol.stage_name }}</h3>
+                        <p class="text-[11px] text-vip-text/60 mt-1">{{ idol.group|default:"Solista" }}</p>
+                        <p class="text-[10px] text-purple-300 mt-0.5">🔥 {{ idol.total_unlocks }} antojos VIP vendidos</p>
+                    </div>
+                </div>
+
+                <div class="text-right">
+                    <span class="text-xs font-bold text-vip-gold block">⭐ {{ idol.rating }}</span>
+                    <span class="text-[10px] text-vip-text/50">❤️ {{ idol.likes_count }}</span>
+                </div>
+            </div>
+        {% empty %}
+            <div class="text-center py-10 text-xs text-vip-text/50 border border-vip-gold/10 rounded-2xl">
+                Aún no hay suficientes registros para el ranking de Idols.
+            </div>
+        {% endfor %}
+    </div>
+
+    <!-- SECCIÓN 2: TOP MAGNATES (Oculto al inicio) -->
+    <div id="section-magnates" class="hidden flex flex-col gap-3">
+        {% for m in magnates %}
+            <div class="bg-vip-panel border {% if forloop.counter == 1 %}border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.25)]{% else %}border-vip-gold/20{% endif %} p-3.5 rounded-2xl flex items-center justify-between">
+                
+                <div class="flex items-center gap-3">
+                    <span class="w-8 text-center font-black text-lg">
+                        {% if forloop.counter == 1 %}👑
+                        {% elif forloop.counter == 2 %}🥈
+                        {% elif forloop.counter == 3 %}🥉
+                        {% else %}<span class="text-xs text-vip-text/40 font-mono">#{{ forloop.counter }}</span>
+                        {% endif %}
+                    </span>
+
+                    <div>
+                        <h3 class="font-bold text-xs text-white">Ciudadano VIP ...{{ m.telegram_id }}</h3>
+                        <p class="text-[11px] text-yellow-500/90 font-semibold mt-0.5">{{ m.titulo }}</p>
+                    </div>
+                </div>
+
+                <div class="text-right bg-black/40 px-3 py-1.5 rounded-xl border border-vip-gold/30">
+                    <span class="text-xs font-bold text-vip-gold font-mono">🪙 {{ m.balance }}</span>
+                </div>
+            </div>
+        {% empty %}
+            <div class="text-center py-10 text-xs text-vip-text/50 border border-vip-gold/10 rounded-2xl">
+                Aún no hay datos de ciudadanos.
+            </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<!-- Script para alternar pestañas sin recargar -->
+<script>
+    function showTab(tab) {
+        const secIdols = document.getElementById('section-idols');
+        const secMagnates = document.getElementById('section-magnates');
+        const btnIdols = document.getElementById('tab-idols-btn');
+        const btnMagnates = document.getElementById('tab-magnates-btn');
+
+        if (tab === 'idols') {
+            secIdols.classList.remove('hidden');
+            secMagnates.classList.add('hidden');
+            btnIdols.classList.add('bg-vip-gold', 'text-black');
+            btnIdols.classList.remove('text-vip-text/60');
+            btnMagnates.classList.remove('bg-vip-gold', 'text-black');
+            btnMagnates.classList.add('text-vip-text/60');
+        } else {
+            secIdols.classList.add('hidden');
+            secMagnates.classList.remove('hidden');
+            btnMagnates.classList.add('bg-vip-gold', 'text-black');
+            btnMagnates.classList.remove('text-vip-text/60');
+            btnIdols.classList.remove('bg-vip-gold', 'text-black');
+            btnIdols.classList.add('text-vip-text/60');
+        }
+    }
+</script>
 {% endblock %}
 
 ==================================================
@@ -1361,6 +2041,14 @@ ARCHIVO: .\templates\core\menu.html
         <span class="text-2xl">✨</span>
     </button>
 
+    <!-- 🏆 SALÓN DE LA FAMA -->
+    <button onclick="window.location.href='/salon-de-la-fama/?tg_id={{ tg_id }}'" 
+            class="w-full mb-2 bg-gradient-to-r from-[#1c1204] via-vip-panel to-vip-base border border-yellow-500/60 text-yellow-400 py-3.5 rounded-lg hover:brightness-125 transition-all duration-300 font-bold flex items-center justify-center gap-2.5 shadow-[0_0_12px_rgba(212,175,55,0.15)]">
+        <span class="text-xl">🏆</span>
+        <span class="tracking-wider uppercase text-xs">Salón de la Fama</span>
+        <span class="text-xl">👑</span>
+    </button>
+
     {% if is_admin %}
     <!-- 👑 ESTE BOTÓN SOLO LO VE EL ADMIN (TÚ) -->
     <button onclick="window.location.href='/admin-panel/?tg_id={{ tg_id }}'" class="w-full bg-gradient-to-r from-yellow-600 to-yellow-900 border border-vip-gold text-white py-4 rounded-lg hover:brightness-125 transition-all duration-300 font-black flex items-center justify-center gap-3 shadow-[0_0_15px_rgba(212,175,55,0.4)] mb-4 tracking-widest">
@@ -1382,6 +2070,13 @@ ARCHIVO: .\templates\core\menu.html
     
     <button onclick="goToWallet()" class="w-full bg-vip-base border border-vip-gold/50 text-vip-gold py-3 rounded-lg hover:bg-vip-gold hover:text-vip-base transition-colors duration-300 font-medium flex items-center justify-center gap-2">
         <span>💰</span> Mi Bóveda VIP
+    </button>
+
+    <!-- 🐾 SANTUARIO DE MASCOTAS -->
+    <button onclick="window.location.href='/pets/?tg_id={{ tg_id }}'" 
+            class="w-full mb-2 bg-gradient-to-r from-[#1c0e2a] via-vip-panel to-vip-base border border-purple-500/50 text-purple-300 py-3 rounded-lg hover:brightness-125 transition-all duration-300 font-bold flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(168,85,247,0.15)]">
+        <span class="text-lg">🐾</span>
+        <span class="tracking-wider uppercase text-xs">Mascotas Reales</span>
     </button>
 
 </div>
@@ -1886,6 +2581,19 @@ ARCHIVO: .\templates\economy\wallet.html
             <span class="text-4xl font-bold text-vip-gold tracking-wider">{{ wallet.balance|default:"0" }}</span>
         </div>
     </div>
+
+    <!-- ACCESO A MI COLECCIÓN PRIVADA -->
+    <a href="/idols/collection/?tg_id={{ tg_id }}" class="mb-4 bg-gradient-to-r from-purple-950/60 via-[#1E112A] to-vip-base border border-purple-500/50 p-3 rounded-xl flex items-center justify-between hover:border-purple-400 transition-all shadow-[0_0_12px_rgba(168,85,247,0.15)] group">
+        <div class="flex items-center gap-3">
+            <span class="text-2xl group-hover:scale-110 transition-transform">💎</span>
+            <div class="text-left">
+                <p class="text-xs font-bold text-purple-300 uppercase tracking-wider">Mi Colección Privada</p>
+                <p class="text-[10px] text-vip-text/60">Ver mis fotos y antojos desbloqueados</p>
+            </div>
+        </div>
+        <span class="text-purple-400 text-sm">➡️</span>
+    </a>
+    
     {% if messages %}
         {% for message in messages %}
             <div class="p-3 rounded-lg text-sm mb-4 {% if message.tags == 'success' %}bg-green-900/60 border border-green-500 text-green-200{% else %}bg-red-900/60 border border-red-500 text-red-200{% endif %}">
@@ -1894,55 +2602,56 @@ ARCHIVO: .\templates\economy\wallet.html
         {% endfor %}
     {% endif %}
 
-    <!-- SECCIÓN: Bono Diario VIP -->
+    <!-- SECCIÓN: Bono Diario VIP con Cuenta Regresiva -->
     <div class="bg-vip-base border border-vip-gold/30 rounded-xl p-4 mb-4 flex justify-between items-center shadow-[0_0_10px_rgba(212,175,55,0.1)]">
         <div class="text-left flex flex-col">
             <span class="text-vip-gold font-bold text-lg">Bono Diario</span>
             <span class="text-vip-text/60 text-xs">+100 🪙 de Oro (cada 24h)</span>
         </div>
         
-        <form action="{% url 'economy:claim_bonus' %}" method="POST" class="m-0">
+        <form id="bonus-form" action="{% url 'economy:claim_bonus' %}" method="POST" class="m-0">
             {% csrf_token %}
             <input type="hidden" name="tg_id" id="hidden_tg_id" value="{{ tg_id }}">
             
-            {% if wallet.can_claim_bonus %}
-                <button type="submit" class="bg-gradient-to-r from-vip-gold to-yellow-600 text-vip-base font-bold px-4 py-2 rounded-lg hover:brightness-110 transition-all shadow-[0_0_10px_rgba(212,175,55,0.4)]">
-                    🎁 Reclamar
-                </button>
-            {% else %}
-                <button type="button" disabled class="bg-vip-panel border border-vip-text/20 text-vip-text/40 font-bold px-4 py-2 rounded-lg cursor-not-allowed">
-                    ⏳ En espera
-                </button>
-            {% endif %}
+            <div id="bonus-button-container">
+                {% if wallet.can_claim_bonus %}
+                    <button type="submit" class="bg-gradient-to-r from-vip-gold to-yellow-600 text-vip-base font-bold px-4 py-2 rounded-lg hover:brightness-110 transition-all shadow-[0_0_10px_rgba(212,175,55,0.4)]">
+                        🎁 Reclamar
+                    </button>
+                {% else %}
+                    <button type="button" disabled class="bg-vip-panel border border-vip-gold/30 text-vip-gold/80 font-mono text-xs font-bold px-3 py-2 rounded-lg shadow-inner">
+                        ⏳ <span id="countdown-timer">Calculando...</span>
+                    </button>
+                {% endif %}
+            </div>
         </form>
     </div>
 
-    <div class="grid grid-cols-3 gap-2 mt-4">
+   <div class="grid grid-cols-2 gap-3 mt-4">
         <!-- Ruleta -->
-        <button onclick="goToCasino()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded-lg hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
+        <button onclick="goToCasino()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3.5 rounded-xl hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
             <span class="text-2xl">🎲</span>
-            <span class="text-[10px] font-bold uppercase">Ruleta</span>
+            <span class="text-xs font-bold uppercase">Ruleta</span>
         </button>
         
         <!-- Slots -->
-        <button onclick="goToSlots()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded-lg hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
+        <button onclick="goToSlots()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3.5 rounded-xl hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
             <span class="text-2xl">🎰</span>
-            <span class="text-[10px] font-bold uppercase">Slots</span>
+            <span class="text-xs font-bold uppercase">Slots</span>
         </button>
 
         <!-- Blackjack -->
-        <button onclick="goToBlackjack()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded-lg hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
+        <button onclick="goToBlackjack()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3.5 rounded-xl hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
             <span class="text-2xl">🃏</span>
-            <span class="text-[10px] font-bold uppercase">Blackjack</span>
+            <span class="text-xs font-bold uppercase">Blackjack</span>
         </button>
-    </div>
-        
-        <button class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3 rounded hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1">
+
+        <!-- Boutique VIP -->
+        <button onclick="alert('La Boutique VIP abrirá sus puertas próximamente.');" class="bg-gradient-to-br from-[#200e33] to-vip-base border border-purple-500/50 text-purple-300 py-3.5 rounded-xl hover:brightness-125 transition-colors flex flex-col items-center gap-1 shadow-md">
             <span class="text-2xl">🛍️</span>
-            <span class="text-xs font-semibold">Boutique VIP</span>
+            <span class="text-xs font-bold uppercase tracking-wider">Boutique VIP</span>
         </button>
     </div>
-</div>
 
 <script>
     function goToCasino() {
@@ -1958,6 +2667,41 @@ ARCHIVO: .\templates\economy\wallet.html
     function goToBlackjack() {
         const tgId = document.getElementById('hidden_tg_id').value;
         window.location.href = `/economy/blackjack/?tg_id=${tgId}`;
+    }
+
+// Temporizador dinámico para el Bono Diario
+    let secondsLeft = Number("{{ wallet.seconds_until_next_bonus|default:0 }}") || 0;
+
+    function updateCountdown() {
+        const timerElement = document.getElementById('countdown-timer');
+        const container = document.getElementById('bonus-button-container');
+
+        if (!timerElement || !container) return;
+
+        if (secondsLeft <= 0) {
+            // ¡Tiempo cumplido! Convertimos el botón en "Reclamar"
+            container.innerHTML = `
+                <button type="submit" class="bg-gradient-to-r from-vip-gold to-yellow-600 text-vip-base font-bold px-4 py-2 rounded-lg hover:brightness-110 transition-all shadow-[0_0_10px_rgba(212,175,55,0.4)] animate-bounce">
+                    🎁 Reclamar
+                </button>
+            `;
+            return;
+        }
+
+        const hours = Math.floor(secondsLeft / 3600);
+        const minutes = Math.floor((secondsLeft % 3600) / 60);
+        const seconds = secondsLeft % 60;
+
+        // Formato con dos dígitos (ej. 04h 08m 22s)
+        const formatNum = (n) => String(n).padStart(2, '0');
+        timerElement.innerText = `${formatNum(hours)}h ${formatNum(minutes)}m ${formatNum(seconds)}s`;
+
+        secondsLeft--;
+    }
+
+    if (secondsLeft > 0) {
+        updateCountdown();
+        setInterval(updateCountdown, 1000);
     }
 </script>
 {% endblock %}
@@ -2018,6 +2762,70 @@ ARCHIVO: .\templates\idols\choose_role.html
         document.getElementById('roleForm').submit();
     }
 </script>
+{% endblock %}
+
+==================================================
+ARCHIVO: .\templates\idols\collection.html
+==================================================
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="p-4 mt-4 flex flex-col gap-4 mx-auto w-full max-w-md pb-16">
+    
+    <!-- Encabezado -->
+    <div class="flex justify-between items-center mb-2 px-2 border-b border-vip-gold/30 pb-3">
+        <div>
+            <h2 class="text-xl font-bold text-vip-gold tracking-wide">💎 Mi Colección Privada</h2>
+            <p class="text-xs text-vip-text/60">Tus fotos y antojos VIP desbloqueados</p>
+        </div>
+        <a href="/economy/wallet/?tg_id={{ tg_id }}" class="text-xs text-vip-text/70 hover:text-vip-text bg-vip-panel px-3 py-1.5 rounded-full border border-vip-gold/30">
+            ⬅ Bóveda
+        </a>
+    </div>
+
+    <!-- Estadísticas de la colección -->
+    <div class="bg-vip-panel border border-vip-gold/20 p-3 rounded-xl flex items-center justify-between px-4">
+        <span class="text-xs text-vip-text/70 uppercase tracking-wider">Antojos en tu poder</span>
+        <span class="text-sm font-bold text-vip-gold font-mono bg-black/40 px-2.5 py-1 rounded-lg border border-vip-gold/30">
+            {{ posts|length }} fotos 🔞
+        </span>
+    </div>
+
+    <!-- Cuadrícula de Fotos Desbloqueadas -->
+    {% if posts %}
+        <div class="grid grid-cols-2 gap-3 mt-2">
+            {% for post in posts %}
+                <div class="relative rounded-xl overflow-hidden border border-vip-gold/30 aspect-[3/4] group bg-black shadow-md flex flex-col justify-end">
+                    <!-- Foto en alta calidad sin censura -->
+                    <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    
+                    <!-- Sombra para leer datos -->
+                    <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
+                    
+                    <!-- Datos de la foto -->
+                    <div class="relative z-10 p-2.5 flex flex-col">
+                        <span class="text-[10px] text-purple-400 font-bold uppercase tracking-wider">VIP</span>
+                        <h4 class="text-xs font-bold text-vip-gold truncate">{{ post.idol.stage_name }}</h4>
+                        <p class="text-[10px] text-vip-text/70 line-clamp-1 italic">"{{ post.caption }}"</p>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="text-center py-12 px-4 border border-vip-gold/10 rounded-2xl bg-vip-panel/40 flex flex-col items-center gap-3 mt-4">
+            <span class="text-4xl">🔐</span>
+            <p class="text-sm text-vip-text/70 font-semibold">Tu colección aún está vacía.</p>
+            <p class="text-xs text-vip-text/50 max-w-xs">
+                Cuando desbloquees fotos exclusivas en el Muro VIP, aparecerán aquí para siempre.
+            </p>
+            <a href="/idols/feed/?tg_id={{ tg_id }}" class="mt-2 bg-gradient-to-r from-vip-gold to-yellow-600 text-black text-xs font-bold px-4 py-2.5 rounded-xl uppercase tracking-wider hover:brightness-110 transition-all shadow-md">
+                Ir al Muro VIP
+            </a>
+        </div>
+    {% endif %}
+
+</div>
 {% endblock %}
 
 ==================================================
@@ -2162,7 +2970,19 @@ ARCHIVO: .\templates\idols\detail.html
             <div class="absolute inset-0 bg-gradient-to-t from-[#130A1F] via-transparent to-transparent"></div>
             
             <div class="absolute bottom-3 left-4 right-4">
-                <span class="text-xs font-bold text-red-400 uppercase tracking-widest">Tomada 🔒</span>
+                {% if idol.status == 'online' %}
+                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-green-400 uppercase tracking-widest bg-black/60 px-2.5 py-1 rounded-full border border-green-500/50 backdrop-blur-sm">
+                        <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span> Chateando en Telegram
+                    </span>
+                {% elif idol.status == 'antojos' %}
+                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-purple-300 uppercase tracking-widest bg-black/60 px-2.5 py-1 rounded-full border border-purple-500/50 backdrop-blur-sm">
+                        🔥 Sesión de Antojos Activa
+                    </span>
+                {% else %}
+                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase tracking-widest bg-black/60 px-2.5 py-1 rounded-full border border-gray-600 backdrop-blur-sm">
+                        🌙 Descansando
+                    </span>
+                {% endif %}
                 <h1 class="text-2xl font-bold text-vip-gold">{{ idol.stage_name }}</h1>
                 <p class="text-sm text-vip-text/80">{{ idol.group|default:"Solista" }}</p>
             </div>
@@ -2192,6 +3012,56 @@ ARCHIVO: .\templates\idols\detail.html
             <div class="text-[11px] text-vip-text/50">
                 Roller a cargo: <span class="text-vip-gold">{{ idol.owner_username|default:"Anónimo" }}</span>
             </div>
+
+            <!-- BOTÓN: Contactar / Contratar Idol en Telegram -->
+            {% if idol.owner_username %}
+            <button onclick="contactIdol('{{ idol.owner_username }}')" 
+                    class="w-full mt-2 bg-gradient-to-r from-purple-900/60 to-vip-base border-2 border-purple-500/70 text-purple-200 py-3.5 rounded-xl hover:bg-purple-800 hover:text-white transition-all duration-300 font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)] group">
+                <span class="text-xl group-hover:scale-125 transition-transform">💬</span>
+                <span class="tracking-wider uppercase text-xs">Solicitar Rol / Contactar a {{ idol.stage_name }}</span>
+            </button>
+            <!-- BUZÓN DE DESEOS: PEDIR ANTOJO PERSONALIZADO -->
+            <button type="button" onclick="toggleCustomRequestModal()" 
+                    class="w-full mt-2 bg-gradient-to-r from-yellow-950/60 via-black to-vip-base border border-vip-gold/60 text-vip-gold py-3 rounded-xl hover:brightness-125 transition-all font-bold flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(212,175,55,0.15)] text-xs uppercase tracking-wider">
+                <span>📬</span> Pedir Antojo Personalizado
+            </button>
+
+            <!-- Modal Desplegable de Petición -->
+            <div id="custom-request-modal" class="hidden mt-3 p-4 bg-black/80 border border-vip-gold/40 rounded-xl">
+                <h4 class="text-xs font-bold text-vip-gold uppercase tracking-wider text-center mb-2">
+                    Pide tu antojo exclusivo a {{ idol.stage_name }}
+                </h4>
+                <p class="text-[11px] text-vip-text/60 text-center mb-3">
+                    Describe lo que quieres y ofrece tu pago. Si la Idol rechaza tu pedido, el oro vuelve a tu Bóveda al instante.
+                </p>
+
+                <form action="{% url 'idols:create_custom_request' idol.id %}" method="POST" class="flex flex-col gap-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="tg_username" value="{{ tg_username }}">
+
+                    <div>
+                        <label class="block text-[11px] text-vip-gold uppercase mb-1">Tu Ofrenda de Oro (🪙)</label>
+                        <input type="number" name="bounty" min="50" value="100" required
+                               class="w-full bg-vip-base border border-vip-gold/40 rounded-lg p-2 text-white font-mono text-center text-sm focus:outline-none focus:border-vip-gold">
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] text-vip-gold uppercase mb-1">¿Cómo quieres tu antojo?</label>
+                        <textarea name="description" rows="3" required placeholder="Ej: Selfie con dedicatoria en papel, foto en outfit específico..."
+                                  class="w-full bg-vip-base border border-vip-gold/40 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold resize-none"></textarea>
+                    </div>
+
+                    <button type="submit" class="w-full bg-gradient-to-r from-vip-gold to-yellow-600 text-black font-bold py-2.5 rounded-lg text-xs uppercase tracking-wider hover:brightness-110 shadow-md">
+                        Enviar Petición (Retener Oro)
+                    </button>
+                </form>
+            </div>
+            {% else %}
+            <div class="text-center text-xs text-vip-text/40 italic py-2">
+                Esta Idol no tiene un usuario de Telegram configurado aún.
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -2270,6 +3140,27 @@ ARCHIVO: .\templates\idols\detail.html
         const tgName = user ? (user.username ? `@${user.username}` : user.first_name) : 'Cliente Anónimo';
         document.getElementById('detail_tg_id').value = tgId;
         document.getElementById('detail_tg_username').value = tgName;
+    }
+
+    function contactIdol(rawUsername) {
+        // Limpiamos el '@' si viene incluido
+        const cleanUser = rawUsername.replace('@', '').trim();
+        if (!cleanUser) return;
+        
+        const telegramUrl = `https://t.me/${cleanUser}`;
+        
+        // Si estamos en la WebApp oficial de Telegram, usamos su método nativo
+        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink) {
+            window.Telegram.WebApp.openTelegramLink(telegramUrl);
+        } else {
+            // Fallback para navegador normal
+            window.open(telegramUrl, '_blank');
+        }
+    }
+
+    function toggleCustomRequestModal() {
+        const modal = document.getElementById('custom-request-modal');
+        modal.classList.toggle('hidden');
     }
 </script>
 {% endblock %}
@@ -2367,16 +3258,96 @@ ARCHIVO: .\templates\idols\feed.html
                 {% endif %}
             </div>
 
-            <!-- Pie del Post (Descripción) -->
-            <div class="p-4">
-                <p class="text-sm text-vip-text/90 leading-relaxed"><span class="font-bold text-vip-gold mr-1">{{ post.idol.stage_name }}</span>{{ post.caption }}</p>
-                
-                <div class="mt-3 flex gap-4 text-vip-text/50 text-sm">
-                    <button class="hover:text-red-500 transition-colors flex items-center gap-1">
-                        <span>❤️</span> {{ post.likes }}
+            <div class="mt-3 flex items-center justify-between text-sm">
+                    <!-- Botón Like -->
+                    <button id="like-btn-{{ post.id }}" onclick="handleLike({{ post.id }})" 
+                            class="transition-all duration-200 flex items-center gap-1.5 px-3 py-1 rounded-full border border-vip-gold/20 {% if post.id in liked_ids %}text-red-500 bg-red-500/10 border-red-500/40{% else %}text-vip-text/60 bg-black/30 hover:text-red-400{% endif %}">
+                        <span id="like-icon-{{ post.id }}">{% if post.id in liked_ids %}❤️{% else %}🤍{% endif %}</span>
+                        <span id="like-count-{{ post.id }}" class="font-semibold text-xs">{{ post.likes }}</span>
+                    </button>
+
+                    <!-- Botón Invitar Trago / Propina -->
+                    <button onclick="toggleTipModal({{ post.id }})" 
+                            class="flex items-center gap-1 text-xs text-vip-gold bg-yellow-950/40 border border-vip-gold/40 px-3 py-1 rounded-full hover:bg-vip-gold hover:text-black transition-all font-semibold shadow-[0_0_8px_rgba(212,175,55,0.15)]">
+                        <span>🥂</span>
+                        <span>Invitar Trago</span>
                     </button>
                 </div>
-            </div>
+
+                <!-- BOTÓN DESPLEGABLE DE COMENTARIOS -->
+                <button type="button" onclick="toggleComments({{ post.id }})" 
+                        class="mt-2 text-xs text-vip-text/60 hover:text-vip-gold flex items-center gap-1.5 transition-colors">
+                    <span>💬</span>
+                    <span id="comment-label-{{ post.id }}">
+                        {% if post.comments.count > 0 %}
+                            Ver los {{ post.comments.count }} comentarios...
+                        {% else %}
+                            Escribir el primer comentario...
+                        {% endif %}
+                    </span>
+                </button>
+
+                <!-- CAJA DE COMENTARIOS (Oculta por defecto) -->
+                <div id="comments-box-{{ post.id }}" class="hidden mt-3 pt-3 border-t border-vip-gold/15 flex flex-col gap-2.5">
+                    
+                    <!-- Lista de Comentarios -->
+                    <div class="max-h-44 overflow-y-auto flex flex-col gap-2 pr-1">
+                        {% for c in post.comments.all %}
+                            <div class="bg-black/40 p-2.5 rounded-lg border border-vip-gold/10 text-xs">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="font-bold {% if '(Idol)' in c.author_name %}text-yellow-400 font-serif tracking-wider{% else %}text-vip-gold{% endif %}">
+                                        {% if '(Idol)' in c.author_name %}👑 {{ c.author_name }}{% else %}{{ c.author_name }}{% endif %}
+                                    </span>
+                                    <span class="text-[10px] text-vip-text/40">{{ c.created_at|date:"d/m H:i" }}</span>
+                                </div>
+                                <p class="text-vip-text/90 leading-relaxed">{{ c.text }}</p>
+                            </div>
+                        {% empty %}
+                            <p class="text-center text-[11px] text-vip-text/40 italic py-2">
+                                No hay comentarios aún. ¡Sé el primero en dejar uno!
+                            </p>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Formulario para agregar comentario -->
+                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 mt-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                        <input type="hidden" name="tg_username" class="input-tg-username" value="{{ tg_username|default:'' }}">
+                        
+                        <input type="text" name="text" placeholder="Escribe un halago o mensaje..." required maxlength="250"
+                               class="flex-1 bg-vip-base border border-vip-gold/30 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-vip-gold">
+                        <button type="submit" 
+                                class="bg-vip-gold text-black font-bold text-xs px-3 py-2 rounded-lg hover:brightness-110 transition-all uppercase tracking-wider shadow">
+                            💬
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Mini Modal Desplegable de Propina (Oculto por defecto) -->
+                <div id="tip-modal-{{ post.id }}" class="hidden mt-3 p-3 bg-black/70 border border-vip-gold/30 rounded-xl">
+                    <p class="text-[11px] text-vip-gold/90 font-bold uppercase tracking-wider mb-2 text-center">
+                        Invitar trago a {{ post.idol.stage_name }}
+                    </p>
+                    <form action="{% url 'idols:send_tip' post.id %}" method="POST" class="flex flex-col gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                        
+                        <div class="grid grid-cols-3 gap-2">
+                            <button type="button" onclick="setTipAmount({{ post.id }}, 10)" class="bg-vip-base border border-vip-gold/30 text-vip-gold py-1 rounded text-xs hover:border-vip-gold font-mono">10 🪙</button>
+                            <button type="button" onclick="setTipAmount({{ post.id }}, 25)" class="bg-vip-base border border-vip-gold/30 text-vip-gold py-1 rounded text-xs hover:border-vip-gold font-mono">25 🪙</button>
+                            <button type="button" onclick="setTipAmount({{ post.id }}, 50)" class="bg-vip-base border border-vip-gold/30 text-vip-gold py-1 rounded text-xs hover:border-vip-gold font-mono">50 🪙</button>
+                        </div>
+
+                        <div class="flex gap-2 mt-1">
+                            <input type="number" name="tip_amount" id="tip-input-{{ post.id }}" min="1" placeholder="Monto" required
+                                   class="w-1/2 bg-vip-base border border-vip-gold/40 text-white text-xs px-2 py-1.5 rounded focus:outline-none focus:border-vip-gold text-center">
+                            <button type="submit" class="w-1/2 bg-gradient-to-r from-vip-gold to-yellow-600 text-black font-bold text-xs py-1.5 rounded uppercase tracking-wider hover:brightness-110 shadow">
+                                Enviar 🥂
+                            </button>
+                        </div>
+                    </form>
+                </div>
         </div>
     {% empty %}
         <div class="text-center text-vip-text/50 mt-10 p-6 border border-vip-gold/20 rounded-xl">
@@ -2385,7 +3356,78 @@ ARCHIVO: .\templates\idols\feed.html
         </div>
     {% endfor %}
 </div>
+
+<script>
+    async function handleLike(postId) {
+        const tg = window.Telegram.WebApp;
+        const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '{{ tg_id }}';
+        
+        const btn = document.getElementById(`like-btn-${postId}`);
+        const icon = document.getElementById(`like-icon-${postId}`);
+        const count = document.getElementById(`like-count-${postId}`);
+        
+        // Efecto visual instantáneo mientras responde el servidor
+        btn.classList.add('scale-110');
+        setTimeout(() => btn.classList.remove('scale-110'), 150);
+
+        try {
+            const formData = new FormData();
+            formData.append('tg_id', tgId);
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+            const response = await fetch(`/idols/feed/like/${postId}/`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                count.innerText = data.likes;
+
+                if (data.liked) {
+                    icon.innerText = '❤️';
+                    btn.classList.remove('text-vip-text/60', 'bg-black/30', 'border-vip-gold/20');
+                    btn.classList.add('text-red-500', 'bg-red-500/10', 'border-red-500/40');
+                } else {
+                    icon.innerText = '🤍';
+                    btn.classList.remove('text-red-500', 'bg-red-500/10', 'border-red-500/40');
+                    btn.classList.add('text-vip-text/60', 'bg-black/30', 'border-vip-gold/20');
+                }
+            }
+        } catch (e) {
+            console.error('Error al dar like:', e);
+        }
+    }
+
+    function toggleTipModal(postId) {
+        const modal = document.getElementById(`tip-modal-${postId}`);
+        modal.classList.toggle('hidden');
+    }
+
+    function setTipAmount(postId, amount) {
+        document.getElementById(`tip-input-${postId}`).value = amount;
+    }
+
+    function toggleComments(postId) {
+        const box = document.getElementById(`comments-box-${postId}`);
+        box.classList.toggle('hidden');
+    }
+
+    // Auto-detectar @username de Telegram si no vino por URL
+    document.addEventListener("DOMContentLoaded", () => {
+        const tg = window.Telegram.WebApp;
+        const user = tg.initDataUnsafe?.user;
+        if (user) {
+            const finalUsername = user.username ? `@${user.username}` : user.first_name;
+            document.querySelectorAll('.input-tg-username').forEach(inp => {
+                if (!inp.value) inp.value = finalUsername;
+            });
+        }
+    });
+</script>
 {% endblock %}
+
+
 
 ==================================================
 ARCHIVO: .\templates\idols\form.html
@@ -2488,7 +3530,19 @@ ARCHIVO: .\templates\idols\gallery.html
 
                 <!-- Textos e Información (posicionados abajo) -->
                 <div class="absolute bottom-0 left-0 w-full p-3 flex flex-col">
-                    <span class="text-xs font-bold text-red-400 uppercase tracking-widest mb-1 drop-shadow-md">Tomada 🔒</span>
+                   {% if idol.status == 'online' %}
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-green-400 uppercase tracking-wider mb-1 drop-shadow-md">
+                            <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span> Chateando
+                        </span>
+                    {% elif idol.status == 'antojos' %}
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1 drop-shadow-md">
+                            🔥 Antojos
+                        </span>
+                    {% else %}
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 drop-shadow-md">
+                            🌙 Descansando
+                        </span>
+                    {% endif %}
                     <h3 class="font-bold text-vip-gold text-lg leading-tight truncate drop-shadow-md">{{ idol.stage_name }}</h3>
                     <p class="text-xs text-vip-text/80 truncate drop-shadow-md">{{ idol.group|default:"Solista" }}</p>
                     
@@ -2551,7 +3605,27 @@ ARCHIVO: .\templates\idols\list.html
                     </div>
                     <div>
                         <h3 class="font-semibold text-vip-gold">{{ idol.stage_name }}</h3>
-                        <p class="text-xs text-vip-text/70">{{ idol.group|default:"Solista" }}</p>
+                        <p class="text-xs text-vip-text/70 mb-2">{{ idol.group|default:"Solista" }}</p>
+
+                        <!-- Selector rápido de estado en vivo -->
+                        <form method="POST" class="flex gap-1">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update_status">
+                            <input type="hidden" name="idol_id" value="{{ idol.id }}">
+                            
+                            <button type="submit" name="status" value="online" title="🟢 Chateando"
+                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'online' %}bg-green-950/80 border-green-500 text-green-300 font-bold shadow-[0_0_8px_rgba(74,222,128,0.3)]{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
+                                🟢 Chat
+                            </button>
+                            <button type="submit" name="status" value="antojos" title="🔥 Subiendo Antojos"
+                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'antojos' %}bg-purple-950/80 border-purple-400 text-purple-300 font-bold shadow-[0_0_8px_rgba(168,85,247,0.3)]{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
+                                🔥 Antojos
+                            </button>
+                            <button type="submit" name="status" value="offline" title="🌙 Descansando"
+                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'offline' %}bg-gray-900 border-gray-500 text-gray-300 font-bold{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
+                                🌙 Off
+                            </button>
+                        </form>
                     </div>
                 </div>
 
@@ -2573,6 +3647,54 @@ ARCHIVO: .\templates\idols\list.html
         </div>
     {% else %}
         <p class="text-center text-sm text-vip-text/60 py-4">Aún no tienes Idols registradas.</p>
+    {% endif %}
+
+    <!-- BANDEJA DE PETICIONES DE ANTOJOS PENDIENTES -->
+    {% if pending_requests %}
+        <div class="mt-4 pt-4 border-t border-vip-gold/30 flex flex-col gap-3">
+            <h3 class="text-sm font-bold text-yellow-400 flex items-center gap-2">
+                <span>📬</span> Peticiones de Antojos Pendientes ({{ pending_requests|length }})
+            </h3>
+
+            {% for req in pending_requests %}
+                <div class="bg-black/60 border border-vip-gold/40 p-4 rounded-xl flex flex-col gap-2.5 shadow-md">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-xs font-bold text-vip-gold">Para: {{ req.idol.stage_name }}</span>
+                            <p class="text-[11px] text-vip-text/60">De: {{ req.client_username }}</p>
+                        </div>
+                        <span class="bg-yellow-950/60 border border-vip-gold text-vip-gold px-2.5 py-0.5 rounded-full text-xs font-mono font-bold">
+                            +{{ req.bounty }} 🪙
+                        </span>
+                    </div>
+
+                    <p class="text-xs text-white/90 bg-vip-base/70 p-2.5 rounded-lg border border-vip-gold/20 italic">
+                        "{{ req.description }}"
+                    </p>
+
+                    <!-- Formulario de Entrega / Rechazo -->
+                    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="request_id" value="{{ req.id }}">
+
+                        <label class="block text-[10px] text-vip-gold uppercase">Subir foto del antojo:</label>
+                        <input type="file" name="delivered_photo" accept="image/*"
+                               class="w-full bg-vip-base border border-vip-gold/30 rounded p-1.5 text-[11px] text-white file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-vip-gold file:text-black hover:file:bg-yellow-500 cursor-pointer">
+
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <button type="submit" name="action" value="accept_request"
+                                    class="bg-green-700/80 border border-green-500 text-white font-bold py-1.5 rounded text-xs hover:bg-green-600 transition-colors uppercase tracking-wider">
+                                ✅ Entregar Foto
+                            </button>
+                            <button type="submit" name="action" value="reject_request"
+                                    class="bg-red-900/60 border border-red-500/50 text-red-200 font-bold py-1.5 rounded text-xs hover:bg-red-700 transition-colors uppercase tracking-wider">
+                                ❌ Rechazar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            {% endfor %}
+        </div>
     {% endif %}
 
     {% if can_add_more %}
@@ -2613,6 +3735,346 @@ ARCHIVO: .\templates\idols\list.html
 
     function goToDelete(idolId) {
         window.location.href = `/idols/delete/${idolId}/?${getTgData()}`;
+    }
+</script>
+{% endblock %}
+
+==================================================
+ARCHIVO: .\templates\pets\sanctuary.html
+==================================================
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="p-4 flex flex-col gap-4 mx-auto w-full max-w-md pb-24 relative overflow-hidden">
+    
+    <!-- Encabezado de Lujo -->
+    <div class="flex justify-between items-center px-1 border-b border-vip-gold/30 pb-3">
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="text-xl">🐾</span>
+                <h2 class="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-vip-gold via-yellow-200 to-yellow-600 tracking-wider uppercase">
+                    Santuario Real
+                </h2>
+            </div>
+            <p class="text-[11px] text-vip-text/60">Compañeros del inframundo y la alta nobleza</p>
+        </div>
+        <a href="/?tg_id={{ tg_id }}" class="text-xs text-vip-gold hover:text-white bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/40 shadow">
+            ⬅ Menú
+        </a>
+    </div>
+
+    {% if pet %}
+        <!-- ALTAR DE LA MASCOTA -->
+        <div class="relative rounded-3xl border-2 border-vip-gold/60 p-5 flex flex-col items-center text-center shadow-[0_0_35px_rgba(212,175,55,0.25)] bg-gradient-to-b from-[#180d24] via-[#0e0716] to-[#08030c] overflow-hidden">
+            
+            <!-- Resplandor místico de fondo -->
+            <div class="absolute top-10 w-48 h-48 bg-purple-600/20 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
+            <div class="absolute bottom-16 w-56 h-32 bg-yellow-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+            <!-- Corona / Nivel Superior -->
+            <div class="w-full flex justify-between items-center z-10 mb-2">
+                <span class="bg-black/80 border border-vip-gold/50 text-vip-gold text-xs font-black px-3 py-1 rounded-full font-mono shadow-[0_0_10px_rgba(212,175,55,0.3)]">
+                    👑 RANGO {{ pet.level }}
+                </span>
+                <span class="text-[11px] font-bold text-purple-300 uppercase tracking-widest bg-purple-950/60 border border-purple-500/40 px-2.5 py-0.5 rounded-full">
+                    {{ pet.get_species_display }}
+                </span>
+            </div>
+
+            <!-- PEDESTAL CON ILUSTRACIÓN DE FANTASÍA Y EFECTO FLOTANTE -->
+            <div class="relative my-3 z-10 flex flex-col items-center">
+                <!-- Partículas flotantes de amor/caricia (Contenedor dinámico) -->
+                <div id="heart-particles" class="absolute inset-0 pointer-events-none z-30 flex items-center justify-center"></div>
+
+                <!-- Marco del Altar -->
+                <div class="w-48 h-48 rounded-2xl p-1 bg-gradient-to-tr from-vip-gold via-yellow-200 to-purple-600 shadow-[0_0_30px_rgba(212,175,55,0.5)]">
+                    <div class="w-full h-full rounded-[14px] overflow-hidden bg-black relative group">
+                        
+                        <!-- Imagen Dinámica de la Mascota -->
+                        <img src="{{ pet.get_image_url }}" alt="{{ pet.name }}"
+                             class="w-full h-full object-cover brightness-95 contrast-125 saturate-125 group-hover:scale-105 transition-all duration-700">
+
+                        <!-- Filtro de atmósfera oscura -->
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none"></div>
+                    </div>
+                </div>
+
+                <!-- Runas del Pedestal Inferior -->
+                <div class="w-40 h-2.5 bg-gradient-to-r from-transparent via-vip-gold to-transparent opacity-80 mt-2 blur-[1px]"></div>
+            </div>
+
+            <!-- Nombre de la Mascota -->
+            <h3 class="text-2xl font-black text-white tracking-widest uppercase drop-shadow-[0_0_12px_rgba(255,255,255,0.4)] z-10">
+                {{ pet.name }}
+            </h3>
+
+            <!-- HABILIDAD PASIVA VIP (BUFF) -->
+            <div class="w-full mt-3 bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 flex items-center justify-between text-left z-10 shadow-inner">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-2xl">
+                        {% if pet.species == 'panther' %}⚡{% elif pet.species == 'fox' %}⏳{% elif pet.species == 'viper' %}💎{% elif pet.species == 'raven' %}🦅{% else %}🐺{% endif %}
+                    </span>
+                    <div>
+                        <p class="text-[10px] text-vip-gold uppercase font-bold tracking-wider">Bendición Real Activa</p>
+                        <p class="text-xs text-white/90 font-medium">
+                            {{ pet.get_buff_description }}
+                        </p>
+                    </div>
+                </div>
+                <span class="text-[10px] bg-green-950 border border-green-500/50 text-green-300 font-bold px-2 py-0.5 rounded-full">
+                    ACTIVO
+                </span>
+            </div>
+
+            <!-- BARRAS DE ESTADO (ENERGÍA Y XP) -->
+            <div class="w-full flex flex-col gap-3 mt-4 z-10 bg-black/40 p-3 rounded-xl border border-vip-gold/15">
+                <!-- Energía -->
+                <div>
+                    <div class="flex justify-between text-[11px] font-bold mb-1">
+                        <span class="text-yellow-400 flex items-center gap-1">⚡ Saciedad / Vitalidad</span>
+                        <span class="text-vip-gold font-mono">{{ pet.energy }}%</span>
+                    </div>
+                    <div class="w-full bg-black/80 h-2.5 rounded-full overflow-hidden border border-yellow-500/30 p-0.5">
+                        <div class="bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-200 h-full rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(234,179,8,0.5)]" style="width: {{ pet.energy }}%;"></div>
+                    </div>
+                </div>
+
+                <!-- XP -->
+                <div>
+                    <div class="flex justify-between text-[11px] font-bold mb-1">
+                        <span class="text-purple-300 flex items-center gap-1">✨ Poder Cósmico (XP)</span>
+                        <span class="text-purple-300 font-mono">{{ pet.xp }} / {{ pet.xp_needed_for_next_level }}</span>
+                    </div>
+                    <div class="w-full bg-black/80 h-2.5 rounded-full overflow-hidden border border-purple-500/30 p-0.5">
+                        <div class="bg-gradient-to-r from-purple-800 via-purple-500 to-fuchsia-400 h-full rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(168,85,247,0.5)]" style="width: {% widthratio pet.xp pet.xp_needed_for_next_level 100 %}%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BOTONES DE CUIDADO INTERACTIVO -->
+            <div class="grid grid-cols-2 gap-3 w-full mt-4 z-10">
+                <!-- Alimentar con festín -->
+                <form action="{% url 'pets:interact' %}" method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="action" value="feed">
+                    <button type="submit" class="w-full bg-gradient-to-r from-yellow-700 via-vip-gold to-yellow-600 text-black font-black py-3 rounded-xl hover:brightness-110 active:scale-95 transition-all flex flex-col items-center justify-center gap-0.5 shadow-[0_0_15px_rgba(212,175,55,0.3)]">
+                        <span class="text-lg">🍖</span>
+                        <span class="text-xs uppercase tracking-wider">Dar Banquete</span>
+                        <span class="text-[9px] bg-black/30 text-black px-2 py-0.2 rounded-full font-mono font-bold">10 🪙</span>
+                    </button>
+                </form>
+
+                <!-- Acariciar con partículas -->
+                <form action="{% url 'pets:interact' %}" method="POST" class="m-0" onsubmit="spawnHearts(event)">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="action" value="pet">
+                    <button type="submit" class="w-full bg-gradient-to-r from-purple-950 via-purple-900 to-[#2d123d] border border-purple-500/60 text-purple-200 font-black py-3 rounded-xl hover:brightness-125 active:scale-95 transition-all flex flex-col items-center justify-center gap-0.5 shadow-[0_0_15px_rgba(168,85,247,0.3)]">
+                        <span class="text-lg">💖</span>
+                        <span class="text-xs uppercase tracking-wider">Acariciar</span>
+                        <span class="text-[9px] text-purple-300 font-mono font-bold">+10 XP</span>
+                    </button>
+                </form>
+
+                <!-- BOTÓN CAMBIAR MASCOTA (RITUAL DE TRANSMUTACIÓN) -->
+            <button type="button" onclick="toggleChangeModal()" 
+                    class="w-full mt-4 bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-text/70 hover:text-vip-gold py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2">
+                <span>🔄</span>
+                <span>Cambiar de Mascota (250 🪙)</span>
+            </button>
+
+            <!-- MODAL / FORMULARIO DESPLEGABLE DE CAMBIO -->
+            <div id="change-pet-modal" class="hidden w-full mt-3 p-4 bg-black/90 border border-vip-gold/50 rounded-2xl flex flex-col gap-3 text-left">
+                <div class="text-center border-b border-vip-gold/20 pb-2">
+                    <h4 class="text-xs font-black text-vip-gold uppercase tracking-wider">Ritual de Reencarnación</h4>
+                    <p class="text-[10px] text-vip-text/60">Transmuta tu compañero actual a otra especie por <span class="text-yellow-400 font-bold">250 🪙</span>.</p>
+                </div>
+
+                <form action="{% url 'pets:change_pet' %}" method="POST" class="flex flex-col gap-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+                    <!-- Selector de nueva especie -->
+                    <div class="flex flex-col gap-1.5">
+                        <label class="text-[10px] text-vip-gold font-bold uppercase">Nueva Especie:</label>
+                        
+                        <label class="flex items-center gap-2 p-2 rounded-lg bg-vip-base border border-vip-gold/20 text-xs text-white cursor-pointer hover:border-vip-gold">
+                            <input type="radio" name="new_species" value="panther" {% if pet.species != 'panther' %}checked{% endif %} class="accent-vip-gold">
+                            <span>🐈‍⬛ Pantera de Ébano (+10% Casino)</span>
+                        </label>
+                        
+                        <label class="flex items-center gap-2 p-2 rounded-lg bg-vip-base border border-vip-gold/20 text-xs text-white cursor-pointer hover:border-vip-gold">
+                            <input type="radio" name="new_species" value="fox" {% if pet.species != 'fox' %}checked{% endif %} class="accent-vip-gold">
+                            <span>🦊 Zorro Kitsune Dorado (Bono 22h)</span>
+                        </label>
+
+                        <label class="flex items-center gap-2 p-2 rounded-lg bg-vip-base border border-vip-gold/20 text-xs text-white cursor-pointer hover:border-vip-gold">
+                            <input type="radio" name="new_species" value="viper" {% if pet.species != 'viper' %}checked{% endif %} class="accent-vip-gold">
+                            <span>🐍 Víbora de Esmeralda (-15% Fotos)</span>
+                        </label>
+
+                        <label class="flex items-center gap-2 p-2 rounded-lg bg-vip-base border border-vip-gold/20 text-xs text-white cursor-pointer hover:border-vip-gold">
+                            <input type="radio" name="new_species" value="raven" {% if pet.species != 'raven' %}checked{% endif %} class="accent-vip-gold">
+                            <span>🦅 Cuervo de Medianoche (Suerte Slots)</span>
+                        </label>
+
+                        <label class="flex items-center gap-2 p-2 rounded-lg bg-vip-base border border-vip-gold/20 text-xs text-white cursor-pointer hover:border-vip-gold">
+                            <input type="radio" name="new_species" value="wolf" {% if pet.species != 'wolf' %}checked{% endif %} class="accent-vip-gold">
+                            <span>🐺 Lobo Espectral de Plata (Escudo Blackjack)</span>
+                        </label>
+                    </div>
+
+                    <!-- Nuevo nombre -->
+                    <div>
+                        <label class="text-[10px] text-vip-gold font-bold uppercase block mb-1">Nuevo Nombre:</label>
+                        <input type="text" name="new_name" placeholder="Bautiza tu nuevo compañero..." required maxlength="30"
+                               class="w-full bg-vip-base border border-vip-gold/40 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-vip-gold text-center font-bold">
+                    </div>
+
+                    <button type="submit" class="w-full bg-gradient-to-r from-yellow-700 via-vip-gold to-yellow-600 text-black font-black py-2.5 rounded-xl uppercase tracking-wider text-xs hover:brightness-110 shadow-md">
+                        Transmutar por 250 🪙
+                    </button>
+                </form>
+            </div>
+
+            </div>
+
+        </div>
+
+    {% else %}
+        <!-- CÁMARA DE ADOPCIÓN (SELECCIÓN VISUAL DE LAS 5 CRIATURAS) -->
+        <div class="bg-vip-panel border border-vip-gold/40 rounded-3xl p-5 flex flex-col gap-4 shadow-[0_0_25px_rgba(212,175,55,0.15)]">
+            <div class="text-center">
+                <span class="text-4xl">🔮</span>
+                <h3 class="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-vip-gold to-yellow-300 uppercase tracking-widest mt-1">
+                    Cámara de Invocación
+                </h3>
+                <p class="text-xs text-vip-text/70 mt-1">
+                    Elige el guardián de tus placeres y fortuna en el Reino.
+                </p>
+            </div>
+
+            <form action="{% url 'pets:adopt' %}" method="POST" class="flex flex-col gap-4 mt-2">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+                <!-- Selector Visual de Especies (5 Mascotas) -->
+                <div class="flex flex-col gap-2.5">
+                    
+                    <!-- 1. Pantera -->
+                    <label class="relative flex items-center gap-3 p-3 rounded-2xl border-2 border-vip-gold/30 bg-black/60 cursor-pointer hover:border-vip-gold transition-all group overflow-hidden">
+                        <input type="radio" name="species" value="panther" checked class="accent-vip-gold scale-125 ml-1">
+                        <div class="w-12 h-12 rounded-xl bg-purple-950/80 border border-vip-gold/50 flex items-center justify-center text-2xl flex-shrink-0">
+                            🐈‍⬛
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs font-black text-vip-gold tracking-wide">Pantera de Ébano</p>
+                            <p class="text-[10px] text-purple-300 font-semibold">⚡ +10% Oro en Casino</p>
+                            <p class="text-[10px] text-vip-text/50">Acecha las sombras del Reino con ojos amatista.</p>
+                        </div>
+                    </label>
+
+                    <!-- 2. Kitsune -->
+                    <label class="relative flex items-center gap-3 p-3 rounded-2xl border-2 border-vip-gold/30 bg-black/60 cursor-pointer hover:border-vip-gold transition-all group overflow-hidden">
+                        <input type="radio" name="species" value="fox" class="accent-vip-gold scale-125 ml-1">
+                        <div class="w-12 h-12 rounded-xl bg-yellow-950/80 border border-vip-gold/50 flex items-center justify-center text-2xl flex-shrink-0">
+                            🦊
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs font-black text-vip-gold tracking-wide">Zorro Kitsune Dorado</p>
+                            <p class="text-[10px] text-yellow-300 font-semibold">⏳ Bono Diario cada 22h</p>
+                            <p class="text-[10px] text-vip-text/50">Fuego espiritual que atrae la buena fortuna.</p>
+                        </div>
+                    </label>
+
+                    <!-- 3. Víbora -->
+                    <label class="relative flex items-center gap-3 p-3 rounded-2xl border-2 border-vip-gold/30 bg-black/60 cursor-pointer hover:border-vip-gold transition-all group overflow-hidden">
+                        <input type="radio" name="species" value="viper" class="accent-vip-gold scale-125 ml-1">
+                        <div class="w-12 h-12 rounded-xl bg-emerald-950/80 border border-vip-gold/50 flex items-center justify-center text-2xl flex-shrink-0">
+                            🐍
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs font-black text-vip-gold tracking-wide">Víbora de Esmeralda</p>
+                            <p class="text-[10px] text-green-400 font-semibold">💎 -15% en KingdomFans</p>
+                            <p class="text-[10px] text-vip-text/50">Escamas de joyas imperiales y seducción letal.</p>
+                        </div>
+                    </label>
+
+                    <!-- 4. Cuervo -->
+                    <label class="relative flex items-center gap-3 p-3 rounded-2xl border-2 border-vip-gold/30 bg-black/60 cursor-pointer hover:border-vip-gold transition-all group overflow-hidden">
+                        <input type="radio" name="species" value="raven" class="accent-vip-gold scale-125 ml-1">
+                        <div class="w-12 h-12 rounded-xl bg-indigo-950/80 border border-vip-gold/50 flex items-center justify-center text-2xl flex-shrink-0">
+                            🦅
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs font-black text-vip-gold tracking-wide">Cuervo de Medianoche</p>
+                            <p class="text-[10px] text-indigo-300 font-semibold">🎰 +20% Suerte en Slots</p>
+                            <p class="text-[10px] text-vip-text/50">Plumaje azabache y secretos de los dioses antiguos.</p>
+                        </div>
+                    </label>
+
+                    <!-- 5. Lobo -->
+                    <label class="relative flex items-center gap-3 p-3 rounded-2xl border-2 border-vip-gold/30 bg-black/60 cursor-pointer hover:border-vip-gold transition-all group overflow-hidden">
+                        <input type="radio" name="species" value="wolf" class="accent-vip-gold scale-125 ml-1">
+                        <div class="w-12 h-12 rounded-xl bg-slate-900 border border-vip-gold/50 flex items-center justify-center text-2xl flex-shrink-0">
+                            🐺
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-xs font-black text-vip-gold tracking-wide">Lobo Espectral de Plata</p>
+                            <p class="text-[10px] text-blue-300 font-semibold">🛡️ Protección en Blackjack</p>
+                            <p class="text-[10px] text-vip-text/50">Leal, feroz y guardián de la fortuna imperial.</p>
+                        </div>
+                    </label>
+
+                </div>
+
+                <!-- Input Nombre -->
+                <div>
+                    <label class="text-xs font-bold text-vip-gold uppercase block mb-1">Nombre de tu Criatura:</label>
+                    <input type="text" name="name" placeholder="Bautiza a tu compañero..." required maxlength="30"
+                           class="w-full bg-vip-base border border-vip-gold/40 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-vip-gold text-center font-bold tracking-wider">
+                </div>
+
+                <button type="submit" class="w-full bg-gradient-to-r from-vip-gold via-yellow-400 to-yellow-600 text-black font-black py-3.5 rounded-xl uppercase tracking-widest text-xs hover:brightness-110 transition-all shadow-[0_0_20px_rgba(212,175,55,0.4)]">
+                    ⚔️ Iniciar Juramento Clandestino
+                </button>
+            </form>
+        </div>
+    {% endif %}
+
+</div>
+
+<!-- Script de Partículas Místicas al Acariciar -->
+<script>
+    function spawnHearts(e) {
+        const container = document.getElementById('heart-particles');
+        if (!container) return;
+
+        for (let i = 0; i < 7; i++) {
+            const heart = document.createElement('span');
+            heart.innerText = ['💖', '✨', '🐾', '⭐'][Math.floor(Math.random() * 4)];
+            heart.className = 'absolute text-xl animate-bounce';
+            heart.style.left = `${40 + Math.random() * 20}%`;
+            heart.style.top = `${40 + Math.random() * 20}%`;
+            heart.style.opacity = '1';
+            heart.style.transition = 'all 0.8s ease-out';
+
+            container.appendChild(heart);
+
+            setTimeout(() => {
+                heart.style.transform = `translate(${(Math.random() - 0.5) * 80}px, -${60 + Math.random() * 40}px) scale(1.4)`;
+                heart.style.opacity = '0';
+            }, 50);
+
+            setTimeout(() => heart.remove(), 850);
+        }
+    }
+
+    function toggleChangeModal() {
+        const modal = document.getElementById('change-pet-modal');
+        modal.classList.toggle('hidden');
     }
 </script>
 {% endblock %}

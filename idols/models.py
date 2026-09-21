@@ -3,6 +3,13 @@ from django.db.models import Avg
 from django.core.exceptions import ValidationError
 
 class IdolProfile(models.Model):
+
+    STATUS_CHOICES = [
+        ('online', '🟢 Chateando en Telegram'),
+        ('antojos', '🔥 Sesión de Antojos'),
+        ('offline', '🌙 Descansando'),
+    ]
+
     # Relacionamos este perfil directamente con el ID numérico de Telegram del usuario
     telegram_user_id = models.BigIntegerField(db_index=True)
     owner_username = models.CharField("Usuario de Telegram", max_length=100, blank=True, null=True)
@@ -11,7 +18,8 @@ class IdolProfile(models.Model):
     stage_name = models.CharField("Nombre Artístico", max_length=100)
     group = models.CharField("Grupo/Solista", max_length=100, blank=True, null=True)
     bio = models.TextField("Biografía / Presentación", max_length=500)
-    
+    status = models.CharField("Estado Actual", max_length=10, choices=STATUS_CHOICES, default='online')
+
     photo = models.ImageField("Foto de Perfil", upload_to='idols_photos/', blank=True, null=True)
     
     # Estadísticas básicas para la ficha
@@ -129,3 +137,46 @@ class UserRole(models.Model):
 
     def __str__(self):
         return f"{self.telegram_id} - {self.role}"
+
+# --- MODELO PETICIONES PERSONALIZADAS DE ANTOJOS ---
+class CustomRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('accepted', 'Entregada'),
+        ('rejected', 'Rechazada'),
+    ]
+    
+    idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='custom_requests')
+    client_telegram_id = models.BigIntegerField("ID del Cliente", db_index=True)
+    client_username = models.CharField("Cliente", max_length=100)
+    
+    description = models.TextField("Detalle del Antojo", max_length=300)
+    bounty = models.PositiveIntegerField("Oro Ofrecido", default=100)
+    status = models.CharField("Estado", max_length=10, choices=STATUS_CHOICES, default='pending')
+    
+    delivered_photo = models.ImageField("Foto Entregada", upload_to='custom_antojos/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Petición de Antojo"
+        verbose_name_plural = "Peticiones de Antojos"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Antojo para {self.idol.stage_name} de {self.client_username} ({self.bounty} 🪙)"
+
+# --- MODELO DE COMENTARIOS EN EL FEED ---
+class PostComment(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    author_telegram_id = models.BigIntegerField("ID del Autor", db_index=True)
+    author_name = models.CharField("Nombre o @ de Usuario", max_length=100)
+    text = models.TextField("Comentario", max_length=250)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Comentario de Post"
+        verbose_name_plural = "Comentarios de Posts"
+        ordering = ['created_at'] # Del más antiguo al más reciente
+
+    def __str__(self):
+        return f"Comentario de {self.author_name} en Post #{self.post.id}"

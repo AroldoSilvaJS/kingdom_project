@@ -22,7 +22,27 @@
                     </div>
                     <div>
                         <h3 class="font-semibold text-vip-gold">{{ idol.stage_name }}</h3>
-                        <p class="text-xs text-vip-text/70">{{ idol.group|default:"Solista" }}</p>
+                        <p class="text-xs text-vip-text/70 mb-2">{{ idol.group|default:"Solista" }}</p>
+
+                        <!-- Selector rápido de estado en vivo -->
+                        <form method="POST" class="flex gap-1">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="update_status">
+                            <input type="hidden" name="idol_id" value="{{ idol.id }}">
+                            
+                            <button type="submit" name="status" value="online" title="🟢 Chateando"
+                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'online' %}bg-green-950/80 border-green-500 text-green-300 font-bold shadow-[0_0_8px_rgba(74,222,128,0.3)]{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
+                                🟢 Chat
+                            </button>
+                            <button type="submit" name="status" value="antojos" title="🔥 Subiendo Antojos"
+                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'antojos' %}bg-purple-950/80 border-purple-400 text-purple-300 font-bold shadow-[0_0_8px_rgba(168,85,247,0.3)]{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
+                                🔥 Antojos
+                            </button>
+                            <button type="submit" name="status" value="offline" title="🌙 Descansando"
+                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'offline' %}bg-gray-900 border-gray-500 text-gray-300 font-bold{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
+                                🌙 Off
+                            </button>
+                        </form>
                     </div>
                 </div>
 
@@ -44,6 +64,54 @@
         </div>
     {% else %}
         <p class="text-center text-sm text-vip-text/60 py-4">Aún no tienes Idols registradas.</p>
+    {% endif %}
+
+    <!-- BANDEJA DE PETICIONES DE ANTOJOS PENDIENTES -->
+    {% if pending_requests %}
+        <div class="mt-4 pt-4 border-t border-vip-gold/30 flex flex-col gap-3">
+            <h3 class="text-sm font-bold text-yellow-400 flex items-center gap-2">
+                <span>📬</span> Peticiones de Antojos Pendientes ({{ pending_requests|length }})
+            </h3>
+
+            {% for req in pending_requests %}
+                <div class="bg-black/60 border border-vip-gold/40 p-4 rounded-xl flex flex-col gap-2.5 shadow-md">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-xs font-bold text-vip-gold">Para: {{ req.idol.stage_name }}</span>
+                            <p class="text-[11px] text-vip-text/60">De: {{ req.client_username }}</p>
+                        </div>
+                        <span class="bg-yellow-950/60 border border-vip-gold text-vip-gold px-2.5 py-0.5 rounded-full text-xs font-mono font-bold">
+                            +{{ req.bounty }} 🪙
+                        </span>
+                    </div>
+
+                    <p class="text-xs text-white/90 bg-vip-base/70 p-2.5 rounded-lg border border-vip-gold/20 italic">
+                        "{{ req.description }}"
+                    </p>
+
+                    <!-- Formulario de Entrega / Rechazo -->
+                    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="request_id" value="{{ req.id }}">
+
+                        <label class="block text-[10px] text-vip-gold uppercase">Subir foto del antojo:</label>
+                        <input type="file" name="delivered_photo" accept="image/*"
+                               class="w-full bg-vip-base border border-vip-gold/30 rounded p-1.5 text-[11px] text-white file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-vip-gold file:text-black hover:file:bg-yellow-500 cursor-pointer">
+
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <button type="submit" name="action" value="accept_request"
+                                    class="bg-green-700/80 border border-green-500 text-white font-bold py-1.5 rounded text-xs hover:bg-green-600 transition-colors uppercase tracking-wider">
+                                ✅ Entregar Foto
+                            </button>
+                            <button type="submit" name="action" value="reject_request"
+                                    class="bg-red-900/60 border border-red-500/50 text-red-200 font-bold py-1.5 rounded text-xs hover:bg-red-700 transition-colors uppercase tracking-wider">
+                                ❌ Rechazar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            {% endfor %}
+        </div>
     {% endif %}
 
     {% if can_add_more %}

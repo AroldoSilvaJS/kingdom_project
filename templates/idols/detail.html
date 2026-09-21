@@ -26,7 +26,19 @@
             <div class="absolute inset-0 bg-gradient-to-t from-[#130A1F] via-transparent to-transparent"></div>
             
             <div class="absolute bottom-3 left-4 right-4">
-                <span class="text-xs font-bold text-red-400 uppercase tracking-widest">Tomada 🔒</span>
+                {% if idol.status == 'online' %}
+                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-green-400 uppercase tracking-widest bg-black/60 px-2.5 py-1 rounded-full border border-green-500/50 backdrop-blur-sm">
+                        <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span> Chateando en Telegram
+                    </span>
+                {% elif idol.status == 'antojos' %}
+                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-purple-300 uppercase tracking-widest bg-black/60 px-2.5 py-1 rounded-full border border-purple-500/50 backdrop-blur-sm">
+                        🔥 Sesión de Antojos Activa
+                    </span>
+                {% else %}
+                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase tracking-widest bg-black/60 px-2.5 py-1 rounded-full border border-gray-600 backdrop-blur-sm">
+                        🌙 Descansando
+                    </span>
+                {% endif %}
                 <h1 class="text-2xl font-bold text-vip-gold">{{ idol.stage_name }}</h1>
                 <p class="text-sm text-vip-text/80">{{ idol.group|default:"Solista" }}</p>
             </div>
@@ -64,6 +76,43 @@
                 <span class="text-xl group-hover:scale-125 transition-transform">💬</span>
                 <span class="tracking-wider uppercase text-xs">Solicitar Rol / Contactar a {{ idol.stage_name }}</span>
             </button>
+            <!-- BUZÓN DE DESEOS: PEDIR ANTOJO PERSONALIZADO -->
+            <button type="button" onclick="toggleCustomRequestModal()" 
+                    class="w-full mt-2 bg-gradient-to-r from-yellow-950/60 via-black to-vip-base border border-vip-gold/60 text-vip-gold py-3 rounded-xl hover:brightness-125 transition-all font-bold flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(212,175,55,0.15)] text-xs uppercase tracking-wider">
+                <span>📬</span> Pedir Antojo Personalizado
+            </button>
+
+            <!-- Modal Desplegable de Petición -->
+            <div id="custom-request-modal" class="hidden mt-3 p-4 bg-black/80 border border-vip-gold/40 rounded-xl">
+                <h4 class="text-xs font-bold text-vip-gold uppercase tracking-wider text-center mb-2">
+                    Pide tu antojo exclusivo a {{ idol.stage_name }}
+                </h4>
+                <p class="text-[11px] text-vip-text/60 text-center mb-3">
+                    Describe lo que quieres y ofrece tu pago. Si la Idol rechaza tu pedido, el oro vuelve a tu Bóveda al instante.
+                </p>
+
+                <form action="{% url 'idols:create_custom_request' idol.id %}" method="POST" class="flex flex-col gap-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="tg_username" value="{{ tg_username }}">
+
+                    <div>
+                        <label class="block text-[11px] text-vip-gold uppercase mb-1">Tu Ofrenda de Oro (🪙)</label>
+                        <input type="number" name="bounty" min="50" value="100" required
+                               class="w-full bg-vip-base border border-vip-gold/40 rounded-lg p-2 text-white font-mono text-center text-sm focus:outline-none focus:border-vip-gold">
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] text-vip-gold uppercase mb-1">¿Cómo quieres tu antojo?</label>
+                        <textarea name="description" rows="3" required placeholder="Ej: Selfie con dedicatoria en papel, foto en outfit específico..."
+                                  class="w-full bg-vip-base border border-vip-gold/40 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold resize-none"></textarea>
+                    </div>
+
+                    <button type="submit" class="w-full bg-gradient-to-r from-vip-gold to-yellow-600 text-black font-bold py-2.5 rounded-lg text-xs uppercase tracking-wider hover:brightness-110 shadow-md">
+                        Enviar Petición (Retener Oro)
+                    </button>
+                </form>
+            </div>
             {% else %}
             <div class="text-center text-xs text-vip-text/40 italic py-2">
                 Esta Idol no tiene un usuario de Telegram configurado aún.
@@ -163,6 +212,11 @@
             // Fallback para navegador normal
             window.open(telegramUrl, '_blank');
         }
+    }
+
+    function toggleCustomRequestModal() {
+        const modal = document.getElementById('custom-request-modal');
+        modal.classList.toggle('hidden');
     }
 </script>
 {% endblock %}

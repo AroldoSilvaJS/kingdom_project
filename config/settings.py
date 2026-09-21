@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'core',
     'idols',
     'economy',
+    'pets',
     
     # Librerías externas
     'corsheaders',

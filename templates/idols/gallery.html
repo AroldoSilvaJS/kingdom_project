@@ -32,7 +32,19 @@
 
                 <!-- Textos e Información (posicionados abajo) -->
                 <div class="absolute bottom-0 left-0 w-full p-3 flex flex-col">
-                    <span class="text-xs font-bold text-red-400 uppercase tracking-widest mb-1 drop-shadow-md">Tomada 🔒</span>
+                   {% if idol.status == 'online' %}
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-green-400 uppercase tracking-wider mb-1 drop-shadow-md">
+                            <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span> Chateando
+                        </span>
+                    {% elif idol.status == 'antojos' %}
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1 drop-shadow-md">
+                            🔥 Antojos
+                        </span>
+                    {% else %}
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 drop-shadow-md">
+                            🌙 Descansando
+                        </span>
+                    {% endif %}
                     <h3 class="font-bold text-vip-gold text-lg leading-tight truncate drop-shadow-md">{{ idol.stage_name }}</h3>
                     <p class="text-xs text-vip-text/80 truncate drop-shadow-md">{{ idol.group|default:"Solista" }}</p>
                     

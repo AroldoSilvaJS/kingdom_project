@@ -87,13 +87,95 @@
                 {% endif %}
             </div>
 
-            <!-- Pie del Post (Descripción) -->
-            <div class="mt-3 flex gap-4 text-sm">
+            <div class="mt-3 flex items-center justify-between text-sm">
+                    <!-- Botón Like -->
                     <button id="like-btn-{{ post.id }}" onclick="handleLike({{ post.id }})" 
                             class="transition-all duration-200 flex items-center gap-1.5 px-3 py-1 rounded-full border border-vip-gold/20 {% if post.id in liked_ids %}text-red-500 bg-red-500/10 border-red-500/40{% else %}text-vip-text/60 bg-black/30 hover:text-red-400{% endif %}">
                         <span id="like-icon-{{ post.id }}">{% if post.id in liked_ids %}❤️{% else %}🤍{% endif %}</span>
                         <span id="like-count-{{ post.id }}" class="font-semibold text-xs">{{ post.likes }}</span>
                     </button>
+
+                    <!-- Botón Invitar Trago / Propina -->
+                    <button onclick="toggleTipModal({{ post.id }})" 
+                            class="flex items-center gap-1 text-xs text-vip-gold bg-yellow-950/40 border border-vip-gold/40 px-3 py-1 rounded-full hover:bg-vip-gold hover:text-black transition-all font-semibold shadow-[0_0_8px_rgba(212,175,55,0.15)]">
+                        <span>🥂</span>
+                        <span>Invitar Trago</span>
+                    </button>
+                </div>
+
+                <!-- BOTÓN DESPLEGABLE DE COMENTARIOS -->
+                <button type="button" onclick="toggleComments({{ post.id }})" 
+                        class="mt-2 text-xs text-vip-text/60 hover:text-vip-gold flex items-center gap-1.5 transition-colors">
+                    <span>💬</span>
+                    <span id="comment-label-{{ post.id }}">
+                        {% if post.comments.count > 0 %}
+                            Ver los {{ post.comments.count }} comentarios...
+                        {% else %}
+                            Escribir el primer comentario...
+                        {% endif %}
+                    </span>
+                </button>
+
+                <!-- CAJA DE COMENTARIOS (Oculta por defecto) -->
+                <div id="comments-box-{{ post.id }}" class="hidden mt-3 pt-3 border-t border-vip-gold/15 flex flex-col gap-2.5">
+                    
+                    <!-- Lista de Comentarios -->
+                    <div class="max-h-44 overflow-y-auto flex flex-col gap-2 pr-1">
+                        {% for c in post.comments.all %}
+                            <div class="bg-black/40 p-2.5 rounded-lg border border-vip-gold/10 text-xs">
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="font-bold {% if '(Idol)' in c.author_name %}text-yellow-400 font-serif tracking-wider{% else %}text-vip-gold{% endif %}">
+                                        {% if '(Idol)' in c.author_name %}👑 {{ c.author_name }}{% else %}{{ c.author_name }}{% endif %}
+                                    </span>
+                                    <span class="text-[10px] text-vip-text/40">{{ c.created_at|date:"d/m H:i" }}</span>
+                                </div>
+                                <p class="text-vip-text/90 leading-relaxed">{{ c.text }}</p>
+                            </div>
+                        {% empty %}
+                            <p class="text-center text-[11px] text-vip-text/40 italic py-2">
+                                No hay comentarios aún. ¡Sé el primero en dejar uno!
+                            </p>
+                        {% endfor %}
+                    </div>
+
+                    <!-- Formulario para agregar comentario -->
+                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 mt-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                        <input type="hidden" name="tg_username" class="input-tg-username" value="{{ tg_username|default:'' }}">
+                        
+                        <input type="text" name="text" placeholder="Escribe un halago o mensaje..." required maxlength="250"
+                               class="flex-1 bg-vip-base border border-vip-gold/30 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-vip-gold">
+                        <button type="submit" 
+                                class="bg-vip-gold text-black font-bold text-xs px-3 py-2 rounded-lg hover:brightness-110 transition-all uppercase tracking-wider shadow">
+                            💬
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Mini Modal Desplegable de Propina (Oculto por defecto) -->
+                <div id="tip-modal-{{ post.id }}" class="hidden mt-3 p-3 bg-black/70 border border-vip-gold/30 rounded-xl">
+                    <p class="text-[11px] text-vip-gold/90 font-bold uppercase tracking-wider mb-2 text-center">
+                        Invitar trago a {{ post.idol.stage_name }}
+                    </p>
+                    <form action="{% url 'idols:send_tip' post.id %}" method="POST" class="flex flex-col gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                        
+                        <div class="grid grid-cols-3 gap-2">
+                            <button type="button" onclick="setTipAmount({{ post.id }}, 10)" class="bg-vip-base border border-vip-gold/30 text-vip-gold py-1 rounded text-xs hover:border-vip-gold font-mono">10 🪙</button>
+                            <button type="button" onclick="setTipAmount({{ post.id }}, 25)" class="bg-vip-base border border-vip-gold/30 text-vip-gold py-1 rounded text-xs hover:border-vip-gold font-mono">25 🪙</button>
+                            <button type="button" onclick="setTipAmount({{ post.id }}, 50)" class="bg-vip-base border border-vip-gold/30 text-vip-gold py-1 rounded text-xs hover:border-vip-gold font-mono">50 🪙</button>
+                        </div>
+
+                        <div class="flex gap-2 mt-1">
+                            <input type="number" name="tip_amount" id="tip-input-{{ post.id }}" min="1" placeholder="Monto" required
+                                   class="w-1/2 bg-vip-base border border-vip-gold/40 text-white text-xs px-2 py-1.5 rounded focus:outline-none focus:border-vip-gold text-center">
+                            <button type="submit" class="w-1/2 bg-gradient-to-r from-vip-gold to-yellow-600 text-black font-bold text-xs py-1.5 rounded uppercase tracking-wider hover:brightness-110 shadow">
+                                Enviar 🥂
+                            </button>
+                        </div>
+                    </form>
                 </div>
         </div>
     {% empty %}
@@ -145,6 +227,32 @@
             console.error('Error al dar like:', e);
         }
     }
+
+    function toggleTipModal(postId) {
+        const modal = document.getElementById(`tip-modal-${postId}`);
+        modal.classList.toggle('hidden');
+    }
+
+    function setTipAmount(postId, amount) {
+        document.getElementById(`tip-input-${postId}`).value = amount;
+    }
+
+    function toggleComments(postId) {
+        const box = document.getElementById(`comments-box-${postId}`);
+        box.classList.toggle('hidden');
+    }
+
+    // Auto-detectar @username de Telegram si no vino por URL
+    document.addEventListener("DOMContentLoaded", () => {
+        const tg = window.Telegram.WebApp;
+        const user = tg.initDataUnsafe?.user;
+        if (user) {
+            const finalUsername = user.username ? `@${user.username}` : user.first_name;
+            document.querySelectorAll('.input-tg-username').forEach(inp => {
+                if (!inp.value) inp.value = finalUsername;
+            });
+        }
+    });
 </script>
 {% endblock %}
 
