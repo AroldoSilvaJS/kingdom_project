@@ -231,9 +231,12 @@ def unlock_post(request, post_id):
                 # 2. Registramos que el cliente desbloqueó la foto
                 PostUnlock.objects.get_or_create(post=post, client_telegram_id=tg_id)
                 
-                # 3. 💰 TRANSFERENCIA DE ORO A LA IDOL:
+                # 3. 💰 COMISIÓN DEL REINO: 15% se quema (sumidero) y 85% va a la Idol
+                comision = int(post.price * 0.15)
+                ganancia_idol = post.price - comision
+                
                 idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
-                idol_wallet.add_funds(post.price)
+                idol_wallet.add_funds(ganancia_idol)
                 
                 messages.success(request, f"¡Foto desbloqueada con éxito! (-{post.price} 🪙)")
             else:
@@ -354,9 +357,12 @@ def send_tip(request, post_id):
         client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         
         if client_wallet.remove_funds(amount):
-            # Transferir el oro a la Idol
+            # 10% de comisión del Reino
+            comision = int(amount * 0.10)
+            neto_idol = amount - comision
+            
             idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
-            idol_wallet.add_funds(amount)
+            idol_wallet.add_funds(neto_idol)
             messages.success(request, f"🥂 ¡Le has invitado un trago de {amount} 🪙 a {post.idol.stage_name}!")
         else:
             messages.error(request, "No tienes suficiente oro en tu Bóveda.")

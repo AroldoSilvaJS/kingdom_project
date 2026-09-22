@@ -53,12 +53,12 @@ def interact_pet(request):
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         
         if action == 'feed':
-            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-            if wallet.remove_funds(10):
-                pet.feed()
-                messages.success(request, f"🍖 ¡Alimentaste a {pet.name}! (+25 Energía, +30 XP) (-10 🪙). Saldo restante en Bóveda: {wallet.balance} 🪙")
-            else:
-                messages.error(request, f"No tienes suficiente oro (10 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
+         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+         if wallet.remove_funds(15):
+             pet.feed()
+             messages.success(request, f"🍖 ¡Alimentaste a {pet.name}! (+25 Energía, +30 XP) (-15 🪙). Saldo restante en Bóveda: {wallet.balance} 🪙")
+         else:
+             messages.error(request, f"No tienes suficientes monedas (15 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
                 
         elif action == 'pet':
             pet.pet_action()
@@ -71,7 +71,7 @@ def change_pet(request):
         tg_id = resolve_tg_id(request)
         new_species = request.POST.get('new_species')
         new_name = request.POST.get('new_name', '').strip()
-        cost = 250
+        cost = 300
         
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)

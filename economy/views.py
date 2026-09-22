@@ -30,17 +30,17 @@ def casino_game(request):
             # Validaciones de seguridad
             if apuesta <= 0:
                 messages.error(request, "La apuesta debe ser mayor a 0.")
+            elif apuesta > 100:
+                messages.error(request, "La apuesta máxima del Casino Imperial es de 100 🪙.")
             elif apuesta > wallet.balance:
                 messages.error(request, "No tienes suficiente oro para esta apuesta.")
             else:
-                # El juego: 50% de probabilidad de ganar
-                if random.choice([True, False]):
-                    # Gana
-                    wallet.add_funds(apuesta)
+                # 48% de probabilidad de ganar (5% de ventaja para la casa)
+                if random.random() < 0.48:
+                    ganancia = int(apuesta * 1.95)
+                    wallet.add_funds(ganancia)
                     resultado = "win"
-                    ganancia = apuesta
                 else:
-                    # Pierde
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
                     ganancia = apuesta
@@ -62,14 +62,13 @@ def claim_bonus(request):
         
         # Usamos la función que creamos en el modelo
         if wallet.can_claim_bonus():
-            wallet.add_funds(100) # Premio de 100 de oro
+            wallet.add_funds(35) # <- Premio diario equilibrado de 35 de oro
             wallet.last_bonus_claim = timezone.now()
             wallet.save()
-            messages.success(request, "¡Has reclamado tu bono diario de 100 🪙 de oro!")
+            messages.success(request, "¡Has reclamado tu bono diario de 35 🪙 de oro!")
         else:
             messages.error(request, "Aún no han pasado 24 horas desde tu último bono.")
             
-        # Lo devolvemos a la bóveda
         return redirect(f'/economy/wallet/?tg_id={tg_id}')
     
 def slots_game(request):
@@ -88,6 +87,8 @@ def slots_game(request):
             apuesta = int(request.POST.get('bet_amount', 0))
             if apuesta <= 0:
                 messages.error(request, "La apuesta debe ser mayor a 0.")
+            elif apuesta > 100:
+                messages.error(request, "La apuesta máxima permitida es de 100 🪙.")
             elif apuesta > wallet.balance:
                 messages.error(request, "No tienes suficiente oro para esta apuesta.")
             else:
