@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="p-4 mt-2 flex flex-col gap-4 mx-auto w-full max-w-md">
+<div class="p-4 mt-2 flex flex-col gap-4 mx-auto w-full max-w-md pb-20">
     
     <!-- Barra superior de navegación -->
     <div class="flex justify-between items-center px-1">
@@ -15,32 +15,47 @@
 
    <!-- Tarjeta Principal de la Idol -->
     <div class="vip-panel overflow-hidden border border-vip-gold/50 rounded-2xl">
-        <!-- Cambiamos h-72 por aspect-[3/4] (formato retrato) y un límite de altura máxima -->
+        <!-- Retrato de la Idol con degradado -->
         <div class="relative aspect-[3/4] w-full max-h-[450px]">
             {% if idol.photo %}
-                <!-- Añadimos object-top para que, si debe hacer un ligero recorte, proteja siempre el rostro -->
                 <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover object-top">
             {% else %}
                 <div class="w-full h-full bg-vip-panel flex items-center justify-center text-4xl">🎭</div>
             {% endif %}
             <div class="absolute inset-0 bg-gradient-to-t from-[#130A1F] via-transparent to-transparent"></div>
             
-            <div class="absolute bottom-3 left-4 right-4">
-                {% if idol.status == 'online' %}
-                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-green-400 uppercase tracking-widest bg-black/60 px-2.5 py-1 rounded-full border border-green-500/50 backdrop-blur-sm">
-                        <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span> Chateando en Telegram
-                    </span>
-                {% elif idol.status == 'antojos' %}
-                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-purple-300 uppercase tracking-widest bg-black/60 px-2.5 py-1 rounded-full border border-purple-500/50 backdrop-blur-sm">
-                        🔥 Sesión de Antojos Activa
-                    </span>
-                {% else %}
-                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-gray-400 uppercase tracking-widest bg-black/60 px-2.5 py-1 rounded-full border border-gray-600 backdrop-blur-sm">
-                        🌙 Descansando
-                    </span>
-                {% endif %}
-                <h1 class="text-2xl font-bold text-vip-gold">{{ idol.stage_name }}</h1>
-                <p class="text-sm text-vip-text/80">{{ idol.group|default:"Solista" }}</p>
+            <!-- Datos e Insignias sobre la foto (abajo) -->
+            <div class="absolute bottom-3 left-4 right-4 z-10 flex flex-col gap-1">
+                <!-- Estados e Insignias VIP -->
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    {% if idol.status == 'online' %}
+                        <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-green-400 uppercase tracking-widest bg-black/70 px-2.5 py-0.5 rounded-full border border-green-500/50 backdrop-blur-sm">
+                            <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span> Chateando
+                        </span>
+                    {% elif idol.status == 'antojos' %}
+                        <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-purple-300 uppercase tracking-widest bg-black/70 px-2.5 py-0.5 rounded-full border border-purple-500/50 backdrop-blur-sm">
+                            🔥 Antojos
+                        </span>
+                    {% else %}
+                        <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-black/70 px-2.5 py-0.5 rounded-full border border-gray-600 backdrop-blur-sm">
+                            🌙 Descansando
+                        </span>
+                    {% endif %}
+
+                    {% if is_trending %}
+                        <span class="bg-gradient-to-r from-yellow-600 to-yellow-400 text-black text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-lg">
+                            🔥 Favorita del Reino
+                        </span>
+                    {% endif %}
+                    {% if is_top_rated %}
+                        <span class="bg-gradient-to-r from-purple-900 to-fuchsia-700 text-purple-100 border border-purple-400 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-lg">
+                            👑 Excelencia Real
+                        </span>
+                    {% endif %}
+                </div>
+
+                <h1 class="text-2xl font-black text-vip-gold drop-shadow-md leading-tight mt-1">{{ idol.stage_name }}</h1>
+                <p class="text-xs text-vip-text/80 drop-shadow">{{ idol.group|default:"Solista" }}</p>
             </div>
         </div>
 
@@ -72,18 +87,19 @@
             <!-- BOTÓN: Contactar / Contratar Idol en Telegram -->
             {% if idol.owner_username %}
             <button onclick="contactIdol('{{ idol.owner_username }}')" 
-                    class="w-full mt-2 bg-gradient-to-r from-purple-900/60 to-vip-base border-2 border-purple-500/70 text-purple-200 py-3.5 rounded-xl hover:bg-purple-800 hover:text-white transition-all duration-300 font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)] group">
+                    class="w-full mt-1 bg-gradient-to-r from-purple-900/60 to-vip-base border-2 border-purple-500/70 text-purple-200 py-3.5 rounded-xl hover:bg-purple-800 hover:text-white transition-all duration-300 font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)] group">
                 <span class="text-xl group-hover:scale-125 transition-transform">💬</span>
                 <span class="tracking-wider uppercase text-xs">Solicitar Rol / Contactar a {{ idol.stage_name }}</span>
             </button>
+            
             <!-- BUZÓN DE DESEOS: PEDIR ANTOJO PERSONALIZADO -->
             <button type="button" onclick="toggleCustomRequestModal()" 
-                    class="w-full mt-2 bg-gradient-to-r from-yellow-950/60 via-black to-vip-base border border-vip-gold/60 text-vip-gold py-3 rounded-xl hover:brightness-125 transition-all font-bold flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(212,175,55,0.15)] text-xs uppercase tracking-wider">
+                    class="w-full bg-gradient-to-r from-yellow-950/60 via-black to-vip-base border border-vip-gold/60 text-vip-gold py-3 rounded-xl hover:brightness-125 transition-all font-bold flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(212,175,55,0.15)] text-xs uppercase tracking-wider">
                 <span>📬</span> Pedir Antojo Personalizado
             </button>
 
             <!-- Modal Desplegable de Petición -->
-            <div id="custom-request-modal" class="hidden mt-3 p-4 bg-black/80 border border-vip-gold/40 rounded-xl">
+            <div id="custom-request-modal" class="hidden p-4 bg-black/80 border border-vip-gold/40 rounded-xl">
                 <h4 class="text-xs font-bold text-vip-gold uppercase tracking-wider text-center mb-2">
                     Pide tu antojo exclusivo a {{ idol.stage_name }}
                 </h4>
@@ -120,6 +136,41 @@
             {% endif %}
         </div>
     </div>
+
+    <!-- 📸 PUBLICACIONES EXCLUSIVAS DE ESTA IDOL -->
+    {% if recent_posts %}
+    <div class="vip-panel p-4 rounded-2xl border border-vip-gold/30 flex flex-col gap-3">
+        <div class="flex justify-between items-center">
+            <h3 class="text-xs font-bold text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
+                <span>📸</span> Muro de {{ idol.stage_name }} ({{ recent_posts.count }})
+            </h3>
+            <a href="{% url 'idols:social_feed' %}?tg_id={{ tg_id }}" class="text-[11px] text-vip-text/60 hover:text-vip-gold">
+                Ver Feed Completo ➡️
+            </a>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2">
+            {% for post in recent_posts %}
+                <div class="relative aspect-square rounded-xl overflow-hidden border border-vip-gold/30 group bg-black">
+                    {% if post.network == 'gram' or post.id in unlocked_ids %}
+                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
+                    {% else %}
+                        <!-- Censura VIP con precio -->
+                        <img src="{{ post.image.url }}" class="w-full h-full object-cover filter blur-md brightness-50">
+                        <a href="{% url 'idols:social_feed' %}?tg_id={{ tg_id }}" class="absolute inset-0 flex flex-col items-center justify-center p-1 text-center bg-black/40">
+                            <span class="text-xs">🔒</span>
+                            <span class="text-[9px] font-bold text-vip-gold font-mono">🪙 {{ post.price }}</span>
+                        </a>
+                    {% endif %}
+
+                    {% if post.network == 'fans' %}
+                        <span class="absolute top-1 right-1 bg-purple-950/80 border border-purple-500/60 text-purple-300 text-[8px] font-bold px-1.5 py-0.2 rounded">VIP</span>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Mensajes de feedback -->
     {% if messages %}
@@ -189,27 +240,23 @@
 
 <script>
     const tg = window.Telegram.WebApp;
-    // Si los campos ocultos están vacíos, los llenamos con datos de Telegram o fallback
     if (!document.getElementById('detail_tg_id').value) {
         const user = tg.initDataUnsafe?.user;
-        const tgId = user ? user.id : '999999999'; // ID de cliente de prueba
+        const tgId = user ? user.id : '999999999';
         const tgName = user ? (user.username ? `@${user.username}` : user.first_name) : 'Cliente Anónimo';
         document.getElementById('detail_tg_id').value = tgId;
         document.getElementById('detail_tg_username').value = tgName;
     }
 
     function contactIdol(rawUsername) {
-        // Limpiamos el '@' si viene incluido
         const cleanUser = rawUsername.replace('@', '').trim();
         if (!cleanUser) return;
         
         const telegramUrl = `https://t.me/${cleanUser}`;
         
-        // Si estamos en la WebApp oficial de Telegram, usamos su método nativo
         if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink) {
             window.Telegram.WebApp.openTelegramLink(telegramUrl);
         } else {
-            // Fallback para navegador normal
             window.open(telegramUrl, '_blank');
         }
     }

@@ -1,5 +1,6 @@
 from urllib.parse import quote as encode_param # <- Añade esto al inicio
 from django.shortcuts import render, redirect, get_object_or_404
+from django.db.models import Count # Asegúrate de que esté arriba o añádelo
 from django.http import JsonResponse
 from django.contrib import messages
 from .models import IdolProfile, Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
@@ -128,9 +129,26 @@ def idol_delete(request, idol_id):
     return render(request, 'idols/confirm_delete.html', {'tg_id': tg_id, 'idol': idol})
 
 def idol_gallery(request):
-    all_idols = IdolProfile.objects.all().order_by('stage_name')
-    print("Idols en la base de datos:", all_idols.count()) # <- Añade esto
-    return render(request, 'idols/gallery.html', {'all_idols': all_idols})
+    tg_id = request.GET.get('tg_id') or request.session.get('tg_id')
+    
+    # Traemos las Idols con el conteo de ventas de sus posts VIP
+    all_idols = IdolProfile.objects.annotate(
+        total_unlocks=Count('posts__unlocks')
+    ).order_by('-rating', '-total_unlocks')
+
+    # Identificamos el máximo de desbloqueos para saber quién es Trending
+    max_unlocks = max([i.total_unlocks for i in all_idols], default=0)
+
+    for idol in all_idols:
+        # Insignia Trending (más de 0 ventas y líder en desbloqueos)
+        idol.is_trending = (max_unlocks > 0 and idol.total_unlocks == max_unlocks)
+        # Insignia de Excelencia (rating >= 4.8 y al menos 2 servicios)
+        idol.is_top_rated = (idol.rating >= 4.80 and idol.services_done >= 2)
+
+    return render(request, 'idols/gallery.html', {
+        'all_idols': all_idols,
+        'tg_id': tg_id
+    })
 
 def idol_detail(request, idol_id):
     tg_id = request.GET.get('tg_id') or request.POST.get('tg_id')
@@ -138,6 +156,26 @@ def idol_detail(request, idol_id):
     
     idol = get_object_or_404(IdolProfile, id=idol_id)
     reviews = idol.reviews.all()
+    
+    # 📸 Traemos los últimos posts de esta Idol
+    recent_posts = idol.posts.all().order_by('-created_at')[:6]
+    
+    # Posts ya desbloqueados por este usuario
+    unlocked_ids = []
+    if tg_id:
+        unlocked_ids = list(PostUnlock.objects.filter(
+            client_telegram_id=tg_id,
+            post__idol=idol
+        ).values_list('post_id', flat=True))
+        
+        # Si el usuario es el dueño de la Idol, todo está desbloqueado
+        if int(tg_id) == idol.telegram_user_id:
+            unlocked_ids = list(recent_posts.values_list('id', flat=True))
+
+    # Insignias dinámicas
+    total_sales = PostUnlock.objects.filter(post__idol=idol).count()
+    is_top_rated = (idol.rating >= 4.80 and idol.services_done >= 2)
+    is_trending = (total_sales >= 3)
     
     if request.method == 'POST':
         try:
@@ -167,6 +205,11 @@ def idol_detail(request, idol_id):
     context = {
         'idol': idol,
         'reviews': reviews,
+        'recent_posts': recent_posts,
+        'unlocked_ids': unlocked_ids,
+        'is_top_rated': is_top_rated,
+        'is_trending': is_trending,
+        'total_sales': total_sales,
         'tg_id': tg_id,
         'tg_username': tg_username,
     }

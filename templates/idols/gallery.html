@@ -15,48 +15,66 @@
     <!-- Cuadrícula de Tarjetas (2 columnas en móvil) -->
     <div class="grid grid-cols-2 gap-4">
         {% for idol in all_idols %}
-            <div onclick="goToDetail('{{ idol.id }}')" class="relative rounded-xl overflow-hidden border border-vip-gold/40 shadow-[0_0_10px_rgba(212,175,55,0.15)] aspect-[3/4] group cursor-pointer hover:border-vip-gold transition-all">
+            <div onclick="goToDetail('{{ idol.id }}')" 
+                 class="relative rounded-2xl overflow-hidden border {% if idol.is_trending %}border-yellow-400 shadow-[0_0_20px_rgba(234,179,8,0.35)]{% elif idol.is_top_rated %}border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.25)]{% else %}border-vip-gold/40 shadow-md{% endif %} aspect-[3/4] group cursor-pointer hover:scale-[1.02] transition-all duration-300">
                 
                 <!-- Imagen de la Idol -->
                 {% if idol.photo %}
                     <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover">
                 {% else %}
-                    <!-- Placeholder si no tiene foto -->
                     <div class="w-full h-full bg-vip-panel flex items-center justify-center">
                         <span class="text-vip-gold/50 text-4xl">🎭</span>
                     </div>
                 {% endif %}
 
-                <!-- Degradado oscuro en la parte inferior para que el texto resalte -->
-                <div class="absolute inset-0 bg-gradient-to-t from-[#0B0612] via-[#0B0612]/60 to-transparent"></div>
+                <!-- INSIGNIAS FLOTANTES SUPERIORES -->
+                <div class="absolute top-2 left-2 right-2 flex justify-between items-start z-10 pointer-events-none">
+                    {% if idol.is_trending %}
+                        <span class="bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-600 text-black text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1 animate-pulse">
+                            🔥 Trending
+                        </span>
+                    {% elif idol.is_top_rated %}
+                        <span class="bg-gradient-to-r from-purple-900 to-fuchsia-700 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg border border-purple-400 flex items-center gap-1">
+                            ⭐ Top Rated
+                        </span>
+                    {% else %}
+                        <span></span>
+                    {% endif %}
 
-                <!-- Textos e Información (posicionados abajo) -->
-                <div class="absolute bottom-0 left-0 w-full p-3 flex flex-col">
-                   {% if idol.status == 'online' %}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-green-400 uppercase tracking-wider mb-1 drop-shadow-md">
-                            <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span> Chateando
+                    <!-- Rating pill -->
+                    <span class="bg-black/70 backdrop-blur-sm text-yellow-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-vip-gold/30">
+                        ⭐ {{ idol.rating }}
+                    </span>
+                </div>
+
+                <!-- Degradado inferior -->
+                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
+
+                <!-- Textos abajo -->
+                <div class="absolute bottom-0 left-0 w-full p-3 flex flex-col z-10">
+                    {% if idol.status == 'online' %}
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-green-400 uppercase tracking-wider mb-0.5">
+                            <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Chateando
                         </span>
                     {% elif idol.status == 'antojos' %}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1 drop-shadow-md">
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-0.5">
                             🔥 Antojos
                         </span>
                     {% else %}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 drop-shadow-md">
+                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                             🌙 Descansando
                         </span>
                     {% endif %}
-                    <h3 class="font-bold text-vip-gold text-lg leading-tight truncate drop-shadow-md">{{ idol.stage_name }}</h3>
-                    <p class="text-xs text-vip-text/80 truncate drop-shadow-md">{{ idol.group|default:"Solista" }}</p>
                     
-                    <!-- Pequeña info extra -->
-                    <div class="mt-2 flex justify-between items-center text-[10px] text-vip-text/60 border-t border-vip-gold/30 pt-1">
-                        <span>⭐ {{ idol.rating }}</span>
-                        <!-- Aquí mostramos el nombre del Roller -->
-                        <span class="truncate max-w-[100px] text-right">Roller: {{ idol.owner_username|default:"Anónimo" }}</span>
+                    <h3 class="font-black text-vip-gold text-base leading-tight truncate drop-shadow">{{ idol.stage_name }}</h3>
+                    <p class="text-[11px] text-vip-text/80 truncate drop-shadow">{{ idol.group|default:"Solista" }}</p>
+                    
+                    <div class="mt-1.5 flex justify-between items-center text-[10px] text-vip-text/60 border-t border-vip-gold/20 pt-1">
+                        <span>Servicios: {{ idol.services_done }}</span>
+                        <span class="truncate max-w-[85px] text-right text-yellow-500/80">{{ idol.owner_username|default:"Anónimo" }}</span>
                     </div>
-                </div> <!-- FIN DE LOS TEXTOS -->
-                
-            </div> <!-- FIN DE LA TARJETA (¡Este era el div que faltaba!) -->
+                </div>
+            </div>
         {% empty %}
             <div class="col-span-2 text-center py-10 text-vip-text/50 text-sm">
                 Aún no hay ninguna Idol registrada en el Kingdom.
