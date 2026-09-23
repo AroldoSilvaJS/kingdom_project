@@ -19,6 +19,11 @@ def casino_game(request):
     wallet = None
     resultado = None
     ganancia = 0
+    numero_ganador = None
+    color_ganador = None
+    
+    # Números rojos estándar de ruleta europea
+    ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
     
     if tg_id:
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
@@ -26,8 +31,8 @@ def casino_game(request):
     if request.method == 'POST':
         try:
             apuesta = int(request.POST.get('bet_amount', 0))
+            eleccion = request.POST.get('bet_choice', 'red') # 'red', 'black' o 'zero'
             
-            # Validaciones de seguridad
             if apuesta <= 0:
                 messages.error(request, "La apuesta debe ser mayor a 0.")
             elif apuesta > 100:
@@ -35,10 +40,26 @@ def casino_game(request):
             elif apuesta > wallet.balance:
                 messages.error(request, "No tienes suficiente oro para esta apuesta.")
             else:
-                # 48% de probabilidad de ganar (5% de ventaja para la casa)
-                if random.random() < 0.48:
-                    ganancia = int(apuesta * 1.95)
-                    wallet.add_funds(ganancia)
+                # 🎡 Giro de la Ruleta: 0 al 36 (37 casilleros reales)
+                numero_ganador = random.randint(0, 36)
+                
+                if numero_ganador == 0:
+                    color_ganador = 'zero'
+                elif numero_ganador in ROJOS:
+                    color_ganador = 'red'
+                else:
+                    color_ganador = 'black'
+                    
+                # Comprobamos si el jugador acertó
+                if eleccion == color_ganador:
+                    if eleccion == 'zero':
+                        # El Cero verde paga x14
+                        ganancia = int(apuesta * 14)
+                    else:
+                        # Rojo o Negro paga x1.95 (margen imperial del 5%)
+                        ganancia = int(apuesta * 1.95)
+                        
+                    wallet.add_funds(ganancia - apuesta) # Suma neta ganada
                     resultado = "win"
                 else:
                     wallet.remove_funds(apuesta)
@@ -52,7 +73,9 @@ def casino_game(request):
         'tg_id': tg_id, 
         'wallet': wallet,
         'resultado': resultado,
-        'ganancia': ganancia
+        'ganancia': ganancia,
+        'numero_ganador': numero_ganador,
+        'color_ganador': color_ganador
     })
     
 def claim_bonus(request):

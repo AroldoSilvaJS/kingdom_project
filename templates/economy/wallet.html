@@ -1,141 +1,157 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%]">
-    <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-2">
-        <h2 class="text-xl font-semibold text-vip-gold">Mi Bóveda</h2>
-        <a href="/" class="text-sm text-vip-text/60 hover:text-vip-text">⬅ Menú</a>
-    </div>
+<div class="flex flex-col gap-4 mt-2">
+    
+    <!-- TARJETA BLACK VIP: SALDO DE ORO -->
+    <div class="relative overflow-hidden rounded-3xl p-6 border border-vip-gold/50 shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(212,175,55,0.18)] bg-gradient-to-br from-[#1c102c] via-[#0d0617] to-black">
+        <!-- Resplandor dorado de fondo -->
+        <div class="absolute -top-12 -right-12 w-40 h-40 bg-vip-gold/15 rounded-full blur-3xl pointer-events-none"></div>
 
-    <!-- Tarjeta de Saldo -->
-    <div class="bg-gradient-to-br from-[#1E112A] to-[#130A1F] border border-vip-gold p-6 rounded-xl flex flex-col items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.1)] mb-4">
-        <p class="text-sm text-vip-text/70 uppercase tracking-widest mb-1">Saldo Disponible</p>
-        <div class="flex items-center gap-2">
-            <span class="text-3xl">🪙</span>
-            <span class="text-4xl font-bold text-vip-gold tracking-wider">{{ wallet.balance|default:"0" }}</span>
+        <div class="flex justify-between items-start">
+            <div>
+                <span class="text-[10px] uppercase tracking-[0.2em] text-vip-gold/70 font-bold">Bóveda Imperial</span>
+                <p class="text-xs text-vip-text/50 font-mono mt-0.5">ID: <span id="display-wallet-id">{{ wallet.telegram_user_id }}</span></p>
+            </div>
+            <span class="text-2xl filter drop-shadow-[0_0_8px_rgba(212,175,55,0.6)]">🪙</span>
         </div>
-    </div>
 
-    <!-- ACCESO A MI COLECCIÓN PRIVADA -->
-    <a href="/idols/collection/?tg_id={{ tg_id }}" class="mb-4 bg-gradient-to-r from-purple-950/60 via-[#1E112A] to-vip-base border border-purple-500/50 p-3 rounded-xl flex items-center justify-between hover:border-purple-400 transition-all shadow-[0_0_12px_rgba(168,85,247,0.15)] group">
-        <div class="flex items-center gap-3">
-            <span class="text-2xl group-hover:scale-110 transition-transform">💎</span>
-            <div class="text-left">
-                <p class="text-xs font-bold text-purple-300 uppercase tracking-wider">Mi Colección Privada</p>
-                <p class="text-[10px] text-vip-text/60">Ver mis fotos y antojos desbloqueados</p>
+        <div class="my-4">
+            <span class="text-[11px] text-vip-text/60 uppercase tracking-wider">Saldo Disponible</span>
+            <div class="flex items-baseline gap-2 mt-1">
+                <span class="font-serif text-4xl font-black text-gold-gradient tracking-tight">
+                    {{ wallet.balance }}
+                </span>
+                <span class="text-xs font-bold text-vip-gold tracking-widest uppercase">Monedas de Oro</span>
             </div>
         </div>
-        <span class="text-purple-400 text-sm">➡️</span>
-    </a>
-    
+
+        <!-- RECLAMAR BONO DIARIO -->
+        <form action="{% url 'economy:claim_bonus' %}" method="POST" id="bonus-form" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="tg_id" id="bonus-tg-id" value="{{ wallet.telegram_user_id }}">
+            
+            {% if wallet.can_claim_bonus %}
+                <button type="submit" onclick="triggerHaptic('success')"
+                        class="w-full btn-gold py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider animate-pulse">
+                    <span>✨</span> Reclamar Bono Diario (+35 🪙)
+                </button>
+            {% else %}
+                <button type="button" disabled 
+                        class="w-full bg-black/60 border border-vip-gold/20 text-vip-text/40 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold uppercase cursor-not-allowed">
+                    <span>⏳</span> Bono diario reclamado (espera 24h)
+                </button>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- MENSAJES DEL SISTEMA -->
     {% if messages %}
         {% for message in messages %}
-            <div class="p-3 rounded-lg text-sm mb-4 {% if message.tags == 'success' %}bg-green-900/60 border border-green-500 text-green-200{% else %}bg-red-900/60 border border-red-500 text-red-200{% endif %}">
+            <div class="p-3.5 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
                 {{ message }}
             </div>
         {% endfor %}
     {% endif %}
 
-    <!-- SECCIÓN: Bono Diario VIP con Cuenta Regresiva -->
-    <div class="bg-vip-base border border-vip-gold/30 rounded-xl p-4 mb-4 flex justify-between items-center shadow-[0_0_10px_rgba(212,175,55,0.1)]">
-        <div class="text-left flex flex-col">
-            <span class="text-vip-gold font-bold text-lg">Bono Diario</span>
-            <span class="text-vip-text/60 text-xs">+35 🪙 de Oro (cada 24h)</span>
+    <!-- SECCIÓN: SALÓN DE JUEGOS Y CASINO IMPERIAL -->
+    <div class="flex flex-col gap-3">
+        <div class="flex justify-between items-center px-1">
+            <h3 class="font-serif text-sm font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
+                <span>🎰</span> Salón de Fortuna y Azar
+            </h3>
+            <span class="text-[10px] text-vip-text/50 uppercase">Tope máx: 100 🪙</span>
         </div>
-        
-        <form id="bonus-form" action="{% url 'economy:claim_bonus' %}" method="POST" class="m-0">
-            {% csrf_token %}
-            <input type="hidden" name="tg_id" id="hidden_tg_id" value="{{ tg_id }}">
-            
-            <div id="bonus-button-container">
-                {% if wallet.can_claim_bonus %}
-                    <button type="submit" class="bg-gradient-to-r from-vip-gold to-yellow-600 text-vip-base font-bold px-4 py-2 rounded-lg hover:brightness-110 transition-all shadow-[0_0_10px_rgba(212,175,55,0.4)]">
-                        🎁 Reclamar
-                    </button>
-                {% else %}
-                    <button type="button" disabled class="bg-vip-panel border border-vip-gold/30 text-vip-gold/80 font-mono text-xs font-bold px-3 py-2 rounded-lg shadow-inner">
-                        ⏳ <span id="countdown-timer">Calculando...</span>
-                    </button>
-                {% endif %}
-            </div>
-        </form>
+
+        <div class="grid grid-cols-3 gap-2.5">
+            <!-- 1. Ruleta Imperial -->
+            <button type="button" onclick="goToGame('{% url 'economy:casino' %}')" 
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all group aspect-square">
+                <span class="text-3xl group-hover:scale-110 transition-transform">🎡</span>
+                <div>
+                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Ruleta</h4>
+                    <span class="text-[9px] text-yellow-400/80 font-mono">x1.95</span>
+                </div>
+            </button>
+
+            <!-- 2. Tragamonedas / Slots -->
+            <button type="button" onclick="goToGame('{% url 'economy:slots' %}')" 
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-purple-400/60 active:scale-95 transition-all group aspect-square">
+                <span class="text-3xl group-hover:scale-110 transition-transform">🍒</span>
+                <div>
+                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Tragaperras</h4>
+                    <span class="text-[9px] text-purple-300 font-mono">Jackpot</span>
+                </div>
+            </button>
+
+            <!-- 3. Blackjack VIP -->
+            <button type="button" onclick="goToGame('{% url 'economy:blackjack' %}')" 
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-vip-gold/60 active:scale-95 transition-all group aspect-square">
+                <span class="text-3xl group-hover:scale-110 transition-transform">🃏</span>
+                <div>
+                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Blackjack</h4>
+                    <span class="text-[9px] text-vip-gold/80 font-mono">21 Real</span>
+                </div>
+            </button>
+        </div>
     </div>
 
-   <div class="grid grid-cols-2 gap-3 mt-4">
-        <!-- Ruleta -->
-        <button onclick="goToCasino()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3.5 rounded-xl hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
-            <span class="text-2xl">🎲</span>
-            <span class="text-xs font-bold uppercase">Ruleta</span>
-        </button>
-        
-        <!-- Slots -->
-        <button onclick="goToSlots()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3.5 rounded-xl hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
-            <span class="text-2xl">🎰</span>
-            <span class="text-xs font-bold uppercase">Slots</span>
-        </button>
-
-        <!-- Blackjack -->
-        <button onclick="goToBlackjack()" class="bg-vip-base border border-vip-gold/40 text-vip-gold py-3.5 rounded-xl hover:bg-vip-gold hover:text-vip-base transition-colors flex flex-col items-center gap-1 shadow-md">
-            <span class="text-2xl">🃏</span>
-            <span class="text-xs font-bold uppercase">Blackjack</span>
-        </button>
-
-        <!-- Boutique VIP -->
-        <button onclick="alert('La Boutique VIP abrirá sus puertas próximamente.');" class="bg-gradient-to-br from-[#200e33] to-vip-base border border-purple-500/50 text-purple-300 py-3.5 rounded-xl hover:brightness-125 transition-colors flex flex-col items-center gap-1 shadow-md">
-            <span class="text-2xl">🛍️</span>
-            <span class="text-xs font-bold uppercase tracking-wider">Boutique VIP</span>
-        </button>
+    <!-- SECCIÓN: CÓMO OBTENER MÁS ORO -->
+    <div class="vip-panel p-4 flex flex-col gap-2.5">
+        <h4 class="text-xs font-bold text-vip-gold uppercase tracking-wider">📜 Reglas de la Economía</h4>
+        <ul class="text-[11px] text-vip-text/70 flex flex-col gap-1.5 list-disc pl-4">
+            <li>Reclama tus <span class="text-yellow-400 font-bold">+35 🪙 de oro gratis</span> cada 24 horas.</li>
+            <li>Si eres <span class="text-purple-300 font-bold">Roller de una Idol</span>, recibes el 85% de cada foto VIP y el 90% de las propinas directo a tu Bóveda.</li>
+            <li>Gana en el Casino con tus dotes de estratega (apuesta máxima de 100 🪙 por ronda).</li>
+        </ul>
     </div>
 
+</div>
+
+<!-- SCRIPTS DE TELEGRAM Y NAVEGACIÓN -->
 <script>
-    function goToCasino() {
-        const tgId = document.getElementById('hidden_tg_id').value;
-        window.location.href = `/economy/casino/?tg_id=${tgId}`;
-    }
+    document.addEventListener("DOMContentLoaded", () => {
+        const tg = window.Telegram?.WebApp;
+        
+        // Obtenemos el ID de Telegram o del parámetro URL o del fallback
+        const urlParams = new URLSearchParams(window.location.search);
+        let activeTgId = urlParams.get('tg_id');
 
-    function goToSlots() {
-        const tgId = document.getElementById('hidden_tg_id').value;
-        window.location.href = `/economy/slots/?tg_id=${tgId}`;
-    }
-    
-    function goToBlackjack() {
-        const tgId = document.getElementById('hidden_tg_id').value;
-        window.location.href = `/economy/blackjack/?tg_id=${tgId}`;
-    }
-
-// Temporizador dinámico para el Bono Diario
-    let secondsLeft = Number("{{ wallet.seconds_until_next_bonus|default:0 }}") || 0;
-
-    function updateCountdown() {
-        const timerElement = document.getElementById('countdown-timer');
-        const container = document.getElementById('bonus-button-container');
-
-        if (!timerElement || !container) return;
-
-        if (secondsLeft <= 0) {
-            // ¡Tiempo cumplido! Convertimos el botón en "Reclamar"
-            container.innerHTML = `
-                <button type="submit" class="bg-gradient-to-r from-vip-gold to-yellow-600 text-vip-base font-bold px-4 py-2 rounded-lg hover:brightness-110 transition-all shadow-[0_0_10px_rgba(212,175,55,0.4)] animate-bounce">
-                    🎁 Reclamar
-                </button>
-            `;
-            return;
+        if (!activeTgId || activeTgId === 'None' || activeTgId === 'undefined') {
+            if (tg?.initDataUnsafe?.user) {
+                activeTgId = tg.initDataUnsafe.user.id;
+            } else {
+                activeTgId = '{{ wallet.telegram_user_id }}';
+            }
         }
 
-        const hours = Math.floor(secondsLeft / 3600);
-        const minutes = Math.floor((secondsLeft % 3600) / 60);
-        const seconds = secondsLeft % 60;
+        // Actualizamos los campos ocultos del formulario de bono
+        const bonusInput = document.getElementById('bonus-tg-id');
+        if (bonusInput && activeTgId) {
+            bonusInput.value = activeTgId;
+        }
 
-        // Formato con dos dígitos (ej. 04h 08m 22s)
-        const formatNum = (n) => String(n).padStart(2, '0');
-        timerElement.innerText = `${formatNum(hours)}h ${formatNum(minutes)}m ${formatNum(seconds)}s`;
+        // Guardamos en memoria global para los botones de juegos
+        window.CURRENT_TG_ID = activeTgId;
+    });
 
-        secondsLeft--;
+    // Función de navegación segura a los juegos de azar con tg_id garantizado
+    function goToGame(urlBase) {
+        triggerHaptic('impact');
+        const tgId = window.CURRENT_TG_ID || '{{ wallet.telegram_user_id }}';
+        window.location.href = `${urlBase}?tg_id=${tgId}`;
     }
 
-    if (secondsLeft > 0) {
-        updateCountdown();
-        setInterval(updateCountdown, 1000);
+    // Efecto háptico nativo de Telegram al tocar botones importantes
+    function triggerHaptic(type) {
+        const tg = window.Telegram?.WebApp;
+        if (tg?.HapticFeedback) {
+            if (type === 'success') {
+                tg.HapticFeedback.notificationOccurred('success');
+            } else if (type === 'impact') {
+                tg.HapticFeedback.impactOccurred('medium');
+            }
+        }
     }
 </script>
 {% endblock %}

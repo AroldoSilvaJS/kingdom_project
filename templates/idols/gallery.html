@@ -1,28 +1,32 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="p-4 mt-4 flex flex-col gap-4 mx-auto w-full max-w-md">
+<div class="flex flex-col gap-4 mt-2">
     
-    <!-- Encabezado de la Galería -->
-    <div class="flex justify-between items-center mb-2 px-2 border-b border-vip-gold/30 pb-2">
+    <!-- ENCABEZADO -->
+    <div class="flex justify-between items-center px-1">
         <div>
-            <h2 class="text-xl font-semibold text-vip-gold">Elenco Exclusivo</h2>
-            <p class="text-xs text-vip-text/60">Idols actualmente contratadas en el Kingdom</p>
+            <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
+                Elenco Imperial
+            </h2>
+            <p class="text-[11px] text-vip-text/60">Idols consagradas en el Reino</p>
         </div>
-        <a href="/" class="text-sm text-vip-text/60 hover:text-vip-text bg-vip-panel px-3 py-1 rounded-full border border-vip-gold/30">⬅ Volver</a>
+        <span class="text-xs bg-vip-gold/15 border border-vip-gold/40 text-vip-gold px-3 py-1 rounded-full uppercase tracking-wider font-bold">
+            Total: {{ all_idols.count }}
+        </span>
     </div>
 
-    <!-- Cuadrícula de Tarjetas (2 columnas en móvil) -->
-    <div class="grid grid-cols-2 gap-4">
+    <!-- CUADRÍCULA DE TARJETAS RETRATO (2 COLUMNAS) -->
+    <div class="grid grid-cols-2 gap-3">
         {% for idol in all_idols %}
             <div onclick="goToDetail('{{ idol.id }}')" 
-                 class="relative rounded-2xl overflow-hidden border {% if idol.is_trending %}border-yellow-400 shadow-[0_0_20px_rgba(234,179,8,0.35)]{% elif idol.is_top_rated %}border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.25)]{% else %}border-vip-gold/40 shadow-md{% endif %} aspect-[3/4] group cursor-pointer hover:scale-[1.02] transition-all duration-300">
+                 class="relative rounded-2xl overflow-hidden border {% if idol.is_trending %}border-yellow-400 shadow-[0_0_20px_rgba(234,179,8,0.35)]{% elif idol.is_top_rated %}border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.25)]{% else %}border-vip-gold/30 shadow-md{% endif %} aspect-[3/4] group cursor-pointer hover:scale-[1.02] active:scale-95 transition-all duration-300 bg-black">
                 
-                <!-- Imagen de la Idol -->
+                <!-- Imagen de la Idol con recorte inteligente -->
                 {% if idol.photo %}
-                    <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover">
+                    <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500">
                 {% else %}
-                    <div class="w-full h-full bg-vip-panel flex items-center justify-center">
+                    <div class="w-full h-full bg-gradient-to-b from-[#180b29] to-black flex items-center justify-center">
                         <span class="text-vip-gold/50 text-4xl">🎭</span>
                     </div>
                 {% endif %}
@@ -31,66 +35,76 @@
                 <div class="absolute top-2 left-2 right-2 flex justify-between items-start z-10 pointer-events-none">
                     {% if idol.is_trending %}
                         <span class="bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-600 text-black text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1 animate-pulse">
-                            🔥 Trending
+                            🔥 Favorita
                         </span>
                     {% elif idol.is_top_rated %}
                         <span class="bg-gradient-to-r from-purple-900 to-fuchsia-700 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg border border-purple-400 flex items-center gap-1">
-                            ⭐ Top Rated
+                            ⭐ Top
                         </span>
                     {% else %}
                         <span></span>
                     {% endif %}
 
-                    <!-- Rating pill -->
-                    <span class="bg-black/70 backdrop-blur-sm text-yellow-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-vip-gold/30">
+                    <!-- Rating badge -->
+                    <span class="bg-black/75 backdrop-blur-md text-yellow-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-vip-gold/30 font-mono shadow">
                         ⭐ {{ idol.rating }}
                     </span>
                 </div>
 
-                <!-- Degradado inferior -->
-                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
+                <!-- Degradado inferior cinematográfico -->
+                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
 
-                <!-- Textos abajo -->
+                <!-- DATOS DE LA IDOL EN EL PIE -->
                 <div class="absolute bottom-0 left-0 w-full p-3 flex flex-col z-10">
+                    <!-- Estado de actividad -->
                     {% if idol.status == 'online' %}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-green-400 uppercase tracking-wider mb-0.5">
+                        <span class="inline-flex items-center gap-1 text-[9px] font-bold text-green-400 uppercase tracking-wider mb-0.5">
                             <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Chateando
                         </span>
                     {% elif idol.status == 'antojos' %}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-0.5">
+                        <span class="inline-flex items-center gap-1 text-[9px] font-bold text-purple-300 uppercase tracking-wider mb-0.5">
                             🔥 Antojos
                         </span>
                     {% else %}
-                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
-                            🌙 Descansando
+                        <span class="inline-flex items-center gap-1 text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                            🌙 Descanso
                         </span>
                     {% endif %}
                     
-                    <h3 class="font-black text-vip-gold text-base leading-tight truncate drop-shadow">{{ idol.stage_name }}</h3>
-                    <p class="text-[11px] text-vip-text/80 truncate drop-shadow">{{ idol.group|default:"Solista" }}</p>
+                    <h3 class="font-serif font-black text-white text-sm leading-tight truncate group-hover:text-vip-gold transition-colors">
+                        {{ idol.stage_name }}
+                    </h3>
+                    <p class="text-[10px] text-vip-text/70 truncate">{{ idol.group|default:"Solista" }}</p>
                     
-                    <div class="mt-1.5 flex justify-between items-center text-[10px] text-vip-text/60 border-t border-vip-gold/20 pt-1">
-                        <span>Servicios: {{ idol.services_done }}</span>
-                        <span class="truncate max-w-[85px] text-right text-yellow-500/80">{{ idol.owner_username|default:"Anónimo" }}</span>
+                    <div class="mt-1 flex justify-between items-center text-[9px] text-vip-text/50 border-t border-vip-gold/15 pt-1">
+                        <span>{{ idol.services_done }} roles</span>
+                        <span class="truncate max-w-[80px] text-vip-gold/80">{{ idol.owner_username|default:"Anónimo" }}</span>
                     </div>
                 </div>
             </div>
         {% empty %}
-            <div class="col-span-2 text-center py-10 text-vip-text/50 text-sm">
-                Aún no hay ninguna Idol registrada en el Kingdom.
+            <div class="col-span-2 vip-panel p-8 text-center flex flex-col items-center">
+                <span class="text-4xl my-2">🎭</span>
+                <p class="text-xs text-vip-text/60">Aún no hay Idols registradas en el Reino.</p>
             </div>
         {% endfor %}
     </div>
+
 </div>
 
 <script>
     function goToDetail(idolId) {
-        const tg = window.Telegram.WebApp;
-        const user = tg.initDataUnsafe?.user;
-        const tgId = user ? user.id : '123456789';
-        let tgName = 'Roller VIP';
-        if (user) {
-            tgName = user.username ? `@${user.username}` : user.first_name;
+        const tg = window.Telegram?.WebApp;
+        let tgId = '{{ tg_id }}';
+        let tgName = 'Cliente VIP';
+
+        if (!tgId || tgId === 'None' || tgId === 'undefined') {
+            if (tg?.initDataUnsafe?.user) {
+                tgId = tg.initDataUnsafe.user.id;
+                tgName = tg.initDataUnsafe.user.username ? `@${tg.initDataUnsafe.user.username}` : tg.initDataUnsafe.user.first_name;
+            } else {
+                tgId = '123456789';
+            }
         }
         window.location.href = `/idols/${idolId}/?tg_id=${tgId}&tg_username=${encodeURIComponent(tgName)}`;
     }

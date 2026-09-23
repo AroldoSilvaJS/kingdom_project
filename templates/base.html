@@ -2,73 +2,169 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Kingdom of Pleasure - VIP</title>
     
+    <!-- Fuentes Premium de Google: Cinzel (Títulos aristocráticos) y Plus Jakarta Sans (UI moderna) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
     <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- Script Oficial de Telegram WebApps -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-    <!-- Configuración personalizada de Tailwind -->
+    <!-- Configuración extendida de Tailwind -->
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
                         vip: {
-                            base: '#0B0612',   /* Fondo mate oscuro */
-                            panel: '#130A1F',  /* Paneles */
-                            gold: '#D4AF37',   /* Detalles dorados */
-                            text: '#E2E0E5'    /* Blanco roto / Gris claro */
+                            base: '#08040E',      /* Negro obsidiana profundo */
+                            card: '#10081C',      /* Fondo de tarjetas */
+                            panel: '#150A24',     /* Paneles flotantes */
+                            gold: '#D4AF37',      /* Oro imperial clásico */
+                            lightgold: '#F3E5AB', /* Brillo de oro suave */
+                            accent: '#A855F7',    /* Púrpura místico neón */
+                            text: '#EAE6F0'       /* Blanco perla legible */
                         }
                     },
                     fontFamily: {
-                        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                        sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+                        serif: ['"Cinzel"', 'serif'],
                     }
                 }
             }
         }
     </script>
 
-    <!-- Estilos extra para pulir la UI en móvil -->
+    <!-- Estilos de Alto Impacto Visual -->
     <style>
         body {
-            background-color: var(--tg-theme-bg-color, #0B0612);
-            color: var(--tg-theme-text-color, #E2E0E5);
+            background: radial-gradient(circle at 50% -20%, #200E38 0%, #08040E 60%, #030106 100%);
+            color: #EAE6F0;
             -webkit-tap-highlight-color: transparent;
+            min-height: 100vh;
         }
-        /* Contenedor principal estilo VIP */
+
+        /* Paneles con efecto Cristal y borde biselado en oro */
         .vip-panel {
-            background-color: #130A1F;
-            border: 1px solid rgba(212, 175, 55, 0.2);
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(135deg, rgba(21, 10, 36, 0.85) 0%, rgba(13, 6, 22, 0.95) 100%);
+            border: 1px solid rgba(212, 175, 55, 0.28);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), 0 0 20px rgba(212, 175, 55, 0.08);
+            backdrop-filter: blur(12px);
+        }
+
+        /* Botón de Oro Pulido con brillo */
+        .btn-gold {
+            background: linear-gradient(135deg, #ECC440 0%, #D4AF37 50%, #9A7B1C 100%);
+            color: #08040E;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.35);
+            transition: all 0.25s ease;
+        }
+        .btn-gold:active {
+            transform: scale(0.97);
+            box-shadow: 0 2px 8px rgba(212, 175, 55, 0.2);
+        }
+
+        /* Texto Dorado con efecto de metal líquido */
+        .text-gold-gradient {
+            background: linear-gradient(135deg, #FFF0B8 0%, #D4AF37 50%, #AA820A 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Resplandor suave para títulos */
+        .glow-title {
+            text-shadow: 0 0 20px rgba(212, 175, 55, 0.35);
         }
     </style>
 </head>
-<body class="bg-vip-base text-vip-text min-h-screen font-sans antialiased flex flex-col items-center p-4">
+<body class="font-sans antialiased flex flex-col items-center min-h-screen relative pb-28">
 
-    <!-- Header / Logo -->
-    <header class="w-full max-w-md text-center py-6">
-        <h1 class="text-2xl font-light tracking-widest text-vip-gold uppercase border-b border-vip-gold/30 pb-2 inline-block">
-            Kingdom of Pleasure
-        </h1>
+    <!-- Header Imperial Superior con logo y resplandor -->
+    <header class="w-full max-w-md pt-5 pb-3 px-4 flex flex-col items-center z-10">
+        <div class="flex items-center gap-2">
+            <span class="text-xl filter drop-shadow-[0_0_8px_#D4AF37]">👑</span>
+            <h1 class="font-serif text-xl tracking-[0.22em] font-black uppercase text-gold-gradient glow-title">
+                Kingdom of Pleasure
+            </h1>
+        </div>
+        <div class="w-32 h-[1px] bg-gradient-to-r from-transparent via-vip-gold/60 to-transparent mt-2"></div>
     </header>
 
     <!-- Contenedor Dinámico de Vistas -->
-    <main class="w-full max-w-md flex-1">
+    <main class="w-full max-w-md flex-1 px-4 z-10">
         {% block content %}
-        <!-- Aquí inyectaremos el contenido de cada módulo -->
         {% endblock %}
     </main>
 
+    <!-- 📱 BARRA DE NAVEGACIÓN INFERIOR FIJA (ESTILO APP MÓVIL MODERNA) -->
+    <nav class="fixed bottom-3 inset-x-4 max-w-md mx-auto z-50">
+        <div class="bg-black/85 border border-vip-gold/40 backdrop-blur-xl rounded-2xl p-2 px-4 flex justify-between items-center shadow-[0_10px_25px_rgba(0,0,0,0.9),0_0_15px_rgba(212,175,55,0.15)]">
+            
+           <!-- 1. Menú -->
+            <button onclick="navGo('{% url 'core:menu' %}')" class="flex flex-col items-center text-vip-text/60 hover:text-vip-gold transition-colors group">
+                <span class="text-lg group-hover:scale-110 transition-transform">🏛️</span>
+                <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Inicio</span>
+            </button>
+
+            <!-- 2. Feed VIP -->
+            <button onclick="navGo('{% url 'idols:social_feed' %}')" class="flex flex-col items-center text-vip-text/60 hover:text-purple-400 transition-colors group">
+                <span class="text-lg group-hover:scale-110 transition-transform">📱</span>
+                <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Muro</span>
+            </button>
+
+            <!-- 3. Galería Elenco (Botón Central Destacado) -->
+            <button onclick="navGo('{% url 'idols:gallery' %}')" class="-mt-5 bg-gradient-to-tr from-vip-gold to-yellow-200 text-black w-12 h-12 rounded-full border-2 border-yellow-100 flex items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.6)] active:scale-95 transition-all">
+                <span class="text-xl">✨</span>
+            </button>
+
+            <!-- 4. Mascotas -->
+            <button onclick="navGo('{% url 'pets:sanctuary' %}')" class="flex flex-col items-center text-vip-text/60 hover:text-purple-300 transition-colors group">
+                <span class="text-lg group-hover:scale-110 transition-transform">🐾</span>
+                <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Santuario</span>
+            </button>
+
+            <!-- 5. Bóveda -->
+            <button onclick="navGo('{% url 'economy:wallet' %}')" class="flex flex-col items-center text-vip-text/60 hover:text-vip-gold transition-colors group">
+                <span class="text-lg group-hover:scale-110 transition-transform">🪙</span>
+                <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Bóveda</span>
+            </button>
+
+        </div>
+    </nav>
+
+    <!-- Script Global de Navegación Telegram -->
     <script>
-        // Inicializar la WebApp de Telegram
-        const tg = window.Telegram.WebApp;
-        tg.expand(); // Expande la app a pantalla completa
-        tg.ready();
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+            tg.expand();
+            tg.ready();
+        }
+
+        function getActiveTgId() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const fromUrl = urlParams.get('tg_id');
+            if (fromUrl && fromUrl !== 'None' && fromUrl !== 'undefined') return fromUrl;
+            
+            const user = tg?.initDataUnsafe?.user;
+            return user ? user.id : '123456789';
+        }
+
+        function navGo(baseUrl) {
+            const tgId = getActiveTgId();
+            // Si la URL ya tiene signos de interrogación o parámetros
+            const separator = baseUrl.includes('?') ? '&' : '?';
+            window.location.href = `${baseUrl}${separator}tg_id=${tgId}`;
+        }
     </script>
 </body>
 </html>

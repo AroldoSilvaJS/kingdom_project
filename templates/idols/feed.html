@@ -1,258 +1,235 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="p-4 mt-6 max-w-md mx-auto w-full flex flex-col gap-6 pb-20">
+<div class="flex flex-col gap-4 mt-2">
     
-    <!-- Encabezado Unificado -->
-    <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-4">
-        <div>
-            <h2 class="text-2xl font-black text-vip-gold uppercase tracking-widest drop-shadow-[0_0_10px_rgba(212,175,55,0.5)]">Kingdom Feed</h2>
-            <p class="text-xs text-vip-text/60 mt-1">Contenido exclusivo de nuestras estrellas</p>
+    <!-- ENCABEZADO Y FILTROS METÁLICOS -->
+    <div class="flex flex-col gap-3">
+        <div class="flex justify-between items-center px-1">
+            <div>
+                <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
+                    Muro Clandestino
+                </h2>
+                <p class="text-[11px] text-vip-text/60">Contenido oficial y exclusivo de Idols</p>
+            </div>
+            
+            <a href="{% url 'idols:create_post' %}?tg_id={{ tg_id }}" 
+               class="bg-gradient-to-r from-purple-900 to-fuchsia-800 border border-purple-400/60 text-white text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-[0_0_12px_rgba(168,85,247,0.3)] hover:brightness-110 active:scale-95 transition-all">
+                <span>➕</span> Publicar
+            </a>
         </div>
-        <a href="{% url 'idols:gallery' %}?tg_id={{ tg_id }}" class="text-sm text-vip-gold/80 hover:text-vip-gold border border-vip-gold/30 px-3 py-1 rounded-lg">⬅ Volver</a>
-    </div>
-    
-    <!-- Botón para Crear Nuevo Post -->
-    <div class="mb-6">
-        <a href="{% url 'idols:create_post' %}?tg_id={{ tg_id }}" class="w-full bg-vip-base border-2 border-dashed border-vip-gold/50 text-vip-gold font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 hover:bg-vip-gold/10 transition-colors">
-            <span class="text-xl">➕</span>
-            <span>Subir Nuevo Contenido</span>
-        </a>
+
+        <!-- Pestañas de Filtro (Todo / Solo VIP) -->
+        <div class="grid grid-cols-2 gap-2 p-1 bg-black/60 border border-vip-gold/20 rounded-xl">
+            <button type="button" onclick="filterFeed('all')" id="btn-filter-all"
+                    class="py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-vip-gold text-black shadow-md">
+                🌐 Todo el Muro
+            </button>
+            <button type="button" onclick="filterFeed('vip')" id="btn-filter-vip"
+                    class="py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all">
+                🔒 Solo Antojos VIP
+            </button>
+        </div>
     </div>
 
-    <!-- Alertas -->
+    <!-- MENSAJES DEL SISTEMA -->
     {% if messages %}
         {% for message in messages %}
-            <div class="p-3 rounded-lg text-sm text-center {% if 'success' in message.tags %}bg-green-900/40 border border-green-500 text-green-400{% else %}bg-red-900/40 border border-red-500 text-red-400{% endif %}">
+            <div class="p-3.5 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
                 {{ message }}
             </div>
         {% endfor %}
     {% endif %}
 
-    <!-- Lista de Publicaciones -->
-    {% for post in posts %}
-        <div class="bg-vip-panel border border-vip-gold/30 rounded-2xl overflow-hidden shadow-lg">
+    <!-- FEED DE PUBLICACIONES -->
+    <div class="flex flex-col gap-4" id="feed-container">
+        {% for post in posts %}
+        <article class="vip-panel overflow-hidden border border-vip-gold/30 rounded-3xl feed-item {% if post.network == 'fans' %}is-vip{% else %}is-public{% endif %}" data-network="{{ post.network }}">
             
-            <!-- Cabecera del Post -->
-            <div class="p-3 flex items-center justify-between border-b border-vip-gold/20">
-                <div class="flex items-center gap-3">
-                    {% if post.idol.photo %}
-                        <img src="{{ post.idol.photo.url }}" class="w-10 h-10 rounded-full object-cover border border-vip-gold">
-                    {% else %}
-                        <div class="w-10 h-10 rounded-full bg-black border border-vip-gold flex items-center justify-center text-xl">👤</div>
-                    {% endif %}
-                    <div>
-                        <h3 class="font-bold text-vip-text leading-none">{{ post.idol.stage_name }}</h3>
-                        <span class="text-[10px] text-vip-gold/70">{{ post.created_at|date:"d M H:i" }}</span>
-                    </div>
-                </div>
-                <!-- Etiqueta de Red -->
-                {% if post.network == 'gram' %}
-                    <span class="bg-blue-600/20 text-blue-400 border border-blue-500/50 text-[10px] px-2 py-1 rounded font-bold tracking-wider">K-GRAM</span>
-                {% else %}
-                    <span class="bg-purple-900/40 text-purple-400 border border-purple-500/50 text-[10px] px-2 py-1 rounded font-bold tracking-wider flex items-center gap-1">
-                        <span class="text-xs">🔒</span> VIP
-                    </span>
-                {% endif %}
-            </div>
-
-            <!-- Contenedor de la Imagen -->
-            <div class="relative w-full aspect-square overflow-hidden bg-black flex items-center justify-center">
-                {% if post.image %}
-                    
-                    {% if post.network == 'gram' or post.id in unlocked_ids %}
-                        <!-- Imagen Normal (Pública o Pagada) -->
-                        <img src="{{ post.image.url }}" class="w-full h-full object-cover">
-                    {% else %}
-                        <!-- Imagen Censurada VIP -->
-                        <img src="{{ post.image.url }}" class="w-full h-full object-cover filter blur-xl brightness-50 scale-110 pointer-events-none select-none">
-                        
-                        <!-- Interfaz de Cobro sobre la imagen -->
-                        <div class="absolute inset-0 flex flex-col items-center justify-center z-10 p-4 bg-black/40">
-                            <span class="text-4xl mb-2 drop-shadow-lg">🔞</span>
-                            <h4 class="text-vip-gold font-bold text-lg text-center drop-shadow-md">Contenido Sensible</h4>
-                            <p class="text-white/80 text-xs text-center mb-4">Desbloquea esta publicación para ver el contenido sin censura.</p>
-                            
-                            <form action="{% url 'idols:unlock_post' post.id %}" method="POST" class="m-0">
-                                {% csrf_token %}
-                                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                                <button type="submit" class="bg-gradient-to-r from-vip-gold to-yellow-600 text-black font-bold px-6 py-3 rounded-full hover:scale-105 transition-transform shadow-[0_0_15px_rgba(212,175,55,0.4)] flex items-center gap-2">
-                                    <span>Desbloquear por</span>
-                                    <span class="bg-black/20 px-2 py-1 rounded text-sm">🪙 {{ post.price }}</span>
-                                </button>
-                            </form>
-                        </div>
-                    {% endif %}
-                    
-                {% endif %}
-            </div>
-
-            <div class="mt-3 flex items-center justify-between text-sm">
-                    <!-- Botón Like -->
-                    <button id="like-btn-{{ post.id }}" onclick="handleLike({{ post.id }})" 
-                            class="transition-all duration-200 flex items-center gap-1.5 px-3 py-1 rounded-full border border-vip-gold/20 {% if post.id in liked_ids %}text-red-500 bg-red-500/10 border-red-500/40{% else %}text-vip-text/60 bg-black/30 hover:text-red-400{% endif %}">
-                        <span id="like-icon-{{ post.id }}">{% if post.id in liked_ids %}❤️{% else %}🤍{% endif %}</span>
-                        <span id="like-count-{{ post.id }}" class="font-semibold text-xs">{{ post.likes }}</span>
-                    </button>
-
-                    <!-- Botón Invitar Trago / Propina -->
-                    <button onclick="toggleTipModal({{ post.id }})" 
-                            class="flex items-center gap-1 text-xs text-vip-gold bg-yellow-950/40 border border-vip-gold/40 px-3 py-1 rounded-full hover:bg-vip-gold hover:text-black transition-all font-semibold shadow-[0_0_8px_rgba(212,175,55,0.15)]">
-                        <span>🥂</span>
-                        <span>Invitar Trago</span>
-                    </button>
-                </div>
-
-                <!-- BOTÓN DESPLEGABLE DE COMENTARIOS -->
-                <button type="button" onclick="toggleComments({{ post.id }})" 
-                        class="mt-2 text-xs text-vip-text/60 hover:text-vip-gold flex items-center gap-1.5 transition-colors">
-                    <span>💬</span>
-                    <span id="comment-label-{{ post.id }}">
-                        {% if post.comments.count > 0 %}
-                            Ver los {{ post.comments.count }} comentarios...
+            <!-- Cabecera del Post: Idol Info -->
+            <div class="p-3.5 flex items-center justify-between border-b border-vip-gold/15 bg-black/40">
+                <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" class="flex items-center gap-2.5 group">
+                    <div class="w-10 h-10 rounded-full overflow-hidden border border-vip-gold/50 group-hover:scale-105 transition-transform bg-black">
+                        {% if post.idol.photo %}
+                            <img src="{{ post.idol.photo.url }}" alt="{{ post.idol.stage_name }}" class="w-full h-full object-cover">
                         {% else %}
-                            Escribir el primer comentario...
+                            <div class="w-full h-full flex items-center justify-center text-sm">🎭</div>
                         {% endif %}
-                    </span>
-                </button>
-
-                <!-- CAJA DE COMENTARIOS (Oculta por defecto) -->
-                <div id="comments-box-{{ post.id }}" class="hidden mt-3 pt-3 border-t border-vip-gold/15 flex flex-col gap-2.5">
-                    
-                    <!-- Lista de Comentarios -->
-                    <div class="max-h-44 overflow-y-auto flex flex-col gap-2 pr-1">
-                        {% for c in post.comments.all %}
-                            <div class="bg-black/40 p-2.5 rounded-lg border border-vip-gold/10 text-xs">
-                                <div class="flex justify-between items-center mb-1">
-                                    <span class="font-bold {% if '(Idol)' in c.author_name %}text-yellow-400 font-serif tracking-wider{% else %}text-vip-gold{% endif %}">
-                                        {% if '(Idol)' in c.author_name %}👑 {{ c.author_name }}{% else %}{{ c.author_name }}{% endif %}
-                                    </span>
-                                    <span class="text-[10px] text-vip-text/40">{{ c.created_at|date:"d/m H:i" }}</span>
-                                </div>
-                                <p class="text-vip-text/90 leading-relaxed">{{ c.text }}</p>
-                            </div>
-                        {% empty %}
-                            <p class="text-center text-[11px] text-vip-text/40 italic py-2">
-                                No hay comentarios aún. ¡Sé el primero en dejar uno!
-                            </p>
-                        {% endfor %}
                     </div>
-
-                    <!-- Formulario para agregar comentario -->
-                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 mt-1">
-                        {% csrf_token %}
-                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                        <input type="hidden" name="tg_username" class="input-tg-username" value="{{ tg_username|default:'' }}">
-                        
-                        <input type="text" name="text" placeholder="Escribe un halago o mensaje..." required maxlength="250"
-                               class="flex-1 bg-vip-base border border-vip-gold/30 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-vip-gold">
-                        <button type="submit" 
-                                class="bg-vip-gold text-black font-bold text-xs px-3 py-2 rounded-lg hover:brightness-110 transition-all uppercase tracking-wider shadow">
-                            💬
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Mini Modal Desplegable de Propina (Oculto por defecto) -->
-                <div id="tip-modal-{{ post.id }}" class="hidden mt-3 p-3 bg-black/70 border border-vip-gold/30 rounded-xl">
-                    <p class="text-[11px] text-vip-gold/90 font-bold uppercase tracking-wider mb-2 text-center">
-                        Invitar trago a {{ post.idol.stage_name }}
-                    </p>
-                    <form action="{% url 'idols:send_tip' post.id %}" method="POST" class="flex flex-col gap-2">
-                        {% csrf_token %}
-                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                        
-                        <div class="grid grid-cols-3 gap-2">
-                            <button type="button" onclick="setTipAmount({{ post.id }}, 10)" class="bg-vip-base border border-vip-gold/30 text-vip-gold py-1 rounded text-xs hover:border-vip-gold font-mono">10 🪙</button>
-                            <button type="button" onclick="setTipAmount({{ post.id }}, 25)" class="bg-vip-base border border-vip-gold/30 text-vip-gold py-1 rounded text-xs hover:border-vip-gold font-mono">25 🪙</button>
-                            <button type="button" onclick="setTipAmount({{ post.id }}, 50)" class="bg-vip-base border border-vip-gold/30 text-vip-gold py-1 rounded text-xs hover:border-vip-gold font-mono">50 🪙</button>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <h4 class="font-bold text-white text-xs group-hover:text-vip-gold transition-colors leading-tight">
+                                {{ post.idol.stage_name }}
+                            </h4>
+                            {% if post.idol.rating >= 4.8 %}
+                                <span class="text-[10px] text-yellow-400">⭐</span>
+                            {% endif %}
                         </div>
+                        <span class="text-[10px] text-vip-text/50 font-mono">{{ post.created_at|timesince }} atrás</span>
+                    </div>
+                </a>
 
-                        <div class="flex gap-2 mt-1">
-                            <input type="number" name="tip_amount" id="tip-input-{{ post.id }}" min="1" placeholder="Monto" required
-                                   class="w-1/2 bg-vip-base border border-vip-gold/40 text-white text-xs px-2 py-1.5 rounded focus:outline-none focus:border-vip-gold text-center">
-                            <button type="submit" class="w-1/2 bg-gradient-to-r from-vip-gold to-yellow-600 text-black font-bold text-xs py-1.5 rounded uppercase tracking-wider hover:brightness-110 shadow">
-                                Enviar 🥂
+                <!-- Tipo de Red / Badge -->
+                {% if post.network == 'fans' %}
+                    <span class="bg-gradient-to-r from-purple-950 to-fuchsia-950 border border-purple-500/60 text-purple-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.25)] flex items-center gap-1">
+                        <span>🔒</span> Antojo VIP
+                    </span>
+                {% else %}
+                    <span class="bg-black/60 border border-vip-gold/30 text-vip-gold text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full">
+                        📸 Público
+                    </span>
+                {% endif %}
+            </div>
+
+            <!-- IMAGEN O CONTENIDO CENSURADO VIP -->
+            <div class="relative w-full aspect-square bg-black overflow-hidden flex items-center justify-center">
+                {% if post.network == 'gram' or post.id in unlocked_ids or is_owner %}
+                    <!-- IMAGEN PÚBLICA O YA DESBLOQUEADA -->
+                    <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover">
+                    {% if post.network == 'fans' and post.id in unlocked_ids %}
+                        <span class="absolute top-3 right-3 bg-green-950/80 border border-green-500 text-green-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow backdrop-blur-sm">
+                            ✓ Desbloqueada
+                        </span>
+                    {% endif %}
+                {% else %}
+                    <!-- CONTENIDO VIP BLOQUEADO / CENSURA ELEGANTE -->
+                    <img src="{{ post.image.url }}" alt="VIP" class="w-full h-full object-cover filter blur-xl brightness-[0.35] scale-110">
+                    
+                    <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
+                        <div class="w-14 h-14 rounded-2xl bg-black/70 border border-purple-500/60 flex items-center justify-center text-2xl shadow-[0_0_20px_rgba(168,85,247,0.4)] mb-3 animate-pulse">
+                            🔒
+                        </div>
+                        <h4 class="font-serif text-sm font-black text-purple-200 uppercase tracking-wider mb-1">
+                            Foto Exclusiva VIP
+                        </h4>
+                        <p class="text-[11px] text-vip-text/70 mb-3 max-w-[220px]">
+                            Desbloquea el contenido privado de {{ post.idol.stage_name }}.
+                        </p>
+
+                        <!-- Botón Desbloquear -->
+                        <form action="{% url 'idols:unlock_post' post.id %}" method="POST" class="m-0">
+                            {% csrf_token %}
+                            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                            <button type="submit" 
+                                    class="btn-gold py-2.5 px-6 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(212,175,55,0.4)]">
+                                <span>Ver por</span>
+                                <span class="font-mono text-sm">{{ post.price }} 🪙</span>
                             </button>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Pie del Post: Descripción y Acciones -->
+            <div class="p-4 flex flex-col gap-2.5 bg-gradient-to-t from-black/60 to-transparent">
+                <!-- Leyenda / Caption -->
+                {% if post.caption %}
+                    <p class="text-xs text-vip-text/90 leading-relaxed">
+                        <strong class="text-vip-gold font-bold mr-1">{{ post.idol.stage_name }}</strong>{{ post.caption }}
+                    </p>
+                {% endif %}
+
+                <!-- Barra de interacción inferior: Invitar trago / dar propina -->
+                <div class="flex justify-between items-center border-t border-vip-gold/15 pt-2.5 mt-1">
+                    <button type="button" onclick="openTipModal('{{ post.id }}', '{{ post.idol.stage_name }}')" 
+                            class="text-xs text-purple-300 hover:text-white bg-purple-950/60 border border-purple-500/40 px-3 py-1.5 rounded-full flex items-center gap-1.5 active:scale-95 transition-all">
+                        <span>🥂</span> Invitar un Trago
+                    </button>
+
+                    <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" 
+                       class="text-[11px] text-vip-gold/80 hover:text-vip-gold font-semibold uppercase tracking-wider">
+                        Ver Perfil ➔
+                    </a>
                 </div>
+            </div>
+
+        </article>
+        {% empty %}
+        <div class="vip-panel p-8 text-center flex flex-col items-center">
+            <span class="text-4xl my-2">📭</span>
+            <h4 class="font-serif text-sm font-bold text-white">Muro en calma</h4>
+            <p class="text-xs text-vip-text/60 mt-1">Aún no hay publicaciones en el Kingdom. ¡Sé el primero en compartir un momento!</p>
         </div>
-    {% empty %}
-        <div class="text-center text-vip-text/50 mt-10 p-6 border border-vip-gold/20 rounded-xl">
-            <span class="text-4xl block mb-2">📭</span>
-            Aún no hay publicaciones en el muro.
+        {% endfor %}
+    </div>
+
+</div>
+
+<!-- MODAL PARA INVITAR UN TRAGO / PROPINA -->
+<div id="tip-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="vip-panel max-w-sm w-full p-6 relative border-purple-500/60">
+        <button onclick="closeTipModal()" class="absolute top-4 right-4 text-vip-text/50 hover:text-white text-lg">✕</button>
+        
+        <div class="text-center flex flex-col items-center">
+            <span class="text-4xl my-1">🥂</span>
+            <h3 class="font-serif text-base font-black text-gold-gradient uppercase tracking-wider mt-1">
+                Invitar un Trago Real
+            </h3>
+            <p class="text-xs text-vip-text/70 mt-1" id="tip-idol-target">
+                Envía una ofrenda de oro a la Idol.
+            </p>
         </div>
-    {% endfor %}
+
+        <form id="tip-form" action="" method="POST" class="mt-4 flex flex-col gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Monto de la ofrenda (🪙)</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button type="button" onclick="setTipAmount(20)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">20 🪙</button>
+                    <button type="button" onclick="setTipAmount(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">50 🪙</button>
+                    <button type="button" onclick="setTipAmount(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">100 🪙</button>
+                </div>
+                <input type="number" id="tip-amount-input" name="amount" min="10" value="20" required
+                       class="mt-2 w-full bg-black/70 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-bold text-white text-sm">
+            </div>
+
+            <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider mt-1">
+                Enviar Brindis
+            </button>
+        </form>
+    </div>
 </div>
 
 <script>
-    async function handleLike(postId) {
-        const tg = window.Telegram.WebApp;
-        const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '{{ tg_id }}';
-        
-        const btn = document.getElementById(`like-btn-${postId}`);
-        const icon = document.getElementById(`like-icon-${postId}`);
-        const count = document.getElementById(`like-count-${postId}`);
-        
-        // Efecto visual instantáneo mientras responde el servidor
-        btn.classList.add('scale-110');
-        setTimeout(() => btn.classList.remove('scale-110'), 150);
+    // Filtro interactivo Todo vs Solo VIP
+    function filterFeed(type) {
+        const items = document.querySelectorAll('.feed-item');
+        const btnAll = document.getElementById('btn-filter-all');
+        const btnVip = document.getElementById('btn-filter-vip');
 
-        try {
-            const formData = new FormData();
-            formData.append('tg_id', tgId);
-            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-            const response = await fetch(`/idols/feed/like/${postId}/`, {
-                method: 'POST',
-                body: formData
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                count.innerText = data.likes;
-
-                if (data.liked) {
-                    icon.innerText = '❤️';
-                    btn.classList.remove('text-vip-text/60', 'bg-black/30', 'border-vip-gold/20');
-                    btn.classList.add('text-red-500', 'bg-red-500/10', 'border-red-500/40');
+        if (type === 'vip') {
+            btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-gradient-to-r from-purple-800 to-fuchsia-700 text-white shadow-md";
+            btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
+            items.forEach(el => {
+                if (el.dataset.network === 'fans') {
+                    el.style.display = 'block';
                 } else {
-                    icon.innerText = '🤍';
-                    btn.classList.remove('text-red-500', 'bg-red-500/10', 'border-red-500/40');
-                    btn.classList.add('text-vip-text/60', 'bg-black/30', 'border-vip-gold/20');
+                    el.style.display = 'none';
                 }
-            }
-        } catch (e) {
-            console.error('Error al dar like:', e);
-        }
-    }
-
-    function toggleTipModal(postId) {
-        const modal = document.getElementById(`tip-modal-${postId}`);
-        modal.classList.toggle('hidden');
-    }
-
-    function setTipAmount(postId, amount) {
-        document.getElementById(`tip-input-${postId}`).value = amount;
-    }
-
-    function toggleComments(postId) {
-        const box = document.getElementById(`comments-box-${postId}`);
-        box.classList.toggle('hidden');
-    }
-
-    // Auto-detectar @username de Telegram si no vino por URL
-    document.addEventListener("DOMContentLoaded", () => {
-        const tg = window.Telegram.WebApp;
-        const user = tg.initDataUnsafe?.user;
-        if (user) {
-            const finalUsername = user.username ? `@${user.username}` : user.first_name;
-            document.querySelectorAll('.input-tg-username').forEach(inp => {
-                if (!inp.value) inp.value = finalUsername;
             });
+        } else {
+            btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-vip-gold text-black shadow-md";
+            btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
+            items.forEach(el => el.style.display = 'block');
         }
-    });
+    }
+
+    // Modal de Propinas
+    function openTipModal(postId, idolName) {
+        const form = document.getElementById('tip-form');
+        form.action = `/idols/post/${postId}/tip/`;
+        document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
+        document.getElementById('tip-modal').classList.remove('hidden');
+    }
+
+    function closeTipModal() {
+        document.getElementById('tip-modal').classList.add('hidden');
+    }
+
+    function setTipAmount(val) {
+        document.getElementById('tip-amount-input').value = val;
+    }
 </script>
 {% endblock %}
-
