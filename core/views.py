@@ -1,16 +1,18 @@
 from django.shortcuts import render, redirect
-from idols.models import UserRole
-from economy.models import Wallet
+from django.contrib import messages
 from django.db.models import Count, Sum
-from idols.models import IdolProfile, Post, PostUnlock
+from idols.models import UserRole, IdolProfile, Post, PostUnlock
 from economy.models import Wallet
+from core.models import UserProfile
+from pets.models import Pet
 
 # 👑 Tu ID Maestro de Telegram
 ADMIN_TG_ID = '7474444797'
 
 def main_menu(request):
     # 1. Buscamos el ID en la URL, POST, o sesión
-    tg_id = request.GET.get('tg_id') or request.POST.get('tg_id') or request.session.get('tg_id')
+    raw_id = request.GET.get('tg_id') or request.POST.get('tg_id') or request.session.get('tg_id')
+    tg_id = raw_id if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null'] else None 
     
     # 2. Si el usuario acaba de elegir su rol:
     if request.method == 'POST':
@@ -21,7 +23,7 @@ def main_menu(request):
                 defaults={'role': elegido}
             )
             request.session['tg_id'] = tg_id
-            return redirect(request.path)
+            return redirect(f"{request.path}?tg_id={tg_id}")
 
     # 3. Buscamos si este usuario ya tiene rol:
     usuario = None
@@ -45,7 +47,8 @@ def main_menu(request):
     
 def admin_panel(request):
     # Buscamos quién intenta entrar
-    tg_id = request.GET.get('tg_id') or request.session.get('tg_id')
+    raw_id = request.GET.get('tg_id') or request.POST.get('tg_id') or request.session.get('tg_id')
+    tg_id = raw_id if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null'] else None
     
     # CANDADO: Si no eres tú, patada de vuelta al inicio
     if str(tg_id) != ADMIN_TG_ID:
@@ -85,27 +88,29 @@ def admin_panel(request):
         # Recargamos la página para ver los cambios
         return redirect(f"/admin-panel/?tg_id={tg_id}")
     # -------------------------------
-
-  # Traemos a todos los usuarios de la base de datos
+    # Traemos a todos los usuarios
     todos_los_usuarios = UserRole.objects.all()
 
-    # --- AGREGAR ESTAS LÍNEAS PARA LEER EL SALDO EN VIVO ---
+    # 1 sola consulta rápida para todas las billeteras (guardando la clave como texto):
+    wallets = {str(w.telegram_user_id): w.balance for w in Wallet.objects.all()}
+
+    # Asignamos el saldo a cada usuario
     for u in todos_los_usuarios:
-        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=u.telegram_id)
-        u.balance = wallet.balance
-    # -------------------------------------------------------
-    
+        u.balance = wallets.get(str(u.telegram_id), 0)
+
+    # El return debe estar AFUERA del for (alineado con 'todos_los_usuarios'):
     return render(request, 'core/admin_panel.html', {
         'usuarios': todos_los_usuarios,
         'tg_id': tg_id
     })
+
 
 def leaderboard(request):
     tg_id = request.GET.get('tg_id') or request.session.get('tg_id')
 
     # 1. TOP IDOLS: Ordenadas por desbloqueos de sus fotos VIP y likes
     top_idols = IdolProfile.objects.annotate(
-        total_unlocks=Count('posts__unlocks'),
+        total_unlocks=Count('posts__unlocks', distinct=True),
         total_likes=Sum('posts__likes')
     ).order_by('-total_unlocks', '-rating')[:10]
 
@@ -131,4 +136,48 @@ def leaderboard(request):
         'tg_id': tg_id,
         'top_idols': top_idols,
         'magnates': magnates
+    })
+
+def my_profile(request):
+    raw_id = request.GET.get('tg_id') or request.POST.get('tg_id') or request.session.get('tg_id')
+    tg_id = raw_id if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null'] else None
+    tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or 'Noble Anónimo'
+    
+    if not tg_id:
+        return redirect('/')
+        
+    profile, _ = UserProfile.objects.get_or_create(
+        telegram_user_id=tg_id,
+        defaults={'username': tg_username}
+    )
+    
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+    all_idols = IdolProfile.objects.all().order_by('stage_name')
+
+    if request.method == 'POST':
+        profile.username = request.POST.get('username', profile.username)
+        profile.title = request.POST.get('title', profile.title)
+        profile.bio = request.POST.get('bio', '')
+        profile.avatar_frame = request.POST.get('avatar_frame', profile.avatar_frame)
+        profile.motto = request.POST.get('motto', profile.motto)
+        profile.profile_theme = request.POST.get('profile_theme', profile.profile_theme)
+        profile.vip_badge = request.POST.get('vip_badge', profile.vip_badge)
+        
+        fav_id = request.POST.get('favorite_idol')
+        if fav_id:
+            profile.favorite_idol = IdolProfile.objects.filter(id=fav_id).first()
+        else:
+            profile.favorite_idol = None
+            
+        profile.save()
+        messages.success(request, "¡Tu Pasaporte Noble ha sido actualizado con éxito!")
+        return redirect(f'/profile/?tg_id={tg_id}&tg_username={tg_username}')
+
+    return render(request, 'core/profile.html', {
+        'tg_id': tg_id,
+        'profile': profile,
+        'wallet': wallet,
+        'pet': pet,
+        'all_idols': all_idols,
     })

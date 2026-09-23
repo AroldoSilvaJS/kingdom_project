@@ -100,23 +100,36 @@ def idol_create(request):
 
 def idol_edit(request, idol_id):
     tg_id = request.GET.get('tg_id') or request.POST.get('tg_id')
-    # Seguridad vital: Buscamos la idol, pero exigimos que pertenezca al tg_id actual
-    idol = get_object_or_404(IdolProfile, id=idol_id, telegram_user_id=tg_id)
+    idol = get_object_or_404(IdolProfile, id=idol_id)
     
-    if request.method == 'POST':
-        idol.stage_name = request.POST.get('stage_name')
-        idol.group = request.POST.get('group')
-        idol.bio = request.POST.get('bio')
-        
-        # Solo actualizamos la foto si subieron una nueva
-        if 'photo' in request.FILES:
-            idol.photo = request.FILES.get('photo')
-            
-        idol.save()
+    # Solo el dueño Roller puede editarla
+    if tg_id and int(tg_id) != idol.telegram_user_id:
+        messages.error(request, "No tienes permiso para editar esta Idol.")
         return redirect(f'/idols/?tg_id={tg_id}')
         
-    # Reutilizamos form.html, pero le enviamos la "idol" para que llene los campos
-    return render(request, 'idols/form.html', {'tg_id': tg_id, 'idol': idol})
+    if request.method == 'POST':
+        idol.stage_name = request.POST.get('stage_name', idol.stage_name)
+        idol.group = request.POST.get('group', idol.group)
+        idol.bio = request.POST.get('bio', idol.bio)
+        idol.tagline = request.POST.get('tagline', idol.tagline)
+        idol.status = request.POST.get('status', idol.status)
+        idol.aura_color = request.POST.get('aura_color', idol.aura_color)
+        idol.specialty = request.POST.get('specialty', idol.specialty)
+        idol.welcome_message = request.POST.get('welcome_message', idol.welcome_message)
+        
+        if 'photo' in request.FILES:
+            idol.photo = request.FILES['photo']
+        if 'banner' in request.FILES:
+            idol.banner = request.FILES['banner']
+            
+        idol.save()
+        messages.success(request, f"¡Perfil de {idol.stage_name} actualizado!")
+        return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+        
+    return render(request, 'idols/form.html', {
+        'idol': idol,
+        'tg_id': tg_id
+    })
 
 def idol_delete(request, idol_id):
     tg_id = request.GET.get('tg_id') or request.POST.get('tg_id')
@@ -217,38 +230,25 @@ def idol_detail(request, idol_id):
 
 def social_feed(request):
     tg_id = request.GET.get('tg_id') or request.POST.get('tg_id')
+    tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or 'Ciudadano VIP'
     
-    # Traemos todos los posts, del más nuevo al más viejo
     posts = Post.objects.all().select_related('idol').prefetch_related('comments')
     
-    # Lista de IDs de posts VIP que este usuario ya pagó o que son de sus propias Idols
     unlocked_ids = []
+    liked_ids = []
+    
     if tg_id:
-        # Posts pagados por el cliente
-        pagados = list(PostUnlock.objects.filter(
-            client_telegram_id=tg_id
-        ).values_list('post_id', flat=True))
-        
-        # Posts que le pertenecen a las Idols del usuario actual (gratis para el creador)
-        propios = list(Post.objects.filter(
-            idol__telegram_user_id=tg_id
-        ).values_list('id', flat=True))
-        
+        pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
+        propios = list(Post.objects.filter(idol__telegram_user_id=tg_id).values_list('id', flat=True))
         unlocked_ids = set(pagados + propios)
-    
-    # IDs de posts a los que este usuario ya dio like
-    
-        liked_ids = list(PostLike.objects.filter(
-            client_telegram_id=tg_id
-        ).values_list('post_id', flat=True))
-
-        tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or 'Ciudadano VIP'
+        
+        liked_ids = list(PostLike.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
         
     return render(request, 'idols/feed.html', {
         'posts': posts,
         'tg_id': tg_id,
         'unlocked_ids': list(unlocked_ids),
-        'liked_ids': liked_ids,  # <- AGREGAR ESTA LÍNEA
+        'liked_ids': liked_ids,
         'tg_username': tg_username
     })
 

@@ -23,6 +23,17 @@ class Pet(models.Model):
     last_petted = models.DateTimeField(auto_now_add=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def xp_to_next_level(self):
+        return self.level * 100
+
+    @property
+    def xp_percentage(self):
+        needed = self.xp_to_next_level
+        if needed <= 0:
+            return 0
+        return min(100, int((self.xp / needed) * 100))
+
     def xp_needed_for_next_level(self):
         return self.level * 100
 

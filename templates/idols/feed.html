@@ -216,12 +216,11 @@
         }
     }
 
-    // Modal de Propinas
     function openTipModal(postId, idolName) {
-        const form = document.getElementById('tip-form');
-        form.action = `/idols/post/${postId}/tip/`;
-        document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
-        document.getElementById('tip-modal').classList.remove('hidden');
+    const form = document.getElementById('tip-form');
+    form.action = `/idols/feed/tip/${postId}/`; // ✅ RUTA REAL CORREGIDA
+    document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
+    document.getElementById('tip-modal').classList.remove('hidden');
     }
 
     function closeTipModal() {

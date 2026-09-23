@@ -148,3 +148,6 @@ MAILERS = {
 
 # Configuraciones de Telegram
 TELEGRAM_BOT_TOKEN = '8966798192:AAHTaCsfbW9Mlzrkoa8PiZJT-DrlryD4dP8'
+
+# Permitir que Telegram WebApp cargue el sitio en su iframe
+X_FRAME_OPTIONS = 'ALLOWALL'

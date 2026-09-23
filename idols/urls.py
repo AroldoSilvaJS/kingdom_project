@@ -13,7 +13,6 @@ urlpatterns = [
     path('feed/', views.social_feed, name='social_feed'),
     path('feed/unlock/<int:post_id>/', views.unlock_post, name='unlock_post'),
     path('feed/new/', views.create_post, name='create_post'), # <- AÑADIR ESTA
-    path('feed/unlock/<int:post_id>/', views.unlock_post, name='unlock_post'),
     path('feed/like/<int:post_id>/', views.toggle_like, name='toggle_like'),
     path('collection/', views.my_collection, name='my_collection'),
     path('feed/tip/<int:post_id>/', views.send_tip, name='send_tip'),

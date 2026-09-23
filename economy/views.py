@@ -37,8 +37,8 @@ def casino_game(request):
                 messages.error(request, "La apuesta debe ser mayor a 0.")
             elif apuesta > 100:
                 messages.error(request, "La apuesta máxima del Casino Imperial es de 100 🪙.")
-            elif apuesta > wallet.balance:
-                messages.error(request, "No tienes suficiente oro para esta apuesta.")
+            elif not wallet or apuesta > wallet.balance:
+                messages.error(request, "No tienes suficiente oro o tu sesión ha expirado.")
             else:
                 # 🎡 Giro de la Ruleta: 0 al 36 (37 casilleros reales)
                 numero_ganador = random.randint(0, 36)
@@ -79,20 +79,19 @@ def casino_game(request):
     })
     
 def claim_bonus(request):
-    if request.method == 'POST':
-        tg_id = request.POST.get('tg_id')
+    tg_id = request.POST.get('tg_id') or request.GET.get('tg_id')
+    if request.method == 'POST' and tg_id:
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         
-        # Usamos la función que creamos en el modelo
         if wallet.can_claim_bonus():
-            wallet.add_funds(35) # <- Premio diario equilibrado de 35 de oro
+            wallet.add_funds(35)
             wallet.last_bonus_claim = timezone.now()
             wallet.save()
             messages.success(request, "¡Has reclamado tu bono diario de 35 🪙 de oro!")
         else:
             messages.error(request, "Aún no han pasado 24 horas desde tu último bono.")
             
-        return redirect(f'/economy/wallet/?tg_id={tg_id}')
+    return redirect(f'/economy/wallet/?tg_id={tg_id}')
     
 def slots_game(request):
     tg_id = request.GET.get('tg_id') or request.POST.get('tg_id')
@@ -114,8 +113,8 @@ def slots_game(request):
                 messages.error(request, "La apuesta debe ser mayor a 0.")
             elif apuesta > 100:
                 messages.error(request, "La apuesta máxima de la Tragaperras es de 100 🪙.")
-            elif apuesta > wallet.balance:
-                messages.error(request, "No tienes suficiente oro para esta apuesta.")
+            elif not wallet or apuesta > wallet.balance:
+                messages.error(request, "No tienes suficiente oro o tu sesión ha expirado.")
             else:
                 # 🎰 Generamos los 3 rodillos
                 reels = [random.choice(SIMBOLOS) for _ in range(3)]
@@ -156,30 +155,6 @@ def slots_game(request):
         'ganancia': ganancia
     })
     
-def get_deck():
-    suits = ['♠', '♥', '♦', '♣']
-    ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
-    deck = [{'suit': s, 'rank': r} for s in suits for r in ranks]
-    random.shuffle(deck)
-    return deck
-
-def calculate_hand(hand):
-    value = 0
-    aces = 0
-    for card in hand:
-        if card['rank'] in ['J', 'Q', 'K']:
-            value += 10
-        elif card['rank'] == 'A':
-            value += 11
-            aces += 1
-        else:
-            value += int(card['rank'])
-    # Si nos pasamos de 21 y tenemos Ases, el As pasa a valer 1 en vez de 11
-    while value > 21 and aces > 0:
-        value -= 10
-        aces -= 1
-    return value
-
 def draw_card():
     suits = ['♠', '♥', '♦', '♣']
     values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
@@ -227,8 +202,8 @@ def blackjack_game(request):
                     messages.error(request, "La apuesta debe ser mayor a 0.")
                 elif apuesta > 100:
                     messages.error(request, "La apuesta máxima de Blackjack es de 100 🪙.")
-                elif apuesta > wallet.balance:
-                    messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+                elif not wallet or apuesta > wallet.balance:
+                    messages.error(request, "No tienes suficiente oro o tu sesión ha expirado.")
                 else:
                     # Descontamos apuesta inicial
                     wallet.remove_funds(apuesta)
@@ -298,13 +273,18 @@ def blackjack_game(request):
             session_bj['finished'] = True
             request.session['blackjack_state'] = None
             
-    # Calculamos valores para el render
+    # 1. Obtenemos las cartas antes de limpiar
     p_cards = session_bj['player_hand'] if session_bj else []
     d_cards = session_bj['dealer_hand'] if session_bj else []
     p_score = calculate_hand_value(p_cards) if p_cards else 0
     d_score = calculate_hand_value(d_cards) if d_cards else 0
     in_game = session_bj is not None and not session_bj.get('finished', False)
-    
+    current_bet = session_bj['bet'] if session_bj else 25
+
+    # 2. Si la partida ya terminó, ahora sí limpiamos la sesión
+    if session_bj and session_bj.get('finished', False):
+        request.session['blackjack_state'] = None
+
     return render(request, 'economy/blackjack.html', {
         'tg_id': tg_id,
         'wallet': wallet,
@@ -315,5 +295,5 @@ def blackjack_game(request):
         'in_game': in_game,
         'resultado': resultado,
         'ganancia': ganancia,
-        'current_bet': session_bj['bet'] if session_bj else 25
+        'current_bet': current_bet
     })

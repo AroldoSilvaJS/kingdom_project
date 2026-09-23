@@ -30,6 +30,24 @@ class IdolProfile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Personalización visual de la Idol
+    banner = models.ImageField(upload_to='idols_banners/', blank=True, null=True, verbose_name="Foto de Portada")
+    tagline = models.CharField(max_length=120, blank=True, null=True, verbose_name="Subtítulo / Esencia")
+    welcome_message = models.CharField(max_length=200, blank=True, null=True, verbose_name="Saludo de Bienvenida")
+    aura_color = models.CharField(
+        max_length=30,
+        choices=[
+            ('purple', 'Aura Mística Púrpura 💜'),
+            ('gold', 'Aura Celestial Dorada 💛'),
+            ('ruby', 'Aura Pasión Rubí ❤️'),
+            ('emerald', 'Aura Seducción Esmeralda 💚'),
+        ],
+        default='purple',
+        verbose_name="Aura de la Idol"
+    )
+    specialty = models.CharField(max_length=100, blank=True, null=True, verbose_name="Especialidad")
+
+
     class Meta:
         verbose_name = "Perfil de Idol"
         verbose_name_plural = "Perfiles de Idols"

@@ -62,7 +62,21 @@
         </h3>
 
         <div class="flex flex-col gap-2">
-            {% for noble in top_wallets %}
+        {% for noble in magnates %}
+        <div class="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-vip-gold/20">
+            <div class="flex items-center gap-3">
+                <span class="w-6 text-center font-serif font-black text-sm">#{{ forloop.counter }}</span>
+                <div>
+                    <h4 class="font-bold text-white text-xs font-mono">Noble ...{{ noble.telegram_id }}</h4>
+                    <span class="text-[9px] text-vip-text/50 uppercase">{{ noble.titulo }}</span>
+                </div>
+            </div>
+            <div class="text-right flex items-center gap-1">
+                <span class="font-serif font-bold text-vip-gold text-xs font-mono">{{ noble.balance }}</span>
+                <span class="text-[10px]">🪙</span>
+            </div>
+        </div>
+        {% empty %}
             <div class="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-vip-gold/20">
                 <div class="flex items-center gap-3">
                     <span class="w-6 text-center font-serif font-black text-sm {% if forloop.counter == 1 %}text-yellow-400{% elif forloop.counter == 2 %}text-gray-300{% elif forloop.counter == 3 %}text-amber-600{% else %}text-vip-text/50{% endif %}">

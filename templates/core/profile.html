@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-24">
+    
+    <!-- ENCABEZADO -->
+    <div class="flex justify-between items-center px-1">
+        <a href="javascript:history.back()" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
+            ⬅ Volver
+        </a>
+        <span class="text-xs border border-vip-gold/40 text-vip-gold px-3 py-1 rounded-full uppercase tracking-widest font-bold">
+            Pasaporte Noble
+        </span>
+    </div>
+
+    <!-- CARNET IMPERIAL DEL USUARIO -->
+    <div class="relative overflow-hidden rounded-3xl p-6 border-2 border-vip-gold/50 shadow-[0_10px_30px_rgba(0,0,0,0.85)] bg-gradient-to-br from-[#1a0e2a] via-[#0d0617] to-black">
+        
+        <!-- Resplandor del marco de avatar -->
+        <div class="flex items-center gap-4">
+            <!-- AVATAR CON MARCO COSMÉTICO -->
+            <div class="relative w-20 h-20 rounded-2xl flex items-center justify-center text-3xl shadow-xl
+                 {% if profile.avatar_frame == 'gold' %}border-2 border-yellow-400 shadow-[0_0_20px_rgba(234,179,8,0.5)] bg-yellow-950/40
+                 {% elif profile.avatar_frame == 'neon' %}border-2 border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.5)] bg-purple-950/40
+                 {% elif profile.avatar_frame == 'diamond' %}border-2 border-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.5)] bg-cyan-950/40
+                 {% else %}border-2 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.5)] bg-red-950/40{% endif %}">
+                <span>🥂</span>
+            </div>
+
+            <!-- DATOS DEL CIUDADANO -->
+            <div class="flex flex-col">
+                <span class="text-[10px] text-vip-gold uppercase font-mono tracking-widest">ID #{{ profile.telegram_user_id }}</span>
+                <h2 class="font-serif text-xl font-black text-white leading-tight">
+                    {{ profile.username|default:"Noble Anónimo" }}
+                </h2>
+                <span class="text-xs font-bold text-yellow-300 uppercase tracking-wider mt-0.5">
+                    {{ profile.get_title_display }}
+                </span>
+            </div>
+        </div>
+
+        <!-- BIO -->
+        {% if profile.bio %}
+            <p class="text-xs text-vip-text/80 italic mt-3 bg-black/40 p-2.5 rounded-xl border border-vip-gold/15">
+                "{{ profile.bio }}"
+            </p>
+        {% endif %}
+
+        <!-- ESTADÍSTICAS DEL PASAPORTE (ORO + MASCOTA + MUSA) -->
+        <div class="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-vip-gold/20 text-center">
+            <!-- Bóveda -->
+            <div class="bg-black/40 p-2 rounded-xl border border-vip-gold/15">
+                <span class="text-[9px] text-vip-text/50 uppercase block">Fortuna</span>
+                <span class="font-mono text-xs font-bold text-vip-gold">🪙 {{ wallet.balance }}</span>
+            </div>
+
+            <!-- Mascota -->
+            <div class="bg-black/40 p-2 rounded-xl border border-vip-gold/15">
+                <span class="text-[9px] text-vip-text/50 uppercase block">Compañero</span>
+                <span class="text-xs font-bold text-purple-300 truncate block">
+                    {% if pet %}{{ pet.name }} (Lvl {{ pet.level }}){% else %}Ninguno{% endif %}
+                </span>
+            </div>
+
+            <!-- Musa -->
+            <div class="bg-black/40 p-2 rounded-xl border border-vip-gold/15">
+                <span class="text-[9px] text-vip-text/50 uppercase block">Musa Favorita</span>
+                <span class="text-xs font-bold text-yellow-400 truncate block">
+                    {% if profile.favorite_idol %}{{ profile.favorite_idol.stage_name }}{% else %}Soltero{% endif %}
+                </span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- MENSAJES -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- FORMULARIO DE PERSONALIZACIÓN -->
+    <div class="vip-panel p-5 flex flex-col gap-4">
+        <h3 class="font-serif text-sm font-black text-vip-gold uppercase tracking-wider border-b border-vip-gold/20 pb-2">
+            ⚙️ Personalizar mi Identidad
+        </h3>
+
+        <form method="POST" class="flex flex-col gap-3.5">
+            {% csrf_token %}
+            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+            <!-- Nombre / Alias -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre o Alias</label>
+                <input type="text" name="username" value="{{ profile.username|default:'' }}" required
+                       class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+            </div>
+
+            <!-- Título Nobiliario -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Título Nobiliario</label>
+                <select name="title" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                    <option value="plebeyo" {% if profile.title == 'plebeyo' %}selected{% endif %}>🍷 Curioso Clandestino</option>
+                    <option value="caballero" {% if profile.title == 'caballero' %}selected{% endif %}>🥂 Caballero VIP</option>
+                    <option value="conde" {% if profile.title == 'conde' %}selected{% endif %}>🪙 Conde de la Fortuna</option>
+                    <option value="duque" {% if profile.title == 'duque' %}selected{% endif %}>👑 Duque Imperial</option>
+                    <option value="archiduque" {% if profile.title == 'archiduque' %}selected{% endif %}>💎 Archiduque del Placer</option>
+                </select>
+            </div>
+
+            <!-- Lema o Frase Insignia -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Lema o Frase Insignia</label>
+                <input type="text" name="motto" value="{{ profile.motto|default:'' }}" placeholder="Ej: «La discreción es el mayor de los lujos»"
+           class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+            </div>
+
+            <!-- Insignia Nobiliaria -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Insignia Honorífica</label>
+                <select name="vip_badge" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                    <option value="none" {% if profile.vip_badge == 'none' %}selected{% endif %}>✨ Sin Insignia</option>
+                    <option value="high_roller" {% if profile.vip_badge == 'high_roller' %}selected{% endif %}>🎰 High Roller Casino</option>
+                    <option value="mecenas" {% if profile.vip_badge == 'mecenas' %}selected{% endif %}>💎 Mecenas Imperial</option>
+                    <option value="romantico" {% if profile.vip_badge == 'romantico' %}selected{% endif %}>🌹 Caballero Devoto</option>
+                    <option value="coleccionista" {% if profile.vip_badge == 'coleccionista' %}selected{% endif %}>🐾 Domador de Bestias</option>
+                </select>
+            </div>
+
+            <!-- Tema de Fondo del Pasaporte -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Ambiente del Pasaporte</label>
+                <select name="profile_theme" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                    <option value="velvet" {% if profile.profile_theme == 'velvet' %}selected{% endif %}>Terciopelo Imperial (Púrpura & Oro)</option>
+                    <option value="obsidian" {% if profile.profile_theme == 'obsidian' %}selected{% endif %}>Obsidiana & Neón (Oscuro Profundo)</option>
+                    <option value="crimson" {% if profile.profile_theme == 'crimson' %}selected{% endif %}>Carmesí Clandestino (Rojo Pasión)</option>
+                    <option value="champagne" {% if profile.profile_theme == 'champagne' %}selected{% endif %}>Champagne Real (Dorado Radiante)</option>
+                </select>
+            </div>
+
+            <!-- Marco de Avatar -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Marco Cosmético de Avatar</label>
+                <select name="avatar_frame" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                    <option value="gold" {% if profile.avatar_frame == 'gold' %}selected{% endif %}>👑 Borde Oro Pulido</option>
+                    <option value="neon" {% if profile.avatar_frame == 'neon' %}selected{% endif %}>🟣 Borde Neón Púrpura</option>
+                    <option value="diamond" {% if profile.avatar_frame == 'diamond' %}selected{% endif %}>💎 Borde Diamante Glacial</option>
+                    <option value="flame" {% if profile.avatar_frame == 'flame' %}selected{% endif %}>🔥 Borde Llama Carmesí</option>
+                </select>
+            </div>
+
+            <!-- Musa Favorita -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Musa / Idol Favorita</label>
+                <select name="favorite_idol" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                    <option value="">-- Ninguna (Corazón Libre) --</option>
+                    {% for idol in all_idols %}
+                        <option value="{{ idol.id }}" {% if profile.favorite_idol and profile.favorite_idol.id == idol.id %}selected{% endif %}>
+                            {{ idol.stage_name }} ({{ idol.group|default:"Solista" }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Frase / Biografía -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Frase del Pasaporte</label>
+                <input type="text" name="bio" value="{{ profile.bio|default:'' }}" placeholder="Ej: Amante del buen champán y el rol exclusivo..."
+                       class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+            </div>
+
+            <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider mt-2 shadow-lg">
+                Guardar Pasaporte
+            </button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}
