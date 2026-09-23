@@ -1,177 +1,165 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<style>
-    /* Animación de reparto de cartas */
-    @keyframes dealCard {
-        0% { transform: translateY(-150px) scale(0.5) rotate(15deg); opacity: 0; }
-        100% { transform: translateY(0) scale(1) rotate(0deg); opacity: 1; }
-    }
-    .card-anim {
-        animation: dealCard 0.4s ease-out forwards;
-        opacity: 0; /* Oculta hasta que empieza la animación */
-    }
-    .delay-1 { animation-delay: 0.1s; }
-    .delay-2 { animation-delay: 0.3s; }
-    .delay-3 { animation-delay: 0.5s; }
-    .delay-4 { animation-delay: 0.7s; }
+<div class="flex flex-col gap-4 mt-2">
     
-    /* El tapete verde del casino */
-    .casino-table {
-        background: radial-gradient(circle at center, #0a4d2e 0%, #032111 100%);
-        border: 4px solid #D4AF37;
-        box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
-    }
-</style>
-
-<div class="vip-panel p-4 mt-6 flex flex-col gap-4 mx-auto w-full max-w-md border border-vip-gold/50 rounded-2xl">
-    
-    <!-- Header -->
-    <div class="flex justify-between items-center mb-2 border-b border-vip-gold/30 pb-2 px-2">
-        <h2 class="text-xl font-bold text-vip-gold">Blackjack 21</h2>
-        <a href="/economy/wallet/?tg_id={{ tg_id }}" class="text-sm text-vip-text/60 hover:text-vip-text">⬅ Bóveda</a>
+    <!-- ENCABEZADO Y VOLVER -->
+    <div class="flex justify-between items-center px-1">
+        <a href="{% url 'economy:wallet' %}?tg_id={{ tg_id }}" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
+            ⬅ Bóveda
+        </a>
+        <div class="flex items-center gap-1.5 bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full">
+            <span class="text-xs">🪙</span>
+            <span class="text-xs font-mono font-bold text-gold-gradient">{{ wallet.balance }}</span>
+        </div>
     </div>
 
-    <!-- Saldo -->
-    <div class="text-center mb-2">
-        <p class="text-xs text-vip-text/70 uppercase tracking-widest">Bóveda VIP</p>
-        <p class="text-2xl font-bold text-vip-gold">🪙 {{ wallet.balance }}</p>
-    </div>
-
-    <!-- Mensajes de Error -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="bg-red-900/50 border border-red-500 text-red-200 p-2 rounded text-sm text-center">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-
-    <!-- TABLERO DE JUEGO VERDE -->
-    <div class="casino-table rounded-xl p-4 flex flex-col gap-6 relative min-h-[300px]">
+    <!-- MESA DE BLACKJACK VIP (PAÑO VERDE ESMERALDA OSCURO) -->
+    <div class="rounded-3xl p-5 border-2 border-vip-gold/40 shadow-[0_10px_30px_rgba(0,0,0,0.85)] bg-gradient-to-b from-[#0a2e1e] via-[#051c12] to-black flex flex-col items-center relative overflow-hidden">
         
-        {% if not state or state.status != 'playing' %}
-            <!-- RESULTADOS FINALES (Aparecen sobre el tapete) -->
-            {% if state %}
-                <div class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center rounded-xl z-20 backdrop-blur-sm p-4 text-center animate-fade-in">
-                    {% if resultado == 'blackjack' %}
-                        <h3 class="text-4xl font-black text-vip-gold drop-shadow-[0_0_15px_#D4AF37]">¡BLACKJACK!</h3>
-                        <p class="text-white mt-2">Ganaste 🪙 {{ state.bet|add:state.bet }}</p>
-                    {% elif resultado == 'win' %}
-                        <h3 class="text-3xl font-black text-green-400 drop-shadow-[0_0_15px_#4ade80]">¡GANASTE!</h3>
-                        <p class="text-white mt-2">Doblaste tu apuesta</p>
-                    {% elif resultado == 'bust' or resultado == 'lose' %}
-                        <h3 class="text-3xl font-black text-red-500 drop-shadow-[0_0_15px_#ef4444]">PERDISTE</h3>
-                        <p class="text-white mt-2">La casa gana.</p>
-                    {% elif resultado == 'tie' %}
-                        <h3 class="text-3xl font-black text-gray-300">EMPATE</h3>
-                        <p class="text-white mt-2">Recuperas tu oro.</p>
-                    {% endif %}
-                    
-                    <form method="POST" class="mt-6 w-full max-w-[200px]">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="start">
-                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                        
-                        <!-- Reemplazamos el input 'hidden' por uno de número (visible) -->
-                        <label class="block text-[10px] text-vip-gold/80 mb-1 uppercase tracking-widest">Cambiar Apuesta:</label>
-                        <input type="number" name="bet_amount" min="1" max="{{ wallet.balance }}" value="{{ state.bet }}" required
-                               class="w-full bg-black/50 border border-vip-gold/50 text-white text-2xl text-center focus:outline-none focus:border-vip-gold mb-3 py-2 rounded-lg">
-                               
-                        <button type="submit" class="w-full bg-vip-gold text-black font-bold py-3 rounded-lg hover:bg-yellow-600 transition-colors shadow-[0_0_15px_rgba(212,175,55,0.4)]">
-                            Volver a Apostar
-                        </button>
-                    </form>
-                </div>
-            {% endif %}
-            
-            <!-- FORMULARIO DE APUESTA INICIAL -->
-            {% if not state %}
-                <div class="absolute inset-0 flex items-center justify-center z-10 p-4">
-                    <form method="POST" class="bg-black/80 p-5 rounded-xl border border-vip-gold/50 text-center w-full max-w-[250px]">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="start">
-                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                        
-                        <label class="block text-sm text-vip-gold mb-2 font-bold uppercase">Haz tu apuesta</label>
-                        <input type="number" name="bet_amount" min="1" max="{{ wallet.balance }}" required
-                               class="w-full bg-transparent border-b-2 border-vip-gold/50 text-white text-3xl text-center focus:outline-none focus:border-vip-gold mb-4 py-2"
-                               placeholder="100">
-                        
-                        <button type="submit" class="w-full bg-gradient-to-r from-vip-gold to-yellow-600 text-black font-bold py-3 rounded-lg shadow-lg">
-                            REPARTIR CARTAS
-                        </button>
-                    </form>
-                </div>
-            {% endif %}
-        {% endif %}
+        <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider text-center">
+            Blackjack Imperial (21)
+        </h2>
+        <p class="text-[10px] text-green-300/70 mb-3 uppercase tracking-widest">El Croupier se planta en 17</p>
 
-        <!-- MANO DEL CRUPIER -->
-        {% if state %}
-        <div>
-            <div class="flex justify-between items-end mb-2">
-                <span class="text-white/80 text-xs font-bold uppercase tracking-widest">Crupier</span>
-                <span class="text-vip-gold bg-black/50 px-2 py-0.5 rounded text-xs font-mono">
-                    {% if state.status == 'playing' %} ? {% else %} {{ d_val }} {% endif %}
-                </span>
+        <!-- SECCIÓN CROUPIER -->
+        <div class="w-full flex flex-col items-center bg-black/40 p-3 rounded-2xl border border-green-500/20 mb-3">
+            <div class="flex justify-between w-full px-2 text-[11px] font-bold text-green-400 mb-1.5">
+                <span>🤵 Croupier Imperial</span>
+                {% if not in_game and dealer_score > 0 %}
+                    <span class="font-mono">{{ dealer_score }} pts</span>
+                {% else %}
+                    <span class="font-mono text-vip-text/50">? pts</span>
+                {% endif %}
             </div>
-            <div class="flex justify-center gap-2">
-                {% for card in state.dealer %}
-                    <!-- La segunda carta del crupier se oculta mientras se juega -->
-                    {% if forloop.counter == 2 and state.status == 'playing' %}
-                        <div class="w-14 h-20 bg-red-900 border-2 border-white rounded-md flex items-center justify-center card-anim delay-2 shadow-lg">
-                            <span class="text-white text-2xl opacity-50">♚</span>
-                        </div>
-                    {% else %}
-                        <div class="w-14 h-20 bg-white rounded-md flex flex-col justify-between p-1 border border-gray-300 card-anim delay-{{ forloop.counter }} shadow-lg">
-                            <span class="text-[10px] font-bold leading-none {% if card.suit in '♥♦' %}text-red-600{% else %}text-black{% endif %}">{{ card.rank }}</span>
-                            <span class="text-xl text-center leading-none {% if card.suit in '♥♦' %}text-red-600{% else %}text-black{% endif %}">{{ card.suit }}</span>
-                            <span class="text-[10px] font-bold leading-none rotate-180 {% if card.suit in '♥♦' %}text-red-600{% else %}text-black{% endif %}">{{ card.rank }}</span>
-                        </div>
-                    {% endif %}
-                {% endfor %}
-            </div>
-        </div>
 
-        <!-- MANO DEL JUGADOR -->
-        <div>
-            <div class="flex justify-between items-end mb-2">
-                <span class="text-white/80 text-xs font-bold uppercase tracking-widest">Tú (Apostado: {{ state.bet }})</span>
-                <span class="text-vip-gold bg-black/50 px-2 py-0.5 rounded text-xs font-mono">{{ p_val }}</span>
-            </div>
-            <div class="flex justify-center gap-2 flex-wrap">
-                {% for card in state.player %}
-                    <div class="w-14 h-20 bg-white rounded-md flex flex-col justify-between p-1 border border-gray-300 card-anim delay-{% if forloop.counter <= 2 %}3{% else %}1{% endif %} shadow-lg">
-                        <span class="text-[10px] font-bold leading-none {% if card.suit in '♥♦' %}text-red-600{% else %}text-black{% endif %}">{{ card.rank }}</span>
-                        <span class="text-xl text-center leading-none {% if card.suit in '♥♦' %}text-red-600{% else %}text-black{% endif %}">{{ card.suit }}</span>
-                        <span class="text-[10px] font-bold leading-none rotate-180 {% if card.suit in '♥♦' %}text-red-600{% else %}text-black{% endif %}">{{ card.rank }}</span>
+            <div class="flex gap-2 justify-center min-h-[75px] items-center">
+                {% if in_game %}
+                    <!-- Primera carta visible, segunda oculta -->
+                    <div class="w-12 h-16 bg-white rounded-lg shadow-md border border-gray-300 flex flex-col items-center justify-between p-1 text-black font-bold">
+                        <span class="text-[10px] self-start leading-none">{{ dealer_cards.0.val }}</span>
+                        <span class="text-lg leading-none {% if dealer_cards.0.is_red %}text-red-600{% endif %}">{{ dealer_cards.0.suit }}</span>
+                        <span class="text-[10px] self-end leading-none">{{ dealer_cards.0.val }}</span>
                     </div>
+                    <!-- Carta oculta boca abajo -->
+                    <div class="w-12 h-16 bg-gradient-to-br from-red-800 to-red-950 rounded-lg shadow-md border-2 border-yellow-500/50 flex items-center justify-center text-yellow-400 text-xs font-black">
+                        👑
+                    </div>
+                {% elif dealer_cards %}
+                    <!-- Todas visibles al finalizar -->
+                    {% for c in dealer_cards %}
+                        <div class="w-12 h-16 bg-white rounded-lg shadow-md border border-gray-300 flex flex-col items-center justify-between p-1 text-black font-bold">
+                            <span class="text-[10px] self-start leading-none">{{ c.val }}</span>
+                            <span class="text-lg leading-none {% if c.is_red %}text-red-600{% endif %}">{{ c.suit }}</span>
+                            <span class="text-[10px] self-end leading-none">{{ c.val }}</span>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <span class="text-xs text-green-300/40 italic py-4">Esperando reparto...</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- SECCIÓN JUGADOR -->
+        <div class="w-full flex flex-col items-center bg-black/50 p-3 rounded-2xl border border-vip-gold/30">
+            <div class="flex justify-between w-full px-2 text-[11px] font-bold text-yellow-400 mb-1.5">
+                <span>Tu Mano</span>
+                {% if player_score > 0 %}
+                    <span class="font-mono text-white bg-black/70 px-2 py-0.5 rounded-full border border-yellow-500/30">{{ player_score }} pts</span>
+                {% endif %}
+            </div>
+
+            <div class="flex gap-2 justify-center min-h-[75px] items-center flex-wrap">
+                {% for c in player_cards %}
+                    <div class="w-12 h-16 bg-white rounded-lg shadow-md border border-gray-300 flex flex-col items-center justify-between p-1 text-black font-bold animate-fadeIn">
+                        <span class="text-[10px] self-start leading-none">{{ c.val }}</span>
+                        <span class="text-lg leading-none {% if c.is_red %}text-red-600{% endif %}">{{ c.suit }}</span>
+                        <span class="text-[10px] self-end leading-none">{{ c.val }}</span>
+                    </div>
+                {% empty %}
+                    <span class="text-xs text-vip-text/40 italic py-4">Haz tu apuesta para recibir cartas</span>
                 {% endfor %}
             </div>
         </div>
+
+        <!-- RESULTADOS DE LA RONDA -->
+        {% if resultado == 'blackjack' %}
+            <div class="p-3 bg-gradient-to-r from-yellow-700 via-yellow-400 to-yellow-700 text-black text-xs font-black uppercase rounded-xl w-full my-2 text-center animate-bounce shadow-lg">
+                👑 ¡BLACKJACK REAL! Pago especial x2.5 (+{{ ganancia }} 🪙)
+            </div>
+        {% elif resultado == 'win' %}
+            <div class="p-2.5 bg-green-950 border border-green-500 text-green-200 text-xs font-bold rounded-xl w-full my-2 text-center">
+                🎉 ¡Has vencido al Croupier! Ganancia: +{{ ganancia }} 🪙 de oro.
+            </div>
+        {% elif resultado == 'push' %}
+            <div class="p-2.5 bg-yellow-950 border border-yellow-500 text-yellow-200 text-xs font-bold rounded-xl w-full my-2 text-center">
+                🤝 Empate. Se devuelve tu apuesta intacta ({{ ganancia }} 🪙).
+            </div>
+        {% elif resultado == 'bust' %}
+            <div class="p-2.5 bg-red-950 border border-red-500 text-red-200 text-xs font-bold rounded-xl w-full my-2 text-center">
+                💥 Te pasaste de 21 puntos. Pierdes {{ ganancia }} 🪙 de oro.
+            </div>
+        {% elif resultado == 'lose' %}
+            <div class="p-2.5 bg-red-950 border border-red-500 text-red-200 text-xs font-bold rounded-xl w-full my-2 text-center">
+                💀 El Croupier gana esta ronda. Pierdes {{ ganancia }} 🪙 de oro.
+            </div>
         {% endif %}
+
+        <!-- BOTONES DE ACCIÓN DINÁMICOS -->
+        {% if in_game %}
+            <!-- BOTONES DURANTE LA PARTIDA: PEDIR O PLANTARSE -->
+            <div class="grid grid-cols-2 gap-3 w-full mt-3">
+                <form method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="action" value="hit">
+                    <button type="submit" class="w-full btn-gold py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 shadow-md">
+                        <span>🎴</span> Pedir Carta
+                    </button>
+                </form>
+
+                <form method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="action" value="stand">
+                    <button type="submit" class="w-full bg-red-950/80 border border-red-500/70 text-red-200 hover:bg-red-900 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all">
+                        <span>✋</span> Plantarse
+                    </button>
+                </form>
+            </div>
+        {% else %}
+            <!-- FORMULARIO DE NUEVA PARTIDA / APUESTA -->
+            <form method="POST" class="w-full flex flex-col gap-2.5 mt-3">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <input type="hidden" name="action" value="deal">
+
+                <div>
+                    <label class="block text-[11px] text-green-300 uppercase font-bold mb-1">Apuesta (Máx: 100 🪙)</label>
+                    <div class="grid grid-cols-4 gap-1.5 mb-1.5">
+                        <button type="button" onclick="setBet(10)" class="bg-black/60 border border-green-500/30 hover:border-green-400 text-green-300 py-1.5 rounded-lg text-xs font-mono font-bold">10</button>
+                        <button type="button" onclick="setBet(25)" class="bg-black/60 border border-green-500/30 hover:border-green-400 text-green-300 py-1.5 rounded-lg text-xs font-mono font-bold">25</button>
+                        <button type="button" onclick="setBet(50)" class="bg-black/60 border border-green-500/30 hover:border-green-400 text-green-300 py-1.5 rounded-lg text-xs font-mono font-bold">50</button>
+                        <button type="button" onclick="setBet(100)" class="bg-black/60 border border-green-500/30 hover:border-green-400 text-green-300 py-1.5 rounded-lg text-xs font-mono font-bold">100</button>
+                    </div>
+                    <input type="number" id="bet_amount_input" name="bet_amount" min="1" max="100" value="25" required
+                           class="w-full bg-black/80 border border-green-500/40 rounded-xl p-2.5 text-center font-mono font-bold text-white text-base">
+                </div>
+
+                <button type="submit" class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center justify-center gap-2">
+                    <span>🃏</span> Repartir Cartas
+                </button>
+            </form>
+        {% endif %}
+
     </div>
 
-    <!-- BOTONES DE ACCIÓN (Solo visibles si está jugando) -->
-    {% if state and state.status == 'playing' %}
-        <div class="flex gap-3 mt-2">
-            <form method="POST" class="w-1/2">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="hit">
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <button type="submit" class="w-full bg-[#1a0f2e] border-2 border-vip-gold text-vip-gold font-bold py-3 rounded-lg hover:bg-vip-gold hover:text-black transition-colors uppercase tracking-widest text-sm">
-                    👆 Pedir
-                </button>
-            </form>
-            <form method="POST" class="w-1/2">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="stand">
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <button type="submit" class="w-full bg-vip-gold text-black font-bold py-3 rounded-lg hover:bg-yellow-500 transition-colors uppercase tracking-widest text-sm shadow-[0_0_15px_rgba(212,175,55,0.4)]">
-                    ✋ Plantarse
-                </button>
-            </form>
-        </div>
-    {% endif %}
 </div>
+
+<script>
+    function setBet(val) {
+        const input = document.getElementById('bet_amount_input');
+        if (input) input.value = val;
+    }
+</script>
 {% endblock %}

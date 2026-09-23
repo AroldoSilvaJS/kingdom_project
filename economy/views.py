@@ -99,56 +99,61 @@ def slots_game(request):
     wallet = None
     resultado = None
     ganancia = 0
-    simbolos_finales = ['❔', '❔', '❔']
-    animar = False
-
+    reels = ['👑', '💎', '⭐'] # Iconos iniciales por defecto
+    
+    SIMBOLOS = ['👑', '💎', '⭐', '🍇', '🍒', '🪙']
+    
     if tg_id:
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-
+        
     if request.method == 'POST':
         try:
             apuesta = int(request.POST.get('bet_amount', 0))
+            
             if apuesta <= 0:
                 messages.error(request, "La apuesta debe ser mayor a 0.")
             elif apuesta > 100:
-                messages.error(request, "La apuesta máxima permitida es de 100 🪙.")
+                messages.error(request, "La apuesta máxima de la Tragaperras es de 100 🪙.")
             elif apuesta > wallet.balance:
                 messages.error(request, "No tienes suficiente oro para esta apuesta.")
             else:
-                # Cobramos la apuesta por adelantado
-                wallet.remove_funds(apuesta)
+                # 🎰 Generamos los 3 rodillos
+                reels = [random.choice(SIMBOLOS) for _ in range(3)]
                 
-                # Sorteamos los símbolos
-                opciones = ['🍒', '💎', '🔔', '🍋', '7️⃣']
-                s1, s2, s3 = random.choice(opciones), random.choice(opciones), random.choice(opciones)
-                simbolos_finales = [s1, s2, s3]
-                
-                # Verificamos premios
-                if s1 == s2 == s3:
-                    # ¡Jackpot! Multiplica por 10
-                    ganancia = apuesta * 10
-                    wallet.add_funds(ganancia)
+                # Evaluación de premios
+                if reels[0] == reels[1] == reels[2]:
+                    # Triple coincidencia
+                    if reels[0] == '👑':
+                        multiplicador = 15 # Jackpot Corona
+                    elif reels[0] == '💎':
+                        multiplicador = 10 # Jackpot Diamante
+                    elif reels[0] == '⭐':
+                        multiplicador = 6
+                    else:
+                        multiplicador = 4 # Frutas o Monedas triples
+                        
+                    ganancia = apuesta * multiplicador
+                    wallet.add_funds(ganancia - apuesta)
                     resultado = "jackpot"
-                elif s1 == s2 or s2 == s3 or s1 == s3:
-                    # Premio Menor: Multiplica por 2
-                    ganancia = apuesta * 2
-                    wallet.add_funds(ganancia)
-                    resultado = "win"
+                elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
+                    # Par de símbolos iguales (premio consuelo)
+                    ganancia = int(apuesta * 1.5)
+                    wallet.add_funds(ganancia - apuesta)
+                    resultado = "pair"
                 else:
-                    # Pierde
+                    wallet.remove_funds(apuesta)
                     resultado = "lose"
-                
-                animar = True
+                    ganancia = apuesta
+                    
         except ValueError:
-            messages.error(request, "Apuesta inválida.")
-
+            messages.error(request, "Monto inválido.")
+            
     return render(request, 'economy/slots.html', {
         'tg_id': tg_id,
         'wallet': wallet,
+        'reels': reels,
         'resultado': resultado,
-        'ganancia': ganancia,
-        'simbolos': simbolos_finales,
-        'animar': animar
+        'ganancia': ganancia
     })
     
 def get_deck():
@@ -175,89 +180,140 @@ def calculate_hand(hand):
         aces -= 1
     return value
 
+def draw_card():
+    suits = ['♠', '♥', '♦', '♣']
+    values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+    suit = random.choice(suits)
+    val = random.choice(values)
+    return {'val': val, 'suit': suit, 'is_red': suit in ['♥', '♦']}
+
+def calculate_hand_value(hand):
+    total = 0
+    aces = 0
+    for c in hand:
+        val = c['val']
+        if val in ['J', 'Q', 'K']:
+            total += 10
+        elif val == 'A':
+            aces += 1
+            total += 11
+        else:
+            total += int(val)
+    while total > 21 and aces > 0:
+        total -= 10
+        aces -= 1
+    return total
+
 def blackjack_game(request):
     tg_id = request.GET.get('tg_id') or request.POST.get('tg_id')
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    wallet = None
     
-    # Recuperamos la partida actual (si existe) desde la memoria temporal de Django
-    game_state = request.session.get('blackjack_state', None)
+    if tg_id:
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        
+    # Estado de la mano guardado en sesión
+    session_bj = request.session.get('blackjack_state')
+    
     resultado = None
+    ganancia = 0
     
     if request.method == 'POST':
-        action = request.POST.get('action')
+        action = request.POST.get('action') # 'deal', 'hit', 'stand'
         
-        # 1. INICIAR NUEVO JUEGO
-        if action == 'start':
-            apuesta = int(request.POST.get('bet_amount', 0))
-            if apuesta <= 0 or apuesta > wallet.balance:
-                messages.error(request, "Apuesta inválida o no tienes suficiente oro.")
-            else:
-                wallet.remove_funds(apuesta)
-                deck = get_deck()
-                
-                # Repartir cartas iniciales
-                game_state = {
-                    'deck': deck,
-                    'player': [deck.pop(), deck.pop()],
-                    'dealer': [deck.pop(), deck.pop()],
-                    'bet': apuesta,
-                    'status': 'playing' # playing, player_won, dealer_won, tie
-                }
-                
-                # Revisar si el jugador sacó 21 a la primera (Blackjack Natural)
-                if calculate_hand(game_state['player']) == 21:
-                    game_state['status'] = 'player_won'
-                    wallet.add_funds(int(apuesta * 2.5)) # El Blackjack paga 3:2
-                    resultado = "blackjack"
+        if action == 'deal':
+            try:
+                apuesta = int(request.POST.get('bet_amount', 25))
+                if apuesta <= 0:
+                    messages.error(request, "La apuesta debe ser mayor a 0.")
+                elif apuesta > 100:
+                    messages.error(request, "La apuesta máxima de Blackjack es de 100 🪙.")
+                elif apuesta > wallet.balance:
+                    messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+                else:
+                    # Descontamos apuesta inicial
+                    wallet.remove_funds(apuesta)
                     
-                request.session['blackjack_state'] = game_state
+                    # Repartimos 2 cartas a jugador y 2 al croupier
+                    player_hand = [draw_card(), draw_card()]
+                    dealer_hand = [draw_card(), draw_card()]
+                    
+                    p_val = calculate_hand_value(player_hand)
+                    
+                    # Blackjack natural
+                    if p_val == 21:
+                        ganancia = int(apuesta * 2.5)
+                        wallet.add_funds(ganancia)
+                        resultado = 'blackjack'
+                        session_bj = None
+                    else:
+                        session_bj = {
+                            'bet': apuesta,
+                            'player_hand': player_hand,
+                            'dealer_hand': dealer_hand,
+                            'finished': False
+                        }
+                    request.session['blackjack_state'] = session_bj
+            except ValueError:
+                messages.error(request, "Monto inválido.")
                 
-        # 2. PEDIR CARTA (HIT)
-        elif action == 'hit' and game_state and game_state['status'] == 'playing':
-            game_state['player'].append(game_state['deck'].pop())
+        elif action == 'hit' and session_bj and not session_bj.get('finished'):
+            # Jugador pide carta
+            session_bj['player_hand'].append(draw_card())
+            p_val = calculate_hand_value(session_bj['player_hand'])
             
-            if calculate_hand(game_state['player']) > 21:
-                game_state['status'] = 'dealer_won'
-                resultado = "bust"
+            if p_val > 21:
+                resultado = 'bust' # Te pasaste
+                ganancia = session_bj['bet']
+                session_bj['finished'] = True
+                request.session['blackjack_state'] = None
+            else:
+                request.session['blackjack_state'] = session_bj
                 
-            request.session['blackjack_state'] = game_state
-            request.session.modified = True
+        elif action == 'stand' and session_bj and not session_bj.get('finished'):
+            # Jugador se planta -> Croupier roba hasta 17
+            p_val = calculate_hand_value(session_bj['player_hand'])
+            d_hand = session_bj['dealer_hand']
             
-        # 3. PLANTARSE (STAND)
-        elif action == 'stand' and game_state and game_state['status'] == 'playing':
-            dealer_hand = game_state['dealer']
-            
-            # El crupier está obligado a pedir carta hasta llegar a 17
-            while calculate_hand(dealer_hand) < 17:
-                dealer_hand.append(game_state['deck'].pop())
+            while calculate_hand_value(d_hand) < 17:
+                d_hand.append(draw_card())
                 
-            p_val = calculate_hand(game_state['player'])
-            d_val = calculate_hand(dealer_hand)
+            d_val = calculate_hand_value(d_hand)
+            apuesta = session_bj['bet']
             
             if d_val > 21 or p_val > d_val:
-                game_state['status'] = 'player_won'
-                wallet.add_funds(game_state['bet'] * 2)
-                resultado = "win"
-            elif d_val > p_val:
-                game_state['status'] = 'dealer_won'
-                resultado = "lose"
+                # Gana el jugador
+                ganancia = apuesta * 2
+                wallet.add_funds(ganancia)
+                resultado = 'win'
+            elif p_val == d_val:
+                # Empate (push) -> recupera su apuesta
+                wallet.add_funds(apuesta)
+                resultado = 'push'
+                ganancia = apuesta
             else:
-                game_state['status'] = 'tie'
-                wallet.add_funds(game_state['bet']) # Empate: se devuelve el oro
-                resultado = "tie"
+                # Gana el croupier
+                resultado = 'lose'
+                ganancia = apuesta
                 
-            request.session['blackjack_state'] = game_state
-            request.session.modified = True
-
-    # Calcular valores para mostrar en pantalla
-    p_val = calculate_hand(game_state['player']) if game_state else 0
-    d_val = calculate_hand(game_state['dealer']) if game_state else 0
+            session_bj['finished'] = True
+            request.session['blackjack_state'] = None
+            
+    # Calculamos valores para el render
+    p_cards = session_bj['player_hand'] if session_bj else []
+    d_cards = session_bj['dealer_hand'] if session_bj else []
+    p_score = calculate_hand_value(p_cards) if p_cards else 0
+    d_score = calculate_hand_value(d_cards) if d_cards else 0
+    in_game = session_bj is not None and not session_bj.get('finished', False)
     
     return render(request, 'economy/blackjack.html', {
         'tg_id': tg_id,
         'wallet': wallet,
-        'state': game_state,
-        'p_val': p_val,
-        'd_val': d_val,
-        'resultado': resultado
+        'player_cards': p_cards,
+        'dealer_cards': d_cards,
+        'player_score': p_score,
+        'dealer_score': d_score,
+        'in_game': in_game,
+        'resultado': resultado,
+        'ganancia': ganancia,
+        'current_bet': session_bj['bet'] if session_bj else 25
     })

@@ -14,77 +14,72 @@
         </div>
     </div>
 
-    <!-- MESA DE RULETA VIP -->
+    <!-- MESA DE RULETA VIP ANIMADA -->
     <div class="vip-panel p-5 text-center relative overflow-hidden flex flex-col items-center">
         
         <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
             Ruleta Real Europea
         </h2>
-        <p class="text-[11px] text-vip-text/60 mb-3">Elige tu color y desafía al azar imperial</p>
+        <p class="text-[11px] text-vip-text/60 mb-2">Elige tu color y desafía al azar imperial</p>
 
-        <!-- RUEDA / VISOR DE CASILLERO GANADOR -->
-        <div class="relative my-3 w-36 h-36 rounded-full border-4 border-vip-gold/60 flex flex-col items-center justify-center shadow-[0_0_30px_rgba(212,175,55,0.35)] bg-gradient-to-b from-[#180a29] to-black">
+        <!-- RUEDA GIRATORIA CON EFECTO DE FÍSICA -->
+        <div class="relative my-4 flex items-center justify-center">
             
-            {% if numero_ganador is not null %}
-                <!-- NÚMERO GANADOR REVELADO -->
-                <div class="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-black font-mono shadow-inner border 
-                     {% if color_ganador == 'red' %}bg-red-600 border-red-400 text-white
-                     {% elif color_ganador == 'black' %}bg-neutral-900 border-neutral-600 text-white
-                     {% else %}bg-green-600 border-green-400 text-white{% endif %} animate-bounce">
-                    {{ numero_ganador }}
+            <!-- Puntero indicador superior -->
+            <div class="absolute -top-3 z-30 text-yellow-400 text-xl filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+                ▼
+            </div>
+
+            <!-- Disco exterior con casilleros dorados -->
+            <div id="roulette-wheel" class="w-44 h-44 rounded-full border-4 border-vip-gold/80 shadow-[0_0_35px_rgba(212,175,55,0.4)] flex items-center justify-center relative overflow-hidden" 
+                 style="background: conic-gradient(#dc2626 0deg 9.7deg, #171717 9.7deg 19.4deg, #dc2626 19.4deg 29.1deg, #171717 29.1deg 38.8deg, #dc2626 38.8deg 48.5deg, #16a34a 48.5deg 58.2deg, #dc2626 58.2deg 67.9deg, #171717 67.9deg 77.6deg, #dc2626 77.6deg 87.3deg, #171717 87.3deg 97deg, #dc2626 97deg 106.7deg, #171717 106.7deg 116.4deg, #dc2626 116.4deg 126.1deg, #171717 126.1deg 135.8deg, #dc2626 135.8deg 145.5deg, #171717 145.5deg 155.2deg, #dc2626 155.2deg 164.9deg, #171717 164.9deg 174.6deg, #dc2626 174.6deg 184.3deg, #171717 184.3deg 194deg, #dc2626 194deg 203.7deg, #171717 203.7deg 213.4deg, #dc2626 213.4deg 223.1deg, #171717 223.1deg 232.8deg, #dc2626 232.8deg 242.5deg, #171717 242.5deg 252.2deg, #dc2626 252.2deg 261.9deg, #171717 261.9deg 271.6deg, #dc2626 271.6deg 281.3deg, #171717 281.3deg 291deg, #dc2626 291deg 300.7deg, #171717 300.7deg 310.4deg, #dc2626 310.4deg 320.1deg, #171717 320.1deg 329.8deg, #dc2626 329.8deg 339.5deg, #171717 339.5deg 349.2deg, #dc2626 349.2deg 360deg);">
+                
+                <!-- Centro de madera y latón dorado -->
+                <div class="w-24 h-24 rounded-full bg-gradient-to-br from-[#2c1404] via-black to-[#130701] border-2 border-vip-gold/60 flex flex-col items-center justify-center z-10 shadow-2xl">
+                    <span id="center-display-num" class="text-2xl font-black font-mono text-white">
+                        {% if numero_ganador is not null %}{{ numero_ganador }}{% else %}👑{% endif %}
+                    </span>
+                    <span id="center-display-text" class="text-[9px] uppercase font-bold text-vip-gold tracking-widest">
+                        {% if color_ganador == 'red' %}Rojo
+                        {% elif color_ganador == 'black' %}Negro
+                        {% elif color_ganador == 'zero' %}Cero
+                        {% else %}Casino{% endif %}
+                    </span>
                 </div>
-                <span class="text-[10px] uppercase tracking-widest font-bold mt-1 text-vip-gold">
-                    {% if color_ganador == 'red' %}🔴 Rojo
-                    {% elif color_ganador == 'black' %}⚫ Negro
-                    {% else %}🟢 Cero Real{% endif %}
-                </span>
-            {% else %}
-                <!-- EN REPOSO / ESPERANDO GIRO -->
-                <span class="text-4xl animate-spin" style="animation-duration: 12s;">🎡</span>
-                <span class="text-[10px] uppercase tracking-wider text-vip-text/50 font-bold mt-2">Haz tu jugada</span>
-            {% endif %}
+            </div>
 
         </div>
 
-        <!-- RESULTADO DE LA RONDA -->
-        {% if resultado == 'win' %}
-            <div class="p-3 bg-green-950/80 border border-green-500 rounded-xl text-green-200 text-xs font-bold w-full my-1 animate-pulse">
-                🎉 ¡ACERTASTE! La Ruleta te premia con +{{ ganancia }} 🪙 de oro.
-            </div>
-        {% elif resultado == 'lose' %}
-            <div class="p-3 bg-red-950/80 border border-red-500 rounded-xl text-red-200 text-xs font-bold w-full my-1">
-                💀 Cayó en contra. Has perdido {{ ganancia }} 🪙 de oro.
-            </div>
-        {% endif %}
-
-        <!-- MENSAJES -->
-        {% if messages %}
-            {% for message in messages %}
-                <div class="p-2.5 rounded-xl text-xs text-center border w-full my-1 {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
-                    {{ message }}
+        <!-- BANNER DE RESULTADO -->
+        <div id="roulette-result-box" class="w-full min-h-[45px] flex items-center justify-center">
+            {% if resultado == 'win' %}
+                <div class="p-3 bg-green-950/80 border border-green-500 rounded-xl text-green-200 text-xs font-bold w-full animate-bounce shadow-lg">
+                    🎉 ¡ACERTASTE! La Ruleta te premia con +{{ ganancia }} 🪙 de oro.
                 </div>
-            {% endfor %}
-        {% endif %}
+            {% elif resultado == 'lose' %}
+                <div class="p-2.5 bg-red-950/80 border border-red-500 rounded-xl text-red-200 text-xs font-bold w-full">
+                    💀 Cayó en contra. Has perdido {{ ganancia }} 🪙 de oro.
+                </div>
+            {% endif %}
+        </div>
 
         <!-- FORMULARIO DE APUESTA -->
-        <form method="POST" class="w-full flex flex-col gap-3 mt-3">
+        <form method="POST" id="roulette-form" class="w-full flex flex-col gap-3 mt-2">
             {% csrf_token %}
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
             <input type="hidden" id="bet_choice_input" name="bet_choice" value="red">
 
-            <!-- SELECCIÓN DE COLOR / CASILLERO -->
+            <!-- SELECCIÓN DE COLOR -->
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5">1. Selecciona tu Casillero</label>
                 <div class="grid grid-cols-3 gap-2">
-                    <!-- Rojo -->
                     <button type="button" onclick="selectChoice('red')" id="btn-choice-red"
-                            class="py-3 rounded-xl border-2 border-red-500 bg-red-600/30 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-md">
+                            class="py-3 rounded-xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105">
                         <span class="text-base mb-0.5">🔴</span>
                         <span>Rojo</span>
                         <span class="text-[9px] font-mono opacity-80">x1.95</span>
                     </button>
 
-                    <!-- Negro -->
                     <button type="button" onclick="selectChoice('black')" id="btn-choice-black"
                             class="py-3 rounded-xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-neutral-500 transition-all">
                         <span class="text-base mb-0.5">⚫</span>
@@ -92,9 +87,8 @@
                         <span class="text-[9px] font-mono opacity-80">x1.95</span>
                     </button>
 
-                    <!-- Cero Verde -->
                     <button type="button" onclick="selectChoice('zero')" id="btn-choice-zero"
-                            class="py-3 rounded-xl border border-green-800 bg-green-950/40 text-green-300 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-green-500 transition-all">
+                            class="py-3 rounded-xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-green-500 transition-all">
                         <span class="text-base mb-0.5">🟢</span>
                         <span>Cero (0)</span>
                         <span class="text-[9px] font-mono text-yellow-400 font-bold">x14</span>
@@ -116,8 +110,8 @@
             </div>
 
             <!-- BOTÓN DE GIRO -->
-            <button type="submit" 
-                    class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] mt-1 flex items-center justify-center gap-2">
+            <button type="button" id="roulette-spin-btn" onclick="startRouletteSpin()" 
+                    class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] mt-1 flex items-center justify-center gap-2 active:scale-95 transition-all">
                 <span>🎡</span> Girar Ruleta Imperial
             </button>
         </form>
@@ -126,15 +120,16 @@
 
 </div>
 
+<!-- SCRIPT DE FÍSICA Y ROTACIÓN DE RULETA -->
 <script>
+    const tg = window.Telegram?.WebApp;
+
     function selectChoice(choice) {
         document.getElementById('bet_choice_input').value = choice;
-        
         const btnRed = document.getElementById('btn-choice-red');
         const btnBlack = document.getElementById('btn-choice-black');
         const btnZero = document.getElementById('btn-choice-zero');
 
-        // Reset borders
         btnRed.className = "py-3 rounded-xl border border-red-900 bg-red-950/30 text-red-300 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
         btnBlack.className = "py-3 rounded-xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
         btnZero.className = "py-3 rounded-xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
@@ -150,6 +145,50 @@
 
     function setBet(amount) {
         document.getElementById('bet_amount_input').value = amount;
+    }
+
+    // Animación de giro real si viene un resultado
+    const isRouletteResult = "{{ numero_ganador|default:'' }}" !== "";
+
+    if (isRouletteResult) {
+        const wheel = document.getElementById('roulette-wheel');
+        const resultBox = document.getElementById('roulette-result-box');
+        const originalHTML = resultBox.innerHTML;
+        resultBox.innerHTML = '<span class="text-xs text-vip-gold animate-pulse">La bola rueda sobre la ruleta...</span>';
+
+        // Ángulo de giro: 5 a 8 vueltas completas + ángulo aleatorio
+        const randomSpins = 360 * 5 + Math.floor(Math.random() * 360);
+        
+        wheel.style.transition = "transform 3s cubic-bezier(0.15, 0.9, 0.25, 1)";
+        wheel.style.transform = `rotate(${randomSpins}deg)`;
+
+        // Vibración háptica repetida mientras rueda
+        let ticks = 0;
+        const tickInterval = setInterval(() => {
+            tg?.HapticFeedback?.impactOccurred('light');
+            ticks++;
+            if (ticks > 8) clearInterval(tickInterval);
+        }, 300);
+
+        setTimeout(() => {
+            clearInterval(tickInterval);
+            resultBox.innerHTML = originalHTML;
+            const res = "{{ resultado }}";
+            if (res === 'win') {
+                tg?.HapticFeedback?.notificationOccurred('success');
+            } else {
+                tg?.HapticFeedback?.notificationOccurred('error');
+            }
+        }, 3000);
+    }
+
+    function startRouletteSpin() {
+        const btn = document.getElementById('roulette-spin-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> Lanzando Bola...';
+        btn.classList.add('opacity-50');
+        tg?.HapticFeedback?.impactOccurred('heavy');
+        document.getElementById('roulette-form').submit();
     }
 </script>
 {% endblock %}
