@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -89,15 +90,21 @@
 </head>
 <body class="font-sans antialiased flex flex-col items-center min-h-screen relative pb-28">
 
-    <!-- Header Imperial Superior con logo y resplandor -->
-    <header class="w-full max-w-md pt-5 pb-3 px-4 flex flex-col items-center z-10">
-        <div class="flex items-center gap-2">
-            <span class="text-xl filter drop-shadow-[0_0_8px_#D4AF37]">👑</span>
-            <h1 class="font-serif text-xl tracking-[0.22em] font-black uppercase text-gold-gradient glow-title">
-                Kingdom of Pleasure
-            </h1>
+   <!-- Header Imperial: Logo Grande sin fondo negro -->
+    <header class="w-full max-w-md pt-2 pb-1 px-2 flex flex-col items-center z-20">
+        <div class="relative w-full flex justify-center items-center py-1">
+            <!-- Halo de resplandor dorado sutil detrás del logo -->
+            <div class="absolute w-44 h-24 bg-gradient-to-r from-amber-600/25 via-yellow-500/35 to-amber-600/25 rounded-full blur-2xl pointer-events-none"></div>
+
+            <!-- Logo Grande con eliminación de fondo negro mediante mix-blend-mode -->
+            <img src="/media/logo.png" 
+                 alt="Kingdom of Pleasure" 
+                 class="h-28 sm:h-32 w-auto object-contain relative z-10 transition-transform duration-300 hover:scale-105 filter drop-shadow-[0_0_20px_rgba(212,175,55,0.6)]"
+                 style="mix-blend-mode: screen;">
         </div>
-        <div class="w-32 h-[1px] bg-gradient-to-r from-transparent via-vip-gold/60 to-transparent mt-2"></div>
+        
+        <!-- Línea divisoria imperial -->
+        <div class="w-48 h-[1px] bg-gradient-to-r from-transparent via-vip-gold/70 to-transparent mt-0.5"></div>
     </header>
 
     <!-- Contenedor Dinámico de Vistas -->

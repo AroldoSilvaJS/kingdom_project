@@ -204,6 +204,9 @@ MAILERS = {
 # Configuraciones de Telegram
 TELEGRAM_BOT_TOKEN = '8966798192:AAHTaCsfbW9Mlzrkoa8PiZJT-DrlryD4dP8'
 
+# Permitir que Telegram WebApp cargue el sitio en su iframe
+X_FRAME_OPTIONS = 'ALLOWALL'
+
 ==================================================
 ARCHIVO: .\config\urls.py
 ==================================================
@@ -362,14 +365,145 @@ class UserProfile(models.Model):
     def __str__(self):
         return f"{self.username or self.telegram_user_id} - {self.get_title_display()}"
 
+    
+class UserRole(models.Model):
+    ROLES = [
+        ('admin', 'Administrador Supremo 👑'),
+        ('moderador', 'Moderador Imperial 🛡️'),
+        ('idol', 'Musa / Creadora VIP 🌹'),
+        ('vip', 'Noble VIP 🥂'),
+        ('cliente', 'Súbdito Ordinario 🍷'),
+    ]
+    telegram_id = models.BigIntegerField(unique=True, verbose_name="ID de Telegram")
+    role = models.CharField(max_length=20, choices=ROLES, default='cliente')
+    is_banned = models.BooleanField(default=False, verbose_name="¿Baneado?")
+    ban_reason = models.CharField(max_length=255, blank=True, null=True, verbose_name="Motivo de Suspensión")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.telegram_id} - {self.role}"
+
+class KingdomSetting(models.Model):
+    """Guarda valores globales como bono diario, anuncio activo, etc."""
+    key = models.CharField(max_length=80, unique=True)
+    value = models.TextField()
+
+    @classmethod
+    def get_val(cls, key, default=''):
+        obj = cls.objects.filter(key=key).first()
+        return obj.value if obj else default
+
+    @classmethod
+    def set_val(cls, key, value):
+        cls.objects.update_or_create(key=key, defaults={'value': str(value)})
+
+class AdminAuditLog(models.Model):
+    """Registra qué admin hizo cada cambio"""
+    admin_tg_id = models.BigIntegerField()
+    action = models.CharField(max_length=50)
+    target_tg_id = models.BigIntegerField(blank=True, null=True)
+    details = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
 ==================================================
 ARCHIVO: .\core\tests.py
 ==================================================
 
-from django.test import TestCase
+from django.test import TestCase, Client
+from django.urls import reverse
+from economy.models import Wallet
+from core.models import UserProfile
+from idols.models import UserRole, IdolProfile, Post, PostUnlock
+from pets.models import Pet
 
-# Create your tests here.
+class KingdomOfPleasureTestSuite(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.admin_tg_id = '7474444797'
+        self.user_tg_id = '123456789'
+        
+        # 1. Crear billeteras de prueba
+        self.wallet = Wallet.objects.create(telegram_user_id=123456789, balance=200)
+        self.admin_wallet = Wallet.objects.create(telegram_user_id=7474444797, balance=1000)
 
+    def test_01_wallet_economy(self):
+        """Verifica que la billetera sume, reste y valide saldo correctamente"""
+        # Sumar fondos
+        self.wallet.add_funds(50)
+        self.assertEqual(self.wallet.balance, 250)
+        
+        # Restar fondos válidos
+        res = self.wallet.remove_funds(100)
+        self.assertTrue(res)
+        self.assertEqual(self.wallet.balance, 150)
+        
+        # Intentar gastar más de lo que tiene
+        res_fail = self.wallet.remove_funds(500)
+        self.assertFalse(res_fail)
+        self.assertEqual(self.wallet.balance, 150)
+
+    def test_02_pet_system(self):
+        """Verifica adopción, alimentación y subida de nivel de mascotas"""
+        pet = Pet.objects.create(
+            telegram_user_id=123456789,
+            name="Kuro",
+            species="pantera",
+            level=1,
+            xp=0,
+            energy=50
+        )
+        # Alimentar (+25 energía, +30 xp)
+        pet.feed()
+        self.assertEqual(pet.energy, 75)
+        self.assertEqual(pet.xp, 30)
+        self.assertEqual(pet.level, 1)
+
+    def test_03_admin_panel_security(self):
+        """Verifica que un usuario común NO pueda entrar al Panel VIP"""
+        # Intento de usuario normal (debe redirigir)
+        response_user = self.client.get(f'/admin-panel/?tg_id={self.user_tg_id}')
+        self.assertEqual(response_user.status_code, 302)
+
+        # Intento de ADMIN real (debe dar 200 OK)
+        response_admin = self.client.get(f'/admin-panel/?tg_id={self.admin_tg_id}')
+        self.assertEqual(response_admin.status_code, 200)
+
+    def test_04_profile_customization(self):
+        """Verifica que el Pasaporte Noble guarde títulos, marcos y temas"""
+        profile = UserProfile.objects.create(
+            telegram_user_id=123456789,
+            username="LordAlexander",
+            title="duque",
+            avatar_frame="gold",
+            motto="Gloria y Placer",
+            profile_theme="velvet"
+        )
+        self.assertEqual(profile.title, "duque")
+        self.assertEqual(profile.motto, "Gloria y Placer")
+
+    def test_05_vip_unlock_commission(self):
+        """Verifica el split financiero de fotos VIP (15% comisión / 85% Idol)"""
+        idol = IdolProfile.objects.create(
+            telegram_user_id=888888,
+            stage_name="Scarlett",
+            bio="Musa"
+        )
+        post = Post.objects.create(
+            idol=idol,
+            network='fans',
+            price=100,
+            caption="Exclusivo"
+        )
+        # Desbloqueo
+        response = self.client.post(reverse('idols:unlock_post', args=[post.id]), {
+            'tg_id': 123456789
+        })
+        self.wallet.refresh_from_db()
+        # El cliente gastó 100 🪙
+        self.assertEqual(self.wallet.balance, 100)
+        # La Idol recibió 85 🪙 (85%)
+        idol_wallet = Wallet.objects.get(telegram_user_id=888888)
+        self.assertEqual(idol_wallet.balance, 235) # 150 base + 85
 
 ==================================================
 ARCHIVO: .\core\urls.py
@@ -392,108 +526,242 @@ urlpatterns = [
 ARCHIVO: .\core\views.py
 ==================================================
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.db.models import Count, Sum
-from idols.models import UserRole, IdolProfile, Post, PostUnlock
-from economy.models import Wallet
-from core.models import UserProfile
+from django.db.models import F
+from django.utils import timezone
+from datetime import timedelta
+
+# Importa tus modelos existentes
+from core.models import UserRole, UserProfile, Wallet, DailyBonus, KingdomSetting, AdminAuditLog
+from idols.models import IdolProfile
 from pets.models import Pet
 
 # 👑 Tu ID Maestro de Telegram
 ADMIN_TG_ID = '7474444797'
 
-def main_menu(request):
-    # 1. Buscamos el ID en la URL, POST, o sesión
-    tg_id = request.GET.get('tg_id') or request.POST.get('tg_id') or request.session.get('tg_id')
+def admin_required(view_func):
+    """Decorador de seguridad: solo administradores pueden entrar."""
+    def _wrapped_view(request, *args, **kwargs):
+        tg_id = request.GET.get('tg_id') or request.POST.get('tg_id')
+        if not tg_id:
+            return render(request, 'core/error.html', {'mensaje': 'Acceso denegado: falta tg_id.'}, status=403)
+        try:
+            tg_id = int(tg_id)
+        except ValueError:
+            return render(request, 'core/error.html', {'mensaje': 'tg_id inválido.'}, status=400)
+            
+        if not UserRole.objects.filter(telegram_id=tg_id, role='admin').exists():
+            return render(request, 'core/error.html', {'mensaje': 'Acceso denegado: reservado a administradores.'}, status=403)
+        return view_func(request, tg_id, *args, **kwargs)
+    return _wrapped_view
+
+@admin_required
+def admin_panel(request, admin_tg_id):
+    """Panel de Administrador Supremo con control total."""
+    if request.method == "POST":
+        accion = request.POST.get('accion')
+
+        # 1. MODIFICAR SALDO INDIVIDUAL (+, -, o fijar)
+        if accion == 'adjust_gold':
+            target_id = int(request.POST.get('target_id'))
+            mode = request.POST.get('mode', 'add')
+            amount = int(request.POST.get('amount', 0))
+            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=target_id)
+            
+            if mode == 'add':
+                wallet.balance = F('balance') + amount
+                msg = f"+{amount}🪙 otorgados a {target_id}"
+            elif mode == 'subtract':
+                wallet.balance = max(0, wallet.balance - amount)
+                msg = f"-{amount}🪙 retirados a {target_id}"
+            else:
+                wallet.balance = max(0, amount)
+                msg = f"Saldo fijado en {amount}🪙 para {target_id}"
+            wallet.save()
+            
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='gold_adjust', target_tg_id=target_id, details=msg)
+            messages.success(request, msg)
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 2. LLUVIA DE ORO MASIVA (a todos los no baneados)
+        elif accion == 'mass_gold':
+            amount = int(request.POST.get('amount', 0))
+            if amount > 0:
+                banned_ids = list(UserRole.objects.filter(is_banned=True).values_list('telegram_id', flat=True))
+                count = Wallet.objects.exclude(telegram_user_id__in=banned_ids).update(balance=F('balance') + amount)
+                AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='mass_gold', details=f"Lluvia: +{amount}🪙 a {count} usuarios")
+                messages.success(request, f"✨ Lluvia consumada: +{amount}🪙 entregados a {count} usuarios.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 3. CAMBIAR ROL (admin, moderador, idol, vip, cliente)
+        elif accion == 'change_role':
+            target_id = int(request.POST.get('target_id'))
+            new_role = request.POST.get('new_role')
+            UserRole.objects.filter(telegram_id=target_id).update(role=new_role)
+            messages.success(request, f"👑 Rol de {target_id} cambiado a {new_role}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 4. BANEAR O DESBANEAR
+        elif accion == 'toggle_ban':
+            target_id = int(request.POST.get('target_id'))
+            user = get_object_or_404(UserRole, telegram_id=target_id)
+            user.is_banned = not user.is_banned
+            user.ban_reason = request.POST.get('ban_reason', 'Sanción disciplinaria') if user.is_banned else None
+            user.save()
+            messages.warning(request, f"⚖️ Usuario {target_id} {'BANEADO' if user.is_banned else 'DESBANEADO'}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 5. RESETEAR COOLDOWN DE BONO (24H) A UN USUARIO
+        elif accion == 'reset_bonus':
+            target_id = int(request.POST.get('target_id'))
+            DailyBonus.objects.filter(telegram_user_id=target_id).update(last_claimed=timezone.now() - timedelta(days=2))
+            messages.success(request, f"⏱️ Cooldown de bono reseteado para {target_id}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 6. RESETEAR COOLDOWN DE BONO A TODOS
+        elif accion == 'reset_all_bonuses':
+            DailyBonus.objects.all().update(last_claimed=timezone.now() - timedelta(days=2))
+            messages.success(request, "🎉 Cooldown de bono reseteado para todo el reino.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 7. ANUNCIO GLOBAL (BANNER PÚBLICO)
+        elif accion == 'broadcast_message':
+            txt = request.POST.get('broadcast_text', '').strip()
+            KingdomSetting.set_val('broadcast_message', txt)
+            KingdomSetting.set_val('broadcast_active', 'true' if request.POST.get('is_active') == '1' else 'false')
+            messages.success(request, "📢 Anuncio global actualizado.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+    # =========================================================================
+    # LECTURA OPTIMIZADA: 1 sola consulta agrupada para no saturar la BD
+    # =========================================================================
+    usuarios_roles = UserRole.objects.all().order_by('-id')
+    user_ids = [u.telegram_id for u in usuarios_roles]
+
+    wallets_map = {w.telegram_user_id: w.balance for w in Wallet.objects.filter(telegram_user_id__in=user_ids)}
+    profiles_map = {p.telegram_user_id: p for p in UserProfile.objects.filter(telegram_user_id__in=user_ids)}
     
-    # 2. Si el usuario acaba de elegir su rol:
-    if request.method == 'POST':
-        elegido = request.POST.get('role')
-        if elegido and tg_id and tg_id != "None":
-            UserRole.objects.update_or_create(
-                telegram_id=tg_id,
-                defaults={'role': elegido}
-            )
-            request.session['tg_id'] = tg_id
-            return redirect(f"{request.path}?tg_id={tg_id}")
+    cooldown_24h = timezone.now() - timedelta(hours=24)
+    bonuses_map = {b.telegram_user_id: (b.last_claimed > cooldown_24h) for b in DailyBonus.objects.filter(telegram_user_id__in=user_ids)}
 
-    # 3. Buscamos si este usuario ya tiene rol:
-    usuario = None
-    if tg_id and tg_id != "None":
-        request.session['tg_id'] = tg_id
-        usuario = UserRole.objects.filter(telegram_id=tg_id).first()
-    
-    # 4. Si NO tiene rol, le mostramos la pantalla de elección:
-    if not usuario:
-        return render(request, 'idols/choose_role.html', {'tg_id': tg_id})
+    total_oro = 0
+    total_bans = 0
+    for u in usuarios_roles:
+        u.balance = wallets_map.get(u.telegram_id, 0)
+        u.profile = profiles_map.get(u.telegram_id)
+        u.has_bonus_cooldown = bonuses_map.get(u.telegram_id, False)
+        total_oro += u.balance
+        if u.is_banned:
+            total_bans += 1
 
-    # 5. Verificamos si el que entró eres TÚ
-    es_admin = (tg_id == ADMIN_TG_ID)
+    idols = IdolProfile.objects.all()
+    broadcast_msg = KingdomSetting.get_val('broadcast_message', '')
+    broadcast_active = KingdomSetting.get_val('broadcast_active', 'false') == 'true'
 
-    # 6. Lo dejamos entrar al menú:
-    return render(request, 'core/menu.html', {
-        'tg_id': tg_id,
-        'role': usuario.role,
-        'is_admin': es_admin  # <- Enviamos la llave al HTML
+    return render(request, 'core/admin_panel.html', {
+        'admin_tg_id': admin_tg_id,
+        'usuarios': usuarios_roles,
+        'idols': idols,
+        'total_usuarios': len(usuarios_roles),
+        'total_oro': total_oro,
+        'total_baneados': total_bans,
+        'broadcast_msg': broadcast_msg,
+        'broadcast_active': broadcast_active,
     })
     
 def admin_panel(request):
-    # Buscamos quién intenta entrar
     tg_id = request.GET.get('tg_id') or request.session.get('tg_id')
     
-    # CANDADO: Si no eres tú, patada de vuelta al inicio
+    # CANDADO IMPERIAL
     if str(tg_id) != ADMIN_TG_ID:
         return redirect(f"/?tg_id={tg_id}")
         
-    # --- NUEVA LÓGICA DE PODERES ---
+    # --- PROCESAMIENTO DE ACCIONES Y DECRETOS ---
     if request.method == 'POST':
         action = request.POST.get('action')
         target_id = request.POST.get('target_id')
         
-        if target_id:
+        # 1. DECRETO MASIVO: Lluvia de Oro a todos los ciudadanos
+        if action == 'rain_gold':
+            try:
+                amount = int(request.POST.get('amount', 50))
+                if amount > 0:
+                    for w in Wallet.objects.all():
+                        w.add_funds(amount)
+                    messages.success(request, f"👑 ¡Decreto ejecutado! Se han otorgado {amount} 🪙 a TODOS los ciudadanos del Reino.")
+            except ValueError:
+                pass
+
+        elif target_id:
             usuario_target = UserRole.objects.filter(telegram_id=target_id).first()
-            if usuario_target:
-                # Si apretaste "Cambiar Rol"
-                if action == 'toggle_role':
-                    usuario_target.role = 'cliente' if usuario_target.role == 'idol' else 'idol'
-                    usuario_target.save()
-            # Si apretaste "Expulsar"
-                elif action == 'delete':
-                    usuario_target.delete()
-                
-                # --- AGREGAR DESDE AQUÍ (GESTIÓN DE ORO) ---
-                elif action in ['add_gold', 'remove_gold']:
-                    try:
-                        amount = int(request.POST.get('amount', 0))
-                        if amount > 0:
-                            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=target_id)
-                            if action == 'add_gold':
-                                wallet.add_funds(amount)
-                            elif action == 'remove_gold':
-                                wallet.remove_funds(amount)
-                    except ValueError:
-                        pass
-                # --- HASTA AQUÍ ---
-                
-        
-        # Recargamos la página para ver los cambios
+            
+            # Cambiar Rol
+            if action == 'toggle_role' and usuario_target:
+                usuario_target.role = 'cliente' if usuario_target.role == 'idol' else 'idol'
+                usuario_target.save()
+                messages.success(request, f"Rol de {target_id} cambiado a {usuario_target.role.upper()}.")
+
+            # Expulsar
+            elif action == 'delete' and usuario_target:
+                usuario_target.delete()
+                messages.info(request, f"Ciudadano {target_id} expulsado del Reino.")
+
+            # Inyectar / Quitar Oro
+            elif action in ['add_gold', 'remove_gold']:
+                try:
+                    amount = int(request.POST.get('amount', 0))
+                    if amount > 0:
+                        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=target_id)
+                        if action == 'add_gold':
+                            wallet.add_funds(amount)
+                            messages.success(request, f"+{amount} 🪙 inyectados al usuario {target_id}.")
+                        elif action == 'remove_gold':
+                            wallet.remove_funds(amount)
+                            messages.warning(request, f"-{amount} 🪙 retirados al usuario {target_id}.")
+                except ValueError:
+                    pass
+
+            # Resetear Bono Diario (para que pueda volver a reclamar)
+            elif action == 'reset_bonus':
+                wallet = Wallet.objects.filter(telegram_user_id=target_id).first()
+                if wallet:
+                    wallet.last_bonus_claim = None
+                    wallet.save()
+                    messages.success(request, f"Bono diario de {target_id} restablecido.")
+
         return redirect(f"/admin-panel/?tg_id={tg_id}")
-    # -------------------------------
-    # Traemos a todos los usuarios
+
+    # --- MÉTRICAS Y DATOS EN VIVO (1 SOLA CONSULTA POR MODELO) ---
     todos_los_usuarios = UserRole.objects.all()
-
-    # 1 sola consulta rápida para todas las billeteras (guardando la clave como texto):
+    
+    # Mapeo rápido de Billeteras y Perfiles Nobiliarios
     wallets = {str(w.telegram_user_id): w.balance for w in Wallet.objects.all()}
-
-    # Asignamos el saldo a cada usuario
+    profiles = {str(p.telegram_user_id): p for p in UserProfile.objects.all()}
+    
     for u in todos_los_usuarios:
         u.balance = wallets.get(str(u.telegram_id), 0)
+        prof = profiles.get(str(u.telegram_id))
+        u.username_display = prof.username if prof and prof.username else "Anónimo"
+        u.title_display = prof.get_title_display() if prof else "Curioso Clandestino 🍷"
 
-    # El return debe estar AFUERA del for (alineado con 'todos_los_usuarios'):
+    # Estadísticas Globales del Reino
+    total_gold = Wallet.objects.aggregate(total=Sum('balance'))['total'] or 0
+    total_users = todos_los_usuarios.count()
+    total_idols = IdolProfile.objects.count()
+    total_unlocks = PostUnlock.objects.count()
+    total_pets = Pet.objects.count()
+
     return render(request, 'core/admin_panel.html', {
         'usuarios': todos_los_usuarios,
-        'tg_id': tg_id
+        'tg_id': tg_id,
+        'metrics': {
+            'total_gold': total_gold,
+            'total_users': total_users,
+            'total_idols': total_idols,
+            'total_unlocks': total_unlocks,
+            'total_pets': total_pets,
+        }
     })
 
 
@@ -531,7 +799,8 @@ def leaderboard(request):
     })
 
 def my_profile(request):
-    tg_id = request.GET.get('tg_id') or request.POST.get('tg_id') or request.session.get('tg_id')
+    raw_id = request.GET.get('tg_id') or request.POST.get('tg_id') or request.session.get('tg_id')
+    tg_id = raw_id if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null'] else None
     tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or 'Noble Anónimo'
     
     if not tg_id:
@@ -1262,7 +1531,6 @@ urlpatterns = [
     path('feed/', views.social_feed, name='social_feed'),
     path('feed/unlock/<int:post_id>/', views.unlock_post, name='unlock_post'),
     path('feed/new/', views.create_post, name='create_post'), # <- AÑADIR ESTA
-    path('feed/unlock/<int:post_id>/', views.unlock_post, name='unlock_post'),
     path('feed/like/<int:post_id>/', views.toggle_like, name='toggle_like'),
     path('collection/', views.my_collection, name='my_collection'),
     path('feed/tip/<int:post_id>/', views.send_tip, name='send_tip'),
@@ -1390,8 +1658,9 @@ def idol_edit(request, idol_id):
         idol.bio = request.POST.get('bio', idol.bio)
         idol.tagline = request.POST.get('tagline', idol.tagline)
         idol.status = request.POST.get('status', idol.status)
-        idol.theme_color = request.POST.get('theme_color', idol.theme_color)
-        idol.specialties = request.POST.get('specialties', idol.specialties)
+        idol.aura_color = request.POST.get('aura_color', idol.aura_color)
+        idol.specialty = request.POST.get('specialty', idol.specialty)
+        idol.welcome_message = request.POST.get('welcome_message', idol.welcome_message)
         
         if 'photo' in request.FILES:
             idol.photo = request.FILES['photo']
@@ -1506,38 +1775,25 @@ def idol_detail(request, idol_id):
 
 def social_feed(request):
     tg_id = request.GET.get('tg_id') or request.POST.get('tg_id')
+    tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or 'Ciudadano VIP'
     
-    # Traemos todos los posts, del más nuevo al más viejo
     posts = Post.objects.all().select_related('idol').prefetch_related('comments')
     
-    # Lista de IDs de posts VIP que este usuario ya pagó o que son de sus propias Idols
     unlocked_ids = []
+    liked_ids = []
+    
     if tg_id:
-        # Posts pagados por el cliente
-        pagados = list(PostUnlock.objects.filter(
-            client_telegram_id=tg_id
-        ).values_list('post_id', flat=True))
-        
-        # Posts que le pertenecen a las Idols del usuario actual (gratis para el creador)
-        propios = list(Post.objects.filter(
-            idol__telegram_user_id=tg_id
-        ).values_list('id', flat=True))
-        
+        pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
+        propios = list(Post.objects.filter(idol__telegram_user_id=tg_id).values_list('id', flat=True))
         unlocked_ids = set(pagados + propios)
-    
-    # IDs de posts a los que este usuario ya dio like
-    
-        liked_ids = list(PostLike.objects.filter(
-            client_telegram_id=tg_id
-        ).values_list('post_id', flat=True))
-
-        tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or 'Ciudadano VIP'
+        
+        liked_ids = list(PostLike.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
         
     return render(request, 'idols/feed.html', {
         'posts': posts,
         'tg_id': tg_id,
         'unlocked_ids': list(unlocked_ids),
-        'liked_ids': liked_ids,  # <- AGREGAR ESTA LÍNEA
+        'liked_ids': liked_ids,
         'tg_username': tg_username
     })
 
@@ -1816,6 +2072,17 @@ class Pet(models.Model):
     last_fed = models.DateTimeField(auto_now_add=True)
     last_petted = models.DateTimeField(auto_now_add=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def xp_to_next_level(self):
+        return self.level * 100
+
+    @property
+    def xp_percentage(self):
+        needed = self.xp_to_next_level
+        if needed <= 0:
+            return 0
+        return min(100, int((self.xp / needed) * 100))
 
     def xp_needed_for_next_level(self):
         return self.level * 100
@@ -2162,85 +2429,214 @@ ARCHIVO: .\templates\base.html
 ARCHIVO: .\templates\core\admin_panel.html
 ==================================================
 
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sala del Trono | Kingdom of Pleasure</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#080511] text-stone-100 min-h-screen p-4 sm:p-6 font-sans antialiased">
 
-{% block content %}
-<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%]">
-    <h2 class="text-2xl font-black text-yellow-500 text-center mb-2 tracking-widest">👑 PANEL VIP</h2>
-    <p class="text-center text-gray-400 text-sm mb-4">Gestión de Usuarios de Kingdom of Pleasure</p>
-    
-    <!-- Botón para volver -->
-    <button onclick="window.location.href='/?tg_id={{ tg_id }}'" class="mb-2 bg-gray-800 border border-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 w-full transition-colors flex items-center justify-center gap-2">
-        <span>⬅️</span> Volver al Menú
-    </button>
-
-    <div class="w-full h-px bg-vip-gold/30 my-2"></div>
-
-    <!-- Lista de Usuarios -->
-    <h3 class="text-lg font-bold text-white mb-2">Ciudadanos del Reino:</h3>
-    
-    <div class="flex flex-col gap-3">
-        {% for user in usuarios %}
-        <div class="bg-black/50 border border-vip-gold/30 p-4 rounded-lg flex flex-col gap-2 shadow-[0_0_10px_rgba(212,175,55,0.05)]">
-            <div class="flex justify-between items-start">
-                <div>
-                    <p class="text-white font-bold text-sm">ID: {{ user.telegram_id }}</p>
-                    <p class="text-xs text-gray-400 mt-1">Rol actual: 
-                        <span class="{% if user.role == 'idol' %}text-purple-400{% else %}text-vip-gold{% endif %} font-bold uppercase tracking-wider">
-                            {{ user.role }}
-                        </span>
-                    </p>
-                    <p class="text-xs text-vip-gold mt-1 font-semibold">Bóveda: 🪙 {{ user.balance }}</p>
-                </div>
-            </div>
-            
-            <!-- CONTROLES DE ADMIN -->
-            <div class="flex gap-2 mt-2 pt-3 border-t border-vip-gold/10">
-                <!-- Botón Cambiar Rol -->
-                <form method="POST" class="flex-1">
-                    {% csrf_token %}
-                    <input type="hidden" name="target_id" value="{{ user.telegram_id }}">
-                    <input type="hidden" name="action" value="toggle_role">
-                    <button type="submit" class="w-full bg-blue-900/40 border border-blue-500/50 text-blue-200 py-2 rounded text-xs hover:bg-blue-600 hover:text-white transition-colors font-semibold tracking-wider">
-                        🔄 CAMBIAR ROL
-                    </button>
-                </form>
-                
-                <!-- Botón Expulsar -->
-                <form method="POST" class="flex-1" onsubmit="return confirm('¿Estás seguro de expulsar a este usuario del reino?');">
-                    {% csrf_token %}
-                    <input type="hidden" name="target_id" value="{{ user.telegram_id }}">
-                    <input type="hidden" name="action" value="delete">
-                    <button type="submit" class="w-full bg-red-900/40 border border-red-500/50 text-red-200 py-2 rounded text-xs hover:bg-red-600 hover:text-white transition-colors font-semibold tracking-wider">
-                        ⚔️ EXPULSAR
-                    </button>
-                </form>
-            </div>
-
-            <!-- Inyectar / Quitar Oro VIP -->
-            <form method="POST" class="flex items-center gap-2 mt-2 pt-2 border-t border-vip-gold/10">
-                {% csrf_token %}
-                <input type="hidden" name="target_id" value="{{ user.telegram_id }}">
-                <input type="number" name="amount" min="1" placeholder="Oro" required
-                       class="w-24 bg-vip-base border border-vip-gold/40 text-white text-xs px-2 py-1.5 rounded focus:outline-none focus:border-vip-gold text-center">
-                <button type="submit" name="action" value="add_gold" 
-                        class="flex-1 bg-yellow-600/30 border border-vip-gold text-vip-gold py-1.5 rounded text-xs hover:bg-vip-gold hover:text-black transition-colors font-bold tracking-wider">
-                    ➕ INYECTAR
-                </button>
-                <button type="submit" name="action" value="remove_gold" 
-                        class="flex-1 bg-red-900/30 border border-red-500/50 text-red-300 py-1.5 rounded text-xs hover:bg-red-600 hover:text-white transition-colors font-bold tracking-wider">
-                    ➖ QUITAR
-                </button>
-            </form>
+  <!-- Notificaciones de Django -->
+  {% if messages %}
+    <div class="fixed top-4 right-4 z-50 space-y-2 max-w-md">
+      {% for message in messages %}
+        <div class="p-3.5 rounded-xl border bg-[#140b25]/95 border-amber-500/50 text-amber-200 text-xs shadow-2xl flex justify-between items-center">
+          <span>{{ message }}</span>
+          <button onclick="this.parentElement.remove()" class="ml-2 text-stone-400 hover:text-white">&times;</button>
         </div>
-        {% empty %}
-        <div class="text-center py-6 text-gray-500 italic">
-            Aún no hay ciudadanos registrados en la base de datos.
-        </div>
-        {% endfor %}
+      {% endfor %}
     </div>
-</div>
-{% endblock %}
+  {% endif %}
+
+  <!-- Encabezado -->
+  <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-purple-900/50 pb-4">
+    <div>
+      <h1 class="text-xl font-bold text-amber-300">👑 SALA DEL TRONO IMPERIAL</h1>
+      <p class="text-xs text-purple-300">Centro de Mando Administrativo & Censo del Reino</p>
+    </div>
+    <div class="text-xs bg-purple-950/80 px-3 py-1.5 rounded-xl border border-purple-800 text-stone-300">
+      Admin Telegram ID: <strong class="text-amber-400">{{ admin_tg_id }}</strong>
+    </div>
+  </header>
+
+  <!-- Métricas Rápidas -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-[#120a24] p-4 rounded-2xl border border-purple-900/40">
+      <span class="text-[11px] text-stone-400 uppercase font-bold">Total Usuarios</span>
+      <p class="text-2xl font-bold text-white mt-1">{{ total_usuarios }}</p>
+    </div>
+    <div class="bg-[#120a24] p-4 rounded-2xl border border-amber-900/40">
+      <span class="text-[11px] text-amber-300 uppercase font-bold">Oro en Circulación</span>
+      <p class="text-2xl font-bold text-amber-300 mt-1">{{ total_oro }} 🪙</p>
+    </div>
+    <div class="bg-[#120a24] p-4 rounded-2xl border border-rose-900/40">
+      <span class="text-[11px] text-rose-300 uppercase font-bold">Musas / Idols</span>
+      <p class="text-2xl font-bold text-rose-300 mt-1">{{ idols.count }} 🌹</p>
+    </div>
+    <div class="bg-[#120a24] p-4 rounded-2xl border border-stone-800">
+      <span class="text-[11px] text-stone-400 uppercase font-bold">En Mazmorras (Bans)</span>
+      <p class="text-2xl font-bold text-rose-400 mt-1">{{ total_baneados }} ⛓️</p>
+    </div>
+  </div>
+
+  <!-- Decretos Masivos -->
+  <div class="bg-[#140b29] p-5 rounded-3xl border border-amber-500/30 mb-6 space-y-4">
+    <h3 class="font-bold text-amber-300 text-sm">⚡ Decretos Imperiales Inmediatos</h3>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      
+      <!-- Lluvia de oro -->
+      <form method="POST" class="bg-[#0b0517] p-3.5 rounded-2xl border border-purple-900/40 space-y-2">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="mass_gold">
+        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+        <span class="text-xs font-bold text-amber-300">🌧️ Lluvia de Oro Masiva</span>
+        <div class="flex gap-2">
+          <input type="number" name="amount" value="100" min="1" class="w-24 bg-black/60 border border-purple-800 rounded-lg px-2 py-1 text-xs text-amber-300 font-bold">
+          <button type="submit" onclick="return confirm('¿Confirmas dar oro a TODOS los usuarios activos?')" class="flex-1 bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold py-1 rounded-lg">
+            Promulgar
+          </button>
+        </div>
+      </form>
+
+      <!-- Reset Bono Global -->
+      <form method="POST" class="bg-[#0b0517] p-3.5 rounded-2xl border border-purple-900/40 flex flex-col justify-between">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="reset_all_bonuses">
+        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+        <div>
+          <span class="text-xs font-bold text-purple-300">⏱️ Perdón de Cooldown Global</span>
+          <p class="text-[11px] text-stone-400 mt-1">Permite a todos reclamar el bono diario de 24h ahora.</p>
+        </div>
+        <button type="submit" onclick="return confirm('¿Resetear cooldown de bono para todos?')" class="mt-2 w-full bg-purple-900/80 hover:bg-purple-800 text-purple-200 text-xs font-bold py-1 rounded-lg border border-purple-700">
+          Resetear Cooldowns
+        </button>
+      </form>
+
+      <!-- Anuncio / Broadcast -->
+      <form method="POST" class="bg-[#0b0517] p-3.5 rounded-2xl border border-purple-900/40 space-y-2">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="broadcast_message">
+        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+        <div class="flex justify-between items-center">
+          <span class="text-xs font-bold text-amber-300">📢 Decreto Público</span>
+          <label class="text-[10px] text-stone-300 flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" name="is_active" value="1" {% if broadcast_active %}checked{% endif %}> Activo
+          </label>
+        </div>
+        <input type="text" name="broadcast_text" value="{{ broadcast_msg }}" placeholder="Anuncio visible..." class="w-full bg-black/60 border border-purple-800 rounded-lg px-2 py-1 text-xs text-stone-200">
+        <button type="submit" class="w-full bg-amber-700/80 hover:bg-amber-600 text-white text-xs font-bold py-1 rounded-lg">
+          Actualizar Anuncio
+        </button>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- Censo de Usuarios con Buscador -->
+  <div class="bg-[#120a24] p-5 rounded-3xl border border-purple-900/50 shadow-xl space-y-4">
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
+      <h2 class="text-base font-bold text-amber-300">Censo de Súbditos ({{ total_usuarios }})</h2>
+      <input type="text" id="searchInput" onkeyup="filtrarUsuarios()" placeholder="🔍 Buscar por Telegram ID o rol..." class="w-full sm:w-72 bg-[#0a0515] border border-purple-800 rounded-xl px-3 py-1.5 text-xs text-stone-200 focus:outline-none focus:border-amber-400">
+    </div>
+
+    <!-- Tabla -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs text-left text-stone-300">
+        <thead class="bg-[#0b0517] text-stone-400 font-semibold border-b border-purple-900/50">
+          <tr>
+            <th class="p-3">Telegram ID</th>
+            <th class="p-3">Rol</th>
+            <th class="p-3">Fortuna</th>
+            <th class="p-3">Bono 24h</th>
+            <th class="p-3">Estado</th>
+            <th class="p-3 text-right">Acciones Rápidas</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-purple-950/60">
+          {% for u in usuarios %}
+          <tr class="user-row hover:bg-purple-950/20 transition-all" data-search="{{ u.telegram_id }} {{ u.role }}">
+            <td class="p-3 font-mono font-bold text-white">{{ u.telegram_id }}</td>
+            <td class="p-3">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase {% if u.role == 'admin' %}bg-amber-500/20 text-amber-300 border border-amber-500/40{% elif u.role == 'idol' %}bg-rose-500/20 text-rose-300 border border-rose-500/40{% else %}bg-purple-900/40 text-purple-200{% endif %}">
+                {{ u.role }}
+              </span>
+            </td>
+            <td class="p-3 font-bold text-amber-300">{{ u.balance }} 🪙</td>
+            <td class="p-3">
+              {% if u.has_bonus_cooldown %}
+                <span class="text-rose-400 text-[10px]">⏳ En Espera</span>
+              {% else %}
+                <span class="text-emerald-400 text-[10px]">✅ Disponible</span>
+              {% endif %}
+            </td>
+            <td class="p-3">
+              {% if u.is_banned %}
+                <span class="px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 text-[10px] font-bold">BANEADO</span>
+              {% else %}
+                <span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 text-[10px] font-bold">ACTIVO</span>
+              {% endif %}
+            </td>
+            <td class="p-3 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                
+                <!-- +100 Oro Rápido -->
+                <form method="POST" class="inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="accion" value="adjust_gold">
+                  <input type="hidden" name="mode" value="add">
+                  <input type="hidden" name="amount" value="100">
+                  <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
+                  <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+                  <button type="submit" class="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/40 text-[11px] font-bold">
+                    +100🪙
+                  </button>
+                </form>
+
+                <!-- Reset Bono Individual -->
+                <form method="POST" class="inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="accion" value="reset_bonus">
+                  <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
+                  <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+                  <button type="submit" class="px-2 py-1 rounded bg-purple-900/40 hover:bg-purple-800 text-purple-200 border border-purple-700 text-[11px]">
+                    ⏱️ Reset
+                  </button>
+                </form>
+
+                <!-- Ban / Desban -->
+                <form method="POST" class="inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="accion" value="toggle_ban">
+                  <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
+                  <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+                  <button type="submit" onclick="return confirm('¿Cambiar estado de baneo de este usuario?')" class="px-2 py-1 rounded {% if u.is_banned %}bg-emerald-900/50 text-emerald-200 border border-emerald-700{% else %}bg-rose-900/50 text-rose-200 border border-rose-700{% endif %} text-[11px] font-bold">
+                    {% if u.is_banned %}Desbanear{% else %}Banear{% endif %}
+                  </button>
+                </form>
+
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function filtrarUsuarios() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      document.querySelectorAll('.user-row').forEach(r => {
+        const text = r.getAttribute('data-search') || '';
+        r.style.display = text.toLowerCase().includes(q) ? '' : 'none';
+      });
+    }
+  </script>
+</body>
+</html>
 
 ==================================================
 ARCHIVO: .\templates\core\leaderboard.html
@@ -2310,7 +2706,21 @@ ARCHIVO: .\templates\core\leaderboard.html
         </h3>
 
         <div class="flex flex-col gap-2">
-            {% for noble in top_wallets %}
+        {% for noble in magnates %}
+        <div class="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-vip-gold/20">
+            <div class="flex items-center gap-3">
+                <span class="w-6 text-center font-serif font-black text-sm">#{{ forloop.counter }}</span>
+                <div>
+                    <h4 class="font-bold text-white text-xs font-mono">Noble ...{{ noble.telegram_id }}</h4>
+                    <span class="text-[9px] text-vip-text/50 uppercase">{{ noble.titulo }}</span>
+                </div>
+            </div>
+            <div class="text-right flex items-center gap-1">
+                <span class="font-serif font-bold text-vip-gold text-xs font-mono">{{ noble.balance }}</span>
+                <span class="text-[10px]">🪙</span>
+            </div>
+        </div>
+        {% empty %}
             <div class="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-vip-gold/20">
                 <div class="flex items-center gap-3">
                     <span class="w-6 text-center font-serif font-black text-sm {% if forloop.counter == 1 %}text-yellow-400{% elif forloop.counter == 2 %}text-gray-300{% elif forloop.counter == 3 %}text-amber-600{% else %}text-vip-text/50{% endif %}">
@@ -2358,14 +2768,12 @@ ARCHIVO: .\templates\core\menu.html
             Elige tu experiencia dentro del Reino del Placer.
         </p>
 
-        <!-- Agrega este botón o enlace dentro de la tarjeta de bienvenida o debajo del Estatus -->
-        <a href="{% url 'core:my_profile' %}?tg_id={{ tg_id }}" 
-         class="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-950/80 border border-purple-600/50 text-amber-300 text-xs font-semibold shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:brightness-110 transition-all">
-         <span>👑</span>
-        <span>Personalizar Mi Pasaporte Noble</span>
-        <span>→</span>
-       </a>
-
+        <button onclick="navGo('{% url 'core:my_profile' %}')" 
+        class="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-950/80 border border-purple-600/50 text-amber-300 text-xs font-semibold shadow-[0_0_15px_rgba(168,85,247,0.3)] hover:brightness-110 active:scale-95 transition-all">
+          <span>👑</span>
+          <span>Personalizar Mi Pasaporte Noble</span>
+          <span>→</span>
+      </button>
         <!-- Píldora de Rol -->
         <div class="mt-3 inline-flex items-center gap-1.5 bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full text-xs">
             <span class="text-vip-gold">Estatus:</span>
@@ -2608,6 +3016,36 @@ ARCHIVO: .\templates\core\profile.html
                     <option value="conde" {% if profile.title == 'conde' %}selected{% endif %}>🪙 Conde de la Fortuna</option>
                     <option value="duque" {% if profile.title == 'duque' %}selected{% endif %}>👑 Duque Imperial</option>
                     <option value="archiduque" {% if profile.title == 'archiduque' %}selected{% endif %}>💎 Archiduque del Placer</option>
+                </select>
+            </div>
+
+            <!-- Lema o Frase Insignia -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Lema o Frase Insignia</label>
+                <input type="text" name="motto" value="{{ profile.motto|default:'' }}" placeholder="Ej: «La discreción es el mayor de los lujos»"
+           class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+            </div>
+
+            <!-- Insignia Nobiliaria -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Insignia Honorífica</label>
+                <select name="vip_badge" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                    <option value="none" {% if profile.vip_badge == 'none' %}selected{% endif %}>✨ Sin Insignia</option>
+                    <option value="high_roller" {% if profile.vip_badge == 'high_roller' %}selected{% endif %}>🎰 High Roller Casino</option>
+                    <option value="mecenas" {% if profile.vip_badge == 'mecenas' %}selected{% endif %}>💎 Mecenas Imperial</option>
+                    <option value="romantico" {% if profile.vip_badge == 'romantico' %}selected{% endif %}>🌹 Caballero Devoto</option>
+                    <option value="coleccionista" {% if profile.vip_badge == 'coleccionista' %}selected{% endif %}>🐾 Domador de Bestias</option>
+                </select>
+            </div>
+
+            <!-- Tema de Fondo del Pasaporte -->
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Ambiente del Pasaporte</label>
+                <select name="profile_theme" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                    <option value="velvet" {% if profile.profile_theme == 'velvet' %}selected{% endif %}>Terciopelo Imperial (Púrpura & Oro)</option>
+                    <option value="obsidian" {% if profile.profile_theme == 'obsidian' %}selected{% endif %}>Obsidiana & Neón (Oscuro Profundo)</option>
+                    <option value="crimson" {% if profile.profile_theme == 'crimson' %}selected{% endif %}>Carmesí Clandestino (Rojo Pasión)</option>
+                    <option value="champagne" {% if profile.profile_theme == 'champagne' %}selected{% endif %}>Champagne Real (Dorado Radiante)</option>
                 </select>
             </div>
 
@@ -4128,12 +4566,11 @@ ARCHIVO: .\templates\idols\feed.html
         }
     }
 
-    // Modal de Propinas
     function openTipModal(postId, idolName) {
-        const form = document.getElementById('tip-form');
-        form.action = `/idols/post/${postId}/tip/`;
-        document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
-        document.getElementById('tip-modal').classList.remove('hidden');
+    const form = document.getElementById('tip-form');
+    form.action = `/idols/feed/tip/${postId}/`; // ✅ RUTA REAL CORREGIDA
+    document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
+    document.getElementById('tip-modal').classList.remove('hidden');
     }
 
     function closeTipModal() {

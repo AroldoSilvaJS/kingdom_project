@@ -66,3 +66,43 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.username or self.telegram_user_id} - {self.get_title_display()}"
+
+    
+class UserRole(models.Model):
+    ROLES = [
+        ('admin', 'Administrador Supremo 👑'),
+        ('moderador', 'Moderador Imperial 🛡️'),
+        ('idol', 'Musa / Creadora VIP 🌹'),
+        ('vip', 'Noble VIP 🥂'),
+        ('cliente', 'Súbdito Ordinario 🍷'),
+    ]
+    telegram_id = models.BigIntegerField(unique=True, verbose_name="ID de Telegram")
+    role = models.CharField(max_length=20, choices=ROLES, default='cliente')
+    is_banned = models.BooleanField(default=False, verbose_name="¿Baneado?")
+    ban_reason = models.CharField(max_length=255, blank=True, null=True, verbose_name="Motivo de Suspensión")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.telegram_id} - {self.role}"
+
+class KingdomSetting(models.Model):
+    """Guarda valores globales como bono diario, anuncio activo, etc."""
+    key = models.CharField(max_length=80, unique=True)
+    value = models.TextField()
+
+    @classmethod
+    def get_val(cls, key, default=''):
+        obj = cls.objects.filter(key=key).first()
+        return obj.value if obj else default
+
+    @classmethod
+    def set_val(cls, key, value):
+        cls.objects.update_or_create(key=key, defaults={'value': str(value)})
+
+class AdminAuditLog(models.Model):
+    """Registra qué admin hizo cada cambio"""
+    admin_tg_id = models.BigIntegerField()
+    action = models.CharField(max_length=50)
+    target_tg_id = models.BigIntegerField(blank=True, null=True)
+    details = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
