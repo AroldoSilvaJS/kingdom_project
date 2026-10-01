@@ -15,10 +15,9 @@
         </div>
     </div>
 
-    <!-- MESA DE BLACKJACK CON PAÑO VERDE ESMERALDA Y BORDE DE MADERA REAL -->
+    <!-- MESA DE BLACKJACK CON PAÑO VERDE ESMERALDA -->
     <div class="rounded-3xl p-5 border-4 border-[#b8860b]/60 shadow-[0_12px_40px_rgba(0,0,0,0.95)] bg-gradient-to-b from-[#06331e] via-[#042013] to-[#020d08] flex flex-col items-center relative overflow-hidden">
         
-        <!-- Línea de paño de casino imperial -->
         <div class="absolute inset-2 border border-emerald-500/20 rounded-2xl pointer-events-none"></div>
 
         <div class="flex flex-col items-center z-10">
@@ -36,57 +35,45 @@
                 <span class="flex items-center gap-1">
                     <span>🤵</span> <span>Croupier Imperial</span>
                 </span>
-                {% if not in_game and dealer_score > 0 %}
-                    <span class="font-mono text-emerald-200 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-full shadow">
-                        {{ dealer_score }} pts
-                    </span>
-                {% else %}
-                    <span class="font-mono text-vip-text/50 bg-black/60 px-2 py-0.5 rounded-full">? pts</span>
-                {% endif %}
+                <span id="dealer-score-badge" class="font-mono text-emerald-200 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-full shadow">
+                    {% if not in_game and dealer_score > 0 %}{{ dealer_score }} pts{% else %}? pts{% endif %}
+                </span>
             </div>
 
-            <!-- Cartas del Croupier con animación de vuelo -->
-            <div class="flex gap-2.5 justify-center min-h-[90px] items-center py-1">
+            <!-- Cartas del Croupier -->
+            <div class="flex gap-2.5 justify-center min-h-[90px] items-center py-1" id="dealer-cards-container">
                 {% if in_game %}
-                    <!-- 1ra Carta Visible -->
                     {% with c=dealer_cards.0 %}
-                    <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative overflow-hidden">
+                    <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative">
                         <div class="flex justify-between items-center text-[11px] font-black leading-none {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                            <span>{{ c.val }}</span>
-                            <span class="text-[10px]">{{ c.suit }}</span>
+                            <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                         </div>
                         <div class="text-2xl self-center leading-none filter drop-shadow {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
                             {{ c.suit }}
                         </div>
                         <div class="flex justify-between items-center text-[11px] font-black leading-none rotate-180 {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                            <span>{{ c.val }}</span>
-                            <span class="text-[10px]">{{ c.suit }}</span>
+                            <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                         </div>
                     </div>
                     {% endwith %}
 
-                    <!-- Carta Oculta con Holograma Imperial -->
+                    <!-- Carta Oculta -->
                     <div class="card-deal w-14 h-20 rounded-xl shadow-2xl border-2 border-yellow-500/70 bg-gradient-to-br from-[#4a0815] via-[#850d24] to-[#2b040b] flex flex-col items-center justify-center relative select-none animate-pulse">
                         <div class="w-10 h-16 border border-yellow-500/40 rounded-lg flex items-center justify-center">
                             <span class="text-base text-yellow-300 drop-shadow">👑</span>
                         </div>
                     </div>
-
                 {% elif dealer_cards %}
-                    <!-- Todas visibles al finalizar la mano -->
                     {% for c in dealer_cards %}
-                    <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative" 
-                         style="animation-delay: {{ forloop.counter0 }}00ms;">
+                    <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative">
                         <div class="flex justify-between items-center text-[11px] font-black leading-none {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                            <span>{{ c.val }}</span>
-                            <span class="text-[10px]">{{ c.suit }}</span>
+                            <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                         </div>
                         <div class="text-2xl self-center leading-none filter drop-shadow {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
                             {{ c.suit }}
                         </div>
                         <div class="flex justify-between items-center text-[11px] font-black leading-none rotate-180 {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                            <span>{{ c.val }}</span>
-                            <span class="text-[10px]">{{ c.suit }}</span>
+                            <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                         </div>
                     </div>
                     {% endfor %}
@@ -102,138 +89,251 @@
                 <span class="flex items-center gap-1">
                     <span>👑</span> <span>Tu Mano</span>
                 </span>
-                {% if player_score > 0 %}
-                    <span class="font-mono text-white bg-amber-950/80 border border-yellow-500/40 px-2 py-0.5 rounded-full shadow">
-                        {{ player_score }} pts
-                    </span>
-                {% endif %}
+                <span id="player-score-badge" class="font-mono text-white bg-amber-950/80 border border-yellow-500/40 px-2 py-0.5 rounded-full shadow">
+                    {% if player_score > 0 %}{{ player_score }} pts{% else %}0 pts{% endif %}
+                </span>
             </div>
 
             <!-- Cartas del Jugador -->
-            <div class="flex gap-2.5 justify-center min-h-[90px] items-center flex-wrap py-1">
+            <div class="flex gap-2.5 justify-center min-h-[90px] items-center flex-wrap py-1" id="player-cards-container">
                 {% for c in player_cards %}
-                <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative hover:scale-105 transition-transform"
-                     style="animation-delay: {{ forloop.counter0 }}50ms;">
+                <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative">
                     <div class="flex justify-between items-center text-[11px] font-black leading-none {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                        <span>{{ c.val }}</span>
-                        <span class="text-[10px]">{{ c.suit }}</span>
+                        <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                     </div>
                     <div class="text-2xl self-center leading-none filter drop-shadow {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
                         {{ c.suit }}
                     </div>
                     <div class="flex justify-between items-center text-[11px] font-black leading-none rotate-180 {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                        <span>{{ c.val }}</span>
-                        <span class="text-[10px]">{{ c.suit }}</span>
+                        <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                     </div>
                 </div>
                 {% empty %}
-                    <span class="text-xs text-vip-text/40 italic py-6 font-medium">Elige tu apuesta y desafía al crupier</span>
+                    <span class="text-xs text-vip-text/40 italic py-6 font-medium" id="empty-player-text">Elige tu apuesta y desafía al crupier</span>
                 {% endfor %}
             </div>
         </div>
 
-        <!-- BANNER DE RESULTADO CON EFECTO DE GLOW -->
-        {% if resultado %}
-        <div class="w-full my-2 animate-bounce">
-            {% if resultado == 'blackjack' %}
-                <div class="p-3 bg-gradient-to-r from-yellow-600 via-amber-300 to-yellow-600 text-stone-950 text-xs font-black uppercase rounded-xl text-center shadow-[0_0_20px_rgba(234,179,8,0.7)] tracking-wider">
-                    👑 ¡BLACKJACK REAL! Pago Especial x2.5 (+{{ ganancia }} 🪙)
-                </div>
-            {% elif resultado == 'win' %}
-                <div class="p-2.5 bg-emerald-950/90 border-2 border-emerald-500 text-emerald-200 text-xs font-bold rounded-xl text-center shadow-[0_0_15px_rgba(16,185,129,0.5)]">
-                    🎉 ¡Victoria Noble! Superaste al Croupier (+{{ ganancia }} 🪙).
-                </div>
-            {% elif resultado == 'push' %}
-                <div class="p-2.5 bg-amber-950/90 border-2 border-amber-500 text-amber-200 text-xs font-bold rounded-xl text-center shadow">
-                    🤝 Empate (Push). Se reintegra tu apuesta de {{ ganancia }} 🪙.
-                </div>
-            {% elif resultado == 'bust' %}
-                <div class="p-2.5 bg-rose-950/90 border-2 border-rose-600 text-rose-200 text-xs font-bold rounded-xl text-center shadow">
-                    💥 Te pasaste de 21 puntos. Pierdes {{ ganancia }} 🪙 de oro.
-                </div>
-            {% elif resultado == 'lose' %}
-                <div class="p-2.5 bg-rose-950/90 border-2 border-rose-600 text-rose-200 text-xs font-bold rounded-xl text-center shadow">
-                    💀 El Croupier gana esta mano. Pierdes {{ ganancia }} 🪙 de oro.
-                </div>
-            {% endif %}
+        <!-- BANNER DE RESULTADO DINÁMICO -->
+        <div id="bj-result-box" class="w-full my-2"></div>
+
+        <!-- CONTROLES DINÁMICOS (EN JUEGO vs NUEVA APUESTA) -->
+        <div id="ingame-controls" class="{% if not in_game %}hidden{% endif %} grid grid-cols-2 gap-3 w-full mt-3">
+            <button type="button" onclick="handleBJAction('hit')" 
+                    class="w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all">
+                <span>🎴</span> <span>Pedir Carta</span>
+            </button>
+            <button type="button" onclick="handleBJAction('stand')" 
+                    class="w-full bg-rose-950 border-2 border-rose-500 text-rose-200 hover:bg-rose-900 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all">
+                <span>✋</span> <span>Plantarse</span>
+            </button>
         </div>
-        {% endif %}
 
-        <!-- CONTROLES DINÁMICOS -->
-        {% if in_game %}
-            <!-- BOTONES DURANTE LA MANO: PEDIR O PLANTARSE -->
-            <div class="grid grid-cols-2 gap-3 w-full mt-3">
-                <form method="POST" class="m-0">
-                    {% csrf_token %}
-                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                    <input type="hidden" name="action" value="hit">
-                    <button type="submit" 
-                            class="w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all">
-                        <span>🎴</span> <span>Pedir Carta</span>
-                    </button>
-                </form>
-
-                <form method="POST" class="m-0">
-                    {% csrf_token %}
-                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                    <input type="hidden" name="action" value="stand">
-                    <button type="submit" 
-                            class="w-full bg-rose-950 border-2 border-rose-500 text-rose-200 hover:bg-rose-900 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all">
-                        <span>✋</span> <span>Plantarse</span>
-                    </button>
-                </form>
-            </div>
-        {% else %}
-            <!-- FORMULARIO DE NUEVA PARTIDA / APUESTA -->
-            <form method="POST" class="w-full flex flex-col gap-2.5 mt-3">
-                {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <input type="hidden" name="action" value="deal">
-
-                <div>
-                    <label class="block text-[11px] text-emerald-300 uppercase font-bold mb-1.5 text-left">Monto de la Apuesta (Máx: 100 🪙)</label>
-                    <div class="grid grid-cols-4 gap-1.5 mb-2">
-                        <button type="button" onclick="setBet(10)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">10</button>
-                        <button type="button" onclick="setBet(25)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">25</button>
-                        <button type="button" onclick="setBet(50)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
-                        <button type="button" onclick="setBet(100)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">100</button>
-                    </div>
-                    <input type="number" id="bet_amount_input" name="bet_amount" min="1" max="100" value="25" required
-                           class="w-full bg-black/80 border border-emerald-500/50 rounded-xl p-2.5 text-center font-mono font-bold text-white text-base focus:outline-none focus:border-yellow-400">
+        <div id="bet-controls" class="{% if in_game %}hidden{% endif %} w-full flex flex-col gap-2.5 mt-3">
+            <div>
+                <label class="block text-[11px] text-emerald-300 uppercase font-bold mb-1.5 text-left">Monto de la Apuesta (Máx: {{ max_bet }} 🪙)</label>
+                <div class="grid grid-cols-4 gap-1.5 mb-2">
+                    <button type="button" onclick="setBJBet(10)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">10</button>
+                    <button type="button" onclick="setBJBet(25)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">25</button>
+                    <button type="button" onclick="setBJBet(50)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
+                    <button type="button" onclick="setBJBet({{ max_bet }})" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">{{ max_bet }}</button>
                 </div>
+                <input type="number" id="bj_bet_input" min="1" max="{{ max_bet }}" value="25"
+                       class="w-full bg-black/80 border border-emerald-500/50 rounded-xl p-2.5 text-center font-mono font-bold text-white text-base focus:outline-none focus:border-yellow-400">
+            </div>
 
-                <button type="submit" 
-                        class="btn-gold py-4 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    <span>🃏</span> <span>Repartir Cartas</span>
-                </button>
-            </form>
-        {% endif %}
+            <button type="button" onclick="handleBJAction('deal')" 
+                    class="btn-gold py-4 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-all">
+                <span>🃏</span> <span>Repartir Cartas</span>
+            </button>
+        </div>
 
     </div>
 
 </div>
 
-<!-- ESTILOS DE ANIMACIÓN DE CARTAS REALISTAS -->
+<!-- SINTETIZADOR DE AUDIO CASINO VIP -->
+<script>
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function getAudioCtx() {
+        if (!audioCtx) audioCtx = new AudioCtx();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+    }
+
+    // Sonido de naipe deslizándose en el paño
+    function playCardSound() {
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(450, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.09);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.09);
+        } catch(e) {}
+    }
+
+    // Tintineo de monedas
+    function playCoins() {
+        try {
+            const ctx = getAudioCtx();
+            [987, 1318, 1567, 2093].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.08));
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + (idx * 0.08));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.08) + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.08));
+                osc.stop(ctx.currentTime + (idx * 0.08) + 0.25);
+            });
+        } catch(e) {}
+    }
+</script>
+
 <style>
     .card-deal {
-        animation: cardFly 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+        animation: cardFly 0.32s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
     }
     @keyframes cardFly {
-        0% {
-            opacity: 0;
-            transform: translateY(-50px) scale(0.6) rotate(-15deg);
-        }
-        100% {
-            opacity: 1;
-            transform: translateY(0) scale(1) rotate(0deg);
-        }
+        0% { opacity: 0; transform: translateY(-40px) scale(0.7) rotate(-10deg); }
+        100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
     }
 </style>
 
 <script>
-    function setBet(val) {
-        const input = document.getElementById('bet_amount_input');
-        if (input) input.value = val;
+    function setBJBet(val) {
+        document.getElementById('bj_bet_input').value = val;
+    }
+
+    function renderCardHTML(c) {
+        if (c.hidden) {
+            return `
+            <div class="card-deal w-14 h-20 rounded-xl shadow-2xl border-2 border-yellow-500/70 bg-gradient-to-br from-[#4a0815] via-[#850d24] to-[#2b040b] flex flex-col items-center justify-center relative select-none animate-pulse">
+                <div class="w-10 h-16 border border-yellow-500/40 rounded-lg flex items-center justify-center">
+                    <span class="text-base text-yellow-300 drop-shadow">👑</span>
+                </div>
+            </div>`;
+        }
+        const colorClass = c.is_red ? 'text-rose-600' : 'text-neutral-900';
+        return `
+        <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative">
+            <div class="flex justify-between items-center text-[11px] font-black leading-none ${colorClass}">
+                <span>${c.val}</span><span>${c.suit}</span>
+            </div>
+            <div class="text-2xl self-center leading-none filter drop-shadow ${colorClass}">
+                ${c.suit}
+            </div>
+            <div class="flex justify-between items-center text-[11px] font-black leading-none rotate-180 ${colorClass}">
+                <span>${c.val}</span><span>${c.suit}</span>
+            </div>
+        </div>`;
+    }
+
+    async function handleBJAction(action) {
+        playCardSound();
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+
+        const betVal = parseInt(document.getElementById('bj_bet_input').value, 10);
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('action', action);
+        formData.append('bet_amount', betVal);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            const resp = await fetch("{% url 'economy:blackjack' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            if (!data.success) {
+                alert(data.error);
+                return;
+            }
+
+            // Actualizar Saldo
+            const balanceElem = document.getElementById('bj-balance');
+            if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
+
+            // Renderizar cartas Jugador
+            const pCont = document.getElementById('player-cards-container');
+            pCont.innerHTML = data.player_cards.map(c => renderCardHTML(c)).join('');
+
+            // Renderizar cartas Croupier
+            const dCont = document.getElementById('dealer-cards-container');
+            dCont.innerHTML = data.dealer_cards.map(c => renderCardHTML(c)).join('');
+
+            // Puntuaciones
+            document.getElementById('player-score-badge').innerText = `${data.player_score} pts`;
+            document.getElementById('dealer-score-badge').innerText = `${data.dealer_score} pts`;
+
+            // Alternar controles
+            const inGameControls = document.getElementById('ingame-controls');
+            const betControls = document.getElementById('bet-controls');
+            const resultBox = document.getElementById('bj-result-box');
+
+            if (data.in_game) {
+                inGameControls.classList.remove('hidden');
+                betControls.classList.add('hidden');
+                resultBox.innerHTML = '';
+            } else {
+                inGameControls.classList.add('hidden');
+                betControls.classList.remove('hidden');
+
+                // Resultado
+                if (data.resultado === 'blackjack') {
+                    playCoins();
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                    resultBox.innerHTML = `
+                    <div class="p-3 bg-gradient-to-r from-yellow-600 via-amber-300 to-yellow-600 text-stone-950 text-xs font-black uppercase rounded-xl text-center shadow-[0_0_20px_rgba(234,179,8,0.7)] tracking-wider animate-bounce">
+                        👑 ¡BLACKJACK REAL! Pago x2.5 (+${data.ganancia} 🪙)
+                    </div>`;
+                } else if (data.resultado === 'win') {
+                    playCoins();
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                    resultBox.innerHTML = `
+                    <div class="p-2.5 bg-emerald-950/90 border-2 border-emerald-500 text-emerald-200 text-xs font-bold rounded-xl text-center shadow-[0_0_15px_rgba(16,185,129,0.5)]">
+                        🎉 ¡Victoria Noble! Superaste al Croupier (+${data.ganancia} 🪙).
+                    </div>`;
+                } else if (data.resultado === 'push') {
+                    resultBox.innerHTML = `
+                    <div class="p-2.5 bg-amber-950/90 border-2 border-amber-500 text-amber-200 text-xs font-bold rounded-xl text-center shadow">
+                        🤝 Empate. Se reintegra tu apuesta de ${data.ganancia} 🪙.
+                    </div>`;
+                } else if (data.resultado === 'bust') {
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
+                    resultBox.innerHTML = `
+                    <div class="p-2.5 bg-rose-950/90 border-2 border-rose-600 text-rose-200 text-xs font-bold rounded-xl text-center shadow">
+                        💥 Te pasaste de 21 puntos. Pierdes ${data.ganancia} 🪙 de oro.
+                    </div>`;
+                } else if (data.resultado === 'lose') {
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
+                    resultBox.innerHTML = `
+                    <div class="p-2.5 bg-rose-950/90 border-2 border-rose-600 text-rose-200 text-xs font-bold rounded-xl text-center shadow">
+                        💀 El Croupier gana esta mano. Pierdes ${data.ganancia} 🪙 de oro.
+                    </div>`;
+                }
+            }
+
+        } catch(e) {
+            alert("Error de conexión al jugar.");
+        }
     }
 </script>
 {% endblock %}

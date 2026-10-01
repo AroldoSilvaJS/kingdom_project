@@ -3321,6 +3321,8 @@ urlpatterns = [
     path('feed/tip/<int:post_id>/', views.send_tip, name='send_tip'),
     path('<int:idol_id>/custom-request/', views.create_custom_request, name='create_custom_request'),
     path('feed/comment/<int:post_id>/', views.add_comment, name='add_comment'),
+    path('feed/edit/<int:post_id>/', views.edit_post, name='edit_post'),      # 👈 AÑADIR
+    path('feed/delete/<int:post_id>/', views.delete_post, name='delete_post'),  # 👈 AÑADIR
 ]
 
 
@@ -3340,6 +3342,7 @@ from core.models import UserProfile
 from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
+from core.models import UserRole
 
 
 def resolve_safe_tg(request):
@@ -3636,6 +3639,7 @@ def social_feed(request):
     posts = Post.objects.all().select_related('idol').prefetch_related('comments')
     unlocked_ids = []
     liked_ids = []
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
     
     if tg_id:
         pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
@@ -3648,7 +3652,71 @@ def social_feed(request):
         'tg_id': tg_id,
         'unlocked_ids': list(unlocked_ids),
         'liked_ids': liked_ids,
-        'tg_username': tg_username
+        'tg_username': tg_username,
+        'is_admin': is_admin,
+    })
+
+def delete_post(request, post_id):
+    tg_id = resolve_safe_tg(request)
+    post = get_object_or_404(Post, id=post_id)
+    
+    from core.models import UserRole
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_owner = (tg_id == post.idol.telegram_user_id)
+
+    if not (is_admin or is_owner):
+        messages.error(request, "No tienes permiso para eliminar esta publicación.")
+        return redirect(f'/idols/feed/?tg_id={tg_id}')
+
+    if request.method == 'POST':
+        post.delete()
+        messages.success(request, "🗑️ Publicación eliminada del Muro con éxito.")
+        
+    return redirect(f'/idols/feed/?tg_id={tg_id}')
+
+
+def edit_post(request, post_id):
+    tg_id = resolve_safe_tg(request)
+    post = get_object_or_404(Post, id=post_id)
+    
+    from core.models import UserRole
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_owner = (tg_id == post.idol.telegram_user_id)
+
+    if not (is_admin or is_owner):
+        messages.error(request, "No tienes permiso para editar esta publicación.")
+        return redirect(f'/idols/feed/?tg_id={tg_id}')
+
+    creator_profile = UserProfile.objects.filter(telegram_user_id=post.idol.telegram_user_id).first()
+    max_price = creator_profile.max_post_price_allowed if creator_profile else 80
+
+    if request.method == 'POST':
+        post.caption = request.POST.get('caption', '').strip()
+        network = request.POST.get('network', post.network)
+        price = request.POST.get('price', post.price)
+
+        if 'image' in request.FILES:
+            post.image = request.FILES['image']
+
+        post.network = network
+        if network == 'fans':
+            try:
+                p_val = int(price)
+                post.price = min(p_val, max_price) if not is_admin else p_val
+            except ValueError:
+                pass
+        else:
+            post.price = 0
+
+        post.save()
+        messages.success(request, "✨ Publicación actualizada con éxito.")
+        return redirect(f'/idols/feed/?tg_id={tg_id}')
+
+    return render(request, 'idols/edit_post.html', {
+        'post': post,
+        'tg_id': tg_id,
+        'max_price': max_price,
+        'is_admin': is_admin
     })
 
 
@@ -6865,13 +6933,103 @@ ARCHIVO: .\templates\idols\detail.html
 {% endblock %}
 
 ==================================================
+ARCHIVO: .\templates\idols\edit_post.html
+==================================================
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="vip-panel p-6 mt-4 flex flex-col gap-4 mx-auto w-full max-w-md border border-vip-gold/50 rounded-3xl pb-32">
+    
+    <div class="flex justify-between items-center mb-2 border-b border-vip-gold/30 pb-3">
+        <div>
+            <h2 class="text-lg font-serif font-black text-vip-gold uppercase tracking-wider">Editar Publicación</h2>
+            <p class="text-[11px] text-vip-text/60">Modifica el contenido o tarifa de {{ post.idol.stage_name }}</p>
+        </div>
+        <button type="button" onclick="universalNav('/idols/feed/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
+            ⬅ Cancelar
+        </button>
+    </div>
+
+    <!-- MENSAJES -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3.5">
+        {% csrf_token %}
+        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+        <!-- Destino / Red -->
+        <div>
+            <label class="block text-xs text-vip-gold mb-1 uppercase font-bold">Destino de Publicación</label>
+            <select name="network" id="network-select" required class="w-full bg-black/70 border border-vip-gold/40 rounded-xl p-3 text-xs text-vip-text focus:outline-none focus:border-vip-gold" onchange="togglePriceField()">
+                <option value="gram" {% if post.network == 'gram' %}selected{% endif %}>📸 KingdomGram (Público y Gratuito)</option>
+                <option value="fans" {% if post.network == 'fans' %}selected{% endif %}>🔞 KingdomFans (Antojo VIP / Cobrar Oro)</option>
+            </select>
+        </div>
+
+        <!-- Tarifa de Oro (si es fans) -->
+        <div id="price-container" class="{% if post.network != 'fans' %}hidden{% endif %} bg-black/50 p-3 rounded-2xl border border-purple-500/30">
+            <div class="flex justify-between items-center mb-1">
+                <label class="text-xs text-purple-300 uppercase font-bold">Tarifa en Oro (🪙)</label>
+                <span class="text-[10px] text-yellow-400 font-mono font-bold bg-black/60 px-2 py-0.5 rounded border border-yellow-500/30">
+                    Tope: {{ max_price }} 🪙
+                </span>
+            </div>
+            <input type="number" name="price" id="price-input" min="1" max="{{ max_price }}" value="{{ post.price|default:50 }}" 
+                   class="w-full bg-black/80 border border-purple-500/50 rounded-xl p-2.5 text-center font-mono font-bold text-white text-lg focus:outline-none focus:border-yellow-400">
+        </div>
+
+        <!-- Vista previa de foto actual y reemplazo -->
+        <div class="bg-black/40 p-3 rounded-2xl border border-vip-gold/20 flex flex-col gap-2">
+            <label class="block text-xs text-vip-gold uppercase font-bold">Fotografía del Post</label>
+            {% if post.image %}
+                <div class="w-24 h-24 rounded-xl overflow-hidden border border-vip-gold/30 bg-black">
+                    <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover">
+                </div>
+            {% endif %}
+            <span class="text-[10px] text-vip-text/50">Selecciona un archivo solo si deseas sustituir la imagen:</span>
+            <input type="file" name="image" accept="image/*" class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+        </div>
+
+        <!-- Descripción -->
+        <div>
+            <label class="block text-xs text-vip-gold mb-1 uppercase font-bold">Descripción del Post</label>
+            <textarea name="caption" rows="3" required class="w-full bg-black/70 border border-vip-gold/40 rounded-xl p-3 text-xs text-vip-text focus:outline-none focus:border-vip-gold resize-none">{{ post.caption }}</textarea>
+        </div>
+
+        <button type="submit" class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all mt-1">
+            💾 Guardar Cambios
+        </button>
+    </form>
+</div>
+
+<script>
+    function togglePriceField() {
+        const net = document.getElementById('network-select').value;
+        const cont = document.getElementById('price-container');
+        if (net === 'fans') {
+            cont.classList.remove('hidden');
+        } else {
+            cont.classList.add('hidden');
+        }
+    }
+</script>
+{% endblock %}
+
+==================================================
 ARCHIVO: .\templates\idols\feed.html
 ==================================================
 
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2">
+<div class="flex flex-col gap-4 mt-2 pb-36">
     
     <!-- ENCABEZADO Y FILTROS METÁLICOS -->
     <div class="flex flex-col gap-3">
@@ -6916,7 +7074,7 @@ ARCHIVO: .\templates\idols\feed.html
         {% for post in posts %}
         <article class="vip-panel overflow-hidden border border-vip-gold/30 rounded-3xl feed-item {% if post.network == 'fans' %}is-vip{% else %}is-public{% endif %}" data-network="{{ post.network }}">
             
-            <!-- Cabecera del Post: Idol Info -->
+            <!-- Cabecera del Post: Idol Info y Botones de Gestión -->
             <div class="p-3.5 flex items-center justify-between border-b border-vip-gold/15 bg-black/40">
                 <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" class="flex items-center gap-2.5 group">
                     <div class="w-10 h-10 rounded-full overflow-hidden border border-vip-gold/50 group-hover:scale-105 transition-transform bg-black">
@@ -6939,23 +7097,47 @@ ARCHIVO: .\templates\idols\feed.html
                     </div>
                 </a>
 
-                <!-- Tipo de Red / Badge -->
-                {% if post.network == 'fans' %}
-                    <span class="bg-gradient-to-r from-purple-950 to-fuchsia-950 border border-purple-500/60 text-purple-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.25)] flex items-center gap-1">
-                        <span>🔒</span> Antojo VIP
-                    </span>
-                {% else %}
-                    <span class="bg-black/60 border border-vip-gold/30 text-vip-gold text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full">
-                        📸 Público
-                    </span>
-                {% endif %}
+                <!-- Insignia de Red + Botones de Edición / Borrado -->
+                <div class="flex items-center gap-2">
+                    {% if post.network == 'fans' %}
+                        <span class="bg-gradient-to-r from-purple-950 to-fuchsia-950 border border-purple-500/60 text-purple-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.25)] flex items-center gap-1">
+                            <span>🔒</span> Antojo VIP
+                        </span>
+                    {% else %}
+                        <span class="bg-black/60 border border-vip-gold/30 text-vip-gold text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full">
+                            📸 Público
+                        </span>
+                    {% endif %}
+
+                    <!-- BOTONES PARA LA DUEÑA DE LA IDOL O ADMINISTRADORES -->
+                    {% if is_admin or post.idol.telegram_user_id == tg_id %}
+                        <button type="button" onclick="universalNav('{% url 'idols:edit_post' post.id %}')" 
+                                class="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-0.5 rounded-lg bg-black/70 border border-yellow-500/40" title="Editar Publicación">
+                            ✏️
+                        </button>
+                        <form action="{% url 'idols:delete_post' post.id %}" method="POST" class="m-0" 
+                              onsubmit="return confirm('¿Confirmas que deseas eliminar esta publicación del Muro?')">
+                            {% csrf_token %}
+                            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                            <button type="submit" 
+                                    class="text-rose-400 hover:text-rose-300 text-xs px-2 py-0.5 rounded-lg bg-rose-950/70 border border-rose-500/50" title="Eliminar Publicación">
+                                🗑️
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
             </div>
 
             <!-- IMAGEN O CONTENIDO CENSURADO VIP -->
             <div class="relative w-full aspect-square bg-black overflow-hidden flex items-center justify-center">
-                {% if post.network == 'gram' or post.id in unlocked_ids or is_owner %}
-                    <!-- IMAGEN PÚBLICA O YA DESBLOQUEADA -->
-                    <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover">
+                {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
+                    <!-- IMAGEN PÚBLICA O DESBLOQUEADA -->
+                    {% if post.image %}
+                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover">
+                    {% else %}
+                        <div class="w-full h-full flex items-center justify-center text-4xl">📸</div>
+                    {% endif %}
+
                     {% if post.network == 'fans' and post.id in unlocked_ids %}
                         <span class="absolute top-3 right-3 bg-green-950/80 border border-green-500 text-green-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow backdrop-blur-sm">
                             ✓ Desbloqueada
@@ -6963,7 +7145,9 @@ ARCHIVO: .\templates\idols\feed.html
                     {% endif %}
                 {% else %}
                     <!-- CONTENIDO VIP BLOQUEADO / CENSURA ELEGANTE -->
-                    <img src="{{ post.image.url }}" alt="VIP" class="w-full h-full object-cover filter blur-xl brightness-[0.35] scale-110">
+                    {% if post.image %}
+                        <img src="{{ post.image.url }}" alt="VIP" class="w-full h-full object-cover filter blur-xl brightness-[0.35] scale-110">
+                    {% endif %}
                     
                     <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
                         <div class="w-14 h-14 rounded-2xl bg-black/70 border border-purple-500/60 flex items-center justify-center text-2xl shadow-[0_0_20px_rgba(168,85,247,0.4)] mb-3 animate-pulse">
@@ -7063,7 +7247,6 @@ ARCHIVO: .\templates\idols\feed.html
 </div>
 
 <script>
-    // Filtro interactivo Todo vs Solo VIP
     function filterFeed(type) {
         const items = document.querySelectorAll('.feed-item');
         const btnAll = document.getElementById('btn-filter-all');
@@ -7087,10 +7270,10 @@ ARCHIVO: .\templates\idols\feed.html
     }
 
     function openTipModal(postId, idolName) {
-    const form = document.getElementById('tip-form');
-    form.action = `/idols/feed/tip/${postId}/`; // ✅ RUTA REAL CORREGIDA
-    document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
-    document.getElementById('tip-modal').classList.remove('hidden');
+        const form = document.getElementById('tip-form');
+        form.action = `/idols/feed/tip/${postId}/`;
+        document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
+        document.getElementById('tip-modal').classList.remove('hidden');
     }
 
     function closeTipModal() {

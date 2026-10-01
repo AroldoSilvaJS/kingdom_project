@@ -147,15 +147,22 @@ def slots_game(request):
     SIMBOLOS = ['👑', '💎', '⭐', '🍇', '🍒', '🪙']
         
     if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         try:
             apuesta = int(request.POST.get('bet_amount', 0))
             
             if apuesta <= 0:
-                messages.error(request, "La apuesta debe ser mayor a 0.")
+                err = "La apuesta debe ser mayor a 0."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
             elif apuesta > max_bet:
-                messages.error(request, f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙.")
+                err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
             elif apuesta > wallet.balance:
-                messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+                err = "No tienes suficiente oro en tu Bóveda."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
             else:
                 pet = Pet.objects.filter(telegram_user_id=tg_id).first()
                 if pet and pet.species == 'raven' and random.random() < 0.10:
@@ -188,9 +195,22 @@ def slots_game(request):
                 if resultado == "jackpot":
                     xp_gain += 25
                 grant_user_xp(request, tg_id, xp_gain, reason="Tragaperras Imperial")
+
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'reels': reels,
+                        'resultado': resultado,
+                        'ganancia': ganancia,
+                        'nuevo_saldo': wallet.balance,
+                        'current_xp': profile.current_xp,
+                        'level': profile.level
+                    })
                     
         except ValueError:
-            messages.error(request, "Monto inválido.")
+            err = "Monto inválido."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
             
     return render(request, 'economy/slots.html', {
         'tg_id': tg_id,
@@ -214,13 +234,13 @@ def calculate_hand_value(hand):
     total = 0
     aces = 0
     for c in hand:
-        val = c['val']
+        val = c.get('val')
         if val in ['J', 'Q', 'K']:
             total += 10
         elif val == 'A':
             aces += 1
             total += 11
-        else:
+        elif str(val).isdigit():
             total += int(val)
     while total > 21 and aces > 0:
         total -= 10
@@ -238,17 +258,24 @@ def blackjack_game(request):
     ganancia = 0
     
     if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         action = request.POST.get('action')
         
         if action == 'deal':
             try:
                 apuesta = int(request.POST.get('bet_amount', 25))
                 if apuesta <= 0:
-                    messages.error(request, "La apuesta debe ser mayor a 0.")
+                    err = "La apuesta debe ser mayor a 0."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
                 elif apuesta > max_bet:
-                    messages.error(request, f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙.")
+                    err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
                 elif apuesta > wallet.balance:
-                    messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+                    err = "No tienes suficiente oro en tu Bóveda."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
                 else:
                     wallet.remove_funds(apuesta)
                     player_hand = [draw_card(), draw_card()]
@@ -275,7 +302,9 @@ def blackjack_game(request):
                         grant_user_xp(request, tg_id, max(2, apuesta // 5))
                     request.session['blackjack_state'] = session_bj
             except ValueError:
-                messages.error(request, "Monto inválido.")
+                err = "Monto inválido."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
                 
         elif action == 'hit' and session_bj and not session_bj.get('finished'):
             session_bj['player_hand'].append(draw_card())
@@ -318,6 +347,30 @@ def blackjack_game(request):
                 
             session_bj['finished'] = True
             request.session['blackjack_state'] = None
+
+        if is_ajax:
+            p_cards = session_bj['player_hand'] if session_bj else []
+            d_cards = session_bj['dealer_hand'] if session_bj else []
+            in_game = session_bj is not None and not session_bj.get('finished', False)
+
+            dealer_visible = d_cards
+            dealer_score_visible = calculate_hand_value(d_cards) if d_cards else 0
+            if in_game and len(d_cards) >= 2:
+                dealer_visible = [d_cards[0], {'val': '?', 'suit': '👑', 'is_red': False, 'hidden': True}]
+                dealer_score_visible = calculate_hand_value([d_cards[0]])
+
+            return JsonResponse({
+                'success': True,
+                'in_game': in_game,
+                'resultado': resultado,
+                'ganancia': ganancia,
+                'player_cards': p_cards,
+                'dealer_cards': dealer_visible,
+                'player_score': calculate_hand_value(p_cards) if p_cards else 0,
+                'dealer_score': dealer_score_visible,
+                'nuevo_saldo': wallet.balance,
+                'current_bet': session_bj['bet'] if session_bj else 25,
+            })
             
     p_cards = session_bj['player_hand'] if session_bj else []
     d_cards = session_bj['dealer_hand'] if session_bj else []

@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2">
+<div class="flex flex-col gap-4 mt-2 pb-36">
     
     <!-- ENCABEZADO Y VOLVER -->
     <div class="flex justify-between items-center px-1">
@@ -9,21 +9,21 @@
           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
           ⬅ Bóveda
         </button>
-        <div class="flex items-center gap-1.5 bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full">
+        <div class="flex items-center gap-1.5 bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full shadow-inner">
             <span class="text-xs">🪙</span>
-            <span class="text-xs font-mono font-bold text-gold-gradient" id="user-balance">{{ wallet.balance }}</span>
+            <span class="text-xs font-mono font-bold text-gold-gradient" id="slots-balance">{{ wallet.balance }}</span>
         </div>
     </div>
 
-    <!-- MÁQUINA DE SLOTS CON ANIMACIÓN DE SUSPENSO -->
-    <div class="vip-panel p-5 text-center relative overflow-hidden flex flex-col items-center">
+    <!-- MÁQUINA DE SLOTS -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden flex flex-col items-center border border-vip-gold/40 shadow-2xl">
         
         <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
             Tragaperras Imperial
         </h2>
         <p class="text-[11px] text-vip-text/60 mb-2">Alinea las gemas y desata el Jackpot</p>
 
-        <!-- CABINA DE LOS 3 RODILLOS (ANIMADOS EN TIEMPO REAL) -->
+        <!-- CABINA DE LOS 3 RODILLOS -->
         <div class="w-full my-3 p-4 bg-gradient-to-b from-[#180a29] via-black to-[#130724] border-2 border-vip-gold/50 rounded-2xl shadow-[0_0_25px_rgba(212,175,55,0.25)] flex justify-center gap-3">
             
             <!-- Rodillo 1 -->
@@ -49,46 +49,31 @@
 
         </div>
 
-        <!-- BANNER DE RESULTADO (SE MUESTRA SOLO AL FRENAR EL 3ER RODILLO) -->
+        <!-- BANNER DE RESULTADO DINÁMICO -->
         <div id="result-box" class="w-full min-h-[45px] flex items-center justify-center">
-            {% if resultado == 'jackpot' %}
-                <div class="p-3 bg-gradient-to-r from-yellow-950 via-yellow-600 to-yellow-950 border border-yellow-300 rounded-xl text-black text-xs font-black uppercase tracking-wider w-full animate-bounce shadow-lg">
-                    👑 ¡JACKPOT IMPERIAL! Has ganado +{{ ganancia }} 🪙 de oro.
-                </div>
-            {% elif resultado == 'pair' %}
-                <div class="p-2.5 bg-purple-950/80 border border-purple-500 rounded-xl text-purple-200 text-xs font-bold w-full">
-                    ✨ ¡Par conseguido! Recuperas tu apuesta con ganancia (+{{ ganancia }} 🪙).
-                </div>
-            {% elif resultado == 'lose' %}
-                <div class="p-2.5 bg-red-950/80 border border-red-500 rounded-xl text-red-200 text-xs font-bold w-full">
-                    💀 No hubo coincidencia. Pierdes {{ ganancia }} 🪙 de oro.
-                </div>
-            {% endif %}
+            <span class="text-xs text-vip-text/50">Elige tu apuesta y baja la palanca</span>
         </div>
 
-        <!-- FORMULARIO DE APUESTA -->
-        <form method="POST" id="slots-form" class="w-full flex flex-col gap-3 mt-3">
-            {% csrf_token %}
-            <input type="hidden" name="tg_id" value="{{ tg_id }}">
-
+        <!-- CONTROLES DE APUESTA -->
+        <div class="w-full flex flex-col gap-3 mt-2">
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5">Monto de la Tirada (Máx: 100 🪙)</label>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5">Monto de la Tirada (Máx: {{ max_bet }} 🪙)</label>
                 <div class="grid grid-cols-4 gap-1.5 mb-2">
-                    <button type="button" onclick="setBet(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">10</button>
-                    <button type="button" onclick="setBet(25)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">25</button>
-                    <button type="button" onclick="setBet(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">50</button>
-                    <button type="button" onclick="setBet(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">100</button>
+                    <button type="button" onclick="setBet(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">10</button>
+                    <button type="button" onclick="setBet(25)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">25</button>
+                    <button type="button" onclick="setBet(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
+                    <button type="button" onclick="setBet({{ max_bet }})" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">{{ max_bet }}</button>
                 </div>
-                <input type="number" id="bet_amount_input" name="bet_amount" min="1" max="100" value="25" required
+                <input type="number" id="bet_amount_input" min="1" max="{{ max_bet }}" value="25"
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-bold text-white text-base focus:outline-none focus:border-vip-gold">
             </div>
 
             <!-- BOTÓN DE PALANCA DORADA -->
-            <button type="button" id="spin-btn" onclick="startSpinAnimation()" 
-                    class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] mt-1 flex items-center justify-center gap-2 active:scale-95 transition-all">
+            <button type="button" id="spin-btn" onclick="spinSlots()" 
+                    class="btn-gold py-4 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] mt-1 flex items-center justify-center gap-2 active:scale-95 transition-all">
                 <span>🎰</span> Bajar Palanca (Tirar)
             </button>
-        </form>
+        </div>
 
         <!-- TABLA DE PREMIOS -->
         <div class="w-full mt-4 bg-black/40 border border-vip-gold/20 p-3 rounded-xl text-left">
@@ -97,7 +82,7 @@
                 <span>👑👑👑 Triple Corona: <strong class="text-yellow-400">x15</strong></span>
                 <span>💎💎💎 Triple Diamante: <strong class="text-purple-300">x10</strong></span>
                 <span>⭐⭐⭐ Triple Estrella: <strong class="text-yellow-200">x6</strong></span>
-                <span>✨ Par de cualquier gema: <strong class="text-white">x1.5</strong></span>
+                <span>✨ Par de cualquier gema: <strong class="text-white">x1.4</strong></span>
             </div>
         </div>
 
@@ -105,110 +90,210 @@
 
 </div>
 
-<!-- ESTILOS Y SCRIPT DE ANIMACIÓN DE ALTA PRECISIÓN -->
+<!-- SINTETIZADOR DE AUDIO CASINO VIP (Sin dependencias externas) -->
+<script>
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function getAudioCtx() {
+        if (!audioCtx) audioCtx = new AudioCtx();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+    }
+
+    // Sonido de clic mecánico de rodillo
+    function playClack() {
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(220, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.08);
+            gain.gain.setValueAtTime(0.5, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.08);
+        } catch(e) {}
+    }
+
+    // Sonido de tintineo de monedas de oro
+    function playCoins() {
+        try {
+            const ctx = getAudioCtx();
+            [987, 1318, 1567, 2093].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.08));
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + (idx * 0.08));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.08) + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.08));
+                osc.stop(ctx.currentTime + (idx * 0.08) + 0.25);
+            });
+        } catch(e) {}
+    }
+</script>
+
 <style>
-    /* Efecto de rodillo a toda velocidad con desenfoque de movimiento */
     .spinning-reel {
         animation: spinBlur 0.08s infinite linear;
         filter: blur(2px);
     }
     @keyframes spinBlur {
-        0% { transform: translateY(-40px) scale(0.9); opacity: 0.6; }
+        0% { transform: translateY(-35px) scale(0.9); opacity: 0.5; }
         50% { transform: translateY(0px) scale(1.05); opacity: 1; }
-        100% { transform: translateY(40px) scale(0.9); opacity: 0.6; }
+        100% { transform: translateY(35px) scale(0.9); opacity: 0.5; }
     }
-
-    /* Golpe de freno seco */
     .reel-stop {
-        animation: stopBounce 0.35s ease-out;
+        animation: stopBounce 0.28s ease-out;
     }
     @keyframes stopBounce {
-        0% { transform: translateY(-30px); }
-        60% { transform: translateY(10px); }
+        0% { transform: translateY(-25px); }
+        60% { transform: translateY(8px); }
         100% { transform: translateY(0); }
     }
 </style>
 
 <script>
     const SYMBOLS = ['👑', '💎', '⭐', '🍇', '🍒', '🪙'];
-    const tg = window.Telegram?.WebApp;
+    let isSpinning = false;
 
     function setBet(val) {
-        document.getElementById('bet_amount_input').value = val;
+        if (!isSpinning) document.getElementById('bet_amount_input').value = val;
     }
 
-    // Si viene de un POST anterior, ejecutamos la animación antes de revelar el premio
-    const shouldAnimate = "{{ resultado|default:'' }}" !== "";
-
-    if (shouldAnimate) {
-        const finalReels = ['{{ reels.0 }}', '{{ reels.1 }}', '{{ reels.2 }}'];
+    async function spinSlots() {
+        if (isSpinning) return;
+        const betInput = document.getElementById('bet_amount_input');
+        const betVal = parseInt(betInput.value, 10);
         const resultBox = document.getElementById('result-box');
-        
-        // Ocultamos temporalmente el resultado mientras ruedan
-        const originalResultHTML = resultBox.innerHTML;
-        resultBox.innerHTML = '<span class="text-xs text-vip-gold animate-pulse">Rodillos girando a toda velocidad...</span>';
+        const btn = document.getElementById('spin-btn');
+        const balanceElem = document.getElementById('slots-balance');
+
+        if (!betVal || betVal <= 0) {
+            resultBox.innerHTML = '<span class="text-xs text-red-400 font-bold">⚠️ Apuesta inválida</span>';
+            return;
+        }
+
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('bet_amount', betVal);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        isSpinning = true;
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+        btn.innerHTML = '<span>⏳</span> Rodillos Girando...';
+
+        resultBox.innerHTML = '<span class="text-xs text-yellow-300 font-bold animate-pulse">Rodillos a toda velocidad...</span>';
 
         const r1 = document.getElementById('reel-1');
         const r2 = document.getElementById('reel-2');
         const r3 = document.getElementById('reel-3');
 
-        // Empezar a rodar con blur
         r1.classList.add('spinning-reel');
         r2.classList.add('spinning-reel');
         r3.classList.add('spinning-reel');
 
-        // Bucle aleatorio para cambiar los iconos mientras giran
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
+
         const int1 = setInterval(() => { r1.innerText = SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)]; }, 70);
         const int2 = setInterval(() => { r2.innerText = SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)]; }, 70);
-        const int3={};
-        const int3_val = setInterval(() => { r3.innerText = SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)]; }, 70);
+        const int3 = setInterval(() => { r3.innerText = SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)]; }, 70);
 
-        // Freno 1: 0.7 segundos (CLAC!)
-        setTimeout(() => {
-            clearInterval(int1);
-            r1.classList.remove('spinning-reel');
-            r1.innerText = finalReels[0];
-            r1.classList.add('reel-stop');
-            tg?.HapticFeedback?.impactOccurred('medium');
-        }, 700);
+        try {
+            const resp = await fetch("{% url 'economy:slots' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
 
-        // Freno 2: 1.3 segundos (CLAC!!)
-        setTimeout(() => {
-            clearInterval(int2);
-            r2.classList.remove('spinning-reel');
-            r2.innerText = finalReels[1];
-            r2.classList.add('reel-stop');
-            tg?.HapticFeedback?.impactOccurred('medium');
-        }, 1300);
-
-        // Freno 3: 2.0 segundos (¡¡CLAC FINAL!!)
-        setTimeout(() => {
-            clearInterval(int3_val);
-            r3.classList.remove('spinning-reel');
-            r3.innerText = finalReels[2];
-            r3.classList.add('reel-stop');
-            
-            // Revelar resultado final
-            resultBox.innerHTML = originalResultHTML;
-
-            const res = "{{ resultado }}";
-            if (res === 'jackpot') {
-                tg?.HapticFeedback?.notificationOccurred('success');
-            } else if (res === 'lose') {
-                tg?.HapticFeedback?.notificationOccurred('error');
-            } else {
-                tg?.HapticFeedback?.impactOccurred('heavy');
+            if (!data.success) {
+                clearInterval(int1); clearInterval(int2); clearInterval(int3);
+                r1.classList.remove('spinning-reel'); r2.classList.remove('spinning-reel'); r3.classList.remove('spinning-reel');
+                isSpinning = false;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                btn.innerHTML = '<span>🎰</span> Bajar Palanca (Tirar)';
+                resultBox.innerHTML = `<span class="text-xs text-red-400 font-bold">❌ ${data.error}</span>`;
+                return;
             }
-        }, 2000);
-    }
 
-    function startSpinAnimation() {
-        const btn = document.getElementById('spin-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<span>⏳</span> Girando...';
-        btn.classList.add('opacity-50');
-        tg?.HapticFeedback?.impactOccurred('heavy');
-        document.getElementById('slots-form').submit();
+            // Freno 1: 0.6s
+            setTimeout(() => {
+                clearInterval(int1);
+                r1.classList.remove('spinning-reel');
+                r1.innerText = data.reels[0];
+                r1.classList.add('reel-stop');
+                playClack();
+                try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+            }, 600);
+
+            // Freno 2: 1.1s
+            setTimeout(() => {
+                clearInterval(int2);
+                r2.classList.remove('spinning-reel');
+                r2.innerText = data.reels[1];
+                r2.classList.add('reel-stop');
+                playClack();
+                try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+            }, 1100);
+
+            // Freno 3: 1.6s (Final)
+            setTimeout(() => {
+                clearInterval(int3);
+                r3.classList.remove('spinning-reel');
+                r3.innerText = data.reels[2];
+                r3.classList.add('reel-stop');
+                playClack();
+
+                isSpinning = false;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                btn.innerHTML = '<span>🎰</span> Bajar Palanca (Tirar)';
+
+                if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
+
+                if (data.resultado === 'jackpot') {
+                    playCoins();
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                    resultBox.innerHTML = `
+                        <div class="p-3 bg-gradient-to-r from-yellow-950 via-yellow-600 to-yellow-950 border border-yellow-300 rounded-xl text-black text-xs font-black uppercase tracking-wider w-full animate-bounce shadow-lg">
+                            👑 ¡JACKPOT IMPERIAL! Has ganado +${data.ganancia} 🪙 de oro.
+                        </div>`;
+                } else if (data.resultado === 'pair') {
+                    playCoins();
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                    resultBox.innerHTML = `
+                        <div class="p-2.5 bg-purple-950/80 border border-purple-500 rounded-xl text-purple-200 text-xs font-bold w-full">
+                            ✨ ¡Par conseguido! Recuperas tu apuesta con ganancia (+${data.ganancia} 🪙).
+                        </div>`;
+                } else {
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
+                    resultBox.innerHTML = `
+                        <div class="p-2.5 bg-rose-950/80 border border-rose-500 rounded-xl text-rose-200 text-xs font-bold w-full">
+                            💀 Sin coincidencia. Pierdes ${betVal} 🪙 de oro.
+                        </div>`;
+                }
+
+            }, 1600);
+
+        } catch(e) {
+            clearInterval(int1); clearInterval(int2); clearInterval(int3);
+            isSpinning = false;
+            btn.disabled = false;
+            btn.classList.remove('opacity-50');
+            btn.innerHTML = '<span>🎰</span> Bajar Palanca (Tirar)';
+            resultBox.innerHTML = '<span class="text-xs text-red-400 font-bold">⚠️ Error de conexión</span>';
+        }
     }
 </script>
 {% endblock %}
