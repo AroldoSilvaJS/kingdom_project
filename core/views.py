@@ -66,6 +66,11 @@ def main_menu(request):
     
     user_profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
 
+    pending_antojos_count = CustomRequest.objects.filter(
+        idol__telegram_user_id=tg_id, 
+        status='pending'
+    ).count() if is_idol else 0
+
     if user_profile.username and not str(user_profile.username).lower().startswith('noble_'):
         clean_handle = user_profile.username if user_profile.username.startswith('@') else f"@{user_profile.username}"
         IdolProfile.objects.filter(telegram_user_id=tg_id).update(owner_username=clean_handle)
@@ -76,6 +81,7 @@ def main_menu(request):
         'is_idol': is_idol,
         'is_admin': is_admin,
         'user_profile': user_profile,
+        'pending_antojos_count': pending_antojos_count,
     })
 
 

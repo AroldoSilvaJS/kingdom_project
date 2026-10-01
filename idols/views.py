@@ -527,12 +527,18 @@ def create_custom_request(request, idol_id):
             status='pending'
         )
 
+        # ✅ Mensaje detallado indicando a cuál de tus Idols se le pidió el antojo y con botón directo:
         send_telegram_msg(
-            idol.telegram_user_id,
-            f"📬 <b>¡Nueva Petición de Antojo!</b>\n"
-            f"El noble <b>{tg_username}</b> te ofrece <b>+{bounty} 🪙 de oro</b> por un antojo:\n"
-            f"<i>«{description}»</i>\n\n"
-            f"Ingresa a tu panel de Idols para entregar la foto o rechazarla."
+            chat_id=idol.telegram_user_id,
+            text=(
+                f"📬 <b>¡Nueva Petición de Antojo para tu Musa {idol.stage_name}!</b> 🌹\n\n"
+                f"👤 <b>Noble Solicitante:</b> {tg_username}\n"
+                f"🪙 <b>Recompensa en custodia:</b> <b>+{bounty} 🪙</b>\n"
+                f"📝 <b>Deseo:</b> <i>«{description}»</i>\n\n"
+                f"Ingresa a tu panel de Idols para entregar la foto exclusiva o rechazarla."
+            ),
+            button_text=f"📸 Atender Antojo de {idol.stage_name}",
+            button_url=f"https://kingdom-pleasure-app.onrender.com/idols/?tg_id={idol.telegram_user_id}"
         )
         messages.success(request, f"¡Petición enviada a {idol.stage_name}! Tu oro quedó en custodia.")
         
