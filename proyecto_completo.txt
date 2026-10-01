@@ -181,10 +181,8 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 CSRF_TRUSTED_ORIGINS = [
+    'https://*.onrender.com',
     'https://*.trycloudflare.com',
-    'https://*.lhr.life',
-    'https://*.pinggy.link',
-    'https://*.serveo.net',
 ]
 
 # Application definition
@@ -209,9 +207,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # 👈 ¡AÑADIR ESTA LÍNEA!
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'core.middleware.TelegramSessionMiddleware',  # 👈 ¡AÑADIR ESTA LÍNEA!
+    'core.middleware.TelegramSessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -286,8 +285,9 @@ CORS_ALLOW_ALL_ORIGINS = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL = 'static/'
-STATICFILES_DIRS = [BASE_DIR / 'static'] # <- Añadir esta línea
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles' # 👈 Para que Render empaquete los estilos
 
 # Archivos subidos por los usuarios
 MEDIA_URL = 'media/'
