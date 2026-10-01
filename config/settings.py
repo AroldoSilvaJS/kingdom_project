@@ -137,7 +137,7 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles' # 👈 Para que Render empaquete los estilos
 
 # Archivos subidos por los usuarios
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/' 
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Email
