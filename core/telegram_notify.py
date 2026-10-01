@@ -41,6 +41,12 @@ def send_telegram_msg(chat_id, text, button_text=None, button_url=None):
         )
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status == 200
+        
+    # ✅ REEMPLAZAR POR:
+    except urllib.error.HTTPError as e:
+        error_detalle = e.read().decode('utf-8')
+        print(f"❌ Error Telegram API ({e.code}): {error_detalle}")
+        return False
     except Exception as e:
-        print(f"⚠️ Error en send_telegram_msg: {e}")
+        print(f"⚠️ Error general en send_telegram_msg: {e}")
         return False
