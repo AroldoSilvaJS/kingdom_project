@@ -18,16 +18,17 @@ class Pet(models.Model):
     level = models.PositiveIntegerField("Nivel", default=1)
     xp = models.PositiveIntegerField("Experiencia", default=0)
     energy = models.PositiveIntegerField("Energía / Saciedad", default=80)
-    happiness = models.PositiveIntegerField("Felicidad / Vínculo", default=75)
+    happiness = models.PositiveIntegerField("Felicidad / Vínculo", default=70)
     
-    last_fed = models.DateTimeField(auto_now_add=True)
-    last_petted = models.DateTimeField(auto_now_add=True)
-    last_expedition = models.DateTimeField(null=True, blank=True, verbose_name="Última Expedición")
+    last_fed = models.DateTimeField(null=True, blank=True)
+    last_petted = models.DateTimeField(null=True, blank=True)
+    last_expedition = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
     def xp_to_next_level(self):
-        return self.level * 100
+        # Curva de nivel de mascota: Nivel 1 = 100, Nivel 2 = 180, Nivel 3 = 260...
+        return 100 + ((self.level - 1) * 80)
 
     @property
     def xp_percentage(self):
@@ -36,33 +37,50 @@ class Pet(models.Model):
             return 0
         return min(100, int((self.xp / needed) * 100))
 
-    def xp_needed_for_next_level(self):
-        return self.level * 100
+    # --- REGLA 1: COOLDOWN DE CARICIAS (30 MINUTOS) ---
+    def can_be_petted(self):
+        if not self.last_petted:
+            return True
+        return timezone.now() >= self.last_petted + timedelta(minutes=30)
+
+    def minutes_until_next_pet(self):
+        if self.can_be_petted():
+            return 0
+        tiempo_restante = (self.last_petted + timedelta(minutes=30)) - timezone.now()
+        return max(1, int(tiempo_restante.total_seconds() // 60))
+
+    # --- REGLA 2: COOLDOWN DE EXPEDICIÓN (1 HORA Y MEDIA) ---
+    def can_go_expedition(self):
+        if not self.last_expedition:
+            return True
+        return timezone.now() >= self.last_expedition + timedelta(minutes=90)
+
+    def minutes_until_next_expedition(self):
+        if self.can_go_expedition():
+            return 0
+        tiempo_restante = (self.last_expedition + timedelta(minutes=90)) - timezone.now()
+        return max(1, int(tiempo_restante.total_seconds() // 60))
 
     def feed(self):
+        """Alimenta a la mascota sin pasar del 100% de energía"""
         self.energy = min(100, self.energy + 25)
-        self.happiness = min(100, self.happiness + 15)
-        self.xp += 30
-        if self.xp >= self.xp_needed_for_next_level():
-            self.xp -= self.xp_needed_for_next_level()
+        self.happiness = min(100, self.happiness + 10)
+        self.xp += 20
+        if self.xp >= self.xp_to_next_level:
+            self.xp -= self.xp_to_next_level
             self.level += 1
         self.last_fed = timezone.now()
         self.save()
 
     def pet_action(self):
+        """Acaricia a la mascota (solo si el cooldown lo permite)"""
         self.happiness = min(100, self.happiness + 20)
-        self.xp += 10
-        if self.xp >= self.xp_needed_for_next_level():
-            self.xp -= self.xp_needed_for_next_level()
+        self.xp += 15
+        if self.xp >= self.xp_to_next_level:
+            self.xp -= self.xp_to_next_level
             self.level += 1
         self.last_petted = timezone.now()
         self.save()
-
-    def can_go_expedition(self):
-        """Puede salir a cazar/explorar cada 2 horas"""
-        if not self.last_expedition:
-            return True
-        return timezone.now() >= self.last_expedition + timedelta(hours=2)
 
     def get_image_url(self):
         mapping = {

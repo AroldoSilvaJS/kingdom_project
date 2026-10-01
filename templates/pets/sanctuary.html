@@ -86,45 +86,63 @@
             </div>
         </div>
 
-        <!-- BOTONES DE INTERACCIÓN (ALIMENTAR, ACARICIAR, EXPEDICIÓN) -->
-        <div class="grid grid-cols-3 gap-2 w-full">
-            <!-- Alimentar (15 🪙) -->
+        <!-- BOTONES DE INTERACCIÓN BALANCEADOS -->
+        <div class="grid grid-cols-3 gap-2 w-full mt-2">
+            
+            <!-- 1. Alimentar (15 🪙) -->
             <form action="{% url 'pets:interact' %}" method="POST" class="m-0">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
                 <input type="hidden" name="action" value="feed">
                 <button type="submit" 
-                        class="w-full btn-gold py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider">
+                        class="w-full btn-gold py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider {% if pet.energy >= 100 %}opacity-60 cursor-not-allowed{% endif %}">
                     <span class="text-sm mb-0.5">🍖</span>
                     <span>Alimentar</span>
-                    <span class="text-[8px] font-mono opacity-80">-15 🪙</span>
+                    <span class="text-[8px] font-mono opacity-80">
+                        {% if pet.energy >= 100 %}Lleno{% else %}-15 🪙{% endif %}
+                    </span>
                 </button>
             </form>
 
-            <!-- Acariciar (Gratis) -->
+            <!-- 2. Acariciar (Cooldown de 30 min) -->
             <form action="{% url 'pets:interact' %}" method="POST" class="m-0">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
                 <input type="hidden" name="action" value="pet">
                 <button type="submit" 
-                        class="w-full bg-purple-950/80 border border-purple-500/70 text-purple-200 py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider hover:bg-purple-900 active:scale-95 transition-all shadow-md">
+                        class="w-full py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider transition-all shadow-md
+                        {% if pet.can_be_petted %}
+                            bg-purple-950/80 border border-purple-500/70 text-purple-200 hover:bg-purple-900 active:scale-95
+                        {% else %}
+                            bg-black/60 border border-neutral-800 text-stone-500 opacity-60
+                        {% endif %}">
                     <span class="text-sm mb-0.5">💖</span>
                     <span>Acariciar</span>
-                    <span class="text-[8px] font-mono text-purple-300">+10 XP</span>
+                    <span class="text-[8px] font-mono">
+                        {% if pet.can_be_petted %}+15 XP{% else %}{{ pet.minutes_until_next_pet }}m esp.{% endif %}
+                    </span>
                 </button>
             </form>
 
-            <!-- Expedición Clandestina (Nuevo Botín) -->
+            <!-- 3. Expedición (Cooldown de 90 min) -->
             <form action="{% url 'pets:expedition' %}" method="POST" class="m-0">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
                 <button type="submit" 
-                        class="w-full bg-emerald-950/80 border border-emerald-500/70 text-emerald-200 py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider hover:bg-emerald-900 active:scale-95 transition-all shadow-md">
+                        class="w-full py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider transition-all shadow-md
+                        {% if pet.can_go_expedition and pet.energy >= 25 %}
+                            bg-emerald-950/80 border border-emerald-500/70 text-emerald-200 hover:bg-emerald-900 active:scale-95
+                        {% else %}
+                            bg-black/60 border border-neutral-800 text-stone-500 opacity-60
+                        {% endif %}">
                     <span class="text-sm mb-0.5">🌲</span>
                     <span>Explorar</span>
-                    <span class="text-[8px] font-mono text-emerald-300">Botín Oro</span>
+                    <span class="text-[8px] font-mono">
+                        {% if pet.can_go_expedition %}Botín Oro{% else %}{{ pet.minutes_until_next_expedition }}m esp.{% endif %}
+                    </span>
                 </button>
             </form>
+
         </div>
 
         <!-- BOTÓN DE TRANSMUTACIÓN / CAMBIO DE ESPECIE -->

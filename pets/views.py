@@ -49,53 +49,70 @@ def interact_pet(request):
         action = request.POST.get('action')
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         
+        # 1. ACCIÓN ALIMENTAR (Validando que no esté lleno)
         if action == 'feed':
+            if pet.energy >= 100:
+                messages.info(request, f"🍖 {pet.name} está lleno y saciado (100% de energía). Envíalo a explorar antes de alimentarlo otra vez.")
+                return redirect(f'/pets/?tg_id={tg_id}')
+
             wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
             if wallet.remove_funds(15):
                 pet.feed()
-                grant_user_xp(request, tg_id, 15, reason="Alimentar Mascota")
-                messages.success(request, f"🍖 ¡Alimentaste a {pet.name}! (+25 Energía, +15 Felicidad, +30 XP Mascota, +15 EXP Jugador) (-15 🪙).")
+                grant_user_xp(request, tg_id, 10, reason="Alimentar Mascota")
+                messages.success(request, f"🍖 ¡Alimentaste a {pet.name}! (+25 Energía, +10 Vínculo, +20 XP Mascota) (-15 🪙).")
             else:
                 messages.error(request, f"No tienes suficientes monedas (15 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
                 
+        # 2. ACCIÓN ACARICIAR (Con Cooldown de 30 minutos)
         elif action == 'pet':
+            if not pet.can_be_petted():
+                minutos = pet.minutes_until_next_pet()
+                messages.info(request, f"💤 {pet.name} está descansando plácidamente. Podrás acariciarlo en {minutos} minutos.")
+                return redirect(f'/pets/?tg_id={tg_id}')
+
             pet.pet_action()
             grant_user_xp(request, tg_id, 5, reason="Acariciar Mascota")
-            messages.success(request, f"✨ ¡Acariciaste a {pet.name}! (+20 Felicidad, +10 XP Mascota, +5 EXP Jugador)")
+            messages.success(request, f"💖 ¡Acariciaste a {pet.name}! (+20 Vínculo, +15 XP Mascota, +5 EXP Jugador).")
             
         return redirect(f'/pets/?tg_id={tg_id}')
 
 def expedition_pet(request):
-    """Envía a la mascota a explorar los bosques del Reino en busca de oro y tesoros"""
+    """Envía a la mascota a explorar en busca de oro (gasta energía y tiene cooldown)"""
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         
-        if pet.energy < 20:
-            messages.error(request, f"⚠️ {pet.name} está muy agotado ({pet.energy}% energía). Aliméntalo antes de explorar.")
+        if pet.energy < 25:
+            messages.error(request, f"⚠️ {pet.name} no tiene suficiente energía ({pet.energy}%). Necesita al menos 25% para explorar.")
             return redirect(f'/pets/?tg_id={tg_id}')
 
-        if pet.can_go_expedition():
-            pet.energy = max(0, pet.energy - 25)
-            gold_found = random.randint(15, 35) + (pet.level * 3)
-            xp_mascota = 40
-            
-            pet.xp += xp_mascota
-            if pet.xp >= pet.xp_needed_for_next_level():
-                pet.xp -= pet.xp_needed_for_next_level()
-                pet.level += 1
+        if not pet.can_go_expedition():
+            minutos = pet.minutes_until_next_expedition()
+            messages.info(request, f"⏳ {pet.name} aún está exhausto de su último viaje. Podrá salir de expedición en {minutos} minutos.")
+            return redirect(f'/pets/?tg_id={tg_id}')
 
-            pet.last_expedition = timezone.now()
-            pet.save()
+        # Gastar energía
+        pet.energy = max(0, pet.energy - 25)
+        pet.last_expedition = timezone.now()
 
-            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-            wallet.add_funds(gold_found)
-            grant_user_xp(request, tg_id, 20, reason="Expedición de Mascota")
+        # Botín aleatorio de oro según el nivel de la mascota
+        gold_found = random.randint(15, 30) + (pet.level * 2)
+        xp_mascota = 35
+        
+        pet.xp += xp_mascota
+        if pet.xp >= pet.xp_to_next_level:
+            pet.xp -= pet.xp_to_next_level
+            pet.level += 1
+            messages.success(request, f"🎉 ¡{pet.name} subió al Nivel {pet.level}!")
 
-            messages.success(request, f"🌲 ¡{pet.name} regresó de su expedición con un botín de +{gold_found} 🪙 y +{xp_mascota} XP!")
-        else:
-            messages.info(request, f"⏳ {pet.name} aún está descansando de su última expedición. Vuelve más tarde.")
+        pet.save()
 
+        # Entregar botín al jugador
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        wallet.add_funds(gold_found)
+        grant_user_xp(request, tg_id, 15, reason="Expedición de Mascota")
+
+        messages.success(request, f"🌲 ¡{pet.name} regresó de los bosques con un tesoro de +{gold_found} 🪙 y +{xp_mascota} XP! (-25% Energía)")
         return redirect(f'/pets/?tg_id={tg_id}')
 
 def change_pet(request):
