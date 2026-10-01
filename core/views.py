@@ -416,7 +416,7 @@ def telegram_webhook(request):
                     user_prof.save(update_fields=['username'])
                     IdolProfile.objects.filter(telegram_user_id=user_id).update(owner_username=handle_real)
 
-                    if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
+                if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
                     is_group = int(chat_id) < 0
                     if is_group:
                         app_link = "https://t.me/KingdomPleasure_bot?start=entrar"
