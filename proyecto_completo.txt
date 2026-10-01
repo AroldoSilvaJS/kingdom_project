@@ -64,8 +64,9 @@ https://docs.djangoproject.com/en/6.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
-
+import os
 from pathlib import Path
+import dj_database_url  # 👈 AÑADIR ESTE IMPORT
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -95,15 +96,15 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'cloudinary_storage',         # 👈 AÑADIR (debe ir antes de staticfiles)
     'django.contrib.staticfiles',
+    'cloudinary',                 # 👈 AÑADIR
     
     # Nuestras Apps
     'core',
     'idols',
     'economy',
     'pets',
-    
-    # Librerías externas
     'corsheaders',
 ]
 
@@ -144,12 +145,24 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# ✅ REEMPLAZAR POR:
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -192,7 +205,7 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles' # 👈 Para que Render empaquete los estilos
 
 # Archivos subidos por los usuarios
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/' 
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Email
@@ -212,6 +225,18 @@ TELEGRAM_GROUP_ID = -1004393120413
 
 # Permitir que Telegram WebApp cargue el sitio en su iframe
 X_FRAME_OPTIONS = 'ALLOWALL'
+
+# Permitir que la sesión sobreviva dentro del iframe de Telegram
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True
+
+# Configuración de Cloudinary para fotos de Idols y Avatares
+CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
+
+if CLOUDINARY_URL:
+    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 ==================================================
 ARCHIVO: .\config\urls.py
@@ -2117,6 +2142,11 @@ def choose_role(request):
 
     if str(tg_id) != ADMIN_TG_ID and not is_user_in_group(tg_id):
         return render(request, 'core/access_denied.html', {'tg_id': tg_id})
+
+    
+    existing_role = UserRole.objects.filter(telegram_id=tg_id).first()
+    if existing_role and request.method != 'POST':
+        return redirect(f'/?tg_id={tg_id}')
 
     if request.method == 'POST':
         selected_role = request.POST.get('role', 'cliente')
@@ -4281,7 +4311,7 @@ ARCHIVO: .\templates\base.html
             <!-- 3. Botón Central Intuitivo: ELENCO DE IDOLS (Antifaz Veneciano & Corona) -->
             <button type="button" onclick="universalNav('/idols/gallery/')" 
                     class="-mt-6 bg-gradient-to-tr from-amber-500 via-yellow-300 to-amber-600 text-stone-950 w-14 h-14 rounded-full border-2 border-yellow-100 flex flex-col items-center justify-center shadow-[0_0_25px_rgba(212,175,55,0.85)] active:scale-90 transition-all select-none mx-1 hover:brightness-110">
-                <span class="text-2xl leading-none"></span>
+                <span class="text-2xl leading-none">🎭</span>
                 <span class="text-[8px] font-black uppercase tracking-tighter text-stone-950 leading-tight mt-0.5">Elenco</span>
             </button>
 
@@ -4339,7 +4369,7 @@ ARCHIVO: .\templates\base.html
             };
         }
 
-        // Sincronizar cuenta al cargar la página: Si la URL trae el ID de otra persona, forzar la cuenta del móvil actual
+        // Sincronizar cuenta al cargar la página
         (function syncAccount() {
             const currentUser = getRealTelegramUser();
             const urlParams = new URLSearchParams(window.location.search);
@@ -4349,10 +4379,11 @@ ARCHIVO: .\templates\base.html
             localStorage.setItem('current_tg_id', currentUser.id);
             localStorage.setItem('current_tg_user', currentUser.username);
 
-            // Si Telegram WebApp reporta un usuario y la URL tiene el de otra persona (o ninguno), corregir de inmediato
+            // Si Telegram WebApp reporta un usuario y la URL tiene el fallback (123456789) o ninguno
             if (tgApp?.initDataUnsafe?.user && (currentUrlId !== currentUser.id || !currentUrlName)) {
-                const cleanUrl = window.location.pathname;
-                window.location.replace(`${cleanUrl}?tg_id=${currentUser.id}&tg_username=${encodeURIComponent(currentUser.username)}`);
+                // 👈 Si cayó en choose-role por error de inicio, mandarlo a la raíz '/' con su ID real
+                const targetPath = (window.location.pathname.includes('choose-role') && currentUrlId === '123456789') ? '/' : window.location.pathname;
+                window.location.replace(`${targetPath}?tg_id=${currentUser.id}&tg_username=${encodeURIComponent(currentUser.username)}`);
             }
         })();
 
@@ -6892,7 +6923,7 @@ ARCHIVO: .\templates\idols\feed.html
                     <button type="button" onclick="setTipAmount(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">50 🪙</button>
                     <button type="button" onclick="setTipAmount(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">100 🪙</button>
                 </div>
-                <input type="number" id="tip-amount-input" name="amount" min="10" value="20" required
+                <input type="number" id="tip-amount-input" name="tip_amount" min="10" value="20" required
                        class="mt-2 w-full bg-black/70 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-bold text-white text-sm">
             </div>
 
