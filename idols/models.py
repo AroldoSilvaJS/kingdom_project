@@ -1,6 +1,7 @@
 from django.db import models
 from django.db.models import Avg
 from django.core.exceptions import ValidationError
+import os
 
 class IdolProfile(models.Model):
 
@@ -10,11 +11,9 @@ class IdolProfile(models.Model):
         ('offline', '🌙 Descansando'),
     ]
 
-    # Relacionamos este perfil directamente con el ID numérico de Telegram del usuario
     telegram_user_id = models.BigIntegerField(db_index=True)
     owner_username = models.CharField("Usuario de Telegram", max_length=100, blank=True, null=True)
     
-    # Datos del personaje
     stage_name = models.CharField("Nombre Artístico", max_length=100)
     group = models.CharField("Grupo/Solista", max_length=100, blank=True, null=True)
     bio = models.TextField("Biografía / Presentación", max_length=500)
@@ -22,15 +21,9 @@ class IdolProfile(models.Model):
 
     photo = models.ImageField("Foto de Perfil", upload_to='idols_photos/', blank=True, null=True)
     
-    # Estadísticas básicas para la ficha
     services_done = models.IntegerField("Servicios Realizados", default=0)
     rating = models.DecimalField("Calificación Promedio", max_digits=3, decimal_places=2, default=5.00)
 
-    # Fechas de control
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    # Personalización visual de la Idol
     banner = models.ImageField(upload_to='idols_banners/', blank=True, null=True, verbose_name="Foto de Portada")
     tagline = models.CharField(max_length=120, blank=True, null=True, verbose_name="Subtítulo / Esencia")
     welcome_message = models.CharField(max_length=200, blank=True, null=True, verbose_name="Saludo de Bienvenida")
@@ -47,6 +40,8 @@ class IdolProfile(models.Model):
     )
     specialty = models.CharField(max_length=100, blank=True, null=True, verbose_name="Especialidad")
 
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Perfil de Idol"
@@ -57,24 +52,47 @@ class IdolProfile(models.Model):
         return f"{self.stage_name} (Dueño: {self.telegram_user_id})"
 
     def clean(self):
-        # Validación de negocio: máximo 3 Idols por usuario
+        # Validación de negocio: máximo 2 Idols por usuario
         if not self.pk:
             count = IdolProfile.objects.filter(telegram_user_id=self.telegram_user_id).count()
-            if count >= 3:
-                raise ValidationError("No puedes registrar más de 3 Idols.")
+            if count >= 2:
+                raise ValidationError("No puedes registrar más de 2 Idols.")
 
     def save(self, *args, **kwargs):
         self.clean()
         super().save(*args, **kwargs)
 
+    def get_display_owner(self):
+        """Muestra el @ o Nombre de usuario real de Telegram, NUNCA 'Noble_ID' ni números"""
+        # 1. Primero consultar en UserProfile del creador
+        try:
+            from core.models import UserProfile
+            prof = UserProfile.objects.filter(telegram_user_id=self.telegram_user_id).first()
+            if prof and prof.username:
+                u_str = str(prof.username).strip()
+                if not u_str.isdigit() and not u_str.lower().startswith('noble_') and u_str not in ['None', '', 'undefined']:
+                    return u_str if u_str.startswith('@') else f"@{u_str}"
+        except Exception:
+            pass
 
-# --- MODELO REVIEW (pegado al borde izquierdo) ---
+        # 2. Si no, verificar el owner_username guardado en la Idol
+        if self.owner_username:
+            o_str = str(self.owner_username).strip()
+            if not o_str.isdigit() and not o_str.lower().startswith('noble_') and o_str not in ['None', '', 'undefined']:
+                return o_str if o_str.startswith('@') else f"@{o_str}"
+
+        # 3. Si es el Administrador Supremo
+        if str(self.telegram_user_id) == '7474444797':
+            return "@CoronaImperial"
+
+        return "@MusaReal"
+
+
 class Review(models.Model):
     idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='reviews')
     client_telegram_id = models.BigIntegerField("ID del Cliente", db_index=True)
     client_username = models.CharField("Cliente", max_length=100)
     
-    # Calificación de 1 a 5 estrellas
     rating = models.PositiveSmallIntegerField("Calificación (1 a 5)", default=5)
     comment = models.TextField("Comentario / Reseña", max_length=300)
     
@@ -90,12 +108,12 @@ class Review(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Recalcular automáticamente los servicios y el rating promedio de la Idol
         all_reviews = self.idol.reviews.all()
         self.idol.services_done = all_reviews.count()
         avg_score = all_reviews.aggregate(Avg('rating'))['rating__avg']
         self.idol.rating = round(avg_score, 2) if avg_score else 5.00
         self.idol.save()
+
 
 class Post(models.Model):
     NETWORK_CHOICES = [
@@ -109,7 +127,6 @@ class Post(models.Model):
     image = models.ImageField("Foto del Post", upload_to='social_posts/')
     caption = models.TextField("Descripción", max_length=300)
     
-    # Solo se usa si la red es 'fans'
     price = models.PositiveIntegerField("Precio en Oro (0 si es Público)", default=0)
     likes = models.PositiveIntegerField("Me Gusta", default=0)
     
@@ -123,22 +140,37 @@ class Post(models.Model):
     def __str__(self):
         return f"{self.get_network_display()} de {self.idol.stage_name}"
 
+    def save(self, *args, **kwargs):
+        """Optimización y compresión automática de fotos para carga instantánea en Telegram"""
+        super().save(*args, **kwargs)
+        if self.image:
+            try:
+                from PIL import Image
+                img_path = self.image.path
+                if os.path.exists(img_path):
+                    img = Image.open(img_path)
+                    if img.mode in ('RGBA', 'P'):
+                        img = img.convert('RGB')
+                    if img.height > 1200 or img.width > 1200:
+                        img.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+                        img.save(img_path, 'JPEG', quality=85, optimize=True)
+            except Exception:
+                pass
+
+
 class PostUnlock(models.Model):
-    """Guarda el registro de qué cliente desbloqueó qué foto VIP"""
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='unlocks')
     client_telegram_id = models.BigIntegerField("ID del Cliente", db_index=True)
     unlocked_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        # Evita que el mismo cliente compre la misma foto dos veces
         unique_together = ('post', 'client_telegram_id')
 
     def __str__(self):
         return f"Post #{self.post.id} desbloqueado por {self.client_telegram_id}"
 
-# --- AGREGAR AL FINAL DE idols/models.py ---
+
 class PostLike(models.Model):
-    """Registra qué usuario le dio like a qué publicación"""
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='user_likes')
     client_telegram_id = models.BigIntegerField("ID del Usuario", db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -148,15 +180,8 @@ class PostLike(models.Model):
 
     def __str__(self):
         return f"Like en Post #{self.post.id} por {self.client_telegram_id}"
-    
-class UserRole(models.Model):
-    telegram_id = models.CharField(max_length=100, unique=True)
-    role = models.CharField(max_length=10, choices=[('idol', 'Idol'), ('cliente', 'Cliente')])
 
-    def __str__(self):
-        return f"{self.telegram_id} - {self.role}"
 
-# --- MODELO PETICIONES PERSONALIZADAS DE ANTOJOS ---
 class CustomRequest(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pendiente'),
@@ -183,7 +208,7 @@ class CustomRequest(models.Model):
     def __str__(self):
         return f"Antojo para {self.idol.stage_name} de {self.client_username} ({self.bounty} 🪙)"
 
-# --- MODELO DE COMENTARIOS EN EL FEED ---
+
 class PostComment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
     author_telegram_id = models.BigIntegerField("ID del Autor", db_index=True)
@@ -194,7 +219,7 @@ class PostComment(models.Model):
     class Meta:
         verbose_name = "Comentario de Post"
         verbose_name_plural = "Comentarios de Posts"
-        ordering = ['created_at'] # Del más antiguo al más reciente
+        ordering = ['created_at']
 
     def __str__(self):
         return f"Comentario de {self.author_name} en Post #{self.post.id}"

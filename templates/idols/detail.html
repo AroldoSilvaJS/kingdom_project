@@ -1,110 +1,155 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="p-4 mt-2 flex flex-col gap-4 mx-auto w-full max-w-md pb-20">
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
     <!-- Barra superior de navegación -->
     <div class="flex justify-between items-center px-1">
-        <a href="javascript:history.back()" class="text-sm text-vip-text/70 hover:text-vip-text bg-vip-panel px-3 py-1.5 rounded-full border border-vip-gold/30">
-            ⬅ Galería
-        </a>
-        <span class="text-xs text-vip-gold border border-vip-gold/40 px-3 py-1 rounded-full uppercase tracking-widest font-semibold">
-            Ficha Oficial
+        <button type="button" onclick="universalNav('/idols/gallery/')" 
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
+            <span>⬅</span> <span>Galería</span>
+        </button>
+        <span class="text-xs text-vip-gold border border-vip-gold/40 px-3 py-1 rounded-full uppercase tracking-widest font-semibold bg-black/60">
+            Ficha de Musa VIP
         </span>
     </div>
 
-   <!-- Tarjeta Principal de la Idol -->
-    <div class="vip-panel overflow-hidden border border-vip-gold/50 rounded-2xl">
-        <!-- Retrato de la Idol con degradado -->
-        <div class="relative aspect-[3/4] w-full max-h-[450px]">
-            {% if idol.photo %}
-                <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover object-top">
+    <!-- TARJETA PRINCIPAL DE LA IDOL CON PORTADA Y AURA MÍSTICA -->
+    <div class="vip-panel overflow-hidden rounded-3xl relative border-2 shadow-[0_15px_40px_rgba(0,0,0,0.9)]
+        {% if idol.aura_color == 'gold' %}border-amber-400/70 shadow-[0_0_25px_rgba(245,158,11,0.3)]
+        {% elif idol.aura_color == 'ruby' %}border-rose-600/70 shadow-[0_0_25px_rgba(225,29,72,0.3)]
+        {% elif idol.aura_color == 'emerald' %}border-emerald-500/70 shadow-[0_0_25px_rgba(16,185,129,0.3)]
+        {% else %}border-purple-500/70 shadow-[0_0_25px_rgba(168,85,247,0.3)]{% endif %}">
+        
+        <!-- FOTO DE PORTADA / BANNER PANORÁMICO -->
+        <div class="w-full h-36 bg-black relative overflow-hidden">
+            {% if idol.banner %}
+                <img src="{{ idol.banner.url }}" alt="Banner de {{ idol.stage_name }}" class="w-full h-full object-cover object-center filter brightness-90">
             {% else %}
-                <div class="w-full h-full bg-vip-panel flex items-center justify-center text-4xl">🎭</div>
+                <div class="w-full h-full bg-gradient-to-r from-purple-950 via-[#180a29] to-black flex items-center justify-center">
+                    <span class="text-4xl opacity-20">✨</span>
+                </div>
             {% endif %}
-            <div class="absolute inset-0 bg-gradient-to-t from-[#130A1F] via-transparent to-transparent"></div>
-            
-            <!-- Datos e Insignias sobre la foto (abajo) -->
-            <div class="absolute bottom-3 left-4 right-4 z-10 flex flex-col gap-1">
-                <!-- Estados e Insignias VIP -->
-                <div class="flex items-center gap-1.5 flex-wrap">
+            <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+        </div>
+
+        <!-- RETRATO Y ENCABEZADO CON AURA -->
+        <div class="px-5 pt-0 pb-4 relative z-10 flex flex-col">
+            <!-- Avatar flotante sobre el banner con el Aura de Color Elegida -->
+            <div class="flex justify-between items-end -mt-16 mb-2">
+                <div class="relative w-28 h-28 rounded-2xl overflow-hidden border-3 bg-black flex-shrink-0 shadow-2xl
+                    {% if idol.aura_color == 'gold' %}border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.6)]
+                    {% elif idol.aura_color == 'ruby' %}border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.6)]
+                    {% elif idol.aura_color == 'emerald' %}border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.6)]
+                    {% else %}border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.6)]{% endif %}">
+                    {% if idol.photo %}
+                        <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover object-top">
+                    {% else %}
+                        <div class="w-full h-full flex items-center justify-center text-3xl">🎭</div>
+                    {% endif %}
+                </div>
+
+                <!-- Insignia de Estado En Vivo -->
+                <div class="flex flex-col items-end gap-1 mb-1">
                     {% if idol.status == 'online' %}
-                        <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-green-400 uppercase tracking-widest bg-black/70 px-2.5 py-0.5 rounded-full border border-green-500/50 backdrop-blur-sm">
+                        <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-green-300 uppercase tracking-widest bg-emerald-950/80 px-2.5 py-1 rounded-full border border-emerald-500 shadow">
                             <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span> Chateando
                         </span>
                     {% elif idol.status == 'antojos' %}
-                        <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-purple-300 uppercase tracking-widest bg-black/70 px-2.5 py-0.5 rounded-full border border-purple-500/50 backdrop-blur-sm">
+                        <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-purple-300 uppercase tracking-widest bg-purple-950/80 px-2.5 py-1 rounded-full border border-purple-500 shadow">
                             🔥 Antojos
                         </span>
                     {% else %}
-                        <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-black/70 px-2.5 py-0.5 rounded-full border border-gray-600 backdrop-blur-sm">
-                            🌙 Descansando
+                        <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-gray-300 uppercase tracking-widest bg-neutral-900/80 px-2.5 py-1 rounded-full border border-gray-600">
+                            🌙 Descanso
                         </span>
                     {% endif %}
 
                     {% if is_trending %}
-                        <span class="bg-gradient-to-r from-yellow-600 to-yellow-400 text-black text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-lg">
-                            🔥 Favorita del Reino
-                        </span>
-                    {% endif %}
-                    {% if is_top_rated %}
-                        <span class="bg-gradient-to-r from-purple-900 to-fuchsia-700 text-purple-100 border border-purple-400 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-lg">
-                            👑 Excelencia Real
+                        <span class="bg-gradient-to-r from-yellow-500 to-amber-600 text-black text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow">
+                            🔥 Favorita
                         </span>
                     {% endif %}
                 </div>
-
-                <h1 class="text-2xl font-black text-vip-gold drop-shadow-md leading-tight mt-1">{{ idol.stage_name }}</h1>
-                <p class="text-xs text-vip-text/80 drop-shadow">{{ idol.group|default:"Solista" }}</p>
             </div>
-        </div>
 
-        <div class="p-5 flex flex-col gap-4">
-            <!-- Métricas -->
-            <div class="grid grid-cols-2 gap-3 bg-vip-base p-3 rounded-xl border border-vip-gold/20 text-center">
+            <!-- TÍTULOS Y PERSONALIZACIÓN DE LA IDOL -->
+            <div class="flex flex-col mt-1">
+                <div class="flex items-center gap-2">
+                    <h1 class="text-2xl font-serif font-black text-white leading-tight">{{ idol.stage_name }}</h1>
+                    <span class="text-xs text-yellow-400 font-mono font-bold bg-black/60 px-2 py-0.5 rounded-full border border-yellow-500/30">
+                        ⭐ {{ idol.rating }}
+                    </span>
+                </div>
+                <p class="text-xs text-vip-gold font-bold uppercase tracking-wider mt-0.5">{{ idol.group|default:"Musa Solista" }}</p>
+                
+                <!-- Tagline o Lema personalizado -->
+                {% if idol.tagline %}
+                    <p class="text-xs text-purple-200/90 italic mt-1 bg-black/40 p-2 rounded-xl border border-purple-500/20">
+                        «{{ idol.tagline }}»
+                    </p>
+                {% endif %}
+
+                <!-- Saludo de Bienvenida -->
+                {% if idol.welcome_message %}
+                    <div class="mt-2 text-xs text-emerald-300 bg-emerald-950/40 p-2.5 rounded-xl border border-emerald-500/30 flex items-start gap-2">
+                        <span>💬</span>
+                        <span class="italic">"{{ idol.welcome_message }}"</span>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- ESPECIALIDAD Y MÉTRICAS -->
+            <div class="grid grid-cols-2 gap-2.5 bg-black/50 p-3 rounded-2xl border border-vip-gold/20 text-center mt-3">
                 <div>
-                    <p class="text-[11px] text-vip-text/60 uppercase">Calificación</p>
-                    <p class="text-xl font-bold text-vip-gold">⭐ {{ idol.rating }}</p>
+                    <span class="text-[10px] text-vip-text/60 uppercase block font-bold">Especialidad</span>
+                    <span class="text-xs font-bold text-vip-gold truncate block mt-0.5">
+                        {{ idol.specialty|default:"Rol Clandestino" }}
+                    </span>
                 </div>
                 <div class="border-l border-vip-gold/20">
-                    <p class="text-[11px] text-vip-text/60 uppercase">Servicios Dados</p>
-                    <p class="text-xl font-bold text-vip-text">{{ idol.services_done }}</p>
+                    <span class="text-[10px] text-vip-text/60 uppercase block font-bold">Servicios Dados</span>
+                    <span class="text-xs font-bold text-white block mt-0.5">{{ idol.services_done }} roles</span>
                 </div>
             </div>
 
-            <!-- Presentación / Bio -->
-            <div>
-                <h3 class="text-xs font-semibold text-vip-gold uppercase tracking-wider mb-1">Presentación</h3>
-                <p class="text-sm text-vip-text/90 leading-relaxed bg-vip-base/60 p-3 rounded-lg border border-vip-gold/10">
+            <!-- BIOGRAFÍA / PRESENTACIÓN -->
+            <div class="mt-3">
+                <h3 class="text-xs font-bold text-vip-gold uppercase tracking-wider mb-1">Presentación Artística</h3>
+                <p class="text-xs text-vip-text/90 leading-relaxed bg-black/40 p-3 rounded-xl border border-vip-gold/15">
                     {{ idol.bio }}
                 </p>
             </div>
             
-            <div class="text-[11px] text-vip-text/50">
-                Roller a cargo: <span class="text-vip-gold">{{ idol.owner_username|default:"Anónimo" }}</span>
+            <!-- Roller a cargo con @ Real Garantizado -->
+            <div class="text-[11px] text-vip-text/60 mt-2 flex items-center gap-1.5">
+                <span>Roller Oficial:</span>
+                <span class="text-vip-gold font-bold font-mono bg-black/60 px-2 py-0.5 rounded-md border border-vip-gold/30">
+                    {{ idol.get_display_owner }}
+                </span>
             </div>
 
-            <!-- BOTÓN: Contactar / Contratar Idol en Telegram -->
+            <!-- BOTONES DE CONTACTO Y ANTOJOS -->
             {% if idol.owner_username %}
-            <button onclick="contactIdol('{{ idol.owner_username }}')" 
-                    class="w-full mt-1 bg-gradient-to-r from-purple-900/60 to-vip-base border-2 border-purple-500/70 text-purple-200 py-3.5 rounded-xl hover:bg-purple-800 hover:text-white transition-all duration-300 font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)] group">
-                <span class="text-xl group-hover:scale-125 transition-transform">💬</span>
-                <span class="tracking-wider uppercase text-xs">Solicitar Rol / Contactar a {{ idol.stage_name }}</span>
-            </button>
-            
-            <!-- BUZÓN DE DESEOS: PEDIR ANTOJO PERSONALIZADO -->
-            <button type="button" onclick="toggleCustomRequestModal()" 
-                    class="w-full bg-gradient-to-r from-yellow-950/60 via-black to-vip-base border border-vip-gold/60 text-vip-gold py-3 rounded-xl hover:brightness-125 transition-all font-bold flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(212,175,55,0.15)] text-xs uppercase tracking-wider">
-                <span>📬</span> Pedir Antojo Personalizado
-            </button>
+            <div class="flex flex-col gap-2 mt-3">
+                <button type="button" onclick="contactIdol('{{ idol.owner_username }}')" 
+                        class="w-full bg-gradient-to-r from-purple-900 to-fuchsia-900 border border-purple-400 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)] text-xs uppercase tracking-wider active:scale-95 transition-all">
+                    <span>💬</span> <span>Contactar en Telegram a {{ idol.stage_name }}</span>
+                </button>
+                
+                <button type="button" onclick="toggleCustomRequestModal()" 
+                        class="w-full btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow active:scale-95 transition-all">
+                    <span>📬</span> <span>Pedir Antojo Personalizado</span>
+                </button>
+            </div>
 
-            <!-- Modal Desplegable de Petición -->
-            <div id="custom-request-modal" class="hidden p-4 bg-black/80 border border-vip-gold/40 rounded-xl">
-                <h4 class="text-xs font-bold text-vip-gold uppercase tracking-wider text-center mb-2">
+            <!-- MODAL DE ANTOJO -->
+            <div id="custom-request-modal" class="hidden mt-3 p-4 bg-black/90 border border-vip-gold/40 rounded-2xl shadow-2xl">
+                <h4 class="text-xs font-bold text-vip-gold uppercase tracking-wider text-center mb-1">
                     Pide tu antojo exclusivo a {{ idol.stage_name }}
                 </h4>
                 <p class="text-[11px] text-vip-text/60 text-center mb-3">
-                    Describe lo que quieres y ofrece tu pago. Si la Idol rechaza tu pedido, el oro vuelve a tu Bóveda al instante.
+                    Describe tu pedido y ofrece tu pago. Si la Idol rechaza la solicitud, el oro vuelve a tu Bóveda de inmediato.
                 </p>
 
                 <form action="{% url 'idols:create_custom_request' idol.id %}" method="POST" class="flex flex-col gap-3">
@@ -113,58 +158,58 @@
                     <input type="hidden" name="tg_username" value="{{ tg_username }}">
 
                     <div>
-                        <label class="block text-[11px] text-vip-gold uppercase mb-1">Tu Ofrenda de Oro (🪙)</label>
+                        <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Oro a Ofrecer (🪙)</label>
                         <input type="number" name="bounty" min="50" value="100" required
-                               class="w-full bg-vip-base border border-vip-gold/40 rounded-lg p-2 text-white font-mono text-center text-sm focus:outline-none focus:border-vip-gold">
+                               class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-white font-mono text-center text-sm focus:outline-none focus:border-vip-gold">
                     </div>
 
                     <div>
-                        <label class="block text-[11px] text-vip-gold uppercase mb-1">¿Cómo quieres tu antojo?</label>
-                        <textarea name="description" rows="3" required placeholder="Ej: Selfie con dedicatoria en papel, foto en outfit específico..."
-                                  class="w-full bg-vip-base border border-vip-gold/40 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold resize-none"></textarea>
+                        <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Detalle del Antojo</label>
+                        <textarea name="description" rows="3" required placeholder="Ej: Selfie en outfit específico con dedicatoria escrita..."
+                                  class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold resize-none"></textarea>
                     </div>
 
-                    <button type="submit" class="w-full bg-gradient-to-r from-vip-gold to-yellow-600 text-black font-bold py-2.5 rounded-lg text-xs uppercase tracking-wider hover:brightness-110 shadow-md">
+                    <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow">
                         Enviar Petición (Retener Oro)
                     </button>
                 </form>
             </div>
-            {% else %}
-            <div class="text-center text-xs text-vip-text/40 italic py-2">
-                Esta Idol no tiene un usuario de Telegram configurado aún.
-            </div>
             {% endif %}
+
         </div>
     </div>
 
-    <!-- 📸 PUBLICACIONES EXCLUSIVAS DE ESTA IDOL -->
+    <!-- MURO DE FOTOS EXCLUSIVAS DE ESTA IDOL -->
     {% if recent_posts %}
-    <div class="vip-panel p-4 rounded-2xl border border-vip-gold/30 flex flex-col gap-3">
-        <div class="flex justify-between items-center">
+    <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 flex flex-col gap-3">
+        <div class="flex justify-between items-center px-1">
             <h3 class="text-xs font-bold text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
                 <span>📸</span> Muro de {{ idol.stage_name }} ({{ recent_posts.count }})
             </h3>
-            <a href="{% url 'idols:social_feed' %}?tg_id={{ tg_id }}" class="text-[11px] text-vip-text/60 hover:text-vip-gold">
-                Ver Feed Completo ➡️
-            </a>
+            <button type="button" onclick="universalNav('{% url 'idols:social_feed' %}')" class="text-[11px] text-vip-text/60 hover:text-vip-gold">
+                Ver Feed ➔
+            </button>
         </div>
 
         <div class="grid grid-cols-3 gap-2">
             {% for post in recent_posts %}
-                <div class="relative aspect-square rounded-xl overflow-hidden border border-vip-gold/30 group bg-black">
+                <div class="relative aspect-square rounded-xl overflow-hidden border border-vip-gold/30 bg-black">
                     {% if post.network == 'gram' or post.id in unlocked_ids %}
-                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
+                        {% if post.image %}
+                            <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover">
+                        {% endif %}
                     {% else %}
-                        <!-- Censura VIP con precio -->
-                        <img src="{{ post.image.url }}" class="w-full h-full object-cover filter blur-md brightness-50">
-                        <a href="{% url 'idols:social_feed' %}?tg_id={{ tg_id }}" class="absolute inset-0 flex flex-col items-center justify-center p-1 text-center bg-black/40">
+                        {% if post.image %}
+                            <img src="{{ post.image.url }}" class="w-full h-full object-cover filter blur-md brightness-50">
+                        {% endif %}
+                        <button type="button" onclick="universalNav('{% url 'idols:social_feed' %}')" class="absolute inset-0 flex flex-col items-center justify-center p-1 text-center bg-black/50">
                             <span class="text-xs">🔒</span>
                             <span class="text-[9px] font-bold text-vip-gold font-mono">🪙 {{ post.price }}</span>
-                        </a>
+                        </button>
                     {% endif %}
 
                     {% if post.network == 'fans' %}
-                        <span class="absolute top-1 right-1 bg-purple-950/80 border border-purple-500/60 text-purple-300 text-[8px] font-bold px-1.5 py-0.2 rounded">VIP</span>
+                        <span class="absolute top-1 right-1 bg-purple-950/90 border border-purple-500 text-purple-300 text-[8px] font-bold px-1.5 rounded">VIP</span>
                     {% endif %}
                 </div>
             {% endfor %}
@@ -172,19 +217,10 @@
     </div>
     {% endif %}
 
-    <!-- Mensajes de feedback -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="p-3 rounded-lg text-sm {% if message.tags == 'success' %}bg-green-900/60 border border-green-500 text-green-200{% else %}bg-red-900/60 border border-red-500 text-red-200{% endif %}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-
-    <!-- Formulario para Dejar Reseña -->
-    <div class="vip-panel p-5 rounded-2xl border border-vip-gold/30">
-        <h3 class="text-base font-semibold text-vip-gold mb-1">Calificar Servicio</h3>
-        <p class="text-xs text-vip-text/60 mb-4">¿Tuviste un rol con {{ idol.stage_name }}? Deja tu reseña.</p>
+    <!-- FORMULARIO DE RESEÑAS -->
+    <div class="vip-panel p-5 rounded-3xl border border-vip-gold/30">
+        <h3 class="text-sm font-bold text-vip-gold uppercase tracking-wider mb-1">Calificar Interacción / Rol</h3>
+        <p class="text-xs text-vip-text/60 mb-3">Deja tu opinión sincera sobre el servicio de {{ idol.stage_name }}.</p>
 
         <form method="POST" class="flex flex-col gap-3">
             {% csrf_token %}
@@ -192,8 +228,8 @@
             <input type="hidden" name="tg_username" id="detail_tg_username" value="{{ tg_username|default:'' }}">
 
             <div>
-                <label class="block text-xs text-vip-gold mb-1">Puntuación</label>
-                <select name="rating" class="w-full bg-vip-base border border-vip-gold/40 rounded-lg p-2.5 text-vip-text text-sm focus:outline-none focus:border-vip-gold">
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Calificación</label>
+                <select name="rating" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
                     <option value="5">⭐⭐⭐⭐⭐ (5 - Excelente servicio)</option>
                     <option value="4">⭐⭐⭐⭐ (4 - Muy buen rol)</option>
                     <option value="3">⭐⭐⭐ (3 - Aceptable)</option>
@@ -203,35 +239,34 @@
             </div>
 
             <div>
-                <label class="block text-xs text-vip-gold mb-1">Tu Reseña / Experiencia</label>
-                <textarea name="comment" rows="3" required placeholder="Describe qué tal estuvo el servicio o la interacción..."
-                          class="w-full bg-vip-base border border-vip-gold/40 rounded-lg p-3 text-vip-text text-sm focus:outline-none focus:border-vip-gold resize-none"></textarea>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Tu Reseña</label>
+                <textarea name="comment" rows="3" required placeholder="Describe la experiencia de tu rol con esta Musa..."
+                          class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white resize-none focus:outline-none focus:border-vip-gold"></textarea>
             </div>
 
-            <button type="submit" class="w-full bg-vip-gold text-vip-base font-bold py-2.5 rounded-lg hover:bg-yellow-600 transition-colors text-sm shadow-[0_0_10px_rgba(212,175,55,0.2)]">
-                Publicar Reseña
+            <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+                Publicar Reseña (+25 EXP)
             </button>
         </form>
     </div>
 
-    <!-- Muro de Reseñas de Clientes -->
-    <div class="flex flex-col gap-3">
-        <h3 class="text-sm font-semibold text-vip-gold px-1">Opiniones de Clientes ({{ reviews.count }})</h3>
-        
+    <!-- LISTA DE RESEÑAS -->
+    <div class="flex flex-col gap-2.5">
+        <h3 class="text-xs font-bold text-vip-gold uppercase tracking-wider px-1">Opiniones de Nobles ({{ reviews.count }})</h3>
         {% for review in reviews %}
-            <div class="bg-vip-panel border border-vip-gold/20 p-4 rounded-xl flex flex-col gap-2">
+            <div class="bg-black/60 border border-vip-gold/20 p-3.5 rounded-2xl flex flex-col gap-1.5 shadow">
                 <div class="flex justify-between items-center">
-                    <span class="text-xs font-semibold text-vip-text">{{ review.client_username }}</span>
-                    <span class="text-xs text-vip-gold">
-                        {% if review.rating == 5 %}⭐⭐⭐⭐⭐{% elif review.rating == 4 %}⭐⭐⭐⭐{% elif review.rating == 3 %}⭐⭐⭐{% elif review.rating == 2 %}⭐⭐{% else %}⭐{% endif %}
+                    <span class="text-xs font-bold text-white">{{ review.client_username }}</span>
+                    <span class="text-xs text-yellow-400 font-mono">
+                        {% if review.rating == 5 %}⭐⭐⭐⭐⭐{% elif review.rating == 4 %}⭐⭐⭐⭐{% elif review.rating == 3 %}⭐⭐⭐{% else %}⭐{% endif %}
                     </span>
                 </div>
-                <p class="text-xs text-vip-text/80 leading-relaxed italic">"{{ review.comment }}"</p>
-                <span class="text-[10px] text-vip-text/40 self-end">{{ review.created_at|date:"d/m/Y H:i" }}</span>
+                <p class="text-xs text-vip-text/80 italic">"{{ review.comment }}"</p>
+                <span class="text-[9px] text-vip-text/40 self-end font-mono">{{ review.created_at|date:"d/m/Y H:i" }}</span>
             </div>
         {% empty %}
-            <div class="text-center py-6 text-vip-text/40 text-xs border border-vip-gold/10 rounded-xl bg-vip-panel/40">
-                Aún no hay reseñas registradas para esta Idol. ¡Sé el primero en dejar una!
+            <div class="text-center py-6 text-vip-text/40 text-xs border border-vip-gold/10 rounded-2xl bg-black/40">
+                Aún no hay reseñas registradas para esta Musa.
             </div>
         {% endfor %}
     </div>
@@ -239,26 +274,53 @@
 </div>
 
 <script>
-    const tg = window.Telegram.WebApp;
-    if (!document.getElementById('detail_tg_id').value) {
-        const user = tg.initDataUnsafe?.user;
-        const tgId = user ? user.id : '999999999';
-        const tgName = user ? (user.username ? `@${user.username}` : user.first_name) : 'Cliente Anónimo';
-        document.getElementById('detail_tg_id').value = tgId;
-        document.getElementById('detail_tg_username').value = tgName;
-    }
+    document.addEventListener("DOMContentLoaded", () => {
+        const idInput = document.getElementById('detail_tg_id');
+        const nameInput = document.getElementById('detail_tg_username');
+        const realId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '123456789';
+        
+        if (idInput && (!idInput.value || idInput.value === 'None')) {
+            idInput.value = realId;
+        }
+
+        const tg = window.Telegram?.WebApp;
+        const user = tg?.initDataUnsafe?.user;
+        if (nameInput && (!nameInput.value || nameInput.value === 'None')) {
+            nameInput.value = user?.username ? `@${user.username}` : (user?.first_name || `Noble_${realId}`);
+        }
+    });
 
     function contactIdol(rawUsername) {
-        const cleanUser = rawUsername.replace('@', '').trim();
-        if (!cleanUser) return;
-        
-        const telegramUrl = `https://t.me/${cleanUser}`;
-        
-        if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink) {
-            window.Telegram.WebApp.openTelegramLink(telegramUrl);
-        } else {
-            window.open(telegramUrl, '_blank');
+        if (!rawUsername || rawUsername.trim() === '') {
+            alert("Esta Musa no tiene un usuario de Telegram configurado.");
+            return;
         }
+
+        // Limpiar @ y espacios
+        let cleanUser = String(rawUsername).replace('@', '').trim();
+
+        // 1. Si es un ID numérico puro
+        if (/^\d+$/.test(cleanUser)) {
+            window.location.href = `tg://user?id=${cleanUser}`;
+            return;
+        }
+
+        // 2. Esquema universal nativo de Telegram (funciona en iOS y Android)
+        const tgAppUrl = `tg://resolve?domain=${cleanUser}`;
+        const tgWebUrl = `https://t.me/${cleanUser}`;
+
+        if (window.Telegram?.WebApp?.openTelegramLink) {
+            try {
+                window.Telegram.WebApp.openTelegramLink(tgWebUrl);
+                return;
+            } catch(e) {}
+        }
+
+        // Fallback inmediato
+        window.location.href = tgAppUrl;
+        setTimeout(() => {
+            window.open(tgWebUrl, '_blank');
+        }, 500);
     }
 
     function toggleCustomRequestModal() {

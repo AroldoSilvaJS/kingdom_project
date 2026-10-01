@@ -8,4 +8,5 @@ urlpatterns = [
     path('adopt/', views.adopt_pet, name='adopt'),
     path('interact/', views.interact_pet, name='interact'),
     path('change/', views.change_pet, name='change_pet'),
+    path('expedition/', views.expedition_pet, name='expedition'), # 👈 NUEVA
 ]

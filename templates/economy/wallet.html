@@ -1,17 +1,16 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2">
+<div class="flex flex-col gap-4 mt-2 pb-44">
     
     <!-- TARJETA BLACK VIP: SALDO DE ORO -->
     <div class="relative overflow-hidden rounded-3xl p-6 border border-vip-gold/50 shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(212,175,55,0.18)] bg-gradient-to-br from-[#1c102c] via-[#0d0617] to-black">
-        <!-- Resplandor dorado de fondo -->
         <div class="absolute -top-12 -right-12 w-40 h-40 bg-vip-gold/15 rounded-full blur-3xl pointer-events-none"></div>
 
         <div class="flex justify-between items-start">
             <div>
                 <span class="text-[10px] uppercase tracking-[0.2em] text-vip-gold/70 font-bold">Bóveda Imperial</span>
-                <p class="text-xs text-vip-text/50 font-mono mt-0.5">ID: <span id="display-wallet-id">{{ wallet.telegram_user_id }}</span></p>
+                <p class="text-xs text-vip-text/50 font-mono mt-0.5">ID: <span>{{ wallet.telegram_user_id }}</span></p>
             </div>
             <span class="text-2xl filter drop-shadow-[0_0_8px_rgba(212,175,55,0.6)]">🪙</span>
         </div>
@@ -26,23 +25,11 @@
             </div>
         </div>
 
-        <!-- RECLAMAR BONO DIARIO -->
-        <form action="{% url 'economy:claim_bonus' %}" method="POST" id="bonus-form" class="m-0">
-            {% csrf_token %}
-            <input type="hidden" name="tg_id" id="bonus-tg-id" value="{{ wallet.telegram_user_id }}">
-            
-            {% if wallet.can_claim_bonus %}
-                <button type="submit" onclick="triggerHaptic('success')"
-                        class="w-full btn-gold py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider animate-pulse">
-                    <span>✨</span> Reclamar Bono Diario (+35 🪙)
-                </button>
-            {% else %}
-                <button type="button" disabled 
-                        class="w-full bg-black/60 border border-vip-gold/20 text-vip-text/40 py-2.5 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold uppercase cursor-not-allowed">
-                    <span>⏳</span> Bono diario reclamado (espera 24h)
-                </button>
-            {% endif %}
-        </form>
+        {% if pet and pet.species == 'fox' %}
+            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-950/60 border border-amber-500/40 text-[10px] text-amber-300 font-bold">
+                <span>🦊</span> Bendición Kitsune Activa: Recarga de bono cada 22h
+            </div>
+        {% endif %}
     </div>
 
     <!-- MENSAJES DEL SISTEMA -->
@@ -53,6 +40,45 @@
             </div>
         {% endfor %}
     {% endif %}
+
+    <!-- 🎡 SECCIÓN: RULETA DIARIA DE LA FORTUNA -->
+    <div class="vip-panel p-5 flex flex-col items-center text-center relative overflow-hidden border border-vip-gold/40 shadow-xl">
+        <div class="flex justify-between items-center w-full mb-1">
+            <h3 class="font-serif text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
+                <span>🎡</span> Ruleta de la Fortuna
+            </h3>
+            <span class="text-[10px] text-purple-300 font-bold uppercase">Premio Diario</span>
+        </div>
+        <p class="text-[11px] text-vip-text/60 mb-3">Gira cada día y reclama tu ofrenda imperial</p>
+
+        <!-- RUEDA VISUAL -->
+        <div class="relative my-2 flex items-center justify-center">
+            <div class="absolute -top-3.5 z-30 text-yellow-400 text-lg filter drop-shadow animate-bounce">▼</div>
+            <div id="daily-wheel" class="w-36 h-36 rounded-full border-4 border-vip-gold shadow-[0_0_25px_rgba(212,175,55,0.35)] flex items-center justify-center relative overflow-hidden transition-transform duration-[3000ms] cubic-bezier(0.15,0.9,0.25,1)"
+                 style="background: conic-gradient(#7e22ce 0deg 45deg, #171717 45deg 90deg, #d97706 90deg 135deg, #171717 135deg 180deg, #9333ea 180deg 225deg, #171717 225deg 270deg, #eab308 270deg 315deg, #171717 315deg 360deg);">
+                <div class="w-14 h-14 rounded-full bg-black border border-vip-gold flex flex-col items-center justify-center z-10">
+                    <span class="text-sm font-black">👑</span>
+                </div>
+            </div>
+        </div>
+
+        <form action="{% url 'economy:claim_bonus' %}" method="POST" id="daily-wheel-form" class="w-full mt-3 m-0">
+            {% csrf_token %}
+            <input type="hidden" name="tg_id" id="bonus-tg-id" value="{{ wallet.telegram_user_id }}">
+
+            {% if wallet.can_claim_bonus %}
+                <button type="button" id="btn-spin-daily" onclick="spinDailyWheel()"
+                        class="w-full btn-gold py-3.5 rounded-xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                    <span>✨</span> Girar Ruleta Diaria (Gratis)
+                </button>
+            {% else %}
+                <div class="w-full bg-black/70 border border-vip-gold/30 py-3 px-4 rounded-xl flex items-center justify-between text-xs">
+                    <span class="text-vip-text/60 font-medium">⏳ Próximo giro en:</span>
+                    <span id="countdown-timer" class="font-mono font-bold text-yellow-400 text-sm">Calculando...</span>
+                </div>
+            {% endif %}
+        </form>
+    </div>
 
     <!-- SECCIÓN: SALÓN DE JUEGOS Y CASINO IMPERIAL -->
     <div class="flex flex-col gap-3">
@@ -65,30 +91,30 @@
 
         <div class="grid grid-cols-3 gap-2.5">
             <!-- 1. Ruleta Imperial -->
-            <button type="button" onclick="goToGame('{% url 'economy:casino' %}')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all group aspect-square">
-                <span class="text-3xl group-hover:scale-110 transition-transform">🎡</span>
-                <div>
+            <button type="button" onclick="universalNav('/economy/casino/')" 
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-square cursor-pointer">
+                <span class="text-3xl pointer-events-none">🎡</span>
+                <div class="pointer-events-none">
                     <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Ruleta</h4>
                     <span class="text-[9px] text-yellow-400/80 font-mono">x1.95</span>
                 </div>
             </button>
 
             <!-- 2. Tragamonedas / Slots -->
-            <button type="button" onclick="goToGame('{% url 'economy:slots' %}')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-purple-400/60 active:scale-95 transition-all group aspect-square">
-                <span class="text-3xl group-hover:scale-110 transition-transform">🍒</span>
-                <div>
+            <button type="button" onclick="universalNav('/economy/slots/')" 
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-purple-400/60 active:scale-95 transition-all aspect-square cursor-pointer">
+                <span class="text-3xl pointer-events-none">🍒</span>
+                <div class="pointer-events-none">
                     <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Tragaperras</h4>
                     <span class="text-[9px] text-purple-300 font-mono">Jackpot</span>
                 </div>
             </button>
 
             <!-- 3. Blackjack VIP -->
-            <button type="button" onclick="goToGame('{% url 'economy:blackjack' %}')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-vip-gold/60 active:scale-95 transition-all group aspect-square">
-                <span class="text-3xl group-hover:scale-110 transition-transform">🃏</span>
-                <div>
+            <button type="button" onclick="universalNav('/economy/blackjack/')" 
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-vip-gold/60 active:scale-95 transition-all aspect-square cursor-pointer">
+                <span class="text-3xl pointer-events-none">🃏</span>
+                <div class="pointer-events-none">
                     <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Blackjack</h4>
                     <span class="text-[9px] text-vip-gold/80 font-mono">21 Real</span>
                 </div>
@@ -96,62 +122,47 @@
         </div>
     </div>
 
-    <!-- SECCIÓN: CÓMO OBTENER MÁS ORO -->
-    <div class="vip-panel p-4 flex flex-col gap-2.5">
-        <h4 class="text-xs font-bold text-vip-gold uppercase tracking-wider">📜 Reglas de la Economía</h4>
-        <ul class="text-[11px] text-vip-text/70 flex flex-col gap-1.5 list-disc pl-4">
-            <li>Reclama tus <span class="text-yellow-400 font-bold">+35 🪙 de oro gratis</span> cada 24 horas.</li>
-            <li>Si eres <span class="text-purple-300 font-bold">Roller de una Idol</span>, recibes el 85% de cada foto VIP y el 90% de las propinas directo a tu Bóveda.</li>
-            <li>Gana en el Casino con tus dotes de estratega (apuesta máxima de 100 🪙 por ronda).</li>
-        </ul>
-    </div>
-
 </div>
 
-<!-- SCRIPTS DE TELEGRAM Y NAVEGACIÓN -->
 <script>
+    function spinDailyWheel() {
+        const btn = document.getElementById('btn-spin-daily');
+        const wheel = document.getElementById('daily-wheel');
+        if (!btn || !wheel) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> Girando el Destino...';
+        btn.classList.add('opacity-60');
+
+        const degrees = 1800 + Math.floor(Math.random() * 360);
+        wheel.style.transform = `rotate(${degrees}deg)`;
+
+        setTimeout(() => {
+            document.getElementById('daily-wheel-form')?.submit();
+        }, 3000);
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
-        const tg = window.Telegram?.WebApp;
-        
-        // Obtenemos el ID de Telegram o del parámetro URL o del fallback
-        const urlParams = new URLSearchParams(window.location.search);
-        let activeTgId = urlParams.get('tg_id');
+        const rawSeconds = "{{ wallet.seconds_until_next_bonus|default:'0' }}";
+        let remainingSeconds = parseInt(rawSeconds, 10) || 0;
+        const timerElem = document.getElementById('countdown-timer');
 
-        if (!activeTgId || activeTgId === 'None' || activeTgId === 'undefined') {
-            if (tg?.initDataUnsafe?.user) {
-                activeTgId = tg.initDataUnsafe.user.id;
-            } else {
-                activeTgId = '{{ wallet.telegram_user_id }}';
+        if (timerElem && remainingSeconds > 0) {
+            function updateTimer() {
+                if (remainingSeconds <= 0) {
+                    timerElem.innerText = "¡Disponible!";
+                    location.reload();
+                    return;
+                }
+                const hours = Math.floor(remainingSeconds / 3600);
+                const minutes = Math.floor((remainingSeconds % 3600) / 60);
+                const seconds = remainingSeconds % 60;
+                timerElem.innerText = `${hours}h ${minutes}m ${seconds}s`;
+                remainingSeconds--;
             }
+            updateTimer();
+            setInterval(updateTimer, 1000);
         }
-
-        // Actualizamos los campos ocultos del formulario de bono
-        const bonusInput = document.getElementById('bonus-tg-id');
-        if (bonusInput && activeTgId) {
-            bonusInput.value = activeTgId;
-        }
-
-        // Guardamos en memoria global para los botones de juegos
-        window.CURRENT_TG_ID = activeTgId;
     });
-
-    // Función de navegación segura a los juegos de azar con tg_id garantizado
-    function goToGame(urlBase) {
-        triggerHaptic('impact');
-        const tgId = window.CURRENT_TG_ID || '{{ wallet.telegram_user_id }}';
-        window.location.href = `${urlBase}?tg_id=${tgId}`;
-    }
-
-    // Efecto háptico nativo de Telegram al tocar botones importantes
-    function triggerHaptic(type) {
-        const tg = window.Telegram?.WebApp;
-        if (tg?.HapticFeedback) {
-            if (type === 'success') {
-                tg.HapticFeedback.notificationOccurred('success');
-            } else if (type === 'impact') {
-                tg.HapticFeedback.impactOccurred('medium');
-            }
-        }
-    }
 </script>
 {% endblock %}

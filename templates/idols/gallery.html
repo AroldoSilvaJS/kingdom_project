@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2">
+<div class="flex flex-col gap-4 mt-2 pb-36">
     
     <!-- ENCABEZADO -->
     <div class="flex justify-between items-center px-1">
@@ -76,9 +76,10 @@
                     </h3>
                     <p class="text-[10px] text-vip-text/70 truncate">{{ idol.group|default:"Solista" }}</p>
                     
-                    <div class="mt-1 flex justify-between items-center text-[9px] text-vip-text/50 border-t border-vip-gold/15 pt-1">
+                    <!-- Roller oficial con su @ o nombre real (NUNCA el ID numérico) -->
+                    <div class="mt-1 flex justify-between items-center text-[9px] text-vip-text/60 border-t border-vip-gold/15 pt-1">
                         <span>{{ idol.services_done }} roles</span>
-                        <span class="truncate max-w-[80px] text-vip-gold/80">{{ idol.owner_username|default:"Anónimo" }}</span>
+                        <span class="truncate max-w-[90px] text-vip-gold font-bold font-mono">{{ idol.get_display_owner }}</span>
                     </div>
                 </div>
             </div>
@@ -94,19 +95,7 @@
 
 <script>
     function goToDetail(idolId) {
-        const tg = window.Telegram?.WebApp;
-        let tgId = '{{ tg_id }}';
-        let tgName = 'Cliente VIP';
-
-        if (!tgId || tgId === 'None' || tgId === 'undefined') {
-            if (tg?.initDataUnsafe?.user) {
-                tgId = tg.initDataUnsafe.user.id;
-                tgName = tg.initDataUnsafe.user.username ? `@${tg.initDataUnsafe.user.username}` : tg.initDataUnsafe.user.first_name;
-            } else {
-                tgId = '123456789';
-            }
-        }
-        window.location.href = `/idols/${idolId}/?tg_id=${tgId}&tg_username=${encodeURIComponent(tgName)}`;
+        universalNav(`/idols/${idolId}/`);
     }
 </script>
 {% endblock %}

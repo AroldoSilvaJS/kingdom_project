@@ -67,7 +67,12 @@
             <div class="flex items-center gap-3">
                 <span class="w-6 text-center font-serif font-black text-sm">#{{ forloop.counter }}</span>
                 <div>
-                    <h4 class="font-bold text-white text-xs font-mono">Noble ...{{ noble.telegram_id }}</h4>
+                    <div class="flex items-center gap-2">
+                        <h4 class="font-bold text-white text-xs font-mono">Noble ...{{ noble.telegram_id }}</h4>
+                        <span class="text-[9px] bg-purple-950/80 border border-purple-500/40 text-purple-200 px-1.5 py-0.2 rounded font-mono font-bold">
+                            LVL {{ noble.nivel }}
+                        </span>
+                    </div>
                     <span class="text-[9px] text-vip-text/50 uppercase">{{ noble.titulo }}</span>
                 </div>
             </div>
@@ -77,25 +82,8 @@
             </div>
         </div>
         {% empty %}
-            <div class="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-vip-gold/20">
-                <div class="flex items-center gap-3">
-                    <span class="w-6 text-center font-serif font-black text-sm {% if forloop.counter == 1 %}text-yellow-400{% elif forloop.counter == 2 %}text-gray-300{% elif forloop.counter == 3 %}text-amber-600{% else %}text-vip-text/50{% endif %}">
-                        {% if forloop.counter == 1 %}👑{% elif forloop.counter == 2 %}💎{% elif forloop.counter == 3 %}🎖️{% else %}#{{ forloop.counter }}{% endif %}
-                    </span>
-                    <div>
-                        <h4 class="font-bold text-white text-xs font-mono">Noble #{{ noble.telegram_user_id }}</h4>
-                        <span class="text-[9px] text-vip-text/50 uppercase">Ciudadano VIP</span>
-                    </div>
-                </div>
-
-                <div class="text-right flex items-center gap-1">
-                    <span class="font-serif font-bold text-vip-gold text-xs font-mono">{{ noble.balance }}</span>
-                    <span class="text-[10px]">🪙</span>
-                </div>
-            </div>
-            {% empty %}
-                <p class="text-center text-xs text-vip-text/40 py-3">No hay datos de bóvedas.</p>
-            {% endfor %}
+            <p class="text-center text-xs text-vip-text/40 py-3">No hay datos de bóvedas.</p>
+        {% endfor %}
         </div>
     </div>
 

@@ -5,7 +5,7 @@
     
     <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-4">
         <h2 class="text-xl font-bold text-vip-gold uppercase tracking-widest">Nuevo Post</h2>
-        <a href="{% url 'idols:social_feed' %}?tg_id={{ tg_id }}" class="text-sm text-vip-text/60 hover:text-vip-gold">⬅ Cancelar</a>
+        <button type="button" onclick="navGo('/idols/feed/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30"> ⬅ Cancelar </button>
     </div>
 
     <!-- MUY IMPORTANTE: enctype="multipart/form-data" permite subir archivos -->

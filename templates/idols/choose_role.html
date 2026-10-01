@@ -3,50 +3,54 @@
 {% block content %}
 <div class="vip-panel p-6 mt-12 flex flex-col gap-6 mx-auto w-[90%] max-w-md border border-vip-gold/50 rounded-2xl text-center">
     
-    <h2 class="text-2xl font-bold text-vip-gold uppercase tracking-widest mb-2">Tu Destino</h2>
-    <p class="text-sm text-vip-text/80 mb-4">Bienvenido a Kingdom of Pleasure. Antes de entrar, debes elegir tu camino...</p>
+    <h2 class="text-2xl font-bold text-vip-gold uppercase tracking-widest mb-1 font-serif">Tu Destino</h2>
+    <p class="text-xs text-vip-text/70 mb-2">Bienvenido a Kingdom of Pleasure. Antes de entrar, debes elegir tu camino en el reino...</p>
 
-    <!-- Cambiamos el form para controlarlo con JavaScript -->
-    <form id="roleForm" method="POST" class="flex flex-col gap-4">
+    <form id="roleForm" action="{% url 'core:choose_role' %}" method="POST" class="flex flex-col gap-4">
         {% csrf_token %}
-        <input type="hidden" name="tg_id" id="real_tg_id" value="">
+        <input type="hidden" name="tg_id" id="real_tg_id" value="{{ tg_id|default:'' }}">
         <input type="hidden" name="role" id="selected_role" value="">
         
-        <!-- Opcion Cliente -->
-        <button type="button" onclick="elegirRol('cliente')" class="w-full bg-gradient-to-r from-gray-900 to-black border border-vip-gold/50 text-vip-gold py-5 rounded-xl hover:bg-vip-gold hover:text-black transition-all duration-300 shadow-[0_0_15px_rgba(212,175,55,0.1)] group">
+        <!-- Opción Cliente -->
+        <button type="button" onclick="elegirRol('cliente')" class="w-full bg-gradient-to-r from-gray-900 to-black border border-vip-gold/50 text-vip-gold py-5 rounded-xl hover:bg-vip-gold hover:text-black transition-all duration-300 shadow-[0_0_15px_rgba(212,175,55,0.1)] active:scale-95 group">
             <span class="block text-3xl mb-2 group-hover:scale-110 transition-transform">🥂</span>
-            <span class="block font-bold text-lg uppercase tracking-wider">Ser un Cliente VIP</span>
-            <span class="block text-xs font-normal opacity-70 mt-1">Gastar oro, ver el Muro VIP y disfrutar.</span>
+            <span class="block font-bold text-base uppercase tracking-wider font-serif">Ser un Cliente VIP</span>
+            <span class="block text-[11px] font-normal opacity-70 mt-1">Disfrutar del casino, ver el Muro VIP y contratar Idols.</span>
         </button>
 
-        <div class="flex items-center gap-4 my-2 opacity-50">
+        <div class="flex items-center gap-4 my-1 opacity-50">
             <div class="h-px bg-vip-gold flex-1"></div>
-            <span class="text-vip-gold text-xs uppercase">O</span>
+            <span class="text-vip-gold text-xs uppercase font-serif">O</span>
             <div class="h-px bg-vip-gold flex-1"></div>
         </div>
 
-        <!-- Opcion Idol -->
-        <button type="button" onclick="elegirRol('idol')" class="w-full bg-gradient-to-r from-purple-900/40 to-black border border-purple-500/50 text-purple-300 py-5 rounded-xl hover:bg-purple-600 hover:text-white transition-all duration-300 shadow-[0_0_15px_rgba(168,85,247,0.2)] group">
-            <span class="block text-3xl mb-2 group-hover:scale-110 transition-transform">✨</span>
-            <span class="block font-bold text-lg uppercase tracking-wider">Ser una Idol</span>
-            <span class="block text-xs font-normal opacity-70 mt-1">Crear perfil, subir fotos y ganar oro.</span>
+        <!-- Opción Idol -->
+        <button type="button" onclick="elegirRol('idol')" class="w-full bg-gradient-to-r from-purple-900/40 to-black border border-purple-500/50 text-purple-300 py-5 rounded-xl hover:bg-purple-600 hover:text-white transition-all duration-300 shadow-[0_0_15px_rgba(168,85,247,0.2)] active:scale-95 group">
+            <span class="block text-3xl mb-2 group-hover:scale-110 transition-transform">🎭</span>
+            <span class="block font-bold text-base uppercase tracking-wider font-serif">Ser una Idol Real</span>
+            <span class="block text-[11px] font-normal opacity-70 mt-1">Crear perfiles artísticos, publicar fotos y ganar oro.</span>
         </button>
     </form>
 
 </div>
 
-<!-- El mismo truco que usaste en menu.html para atrapar a Telegram -->
 <script>
     function elegirRol(rolElegido) {
-        // 1. Obtenemos el ID directo de Telegram
-        const tg = window.Telegram.WebApp;
-        const tgId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : '123456789';
+        let tgId = document.getElementById('real_tg_id').value;
+        const tgApp = window.Telegram?.WebApp;
         
-        // 2. Lo inyectamos en el formulario oculto
-        document.getElementById('real_tg_id').value = tgId;
+        // Si no venía en el formulario, tomarlo de Telegram en vivo
+        if (!tgId || tgId === 'None' || tgId === 'undefined' || tgId === '123456789') {
+            const user = tgApp?.initDataUnsafe?.user;
+            if (user?.id) {
+                tgId = String(user.id);
+            } else if (typeof window.getGlobalTgId === 'function') {
+                tgId = window.getGlobalTgId();
+            }
+            document.getElementById('real_tg_id').value = tgId;
+        }
+        
         document.getElementById('selected_role').value = rolElegido;
-        
-        // 3. Enviamos los datos al backend de forma segura
         document.getElementById('roleForm').submit();
     }
 </script>

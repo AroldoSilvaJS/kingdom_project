@@ -4,7 +4,7 @@
 <div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%]">
     <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-2">
         <h2 class="text-xl font-semibold text-vip-gold">Mis Idols</h2>
-        <a href="/" class="text-sm text-vip-text/60 hover:text-vip-text">⬅ Volver</a>
+        <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/60 hover:text-vip-gold bg-black/60 px-3 py-1 rounded-full border border-vip-gold/30">⬅ Volver</button>
     </div>
 
     {% if idols %}
@@ -115,43 +115,27 @@
     {% endif %}
 
     {% if can_add_more %}
-        <button onclick="goToCreate()" class="mt-4 w-full bg-vip-gold text-vip-base font-bold py-2 rounded hover:bg-yellow-600 transition-colors">
-            + Registrar Nueva Idol
+        <button type="button" onclick="goToCreate()" class="mt-4 w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+            + Registrar Nueva Idol ({{ idols.count }}/2)
         </button>
     {% else %}
-        <p class="text-center text-xs text-red-400 mt-4">Has alcanzado el límite de 3 Idols.</p>
+        <p class="text-center text-xs text-purple-300/80 mt-4 bg-purple-950/40 p-2.5 rounded-xl border border-purple-800/40 font-bold">
+            👑 Has alcanzado el límite máximo de 2 Idols consagradas.
+        </p>
     {% endif %}
 </div>
 
 <script>
-    const tg = window.Telegram.WebApp;
-    
-    // Creamos una única función que nos devuelve tanto el ID como el Nombre procesado
-    function getTgData() {
-        const user = tg.initDataUnsafe?.user;
-        const tgId = user ? user.id : '123456789';
-        
-        let tgName = 'Roller VIP';
-        if (user) {
-            tgName = user.username ? `@${user.username}` : user.first_name;
-        }
-        
-        // Retornamos el string ya formateado para pegarlo al final de las URLs
-        return `tg_id=${tgId}&tg_username=${encodeURIComponent(tgName)}`;
-    }
-
-    // Ahora las funciones quedan súper limpias y apuntando a las rutas correctas
     function goToCreate() {
-        // Fíjate que aquí apunta a /idols/create/
-        window.location.href = `/idols/create/?${getTgData()}`;
+        universalNav('/idols/create/');
     }
 
     function goToEdit(idolId) {
-        window.location.href = `/idols/edit/${idolId}/?${getTgData()}`;
+        universalNav(`/idols/edit/${idolId}/`);
     }
 
     function goToDelete(idolId) {
-        window.location.href = `/idols/delete/${idolId}/?${getTgData()}`;
+        universalNav(`/idols/delete/${idolId}/`);
     }
 </script>
 {% endblock %}

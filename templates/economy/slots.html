@@ -5,9 +5,10 @@
     
     <!-- ENCABEZADO Y VOLVER -->
     <div class="flex justify-between items-center px-1">
-        <a href="{% url 'economy:wallet' %}?tg_id={{ tg_id }}" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
-            ⬅ Bóveda
-        </a>
+        <button type="button" onclick="universalNav('/economy/wallet/')" 
+          class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
+          ⬅ Bóveda
+        </button>
         <div class="flex items-center gap-1.5 bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full">
             <span class="text-xs">🪙</span>
             <span class="text-xs font-mono font-bold text-gold-gradient" id="user-balance">{{ wallet.balance }}</span>

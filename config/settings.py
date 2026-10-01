@@ -26,10 +26,10 @@ SECRET_KEY = 'django-insecure-b_gxt!(b-)8=@2gj^1@2hs7bfy!ck@=d7&@_$+x!i*)hs)m4yy
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
+
 CSRF_TRUSTED_ORIGINS = [
-    'https://*.lhr.life',
-    'https://*.pinggy.link',
-    'https://*.serveo.net',
+    'https://*.onrender.com',
+    'https://*.trycloudflare.com',
 ]
 
 # Application definition
@@ -54,8 +54,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware', # <- ¡Añadir esta línea!
+    'whitenoise.middleware.WhiteNoiseMiddleware', # 👈 ¡AÑADIR ESTA LÍNEA!
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'core.middleware.TelegramSessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -130,8 +132,9 @@ CORS_ALLOW_ALL_ORIGINS = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL = 'static/'
-STATICFILES_DIRS = [BASE_DIR / 'static'] # <- Añadir esta línea
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles' # 👈 Para que Render empaquete los estilos
 
 # Archivos subidos por los usuarios
 MEDIA_URL = 'media/'
@@ -148,6 +151,9 @@ MAILERS = {
 
 # Configuraciones de Telegram
 TELEGRAM_BOT_TOKEN = '8966798192:AAHTaCsfbW9Mlzrkoa8PiZJT-DrlryD4dP8'
+
+# ID de tu grupo privado de rol en Telegram
+TELEGRAM_GROUP_ID = -1004393120413
 
 # Permitir que Telegram WebApp cargue el sitio en su iframe
 X_FRAME_OPTIONS = 'ALLOWALL'

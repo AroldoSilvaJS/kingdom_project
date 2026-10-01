@@ -1,12 +1,13 @@
+import random
+from django.utils import timezone
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from .models import Pet
 from economy.models import Wallet
+from core.utils import grant_user_xp
 
 def resolve_tg_id(request):
-    """Garantiza que siempre tengamos el ID real o el de prueba (123456789)"""
     raw_id = request.GET.get('tg_id') or request.POST.get('tg_id') or request.session.get('tg_id')
-    
     if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null']:
         try:
             val = int(raw_id)
@@ -14,8 +15,6 @@ def resolve_tg_id(request):
             return val
         except ValueError:
             pass
-            
-    # Si estamos probando en navegador y no hay Telegram, usamos el ID estándar de desarrollo
     fallback_id = 123456789
     request.session['tg_id'] = fallback_id
     return fallback_id
@@ -23,28 +22,26 @@ def resolve_tg_id(request):
 def pet_sanctuary(request):
     tg_id = resolve_tg_id(request)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-
-    return render(request, 'pets/sanctuary.html', {
-        'tg_id': tg_id,
-        'pet': pet
-    })
+    return render(request, 'pets/sanctuary.html', {'tg_id': tg_id, 'pet': pet})
 
 def adopt_pet(request):
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
         name = request.POST.get('name', '').strip()
-        species = request.POST.get('species')
+        species = request.POST.get('species') or request.POST.get('new_species')
         
         if name and species:
             if not Pet.objects.filter(telegram_user_id=tg_id).exists():
-                Pet.objects.create(
-                    telegram_user_id=tg_id,
-                    name=name,
-                    species=species
-                )
-                messages.success(request, f"¡Has adoptado a {name}! Bienvenido a tu Santuario.")
+                Pet.objects.create(telegram_user_id=tg_id, name=name, species=species)
+                grant_user_xp(request, tg_id, 35, reason="Adopción de Mascota")
+                messages.success(request, f"¡Has adoptado a {name}! (+35 EXP). Bienvenido a tu Santuario.")
+            else:
+                messages.info(request, "Ya tienes un compañero leal en tu Santuario.")
+        else:
+            messages.error(request, "Debes ingresar un nombre y elegir una especie válida.")
                 
         return redirect(f'/pets/?tg_id={tg_id}')
+    return redirect('/pets/')
 
 def interact_pet(request):
     if request.method == 'POST':
@@ -53,23 +50,58 @@ def interact_pet(request):
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         
         if action == 'feed':
-         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-         if wallet.remove_funds(15):
-             pet.feed()
-             messages.success(request, f"🍖 ¡Alimentaste a {pet.name}! (+25 Energía, +30 XP) (-15 🪙). Saldo restante en Bóveda: {wallet.balance} 🪙")
-         else:
-             messages.error(request, f"No tienes suficientes monedas (15 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
+            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+            if wallet.remove_funds(15):
+                pet.feed()
+                grant_user_xp(request, tg_id, 15, reason="Alimentar Mascota")
+                messages.success(request, f"🍖 ¡Alimentaste a {pet.name}! (+25 Energía, +15 Felicidad, +30 XP Mascota, +15 EXP Jugador) (-15 🪙).")
+            else:
+                messages.error(request, f"No tienes suficientes monedas (15 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
                 
         elif action == 'pet':
             pet.pet_action()
-            messages.success(request, f"✨ ¡Acariciaste a {pet.name}! Se siente feliz y amado (+10 XP)")
+            grant_user_xp(request, tg_id, 5, reason="Acariciar Mascota")
+            messages.success(request, f"✨ ¡Acariciaste a {pet.name}! (+20 Felicidad, +10 XP Mascota, +5 EXP Jugador)")
             
+        return redirect(f'/pets/?tg_id={tg_id}')
+
+def expedition_pet(request):
+    """Envía a la mascota a explorar los bosques del Reino en busca de oro y tesoros"""
+    if request.method == 'POST':
+        tg_id = resolve_tg_id(request)
+        pet = get_object_or_404(Pet, telegram_user_id=tg_id)
+        
+        if pet.energy < 20:
+            messages.error(request, f"⚠️ {pet.name} está muy agotado ({pet.energy}% energía). Aliméntalo antes de explorar.")
+            return redirect(f'/pets/?tg_id={tg_id}')
+
+        if pet.can_go_expedition():
+            pet.energy = max(0, pet.energy - 25)
+            gold_found = random.randint(15, 35) + (pet.level * 3)
+            xp_mascota = 40
+            
+            pet.xp += xp_mascota
+            if pet.xp >= pet.xp_needed_for_next_level():
+                pet.xp -= pet.xp_needed_for_next_level()
+                pet.level += 1
+
+            pet.last_expedition = timezone.now()
+            pet.save()
+
+            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+            wallet.add_funds(gold_found)
+            grant_user_xp(request, tg_id, 20, reason="Expedición de Mascota")
+
+            messages.success(request, f"🌲 ¡{pet.name} regresó de su expedición con un botín de +{gold_found} 🪙 y +{xp_mascota} XP!")
+        else:
+            messages.info(request, f"⏳ {pet.name} aún está descansando de su última expedición. Vuelve más tarde.")
+
         return redirect(f'/pets/?tg_id={tg_id}')
 
 def change_pet(request):
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
-        new_species = request.POST.get('new_species')
+        new_species = request.POST.get('new_species') or request.POST.get('species')
         new_name = request.POST.get('new_name', '').strip()
         cost = 300
         
@@ -86,8 +118,10 @@ def change_pet(request):
             pet.level = 1
             pet.xp = 0
             pet.energy = 100
+            pet.happiness = 100
             pet.save()
-            messages.success(request, f"✨ ¡Ritual completado! Has transmutado tu mascota a {new_name} por {cost} 🪙. Saldo restante: {wallet.balance} 🪙")
+            grant_user_xp(request, tg_id, 50, reason="Ritual de Transmutación")
+            messages.success(request, f"✨ ¡Ritual completado! Has transmutado tu mascota a {new_name} por {cost} 🪙.")
         else:
             messages.error(request, f"No tienes suficiente oro ({cost} 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
             

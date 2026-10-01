@@ -113,65 +113,116 @@
         {% endblock %}
     </main>
 
-    <!-- 📱 BARRA DE NAVEGACIÓN INFERIOR FIJA (ESTILO APP MÓVIL MODERNA) -->
-    <nav class="fixed bottom-3 inset-x-4 max-w-md mx-auto z-50">
-        <div class="bg-black/85 border border-vip-gold/40 backdrop-blur-xl rounded-2xl p-2 px-4 flex justify-between items-center shadow-[0_10px_25px_rgba(0,0,0,0.9),0_0_15px_rgba(212,175,55,0.15)]">
+    <!-- 📱 BARRA DE NAVEGACIÓN INFERIOR BLINDADA ESTILO TELEGRAM MINI APP -->
+    <div class="fixed bottom-0 inset-x-0 z-[99999] pointer-events-none pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 pt-2">
+        <nav class="max-w-md mx-auto pointer-events-auto bg-[#0a0514]/95 border border-vip-gold/40 backdrop-blur-xl rounded-2xl p-1.5 px-2 flex justify-between items-center shadow-[0_10px_35px_rgba(0,0,0,0.95),0_0_15px_rgba(212,175,55,0.25)]">
             
-           <!-- 1. Menú -->
-            <button onclick="navGo('{% url 'core:menu' %}')" class="flex flex-col items-center text-vip-text/60 hover:text-vip-gold transition-colors group">
-                <span class="text-lg group-hover:scale-110 transition-transform">🏛️</span>
-                <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Inicio</span>
+            <!-- 1. Inicio -->
+            <button type="button" onclick="universalNav('/')" 
+                    class="flex-1 flex flex-col items-center justify-center py-1.5 px-1 text-stone-300 hover:text-vip-gold active:scale-90 transition-all select-none">
+                <span class="text-xl leading-none">🏛️</span>
+                <span class="text-[9px] font-bold uppercase tracking-wider mt-1 text-stone-300">Inicio</span>
             </button>
 
             <!-- 2. Feed VIP -->
-            <button onclick="navGo('{% url 'idols:social_feed' %}')" class="flex flex-col items-center text-vip-text/60 hover:text-purple-400 transition-colors group">
-                <span class="text-lg group-hover:scale-110 transition-transform">📱</span>
-                <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Muro</span>
+            <button type="button" onclick="universalNav('/idols/feed/')" 
+                    class="flex-1 flex flex-col items-center justify-center py-1.5 px-1 text-stone-300 hover:text-purple-300 active:scale-90 transition-all select-none">
+                <span class="text-xl leading-none">📱</span>
+                <span class="text-[9px] font-bold uppercase tracking-wider mt-1 text-stone-300">Muro</span>
             </button>
 
-            <!-- 3. Galería Elenco (Botón Central Destacado) -->
-            <button onclick="navGo('{% url 'idols:gallery' %}')" class="-mt-5 bg-gradient-to-tr from-vip-gold to-yellow-200 text-black w-12 h-12 rounded-full border-2 border-yellow-100 flex items-center justify-center shadow-[0_0_15px_rgba(212,175,55,0.6)] active:scale-95 transition-all">
-                <span class="text-xl">✨</span>
+            <!-- 3. Botón Central Intuitivo: ELENCO DE IDOLS (Antifaz Veneciano & Corona) -->
+            <button type="button" onclick="universalNav('/idols/gallery/')" 
+                    class="-mt-6 bg-gradient-to-tr from-amber-500 via-yellow-300 to-amber-600 text-stone-950 w-14 h-14 rounded-full border-2 border-yellow-100 flex flex-col items-center justify-center shadow-[0_0_25px_rgba(212,175,55,0.85)] active:scale-90 transition-all select-none mx-1 hover:brightness-110">
+                <span class="text-2xl leading-none">🎭</span>
+                <span class="text-[8px] font-black uppercase tracking-tighter text-stone-950 leading-tight mt-0.5">Elenco</span>
             </button>
 
             <!-- 4. Mascotas -->
-            <button onclick="navGo('{% url 'pets:sanctuary' %}')" class="flex flex-col items-center text-vip-text/60 hover:text-purple-300 transition-colors group">
-                <span class="text-lg group-hover:scale-110 transition-transform">🐾</span>
-                <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Santuario</span>
+            <button type="button" onclick="universalNav('/pets/')" 
+                    class="flex-1 flex flex-col items-center justify-center py-1.5 px-1 text-stone-300 hover:text-purple-300 active:scale-90 transition-all select-none">
+                <span class="text-xl leading-none">🐾</span>
+                <span class="text-[9px] font-bold uppercase tracking-wider mt-1 text-stone-300">Santuario</span>
             </button>
 
             <!-- 5. Bóveda -->
-            <button onclick="navGo('{% url 'economy:wallet' %}')" class="flex flex-col items-center text-vip-text/60 hover:text-vip-gold transition-colors group">
-                <span class="text-lg group-hover:scale-110 transition-transform">🪙</span>
-                <span class="text-[9px] font-bold uppercase tracking-wider mt-0.5">Bóveda</span>
+            <button type="button" onclick="universalNav('/economy/wallet/')" 
+                    class="flex-1 flex flex-col items-center justify-center py-1.5 px-1 text-stone-300 hover:text-vip-gold active:scale-90 transition-all select-none">
+                <span class="text-xl leading-none">🪙</span>
+                <span class="text-[9px] font-bold uppercase tracking-wider mt-1 text-stone-300">Bóveda</span>
             </button>
 
-        </div>
-    </nav>
+        </nav>
+    </div>
 
-    <!-- Script Global de Navegación Telegram -->
+    <!-- Script de Autenticación y Navegación Oficial de Telegram Mini App -->
     <script>
-        const tg = window.Telegram?.WebApp;
-        if (tg) {
-            tg.expand();
-            tg.ready();
+        const tgApp = window.Telegram?.WebApp;
+        if (tgApp) {
+            try {
+                tgApp.expand();
+                tgApp.ready();
+            } catch(e) {}
         }
 
-        function getActiveTgId() {
+        // Obtener el ID y el @ de Telegram del usuario que TIENE LA APP ABIERTA AHORA MISMO
+        function getRealTelegramUser() {
+            const tgUser = tgApp?.initDataUnsafe?.user;
+            if (tgUser && tgUser.id) {
+                const tgHandle = tgUser.username ? `@${tgUser.username}` : (tgUser.first_name || `Usuario_${tgUser.id}`);
+                return {
+                    id: String(tgUser.id),
+                    username: tgHandle
+                };
+            }
+
             const urlParams = new URLSearchParams(window.location.search);
-            const fromUrl = urlParams.get('tg_id');
-            if (fromUrl && fromUrl !== 'None' && fromUrl !== 'undefined') return fromUrl;
-            
-            const user = tg?.initDataUnsafe?.user;
-            return user ? user.id : '123456789';
+            const urlId = urlParams.get('tg_id');
+            if (urlId && urlId !== 'None' && urlId !== 'undefined' && urlId.trim() !== '') {
+                const urlName = urlParams.get('tg_username') || `Noble_${urlId}`;
+                return {
+                    id: urlId,
+                    username: urlName.startsWith('@') ? urlName : `@${urlName}`
+                };
+            }
+
+            return {
+                id: localStorage.getItem('current_tg_id') || '123456789',
+                username: localStorage.getItem('current_tg_user') || 'Invitado'
+            };
         }
 
-        function navGo(baseUrl) {
-            const tgId = getActiveTgId();
-            // Si la URL ya tiene signos de interrogación o parámetros
-            const separator = baseUrl.includes('?') ? '&' : '?';
-            window.location.href = `${baseUrl}${separator}tg_id=${tgId}`;
-        }
+        // Sincronizar cuenta al cargar la página: Si la URL trae el ID de otra persona, forzar la cuenta del móvil actual
+        (function syncAccount() {
+            const currentUser = getRealTelegramUser();
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentUrlId = urlParams.get('tg_id');
+            const currentUrlName = urlParams.get('tg_username');
+
+            localStorage.setItem('current_tg_id', currentUser.id);
+            localStorage.setItem('current_tg_user', currentUser.username);
+
+            // Si Telegram WebApp reporta un usuario y la URL tiene el de otra persona (o ninguno), corregir de inmediato
+            if (tgApp?.initDataUnsafe?.user && (currentUrlId !== currentUser.id || !currentUrlName)) {
+                const cleanUrl = window.location.pathname;
+                window.location.replace(`${cleanUrl}?tg_id=${currentUser.id}&tg_username=${encodeURIComponent(currentUser.username)}`);
+            }
+        })();
+
+        // Navegación universal limpia
+        window.universalNav = function(targetPath) {
+            try {
+                tgApp?.HapticFeedback?.impactOccurred('light');
+            } catch(e) {}
+
+            const user = getRealTelegramUser();
+            const cleanPath = targetPath.split('?')[0];
+            window.location.href = `${cleanPath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}`;
+        };
+
+        window.navGo = window.universalNav;
+        window.getGlobalTgId = function() { return getRealTelegramUser().id; };
+        window.getGlobalTgUser = function() { return getRealTelegramUser().username; };
     </script>
 </body>
 </html>

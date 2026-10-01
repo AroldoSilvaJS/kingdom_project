@@ -3,16 +3,15 @@ from django.utils import timezone
 from datetime import timedelta
 
 class Wallet(models.Model):
-    # Usamos unique=True porque cada usuario solo debe tener una billetera
+    # Cada usuario solo debe tener una billetera asociada a su ID de Telegram
     telegram_user_id = models.BigIntegerField(unique=True, db_index=True)
     
-    # Saldo del usuario. Empezamos con 150 de oro como regalo inicial equilibrado
+    # Saldo del usuario (150 monedas de oro como regalo inicial)
     balance = models.IntegerField("Monedas de Oro", default=150)
     
-    # NUEVO CAMPO: Recuerda cuándo reclamó su último bono
+    # Marca temporal del último bono diario reclamado
     last_bonus_claim = models.DateTimeField("Último bono", null=True, blank=True)
     
-    # Registro de cuándo se creó y actualizó
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -24,28 +23,45 @@ class Wallet(models.Model):
         return f"Wallet {self.telegram_user_id} - Saldo: {self.balance}"
     
     def add_funds(self, amount):
-        """Método útil para sumar dinero fácilmente"""
+        """Suma oro a la billetera"""
         self.balance += amount
         self.save()
         
     def remove_funds(self, amount):
-        """Método útil para restar dinero verificando que tenga saldo"""
+        """Resta oro verificando que no quede en saldo negativo"""
         if self.balance >= amount:
             self.balance -= amount
             self.save()
             return True
         return False
 
-    # NUEVA FUNCIÓN: Verifica matemáticamente si pasaron 24 horas
+    # --- LÓGICA DE COOLDOWN DINÁMICA (BUFF DE MASCOTA: ZORRO) ---
+    def get_cooldown_hours(self):
+        """
+        Si el usuario posee un Zorro Kitsune en su Santuario,
+        el bono diario se recarga en 22 horas en vez de 24.
+        """
+        try:
+            from pets.models import Pet
+            pet = Pet.objects.filter(telegram_user_id=self.telegram_user_id).first()
+            if pet and pet.species == 'fox':
+                return 22
+        except Exception:
+            pass
+        return 24
+
     def can_claim_bonus(self):
+        """Verifica si ya transcurrieron las horas necesarias para volver a reclamar"""
         if not self.last_bonus_claim:
-            return True # Si nunca ha reclamado, puede hacerlo
-        return timezone.now() >= self.last_bonus_claim + timedelta(hours=24)
+            return True # Primer reclamo siempre disponible
+        hours = self.get_cooldown_hours()
+        return timezone.now() >= self.last_bonus_claim + timedelta(hours=hours)
     
-    # NUEVO MÉTODO: Calcula los segundos exactos que faltan para el próximo bono
     def seconds_until_next_bonus(self):
+        """Calcula los segundos exactos restantes para el temporizador en frontend"""
         if self.can_claim_bonus():
             return 0
-        proximo_reclamo = self.last_bonus_claim + timedelta(hours=24)
+        hours = self.get_cooldown_hours()
+        proximo_reclamo = self.last_bonus_claim + timedelta(hours=hours)
         restante = (proximo_reclamo - timezone.now()).total_seconds()
         return max(0, int(restante))

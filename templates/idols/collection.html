@@ -9,9 +9,9 @@
             <h2 class="text-xl font-bold text-vip-gold tracking-wide">💎 Mi Colección Privada</h2>
             <p class="text-xs text-vip-text/60">Tus fotos y antojos VIP desbloqueados</p>
         </div>
-        <a href="/economy/wallet/?tg_id={{ tg_id }}" class="text-xs text-vip-text/70 hover:text-vip-text bg-vip-panel px-3 py-1.5 rounded-full border border-vip-gold/30">
+        <a href="javascript:void(0)" onclick="navGo('/economy/wallet/')" class="text-xs text-vip-text/70 hover:text-vip-text bg-vip-panel px-3 py-1.5 rounded-full border border-vip-gold/30">
             ⬅ Bóveda
-        </a>
+         </a>
     </div>
 
     <!-- Estadísticas de la colección -->
@@ -22,13 +22,17 @@
         </span>
     </div>
 
-    <!-- Cuadrícula de Fotos Desbloqueadas -->
+   <!-- Cuadrícula de Fotos Desbloqueadas -->
     {% if posts %}
         <div class="grid grid-cols-2 gap-3 mt-2">
             {% for post in posts %}
                 <div class="relative rounded-xl overflow-hidden border border-vip-gold/30 aspect-[3/4] group bg-black shadow-md flex flex-col justify-end">
-                    <!-- Foto en alta calidad sin censura -->
-                    <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    <!-- Foto en alta calidad sin censura (Con verificación de existencia) -->
+                    {% if post.image %}
+                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    {% else %}
+                        <div class="absolute inset-0 w-full h-full bg-purple-950/60 flex items-center justify-center text-3xl">🔞</div>
+                    {% endif %}
                     
                     <!-- Sombra para leer datos -->
                     <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
@@ -49,9 +53,9 @@
             <p class="text-xs text-vip-text/50 max-w-xs">
                 Cuando desbloquees fotos exclusivas en el Muro VIP, aparecerán aquí para siempre.
             </p>
-            <a href="/idols/feed/?tg_id={{ tg_id }}" class="mt-2 bg-gradient-to-r from-vip-gold to-yellow-600 text-black text-xs font-bold px-4 py-2.5 rounded-xl uppercase tracking-wider hover:brightness-110 transition-all shadow-md">
-                Ir al Muro VIP
-            </a>
+            <a href="javascript:void(0)" onclick="navGo('/idols/feed/')" class="mt-2 bg-gradient-to-r from-vip-gold to-yellow-600 text-black text-xs font-bold px-4 py-2.5 rounded-xl uppercase tracking-wider hover:brightness-110 transition-all shadow-md">
+              Ir al Muro VIP
+             </a>
         </div>
     {% endif %}
 
