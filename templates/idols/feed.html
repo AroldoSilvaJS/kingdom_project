@@ -273,11 +273,9 @@
 </div>
 
 <script>
-    const tgApp = window.Telegram?.WebApp;
-
     // Like AJAX interactivo
     async function handleLike(postId) {
-        try { tgApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
         
         const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
         const formData = new FormData();
@@ -308,9 +306,9 @@
 
     // Desplegar u ocultar comentarios
     function toggleComments(postId) {
-        try { tgApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
         const section = document.getElementById(`comments-section-${postId}`);
-        section.classList.toggle('hidden');
+        if (section) section.classList.toggle('hidden');
     }
 
     // Filtros de Muro
@@ -320,31 +318,35 @@
         const btnVip = document.getElementById('btn-filter-vip');
 
         if (type === 'vip') {
-            btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-gradient-to-r from-purple-800 to-fuchsia-700 text-white shadow-md";
-            btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
+            if (btnVip) btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-gradient-to-r from-purple-800 to-fuchsia-700 text-white shadow-md";
+            if (btnAll) btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
             items.forEach(el => {
                 el.style.display = (el.dataset.network === 'fans') ? 'block' : 'none';
             });
         } else {
-            btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-vip-gold text-black shadow-md";
-            btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
+            if (btnAll) btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-vip-gold text-black shadow-md";
+            if (btnVip) btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
             items.forEach(el => el.style.display = 'block');
         }
     }
 
     function openTipModal(postId, idolName) {
         const form = document.getElementById('tip-form');
-        form.action = `/idols/feed/tip/${postId}/`;
-        document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
-        document.getElementById('tip-modal').classList.remove('hidden');
+        if (form) form.action = `/idols/feed/tip/${postId}/`;
+        const target = document.getElementById('tip-idol-target');
+        if (target) target.innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
+        const modal = document.getElementById('tip-modal');
+        if (modal) modal.classList.remove('hidden');
     }
 
     function closeTipModal() {
-        document.getElementById('tip-modal').classList.add('hidden');
+        const modal = document.getElementById('tip-modal');
+        if (modal) modal.classList.add('hidden');
     }
 
     function setTipAmount(val) {
-        document.getElementById('tip-amount-input').value = val;
+        const input = document.getElementById('tip-amount-input');
+        if (input) input.value = val;
     }
 </script>
 {% endblock %}
