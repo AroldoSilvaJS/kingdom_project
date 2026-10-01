@@ -130,6 +130,22 @@
           Publicar
         </button>
       </form>
+
+<!-- 4. Purgar Datos de Prueba -->
+      <form method="POST" class="bg-black/60 p-3 rounded-2xl border border-rose-500/40 flex flex-col justify-between gap-2">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="purge_test_data">
+        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+        <div>
+          <span class="text-xs font-bold text-rose-400 flex items-center gap-1"><span>🧹</span> Purga de Pruebas</span>
+          <p class="text-[10px] text-stone-400 mt-0.5">Elimina usuarios viejos, perfiles e Idols anteriores.</p>
+        </div>
+        <button type="submit" onclick="return confirm('⚠️ ¿Estás seguro de que deseas ELIMINAR TODOS los usuarios, idols y datos de prueba? Solo quedará tu cuenta de Corona.')" 
+                class="w-full bg-rose-950 border border-rose-500 text-rose-200 hover:bg-rose-900 font-black text-xs py-1.5 rounded-lg uppercase tracking-wider">
+          Limpiar Todo
+        </button>
+      </form>
+
     </div>
   </div>
 

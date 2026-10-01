@@ -312,6 +312,33 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
+        # 8. PURGA GENERAL DE PRUEBAS (Resetear usuarios, perfiles e idols)
+        elif accion == 'purge_test_data':
+            # Borrar reseñas, antojos, compras, posts, mascotas, billeteras y perfiles
+            from idols.models import Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
+            PostComment.objects.all().delete()
+            PostUnlock.objects.all().delete()
+            PostLike.objects.all().delete()
+            CustomRequest.objects.all().delete()
+            Review.objects.all().delete()
+            Post.objects.all().delete()
+            IdolProfile.objects.all().delete()
+            Pet.objects.all().delete()
+
+            # Borrar todos los roles y perfiles EXCEPTO el tuyo de Corona Imperial (7474444797)
+            UserRole.objects.exclude(telegram_id=7474444797).delete()
+            UserProfile.objects.exclude(telegram_user_id=7474444797).delete()
+            Wallet.objects.exclude(telegram_user_id=7474444797).delete()
+
+            # Asegurar que tu cuenta de Administrador quede activa y limpia
+            UserRole.objects.update_or_create(telegram_id=7474444797, defaults={'role': 'admin'})
+            w, _ = Wallet.objects.get_or_create(telegram_user_id=7474444797)
+            w.balance = 1000
+            w.save()
+
+            messages.success(request, "🧹 ¡Purga completada! Todos los usuarios de prueba, idols y datos viejos fueron eliminados. Solo queda la Corona.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
         # 2. LLUVIA DE ORO MASIVA (a todos los no baneados)
         elif accion == 'mass_gold':
             amount = int(request.POST.get('amount', 0))
@@ -363,6 +390,33 @@ def admin_panel(request, admin_tg_id):
             KingdomSetting.set_val('broadcast_message', txt)
             KingdomSetting.set_val('broadcast_active', 'true' if request.POST.get('is_active') == '1' else 'false')
             messages.success(request, "📢 Decreto global actualizado.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 8. PURGA GENERAL DE PRUEBAS (Resetear usuarios, perfiles e idols)
+        elif accion == 'purge_test_data':
+            # Borrar reseñas, antojos, compras, posts, mascotas, billeteras y perfiles
+            from idols.models import Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
+            PostComment.objects.all().delete()
+            PostUnlock.objects.all().delete()
+            PostLike.objects.all().delete()
+            CustomRequest.objects.all().delete()
+            Review.objects.all().delete()
+            Post.objects.all().delete()
+            IdolProfile.objects.all().delete()
+            Pet.objects.all().delete()
+
+            # Borrar todos los roles y perfiles EXCEPTO el tuyo de Corona Imperial (7474444797)
+            UserRole.objects.exclude(telegram_id=7474444797).delete()
+            UserProfile.objects.exclude(telegram_user_id=7474444797).delete()
+            Wallet.objects.exclude(telegram_user_id=7474444797).delete()
+
+            # Asegurar que tu cuenta de Administrador quede activa y limpia
+            UserRole.objects.update_or_create(telegram_id=7474444797, defaults={'role': 'admin'})
+            w, _ = Wallet.objects.get_or_create(telegram_user_id=7474444797)
+            w.balance = 1000
+            w.save()
+
+            messages.success(request, "🧹 ¡Purga completada! Todos los usuarios de prueba, idols y datos viejos fueron eliminados. Solo queda la Corona.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
     # Censo de súbditos enriquecido con sus perfiles de usuario reales
