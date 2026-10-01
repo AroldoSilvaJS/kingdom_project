@@ -417,7 +417,7 @@ def telegram_webhook(request):
                     IdolProfile.objects.filter(telegram_user_id=user_id).update(owner_username=handle_real)
 
                 if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
-                    base_url = request.build_absolute_uri('/')
+                    base_url = request.build_absolute_uri('/').replace('http://', 'https://')
                     is_group = int(chat_id) < 0
                     if is_group:
                         app_link = base_url
