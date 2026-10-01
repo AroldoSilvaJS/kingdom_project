@@ -18,4 +18,6 @@ urlpatterns = [
     path('feed/tip/<int:post_id>/', views.send_tip, name='send_tip'),
     path('<int:idol_id>/custom-request/', views.create_custom_request, name='create_custom_request'),
     path('feed/comment/<int:post_id>/', views.add_comment, name='add_comment'),
+    path('feed/edit/<int:post_id>/', views.edit_post, name='edit_post'),      # 👈 AÑADIR
+    path('feed/delete/<int:post_id>/', views.delete_post, name='delete_post'),  # 👈 AÑADIR
 ]

@@ -10,6 +10,7 @@ from core.models import UserProfile
 from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
+from core.models import UserRole
 
 
 def resolve_safe_tg(request):
@@ -306,6 +307,7 @@ def social_feed(request):
     posts = Post.objects.all().select_related('idol').prefetch_related('comments')
     unlocked_ids = []
     liked_ids = []
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
     
     if tg_id:
         pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
@@ -318,7 +320,71 @@ def social_feed(request):
         'tg_id': tg_id,
         'unlocked_ids': list(unlocked_ids),
         'liked_ids': liked_ids,
-        'tg_username': tg_username
+        'tg_username': tg_username,
+        'is_admin': is_admin,
+    })
+
+def delete_post(request, post_id):
+    tg_id = resolve_safe_tg(request)
+    post = get_object_or_404(Post, id=post_id)
+    
+    from core.models import UserRole
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_owner = (tg_id == post.idol.telegram_user_id)
+
+    if not (is_admin or is_owner):
+        messages.error(request, "No tienes permiso para eliminar esta publicación.")
+        return redirect(f'/idols/feed/?tg_id={tg_id}')
+
+    if request.method == 'POST':
+        post.delete()
+        messages.success(request, "🗑️ Publicación eliminada del Muro con éxito.")
+        
+    return redirect(f'/idols/feed/?tg_id={tg_id}')
+
+
+def edit_post(request, post_id):
+    tg_id = resolve_safe_tg(request)
+    post = get_object_or_404(Post, id=post_id)
+    
+    from core.models import UserRole
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_owner = (tg_id == post.idol.telegram_user_id)
+
+    if not (is_admin or is_owner):
+        messages.error(request, "No tienes permiso para editar esta publicación.")
+        return redirect(f'/idols/feed/?tg_id={tg_id}')
+
+    creator_profile = UserProfile.objects.filter(telegram_user_id=post.idol.telegram_user_id).first()
+    max_price = creator_profile.max_post_price_allowed if creator_profile else 80
+
+    if request.method == 'POST':
+        post.caption = request.POST.get('caption', '').strip()
+        network = request.POST.get('network', post.network)
+        price = request.POST.get('price', post.price)
+
+        if 'image' in request.FILES:
+            post.image = request.FILES['image']
+
+        post.network = network
+        if network == 'fans':
+            try:
+                p_val = int(price)
+                post.price = min(p_val, max_price) if not is_admin else p_val
+            except ValueError:
+                pass
+        else:
+            post.price = 0
+
+        post.save()
+        messages.success(request, "✨ Publicación actualizada con éxito.")
+        return redirect(f'/idols/feed/?tg_id={tg_id}')
+
+    return render(request, 'idols/edit_post.html', {
+        'post': post,
+        'tg_id': tg_id,
+        'max_price': max_price,
+        'is_admin': is_admin
     })
 
 

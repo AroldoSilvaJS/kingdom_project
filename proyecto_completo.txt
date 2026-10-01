@@ -235,11 +235,17 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
 
-# Configuración de Cloudinary para fotos de Idols y Avatares
+# ✅ REEMPLAZAR POR:
 CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
 
-if CLOUDINARY_URL:
-    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+STORAGES = {
+    "default": {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage" if CLOUDINARY_URL else "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
     # Forzar a Django a reconocer el HTTPS detrás del proxy de Render
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -268,6 +274,8 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings # <- Añadir
 from django.conf.urls.static import static # <- Añadir
+from django.views.static import serve
+from django.urls import re_path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -280,6 +288,11 @@ urlpatterns = [
 # Añadir esto al final:
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+    # Servir archivos media tanto en desarrollo como en producción (Gunicorn):
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+]
 
 ==================================================
 ARCHIVO: .\config\wsgi.py
@@ -2136,6 +2149,11 @@ def main_menu(request):
     
     user_profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
 
+    pending_antojos_count = CustomRequest.objects.filter(
+        idol__telegram_user_id=tg_id, 
+        status='pending'
+    ).count() if is_idol else 0
+
     if user_profile.username and not str(user_profile.username).lower().startswith('noble_'):
         clean_handle = user_profile.username if user_profile.username.startswith('@') else f"@{user_profile.username}"
         IdolProfile.objects.filter(telegram_user_id=tg_id).update(owner_username=clean_handle)
@@ -2146,6 +2164,7 @@ def main_menu(request):
         'is_idol': is_idol,
         'is_admin': is_admin,
         'user_profile': user_profile,
+        'pending_antojos_count': pending_antojos_count,
     })
 
 
@@ -3838,12 +3857,18 @@ def create_custom_request(request, idol_id):
             status='pending'
         )
 
+        # ✅ Mensaje detallado indicando a cuál de tus Idols se le pidió el antojo y con botón directo:
         send_telegram_msg(
-            idol.telegram_user_id,
-            f"📬 <b>¡Nueva Petición de Antojo!</b>\n"
-            f"El noble <b>{tg_username}</b> te ofrece <b>+{bounty} 🪙 de oro</b> por un antojo:\n"
-            f"<i>«{description}»</i>\n\n"
-            f"Ingresa a tu panel de Idols para entregar la foto o rechazarla."
+            chat_id=idol.telegram_user_id,
+            text=(
+                f"📬 <b>¡Nueva Petición de Antojo para tu Musa {idol.stage_name}!</b> 🌹\n\n"
+                f"👤 <b>Noble Solicitante:</b> {tg_username}\n"
+                f"🪙 <b>Recompensa en custodia:</b> <b>+{bounty} 🪙</b>\n"
+                f"📝 <b>Deseo:</b> <i>«{description}»</i>\n\n"
+                f"Ingresa a tu panel de Idols para entregar la foto exclusiva o rechazarla."
+            ),
+            button_text=f"📸 Atender Antojo de {idol.stage_name}",
+            button_url=f"https://kingdom-pleasure-app.onrender.com/idols/?tg_id={idol.telegram_user_id}"
         )
         messages.success(request, f"¡Petición enviada a {idol.stage_name}! Tu oro quedó en custodia.")
         
@@ -5006,12 +5031,25 @@ ARCHIVO: .\templates\core\menu.html
     <!-- ZONA ESPECÍFICA DE IDOLS (Solo visible si es Idol) -->
     {% if is_idol %}
     <button type="button" onclick="universalNav('{% url 'idols:list' %}')" 
-            class="vip-panel p-4 flex items-center justify-between border-purple-500/40 hover:border-purple-400 bg-gradient-to-r from-purple-950/30 to-black transition-all">
+            class="vip-panel p-4 flex items-center justify-between border-purple-500/40 hover:border-purple-400 bg-gradient-to-r from-purple-950/30 to-black transition-all relative overflow-hidden">
         <div class="flex items-center gap-3">
             <span class="text-2xl">🎭</span>
             <div class="text-left">
-                <h4 class="font-bold text-purple-200 text-xs uppercase tracking-wider">Gestión de Mis Idols (Máx 2)</h4>
-                <p class="text-[10px] text-vip-text/60">Editar perfiles y responder peticiones</p>
+                <div class="flex items-center gap-2">
+                    <h4 class="font-bold text-purple-200 text-xs uppercase tracking-wider">Gestión de Mis Idols (Máx 2)</h4>
+                    {% if pending_antojos_count > 0 %}
+                        <span class="bg-rose-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-bounce">
+                            {{ pending_antojos_count }} NUEVO
+                        </span>
+                    {% endif %}
+                </div>
+                <p class="text-[10px] text-vip-text/60">
+                    {% if pending_antojos_count > 0 %}
+                        <strong class="text-yellow-400">⚠️ ¡Tienes {{ pending_antojos_count }} petición de antojo esperando entrega!</strong>
+                    {% else %}
+                        Editar perfiles y responder peticiones
+                    {% endif %}
+                </p>
             </div>
         </div>
         <span class="text-purple-300 text-sm">➡️</span>
@@ -7316,6 +7354,54 @@ ARCHIVO: .\templates\idols\list.html
         <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/60 hover:text-vip-gold bg-black/60 px-3 py-1 rounded-full border border-vip-gold/30">⬅ Volver</button>
     </div>
 
+     <!-- BANDEJA DE PETICIONES DE ANTOJOS PENDIENTES -->
+    {% if pending_requests %}
+        <div class="mt-4 pt-4 border-t border-vip-gold/30 flex flex-col gap-3">
+            <h3 class="text-sm font-bold text-yellow-400 flex items-center gap-2">
+                <span>📬</span> Peticiones de Antojos Pendientes ({{ pending_requests|length }})
+            </h3>
+
+            {% for req in pending_requests %}
+                <div class="bg-black/60 border border-vip-gold/40 p-4 rounded-xl flex flex-col gap-2.5 shadow-md">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-xs font-bold text-vip-gold">Para: {{ req.idol.stage_name }}</span>
+                            <p class="text-[11px] text-vip-text/60">De: {{ req.client_username }}</p>
+                        </div>
+                        <span class="bg-yellow-950/60 border border-vip-gold text-vip-gold px-2.5 py-0.5 rounded-full text-xs font-mono font-bold">
+                            +{{ req.bounty }} 🪙
+                        </span>
+                    </div>
+
+                    <p class="text-xs text-white/90 bg-vip-base/70 p-2.5 rounded-lg border border-vip-gold/20 italic">
+                        "{{ req.description }}"
+                    </p>
+
+                    <!-- Formulario de Entrega / Rechazo -->
+                    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-1">
+                        {% csrf_token %}
+                        <input type="hidden" name="request_id" value="{{ req.id }}">
+
+                        <label class="block text-[10px] text-vip-gold uppercase">Subir foto del antojo:</label>
+                        <input type="file" name="delivered_photo" accept="image/*"
+                               class="w-full bg-vip-base border border-vip-gold/30 rounded p-1.5 text-[11px] text-white file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-vip-gold file:text-black hover:file:bg-yellow-500 cursor-pointer">
+
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <button type="submit" name="action" value="accept_request"
+                                    class="bg-green-700/80 border border-green-500 text-white font-bold py-1.5 rounded text-xs hover:bg-green-600 transition-colors uppercase tracking-wider">
+                                ✅ Entregar Foto
+                            </button>
+                            <button type="submit" name="action" value="reject_request"
+                                    class="bg-red-900/60 border border-red-500/50 text-red-200 font-bold py-1.5 rounded text-xs hover:bg-red-700 transition-colors uppercase tracking-wider">
+                                ❌ Rechazar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
     {% if idols %}
         <div class="flex flex-col gap-3">
             {% for idol in idols %}
@@ -7375,53 +7461,7 @@ ARCHIVO: .\templates\idols\list.html
         <p class="text-center text-sm text-vip-text/60 py-4">Aún no tienes Idols registradas.</p>
     {% endif %}
 
-    <!-- BANDEJA DE PETICIONES DE ANTOJOS PENDIENTES -->
-    {% if pending_requests %}
-        <div class="mt-4 pt-4 border-t border-vip-gold/30 flex flex-col gap-3">
-            <h3 class="text-sm font-bold text-yellow-400 flex items-center gap-2">
-                <span>📬</span> Peticiones de Antojos Pendientes ({{ pending_requests|length }})
-            </h3>
-
-            {% for req in pending_requests %}
-                <div class="bg-black/60 border border-vip-gold/40 p-4 rounded-xl flex flex-col gap-2.5 shadow-md">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <span class="text-xs font-bold text-vip-gold">Para: {{ req.idol.stage_name }}</span>
-                            <p class="text-[11px] text-vip-text/60">De: {{ req.client_username }}</p>
-                        </div>
-                        <span class="bg-yellow-950/60 border border-vip-gold text-vip-gold px-2.5 py-0.5 rounded-full text-xs font-mono font-bold">
-                            +{{ req.bounty }} 🪙
-                        </span>
-                    </div>
-
-                    <p class="text-xs text-white/90 bg-vip-base/70 p-2.5 rounded-lg border border-vip-gold/20 italic">
-                        "{{ req.description }}"
-                    </p>
-
-                    <!-- Formulario de Entrega / Rechazo -->
-                    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-1">
-                        {% csrf_token %}
-                        <input type="hidden" name="request_id" value="{{ req.id }}">
-
-                        <label class="block text-[10px] text-vip-gold uppercase">Subir foto del antojo:</label>
-                        <input type="file" name="delivered_photo" accept="image/*"
-                               class="w-full bg-vip-base border border-vip-gold/30 rounded p-1.5 text-[11px] text-white file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-vip-gold file:text-black hover:file:bg-yellow-500 cursor-pointer">
-
-                        <div class="grid grid-cols-2 gap-2 mt-1">
-                            <button type="submit" name="action" value="accept_request"
-                                    class="bg-green-700/80 border border-green-500 text-white font-bold py-1.5 rounded text-xs hover:bg-green-600 transition-colors uppercase tracking-wider">
-                                ✅ Entregar Foto
-                            </button>
-                            <button type="submit" name="action" value="reject_request"
-                                    class="bg-red-900/60 border border-red-500/50 text-red-200 font-bold py-1.5 rounded text-xs hover:bg-red-700 transition-colors uppercase tracking-wider">
-                                ❌ Rechazar
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            {% endfor %}
-        </div>
-    {% endif %}
+   
 
     {% if can_add_more %}
         <button type="button" onclick="goToCreate()" class="mt-4 w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">

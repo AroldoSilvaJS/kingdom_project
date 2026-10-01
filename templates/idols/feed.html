@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2">
+<div class="flex flex-col gap-4 mt-2 pb-36">
     
     <!-- ENCABEZADO Y FILTROS METÁLICOS -->
     <div class="flex flex-col gap-3">
@@ -46,7 +46,7 @@
         {% for post in posts %}
         <article class="vip-panel overflow-hidden border border-vip-gold/30 rounded-3xl feed-item {% if post.network == 'fans' %}is-vip{% else %}is-public{% endif %}" data-network="{{ post.network }}">
             
-            <!-- Cabecera del Post: Idol Info -->
+            <!-- Cabecera del Post: Idol Info y Botones de Gestión -->
             <div class="p-3.5 flex items-center justify-between border-b border-vip-gold/15 bg-black/40">
                 <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" class="flex items-center gap-2.5 group">
                     <div class="w-10 h-10 rounded-full overflow-hidden border border-vip-gold/50 group-hover:scale-105 transition-transform bg-black">
@@ -69,23 +69,47 @@
                     </div>
                 </a>
 
-                <!-- Tipo de Red / Badge -->
-                {% if post.network == 'fans' %}
-                    <span class="bg-gradient-to-r from-purple-950 to-fuchsia-950 border border-purple-500/60 text-purple-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.25)] flex items-center gap-1">
-                        <span>🔒</span> Antojo VIP
-                    </span>
-                {% else %}
-                    <span class="bg-black/60 border border-vip-gold/30 text-vip-gold text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full">
-                        📸 Público
-                    </span>
-                {% endif %}
+                <!-- Insignia de Red + Botones de Edición / Borrado -->
+                <div class="flex items-center gap-2">
+                    {% if post.network == 'fans' %}
+                        <span class="bg-gradient-to-r from-purple-950 to-fuchsia-950 border border-purple-500/60 text-purple-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.25)] flex items-center gap-1">
+                            <span>🔒</span> Antojo VIP
+                        </span>
+                    {% else %}
+                        <span class="bg-black/60 border border-vip-gold/30 text-vip-gold text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full">
+                            📸 Público
+                        </span>
+                    {% endif %}
+
+                    <!-- BOTONES PARA LA DUEÑA DE LA IDOL O ADMINISTRADORES -->
+                    {% if is_admin or post.idol.telegram_user_id == tg_id %}
+                        <button type="button" onclick="universalNav('{% url 'idols:edit_post' post.id %}')" 
+                                class="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-0.5 rounded-lg bg-black/70 border border-yellow-500/40" title="Editar Publicación">
+                            ✏️
+                        </button>
+                        <form action="{% url 'idols:delete_post' post.id %}" method="POST" class="m-0" 
+                              onsubmit="return confirm('¿Confirmas que deseas eliminar esta publicación del Muro?')">
+                            {% csrf_token %}
+                            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                            <button type="submit" 
+                                    class="text-rose-400 hover:text-rose-300 text-xs px-2 py-0.5 rounded-lg bg-rose-950/70 border border-rose-500/50" title="Eliminar Publicación">
+                                🗑️
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
             </div>
 
             <!-- IMAGEN O CONTENIDO CENSURADO VIP -->
             <div class="relative w-full aspect-square bg-black overflow-hidden flex items-center justify-center">
-                {% if post.network == 'gram' or post.id in unlocked_ids or is_owner %}
-                    <!-- IMAGEN PÚBLICA O YA DESBLOQUEADA -->
-                    <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover">
+                {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
+                    <!-- IMAGEN PÚBLICA O DESBLOQUEADA -->
+                    {% if post.image %}
+                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover">
+                    {% else %}
+                        <div class="w-full h-full flex items-center justify-center text-4xl">📸</div>
+                    {% endif %}
+
                     {% if post.network == 'fans' and post.id in unlocked_ids %}
                         <span class="absolute top-3 right-3 bg-green-950/80 border border-green-500 text-green-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow backdrop-blur-sm">
                             ✓ Desbloqueada
@@ -93,7 +117,9 @@
                     {% endif %}
                 {% else %}
                     <!-- CONTENIDO VIP BLOQUEADO / CENSURA ELEGANTE -->
-                    <img src="{{ post.image.url }}" alt="VIP" class="w-full h-full object-cover filter blur-xl brightness-[0.35] scale-110">
+                    {% if post.image %}
+                        <img src="{{ post.image.url }}" alt="VIP" class="w-full h-full object-cover filter blur-xl brightness-[0.35] scale-110">
+                    {% endif %}
                     
                     <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
                         <div class="w-14 h-14 rounded-2xl bg-black/70 border border-purple-500/60 flex items-center justify-center text-2xl shadow-[0_0_20px_rgba(168,85,247,0.4)] mb-3 animate-pulse">
@@ -193,7 +219,6 @@
 </div>
 
 <script>
-    // Filtro interactivo Todo vs Solo VIP
     function filterFeed(type) {
         const items = document.querySelectorAll('.feed-item');
         const btnAll = document.getElementById('btn-filter-all');
@@ -217,10 +242,10 @@
     }
 
     function openTipModal(postId, idolName) {
-    const form = document.getElementById('tip-form');
-    form.action = `/idols/feed/tip/${postId}/`; // ✅ RUTA REAL CORREGIDA
-    document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
-    document.getElementById('tip-modal').classList.remove('hidden');
+        const form = document.getElementById('tip-form');
+        form.action = `/idols/feed/tip/${postId}/`;
+        document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
+        document.getElementById('tip-modal').classList.remove('hidden');
     }
 
     function closeTipModal() {
