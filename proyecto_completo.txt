@@ -201,8 +201,11 @@ CORS_ALLOW_ALL_ORIGINS = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [BASE_DIR / 'static']
-STATIC_ROOT = BASE_DIR / 'staticfiles' # 👈 Para que Render empaquete los estilos
+STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else []
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# 👈 AÑADIR ESTA LÍNEA (compatibilidad Django 6 con Cloudinary y WhiteNoise):
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 # Archivos subidos por los usuarios
 MEDIA_URL = '/media/' 
@@ -237,6 +240,9 @@ CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
 
 if CLOUDINARY_URL:
     DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+    # Forzar a Django a reconocer el HTTPS detrás del proxy de Render
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 ==================================================
 ARCHIVO: .\config\urls.py
@@ -705,8 +711,14 @@ def send_telegram_msg(chat_id, text, button_text=None, button_url=None):
         )
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status == 200
+        
+    # ✅ REEMPLAZAR POR:
+    except urllib.error.HTTPError as e:
+        error_detalle = e.read().decode('utf-8')
+        print(f"❌ Error Telegram API ({e.code}): {error_detalle}")
+        return False
     except Exception as e:
-        print(f"⚠️ Error en send_telegram_msg: {e}")
+        print(f"⚠️ Error general en send_telegram_msg: {e}")
         return False
 
 ==================================================
@@ -2474,13 +2486,15 @@ def telegram_webhook(request):
                     user_prof.save(update_fields=['username'])
                     IdolProfile.objects.filter(telegram_user_id=user_id).update(owner_username=handle_real)
 
+                # ✅ REEMPLAZAR POR:
                 if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
-                    base_url = request.build_absolute_uri('/')
-                    is_group = int(chat_id) < 0
-                    if is_group:
-                        app_link = base_url
-                    else:
-                        app_link = f"{base_url}?tg_id={user_id}&tg_username={encode_param(handle_real)}"
+                   is_group = int(chat_id) < 0
+                if is_group:
+                  # En grupos: enlace directo a abrir el bot en privado o la Mini App
+                  app_link = "https://t.me/KingdomPleasure_bot?start=entrar"
+                else:
+                    # En privado: Mini App con autenticación directa
+                    app_link = f"https://kingdom-pleasure-app.onrender.com/?tg_id={user_id}&tg_username={encode_param(handle_real)}"
                     
                     if text.startswith('/id'):
                         texto = (

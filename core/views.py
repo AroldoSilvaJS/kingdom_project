@@ -416,15 +416,13 @@ def telegram_webhook(request):
                     user_prof.save(update_fields=['username'])
                     IdolProfile.objects.filter(telegram_user_id=user_id).update(owner_username=handle_real)
 
-                # ✅ REEMPLAZAR POR:
-                if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
-                   is_group = int(chat_id) < 0
-                if is_group:
-                  # En grupos: enlace directo a abrir el bot en privado o la Mini App
-                  app_link = "https://t.me/KingdomPleasure_bot?start=entrar"
-                else:
-                    # En privado: Mini App con autenticación directa
-                    app_link = f"https://kingdom-pleasure-app.onrender.com/?tg_id={user_id}&tg_username={encode_param(handle_real)}"
+                    if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):is_group = int(chat_id) < 0
+                    if is_group:
+                        # En grupos: enlace directo a abrir el bot en privado o la Mini App
+                        app_link = "https://t.me/KingdomPleasure_bot?start=entrar"
+                    else:
+                        # En privado: Mini App con autenticación directa
+                        app_link = f"https://kingdom-pleasure-app.onrender.com/?tg_id={user_id}&tg_username={encode_param(handle_real)}"
                     
                     if text.startswith('/id'):
                         texto = (
@@ -443,6 +441,7 @@ def telegram_webhook(request):
                         )
                         btn_txt = "✨ Entrar al Kingdom"
                     
+                    # 👈 Ahora send_telegram_msg se ejecuta SIEMPRE (en grupos y en privado):
                     send_telegram_msg(
                         chat_id=chat_id, 
                         text=texto, 
