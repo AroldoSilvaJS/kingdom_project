@@ -79,14 +79,6 @@ class UserProfile(models.Model):
     # --- MATEMÁTICA Y CURVA DE PROGRESIÓN PROFUNDA ---
     @property
     def xp_needed_for_next_level(self):
-        """
-        Curva balanceada progresiva:
-        Nivel 1 -> 120 XP
-        Nivel 5 -> 380 XP
-        Nivel 15 -> 1,150 XP
-        Nivel 30 -> 2,800 XP
-        Nivel 50+ -> Requiere dedicación real
-        """
         lvl = max(1, self.level)
         return int(120 + ((lvl - 1) * 65) + (lvl ** 1.55 * 18))
 
@@ -100,13 +92,7 @@ class UserProfile(models.Model):
 
     @property
     def max_bet_allowed(self):
-        """
-        Límite dinámico de apuesta en Casino según estatus:
-        Niveles 1-5: 25 🪙 (protege al novato)
-        Niveles 6-15: 50 🪙
-        Niveles 16-30: 100 🪙
-        Niveles 31+: 200 🪙 (Sala de Grandes Apostadores)
-        """
+        """Tope de apuesta en Casino según rango"""
         if self.level >= 31:
             return 200
         elif self.level >= 16:
@@ -117,6 +103,7 @@ class UserProfile(models.Model):
 
     @property
     def idol_rank_name(self):
+        """Escalafón propio para Idols"""
         if self.level >= 70:
             return "Reina Absoluta del Reino ⚜️"
         elif self.level >= 50:
@@ -132,7 +119,26 @@ class UserProfile(models.Model):
         return "Debutante Clandestina 🎭"
 
     @property
+    def idol_commission_rate(self):
+        """Las Idols ganan mayor comisión neta conforme suben de nivel"""
+        if self.level >= 30:
+            return 0.95
+        elif self.level >= 11:
+            return 0.90
+        return 0.85
+
+    @property
+    def max_post_price_allowed(self):
+        """Tope de precio de venta en KingdomFans según nivel"""
+        if self.level >= 21:
+            return 500
+        elif self.level >= 10:
+            return 200
+        return 80
+
+    @property
     def noble_rank_name(self):
+        """Escalafón nobiliario para Clientes"""
         if self.level >= 70:
             return "Soberano del Reino ⚜️"
         elif self.level >= 50:
@@ -151,7 +157,6 @@ class UserProfile(models.Model):
         return self.idol_rank_name if is_idol else self.noble_rank_name
 
     def get_daily_bonus_amount(self):
-        """Recompensa diaria que premia el rango alcanzado"""
         base = 30
         incremento = min(70, self.level * 2)
         return base + incremento

@@ -10,7 +10,6 @@ from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
 
 def get_safe_tg_id(request):
-    """Obtiene un ID numérico garantizado desde GET, POST o Session"""
     raw_id = request.POST.get('tg_id') or request.GET.get('tg_id') or request.session.get('tg_id')
     if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null']:
         try:
@@ -19,8 +18,7 @@ def get_safe_tg_id(request):
             return val
         except (ValueError, TypeError):
             pass
-    fallback = request.session.get('tg_id', 123456789)
-    return fallback
+    return request.session.get('tg_id', 123456789)
 
 
 def wallet_dashboard(request):
@@ -46,7 +44,7 @@ def casino_game(request):
     numero_ganador = None
     color_ganador = None
     
-    max_bet = profile.max_bet_allowed  # 👈 Límite dinámico según nivel
+    max_bet = profile.max_bet_allowed
     ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
         
     if request.method == 'POST':
@@ -74,7 +72,7 @@ def casino_game(request):
                     if eleccion == 'zero':
                         ganancia = int(apuesta * 14)
                     else:
-                        ganancia = int(apuesta * 2.0) # 1:1 pago limpio
+                        ganancia = int(apuesta * 2.0)
                     
                     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
                     if pet and pet.species == 'panther':
@@ -111,10 +109,7 @@ def claim_bonus(request):
         profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
         
         if wallet.can_claim_bonus():
-            ruleta_premios = [25, 35, 35, 40, 50, 60, 75, 120]
-            bonus_amount = random.choice(ruleta_premios)
-            bonus_amount += (profile.level * 2)
-
+            bonus_amount = profile.get_daily_bonus_amount()
             wallet.add_funds(bonus_amount)
             wallet.last_bonus_claim = timezone.now()
             wallet.save()

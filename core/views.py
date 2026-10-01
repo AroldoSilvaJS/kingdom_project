@@ -9,23 +9,17 @@ from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 
-# Modelos reales de tu proyecto
 from core.models import UserRole, UserProfile, KingdomSetting, AdminAuditLog
 from economy.models import Wallet
-from idols.models import IdolProfile, Post, PostUnlock
+from idols.models import IdolProfile, Post, PostUnlock, CustomRequest
 from pets.models import Pet
 from core.telegram_auth import is_user_in_group
 from core.telegram_notify import send_telegram_msg
 
-# ID Maestro del Administrador Supremo de Telegram
 ADMIN_TG_ID = '7474444797'
 
 
 def resolve_secure_tg_id(request):
-    """
-    Obtiene el telegram_id validado desde GET, POST, Cookie o Sesión de Django,
-    protegiendo la navegación en Telegram WebApp contra pérdidas de sesión.
-    """
     raw_id = (
         request.GET.get('tg_id') or 
         request.POST.get('tg_id') or 
@@ -40,12 +34,10 @@ def resolve_secure_tg_id(request):
         except (ValueError, TypeError):
             pass
 
-    fallback_id = request.session.get('tg_id', 123456789)
-    return fallback_id
+    return request.session.get('tg_id', 123456789)
 
 
 def admin_required(view_func):
-    """Decorador de seguridad: solo el Administrador Supremo o roles 'admin' pueden entrar."""
     def _wrapped_view(request, *args, **kwargs):
         tg_id = resolve_secure_tg_id(request)
         is_admin = (str(tg_id) == ADMIN_TG_ID) or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
@@ -55,35 +47,25 @@ def admin_required(view_func):
         return view_func(request, tg_id, *args, **kwargs)
     return _wrapped_view
 
+
 @csrf_exempt
 def main_menu(request):
-    """Menú Principal con detección de rol (Idol vs Cliente VIP) y bienvenida exclusiva."""
     tg_id = resolve_secure_tg_id(request)
 
-    # 🛡️ VERIFICACIÓN ESTRICTA DE CLUB PRIVADO
     if str(tg_id) != ADMIN_TG_ID and not is_user_in_group(tg_id):
         return render(request, 'core/access_denied.html', {'tg_id': tg_id})
 
-    # Buscamos el rol del usuario en la base de datos
     role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
-    
-    # Si el usuario NO tiene rol asignado aún, lo obligamos a elegir su camino
     if not role_obj:
         return redirect(f'/choose-role/?tg_id={tg_id}')
     
     role = role_obj.role
-    
-    # Es Administrador si es el ID maestro o tiene rol 'admin'
     is_admin = (str(tg_id) == ADMIN_TG_ID) or (role == 'admin')
-    
-    # Es Idol si tiene rol 'idol' O si tiene fichas de idol creadas O si es admin supremo
     has_idols_created = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
     is_idol = (role == 'idol') or has_idols_created or (str(tg_id) == ADMIN_TG_ID and has_idols_created)
     
-    # Cargamos o creamos el perfil del usuario
     user_profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
 
-    # Sincronizar automáticamente el @ real en las Idols de esta usuaria
     if user_profile.username and not str(user_profile.username).lower().startswith('noble_'):
         clean_handle = user_profile.username if user_profile.username.startswith('@') else f"@{user_profile.username}"
         IdolProfile.objects.filter(telegram_user_id=tg_id).update(owner_username=clean_handle)
@@ -98,10 +80,8 @@ def main_menu(request):
 
 
 def choose_role(request):
-    """Pantalla inicial donde el usuario decide libremente si será Cliente VIP o Idol Real."""
     tg_id = resolve_secure_tg_id(request)
 
-    # 🛡️ No puede elegir rol si no está en el grupo
     if str(tg_id) != ADMIN_TG_ID and not is_user_in_group(tg_id):
         return render(request, 'core/access_denied.html', {'tg_id': tg_id})
 
@@ -112,13 +92,11 @@ def choose_role(request):
         
         request.session['tg_id'] = clean_id
 
-        # Guardamos su elección en la base de datos
         UserRole.objects.update_or_create(
             telegram_id=clean_id,
             defaults={'role': selected_role}
         )
         
-        # Le creamos su Bóveda y Perfil base si no existen
         Wallet.objects.get_or_create(telegram_user_id=clean_id)
         UserProfile.objects.get_or_create(telegram_user_id=clean_id)
         
@@ -130,7 +108,6 @@ def choose_role(request):
 
 
 def my_profile(request):
-    """Perfil adaptado: Camerino si es Idol / Pasaporte Noble si es Cliente."""
     has_id = (
         request.GET.get('tg_id') or 
         request.POST.get('tg_id') or 
@@ -152,7 +129,6 @@ def my_profile(request):
     if not role_obj:
         return redirect(f'/choose-role/?tg_id={tg_id}')
 
-    # Las admins que además tienen Idols acceden al Camerino de Musa
     has_idols_created = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
     is_idol = (role_obj.role == 'idol') or has_idols_created or (str(tg_id) == ADMIN_TG_ID and has_idols_created)
     
@@ -172,135 +148,54 @@ def my_profile(request):
         
         if not is_idol:
             fav_id = request.POST.get('favorite_idol')
-            if fav_id:
-                profile.favorite_idol = IdolProfile.objects.filter(id=fav_id).first()
-            else:
-                profile.favorite_idol = None
+            profile.favorite_idol = IdolProfile.objects.filter(id=fav_id).first() if fav_id else None
             
         profile.save()
         mensaje = "✨ ¡Camerino de Musa actualizado con éxito!" if is_idol else "✨ ¡Pasaporte Noble actualizado con éxito!"
         messages.success(request, mensaje)
         return redirect(f'/profile/?tg_id={tg_id}&tg_username={encode_param(profile.username)}')
 
-    # Estadísticas para Idols
     total_servicios = sum(i.services_done for i in mis_idols)
     idol_posts = Post.objects.filter(idol__in=mis_idols)
     ventas_vip = PostUnlock.objects.filter(post__in=idol_posts).count()
     likes_totales = sum(p.likes for p in idol_posts)
 
     user_rank = profile.get_rank_name(is_idol=is_idol)
-
-    # Métricas para condecoraciones
     unlocks_count = PostUnlock.objects.filter(client_telegram_id=tg_id).count()
     pet_level = pet.level if pet else 0
     pet_has_expedition = pet and pet.last_expedition is not None
     
-    # 🏆 SISTEMA DE 12 LOGROS IMPERIALES
-    achievements = [
-        # Categoría Oro y Fortuna
-        {
-            'id': 'gold_novice',
-            'name': 'Primer Arca',
-            'desc': 'Alcanzar una fortuna de al menos 300 🪙 en Bóveda',
-            'icon': '🪙',
-            'unlocked': wallet.balance >= 300,
-            'progress': f"{wallet.balance}/300 🪙",
-        },
-        {
-            'id': 'gold_midas',
-            'name': 'Bóveda de Midas',
-            'desc': 'Acumular una fortuna de al menos 1,500 🪙',
-            'icon': '🏦',
-            'unlocked': wallet.balance >= 1500,
-            'progress': f"{wallet.balance}/1500 🪙",
-        },
-        {
-            'id': 'gold_emperor',
-            'name': 'Emperador del Tesoro',
-            'desc': 'Alcanzar la legendaria cifra de 5,000 🪙 en Bóveda',
-            'icon': '💰',
-            'unlocked': wallet.balance >= 5000,
-            'progress': f"{wallet.balance}/5000 🪙",
-        },
-        
-        # Categoría Nivel y Linaje
-        {
-            'id': 'court_iniciado',
-            'name': 'Bautismo Real',
-            'desc': 'Alcanzar el Nivel 5 en el Reino del Placer',
-            'icon': '✨',
-            'unlocked': profile.level >= 5,
-            'progress': f"Lvl {profile.level}/5",
-        },
-        {
-            'id': 'court_noble',
-            'name': 'Caballero Consagrado',
-            'desc': 'Alcanzar el Nivel 15 de linaje imperial',
-            'icon': '🥂',
-            'unlocked': profile.level >= 15,
-            'progress': f"Lvl {profile.level}/15",
-        },
-        {
-            'id': 'court_legend',
-            'name': 'Leyenda de la Corte',
-            'desc': 'Alcanzar el prestigioso Nivel 30',
-            'icon': '👑',
-            'unlocked': profile.level >= 30,
-            'progress': f"Lvl {profile.level}/30",
-        },
-
-        # Categoría Mascotas y Santuario
-        {
-            'id': 'beast_tamer',
-            'name': 'Domador de Bestias',
-            'desc': 'Despertar a tu compañero espiritual en el Santuario',
-            'icon': '🥚',
-            'unlocked': pet is not None,
-            'progress': "1/1 Adoptado" if pet else "0/1 Pendiente",
-        },
-        {
-            'id': 'beast_explorer',
-            'name': 'Paso por las Sombras',
-            'desc': 'Enviar a tu mascota a su primera expedición al bosque',
-            'icon': '🌲',
-            'unlocked': bool(pet_has_expedition),
-            'progress': "Completado" if pet_has_expedition else "Pendiente",
-        },
-        {
-            'id': 'beast_alpha',
-            'name': 'Vínculo Ancestral',
-            'desc': 'Elevar a tu mascota espiritual al Nivel 5 o superior',
-            'icon': '🐾',
-            'unlocked': pet_level >= 5,
-            'progress': f"Lvl {pet_level}/5",
-        },
-
-        # Categoría Rol y Creadoras
-        {
-            'id': 'supporter_first',
-            'name': 'Primer Deleite',
-            'desc': 'Desbloquear tu primera foto privada en KingdomFans' if not is_idol else 'Conseguir tu primera venta VIP',
-            'icon': '🔞',
-            'unlocked': (ventas_vip >= 1) if is_idol else (unlocks_count >= 1),
-            'progress': f"{ventas_vip}/1" if is_idol else f"{unlocks_count}/1",
-        },
-        {
-            'id': 'star_prestige',
-            'name': 'Diva Consagrada' if is_idol else 'Mecenas Supremo',
-            'desc': 'Acumular 10 ventas de contenido VIP' if is_idol else 'Coleccionar al menos 10 fotos exclusivas en tu Colección',
-            'icon': '💎',
-            'unlocked': (ventas_vip >= 10) if is_idol else (unlocks_count >= 10),
-            'progress': f"{ventas_vip}/10" if is_idol else f"{unlocks_count}/10",
-        },
-        {
-            'id': 'devotion_mark',
-            'name': 'Pacto Eterno',
-            'desc': 'Consagrar tu corazón eligiendo a tu Musa Favorita oficial' if not is_idol else 'Crear 2 fichas de Musas activas',
-            'icon': '🌹',
-            'unlocked': (mis_idols.count() >= 2) if is_idol else (profile.favorite_idol is not None),
-            'progress': "Completado" if (mis_idols.count() >= 2 if is_idol else profile.favorite_idol is not None) else "Pendiente",
-        },
-    ]
+    # --- ÁRBOL DE 12 LOGROS DINÁMICOS (IDOLS VS CLIENTES) ---
+    if is_idol:
+        achievements = [
+            {'id': 'idol_born', 'name': 'Primera Huella', 'desc': 'Consagrar tu primer perfil de Idol en el Reino', 'icon': '🎭', 'unlocked': mis_idols.count() >= 1, 'progress': f"{mis_idols.count()}/1 Ficha"},
+            {'id': 'idol_post', 'name': 'Sesión Inaugural', 'desc': 'Publicar tu primer post en el Muro', 'icon': '📸', 'unlocked': idol_posts.count() >= 1, 'progress': f"{idol_posts.count()}/1 Post"},
+            {'id': 'idol_first_sale', 'name': 'Primera Venta VIP', 'desc': 'Lograr que un noble desbloquee tu contenido de pago', 'icon': '🔒', 'unlocked': ventas_vip >= 1, 'progress': f"{ventas_vip}/1 Venta"},
+            {'id': 'idol_hot_seller', 'name': 'Musa Cotizada', 'desc': 'Alcanzar 5 ventas de contenido VIP en KingdomFans', 'icon': '💎', 'unlocked': ventas_vip >= 5, 'progress': f"{ventas_vip}/5 Ventas"},
+            {'id': 'idol_wealth', 'name': 'Fortuna de la Noche', 'desc': 'Acumular al menos 1,000 🪙 de ganancias en tu Bóveda', 'icon': '🏦', 'unlocked': wallet.balance >= 1000, 'progress': f"{wallet.balance}/1000 🪙"},
+            {'id': 'idol_drinks', 'name': 'Copas de Adhesión', 'desc': 'Recibir invitaciones de tragos o propinas de admiradores', 'icon': '🥂', 'unlocked': total_servicios >= 1, 'progress': f"{total_servicios}/1 Rol"},
+            {'id': 'idol_first_5star', 'name': 'Ovación Estelar', 'desc': 'Recibir una reseña perfecta de 5 estrellas', 'icon': '⭐', 'unlocked': any(i.rating >= 4.9 for i in mis_idols), 'progress': "5.0★ Obtenida" if any(i.rating >= 4.9 for i in mis_idols) else "Pendiente"},
+            {'id': 'idol_antojo_delivered', 'name': 'Deseo Satisfecho', 'desc': 'Completar y entregar una petición de Antojo Personalizado', 'icon': '🔥', 'unlocked': CustomRequest.objects.filter(idol__in=mis_idols, status='accepted').exists(), 'progress': "Completado" if CustomRequest.objects.filter(idol__in=mis_idols, status='accepted').exists() else "0/1 Pendiente"},
+            {'id': 'idol_double_trouble', 'name': 'Doble Identidad', 'desc': 'Mantener activas tus 2 fichas de Idols oficiales', 'icon': '👑', 'unlocked': mis_idols.count() >= 2, 'progress': f"{mis_idols.count()}/2 Musas"},
+            {'id': 'idol_pet_charm', 'name': 'Familiar Escénico', 'desc': 'Entrenar a tu mascota hasta Nivel 5 para potenciar tu carisma', 'icon': '🐾', 'unlocked': pet_level >= 5, 'progress': f"Lvl {pet_level}/5"},
+            {'id': 'idol_star_30', 'name': 'Diva Consagrada', 'desc': 'Alcanzar el Nivel 25 de estrellato en el Reino', 'icon': '💄', 'unlocked': profile.level >= 25, 'progress': f"Lvl {profile.level}/25"},
+            {'id': 'idol_legend_50', 'name': 'Diosa del Olimpo', 'desc': 'Alcanzar el legendario Nivel 50 de reputación absoluta', 'icon': '⚜️', 'unlocked': profile.level >= 50, 'progress': f"Lvl {profile.level}/50"},
+        ]
+    else:
+        achievements = [
+            {'id': 'gold_novice', 'name': 'Primer Arca', 'desc': 'Alcanzar una fortuna de al menos 300 🪙 en Bóveda', 'icon': '🪙', 'unlocked': wallet.balance >= 300, 'progress': f"{wallet.balance}/300 🪙"},
+            {'id': 'gold_midas', 'name': 'Bóveda de Midas', 'desc': 'Acumular una fortuna de al menos 1,500 🪙', 'icon': '🏦', 'unlocked': wallet.balance >= 1500, 'progress': f"{wallet.balance}/1500 🪙"},
+            {'id': 'gold_emperor', 'name': 'Emperador del Tesoro', 'desc': 'Alcanzar la legendaria cifra de 5,000 🪙 en Bóveda', 'icon': '💰', 'unlocked': wallet.balance >= 5000, 'progress': f"{wallet.balance}/5000 🪙"},
+            {'id': 'court_iniciado', 'name': 'Bautismo Real', 'desc': 'Alcanzar el Nivel 5 en el Reino del Placer', 'icon': '✨', 'unlocked': profile.level >= 5, 'progress': f"Lvl {profile.level}/5"},
+            {'id': 'court_noble', 'name': 'Caballero Consagrado', 'desc': 'Alcanzar el Nivel 15 de linaje imperial', 'icon': '🥂', 'unlocked': profile.level >= 15, 'progress': f"Lvl {profile.level}/15"},
+            {'id': 'court_legend', 'name': 'Leyenda de la Corte', 'desc': 'Alcanzar el prestigioso Nivel 30', 'icon': '👑', 'unlocked': profile.level >= 30, 'progress': f"Lvl {profile.level}/30"},
+            {'id': 'beast_tamer', 'name': 'Domador de Bestias', 'desc': 'Despertar a tu compañero espiritual en el Santuario', 'icon': '🥚', 'unlocked': pet is not None, 'progress': "1/1 Adoptado" if pet else "0/1 Pendiente"},
+            {'id': 'beast_explorer', 'name': 'Paso por las Sombras', 'desc': 'Enviar a tu mascota a su primera expedición al bosque', 'icon': '🌲', 'unlocked': bool(pet_has_expedition), 'progress': "Completado" if pet_has_expedition else "Pendiente"},
+            {'id': 'beast_alpha', 'name': 'Vínculo Ancestral', 'desc': 'Elevar a tu mascota espiritual al Nivel 5 o superior', 'icon': '🐾', 'unlocked': pet_level >= 5, 'progress': f"Lvl {pet_level}/5"},
+            {'id': 'supporter_first', 'name': 'Primer Deleite', 'desc': 'Desbloquear tu primera foto privada en KingdomFans', 'icon': '🔞', 'unlocked': unlocks_count >= 1, 'progress': f"{unlocks_count}/1 Foto"},
+            {'id': 'star_prestige', 'name': 'Mecenas Supremo', 'desc': 'Coleccionar al menos 10 fotos exclusivas en tu Colección', 'icon': '💎', 'unlocked': unlocks_count >= 10, 'progress': f"{unlocks_count}/10 Fotos"},
+            {'id': 'devotion_mark', 'name': 'Pacto Eterno', 'desc': 'Consagrar tu corazón eligiendo a tu Musa Favorita oficial', 'icon': '🌹', 'unlocked': profile.favorite_idol is not None, 'progress': "Consagrado" if profile.favorite_idol is not None else "Pendiente"},
+        ]
 
     return render(request, 'core/profile.html', {
         'tg_id': tg_id,
@@ -320,25 +215,19 @@ def my_profile(request):
 
 
 def leaderboard(request):
-    """Salón de la Fama: Top Reinas del Escenario (Idols) y Magnates del Reino."""
     tg_id = resolve_secure_tg_id(request)
 
-    # 1. TOP IDOLS: Ordenadas por ventas VIP y likes
     top_idols = IdolProfile.objects.annotate(
         total_unlocks=Count('posts__unlocks', distinct=True),
         total_likes=Sum('posts__likes')
     ).order_by('-total_unlocks', '-rating')[:10]
 
-    for idol in top_idols:
-        idol.likes_count = idol.total_likes or 0
-
-    # 2. TOP MAGNATES: Clientes con mayor oro en bóveda
     top_wallets = Wallet.objects.order_by('-balance')[:10]
     user_ids = [w.telegram_user_id for w in top_wallets]
     profiles_dict = {p.telegram_user_id: p for p in UserProfile.objects.filter(telegram_user_id__in=user_ids)}
 
     magnates = []
-    for idx, w in enumerate(top_wallets):
+    for w in top_wallets:
         prof = profiles_dict.get(w.telegram_user_id)
         titulo = prof.get_rank_name() if prof else "Ciudadano Honorable"
         nivel = prof.level if prof else 1
@@ -360,11 +249,9 @@ def leaderboard(request):
 
 @admin_required
 def admin_panel(request, admin_tg_id):
-    """Sala del Trono Imperial con facultades de Administrador Supremo."""
     if request.method == "POST":
         accion = request.POST.get('accion')
 
-        # 1. MODIFICAR SALDO INDIVIDUAL (+, -, o fijar)
         if accion == 'adjust_gold':
             target_id = int(request.POST.get('target_id'))
             mode = request.POST.get('mode', 'add')
@@ -386,9 +273,7 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 8. PURGA GENERAL DE PRUEBAS (Resetear usuarios, perfiles e idols)
         elif accion == 'purge_test_data':
-            # Borrar reseñas, antojos, compras, posts, mascotas, billeteras y perfiles
             from idols.models import Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
             PostComment.objects.all().delete()
             PostUnlock.objects.all().delete()
@@ -399,12 +284,10 @@ def admin_panel(request, admin_tg_id):
             IdolProfile.objects.all().delete()
             Pet.objects.all().delete()
 
-            # Borrar todos los roles y perfiles EXCEPTO el tuyo de Corona Imperial (7474444797)
             UserRole.objects.exclude(telegram_id=7474444797).delete()
             UserProfile.objects.exclude(telegram_user_id=7474444797).delete()
             Wallet.objects.exclude(telegram_user_id=7474444797).delete()
 
-            # Asegurar que tu cuenta de Administrador quede activa y limpia
             UserRole.objects.update_or_create(telegram_id=7474444797, defaults={'role': 'admin'})
             w, _ = Wallet.objects.get_or_create(telegram_user_id=7474444797)
             w.balance = 1000
@@ -413,17 +296,14 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🧹 ¡Purga completada! Todos los usuarios de prueba, idols y datos viejos fueron eliminados. Solo queda la Corona.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 2. LLUVIA DE ORO MASIVA (a todos los no baneados)
         elif accion == 'mass_gold':
             amount = int(request.POST.get('amount', 0))
             if amount > 0:
                 banned_ids = list(UserRole.objects.filter(is_banned=True).values_list('telegram_id', flat=True))
                 count = Wallet.objects.exclude(telegram_user_id__in=banned_ids).update(balance=F('balance') + amount)
-                AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='mass_gold', details=f"Lluvia: +{amount} 🪙 a {count} súbditos")
                 messages.success(request, f"✨ ¡Lluvia consumada! +{amount} 🪙 entregados a {count} súbditos.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 3. CAMBIAR ROL O ASIGNAR ADMIN
         elif accion == 'change_role':
             target_id = int(request.POST.get('target_id'))
             new_role = request.POST.get('new_role')
@@ -431,7 +311,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, f"👑 Rango de {target_id} actualizado a {new_role.upper()}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 4. BANEAR O DESBANEAR
         elif accion == 'toggle_ban':
             target_id = int(request.POST.get('target_id'))
             user = get_object_or_404(UserRole, telegram_id=target_id)
@@ -441,7 +320,6 @@ def admin_panel(request, admin_tg_id):
             messages.warning(request, f"⚖️ Usuario {target_id} {'BANEADO' if user.is_banned else 'DESBANEADO'}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 5. RESETEAR COOLDOWN DE BONO (24H) A UN USUARIO
         elif accion == 'reset_bonus':
             target_id = int(request.POST.get('target_id'))
             wallet = Wallet.objects.filter(telegram_user_id=target_id).first()
@@ -451,14 +329,11 @@ def admin_panel(request, admin_tg_id):
                 messages.success(request, f"⏱️ Cooldown de bono restablecido para {target_id}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 6. RESETEAR COOLDOWN DE BONO A TODO EL REINO
         elif accion == 'reset_all_bonuses':
             Wallet.objects.all().update(last_bonus_claim=None)
-            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='reset_all_bonuses', details="Perdón Real de Cooldowns")
             messages.success(request, "🎉 Cooldown de bono reseteado para todo el reino.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 7. ANUNCIO GLOBAL / DECRETO EN MARQUESINA
         elif accion == 'broadcast_message':
             txt = request.POST.get('broadcast_text', '').strip()
             KingdomSetting.set_val('broadcast_message', txt)
@@ -466,34 +341,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "📢 Decreto global actualizado.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 8. PURGA GENERAL DE PRUEBAS (Resetear usuarios, perfiles e idols)
-        elif accion == 'purge_test_data':
-            # Borrar reseñas, antojos, compras, posts, mascotas, billeteras y perfiles
-            from idols.models import Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
-            PostComment.objects.all().delete()
-            PostUnlock.objects.all().delete()
-            PostLike.objects.all().delete()
-            CustomRequest.objects.all().delete()
-            Review.objects.all().delete()
-            Post.objects.all().delete()
-            IdolProfile.objects.all().delete()
-            Pet.objects.all().delete()
-
-            # Borrar todos los roles y perfiles EXCEPTO el tuyo de Corona Imperial (7474444797)
-            UserRole.objects.exclude(telegram_id=7474444797).delete()
-            UserProfile.objects.exclude(telegram_user_id=7474444797).delete()
-            Wallet.objects.exclude(telegram_user_id=7474444797).delete()
-
-            # Asegurar que tu cuenta de Administrador quede activa y limpia
-            UserRole.objects.update_or_create(telegram_id=7474444797, defaults={'role': 'admin'})
-            w, _ = Wallet.objects.get_or_create(telegram_user_id=7474444797)
-            w.balance = 1000
-            w.save()
-
-            messages.success(request, "🧹 ¡Purga completada! Todos los usuarios de prueba, idols y datos viejos fueron eliminados. Solo queda la Corona.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-    # Censo de súbditos enriquecido con sus perfiles de usuario reales
     usuarios_roles = list(UserRole.objects.all().order_by('-id'))
     user_ids = [u.telegram_id for u in usuarios_roles]
 
@@ -542,7 +389,6 @@ def admin_panel(request, admin_tg_id):
 
 @csrf_exempt
 def telegram_webhook(request):
-    """Recibe los comandos de Telegram (/start, /id, /app) a través de Cloudflare."""
     if request.method == "POST":
         try:
             data = json.loads(request.body.decode('utf-8'))
@@ -557,27 +403,16 @@ def telegram_webhook(request):
                 first_name = user.get('first_name', 'Noble')
                 username = user.get('username')
                 
-                # Formatear el @ real del usuario
                 handle_real = f"@{username}" if username else first_name
-                
-                print(f"📩 Mensaje recibido en Telegram de {handle_real}: {text} (Chat ID: {chat_id}, User ID: {user_id})")
 
-                # Guardar o actualizar de inmediato el perfil en la base de datos con su @ real
                 if user_id:
                     user_prof, _ = UserProfile.objects.get_or_create(telegram_user_id=user_id)
                     user_prof.username = handle_real
                     user_prof.save(update_fields=['username'])
-                    
-                    # Sincronizar sus Idols existentes con su @ real
                     IdolProfile.objects.filter(telegram_user_id=user_id).update(owner_username=handle_real)
 
-                # Si escriben /start, /id, /menu o /app
                 if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
                     base_url = request.build_absolute_uri('/')
-                    
-                    # ⚠️ SEGURIDAD MULTIUSUARIO:
-                    # En grupos, NO incrustar ?tg_id fijo para que no se crucen las cuentas.
-                    # El script en base.html detecta quién abrió el enlace en su propio móvil.
                     is_group = int(chat_id) < 0
                     if is_group:
                         app_link = base_url

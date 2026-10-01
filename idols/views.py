@@ -13,7 +13,6 @@ from core.telegram_notify import send_telegram_msg
 
 
 def resolve_safe_tg(request):
-    """Garantiza la obtención estricta del ID del usuario actual."""
     raw_id = request.POST.get('tg_id') or request.GET.get('tg_id') or request.session.get('tg_id')
     if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null']:
         try:
@@ -26,7 +25,6 @@ def resolve_safe_tg(request):
 
 
 def sync_user_profile(tg_id, username_raw):
-    """Guarda o actualiza el @usuario real de Telegram en la base de datos."""
     if not tg_id or not username_raw or str(username_raw).strip() in ['', 'None', 'undefined']:
         return None
     
@@ -45,7 +43,6 @@ def sync_user_profile(tg_id, username_raw):
 
 
 def idol_list(request):
-    """Panel de Idols: Muestra ESTRICTAMENTE las Idols creadas por este usuario."""
     tg_id = resolve_safe_tg(request)
     tg_username = request.POST.get('tg_username') or request.GET.get('tg_username') or ''
 
@@ -57,7 +54,6 @@ def idol_list(request):
     if request.method == 'POST':
         action = request.POST.get('action')
         
-        # 1. Cambiar estado en vivo (Chat / Antojos / Off)
         if action == 'update_status':
             idol_id = request.POST.get('idol_id')
             new_status = request.POST.get('status')
@@ -65,7 +61,6 @@ def idol_list(request):
                 IdolProfile.objects.filter(id=idol_id, telegram_user_id=tg_id).update(status=new_status)
             return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
             
-        # 2. Responder peticiones de antojo
         elif action in ['accept_request', 'reject_request']:
             req_id = request.POST.get('request_id')
             req_obj = get_object_or_404(CustomRequest, id=req_id, idol__telegram_user_id=tg_id)
@@ -95,7 +90,7 @@ def idol_list(request):
                     
                     idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
                     idol_wallet.add_funds(req_obj.bounty)
-                    grant_user_xp(request, tg_id, 30, reason="Entrega de Antojo")
+                    grant_user_xp(request, tg_id, 40, reason="Entrega de Antojo")
                     
                     send_telegram_msg(
                         req_obj.client_telegram_id,
@@ -103,13 +98,11 @@ def idol_list(request):
                         f"{req_obj.idol.stage_name} ha subido tu foto exclusiva solicitada.\n"
                         f"Ya puedes verla en tu Colección Privada."
                     )
-                    messages.success(request, f"¡Antojo entregado con éxito! Recibiste +{req_obj.bounty} 🪙 en tu Bóveda.")
+                    messages.success(request, f"¡Antojo entregado con éxito! Recibiste +{req_obj.bounty} 🪙 en tu Bóveda (+40 EXP).")
                     
             return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
     
-    # 🔒 FILTRADO ESTRICTO: Solo las Idols cuyo telegram_user_id coincida EXACTAMENTE con este usuario
     idols = list(IdolProfile.objects.filter(telegram_user_id=tg_id))
-    
     pending_requests = CustomRequest.objects.filter(
         idol__telegram_user_id=tg_id,
         status='pending'
@@ -126,19 +119,16 @@ def idol_list(request):
 
 
 def idol_create(request):
-    """Crea una Idol asociándola de forma definitiva al telegram_user_id del creador."""
     tg_id = resolve_safe_tg(request)
     if not tg_id:
         return redirect('/')
 
-    # Si no viene username, buscamos el que tengamos guardado en UserProfile
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
     tg_username = request.POST.get('tg_username') or request.GET.get('tg_username') or (profile.username if profile else f"@{tg_id}")
     
     if not tg_username.startswith('@'):
         tg_username = f"@{tg_username}"
 
-    # Validar tope máximo estricto de 2 Idols
     if IdolProfile.objects.filter(telegram_user_id=tg_id).count() >= 2:
         messages.error(request, "Ya has alcanzado el límite máximo de 2 Idols consagradas.")
         return redirect(f'/idols/?tg_id={tg_id}')
@@ -157,7 +147,7 @@ def idol_create(request):
         try:
             IdolProfile.objects.create(
                 telegram_user_id=tg_id,
-                owner_username=tg_username, # 👈 Se guarda el @ real
+                owner_username=tg_username,
                 stage_name=stage_name,
                 group=group,
                 bio=bio,
@@ -181,7 +171,6 @@ def idol_edit(request, idol_id):
     tg_id = resolve_safe_tg(request)
     idol = get_object_or_404(IdolProfile, id=idol_id)
     
-    # Seguridad: solo la dueña o el Admin Supremo pueden editar
     if tg_id != idol.telegram_user_id and str(tg_id) != '7474444797':
         messages.error(request, "No tienes permiso para editar esta Idol.")
         return redirect(f'/idols/?tg_id={tg_id}')
@@ -282,6 +271,7 @@ def idol_detail(request, idol_id):
                         comment=comment_val
                     )
                     grant_user_xp(request, tg_id, 25, reason="Reseña de Idol")
+                    grant_user_xp(None, idol.telegram_user_id, 35 if rating_val == 5 else 20, reason="Calificación Recibida")
                     
                     send_telegram_msg(
                         idol.telegram_user_id,
@@ -353,19 +343,21 @@ def unlock_post(request, post_id):
                 wallet.remove_funds(precio_final)
                 PostUnlock.objects.get_or_create(post=post, client_telegram_id=tg_id)
                 
-                comision = int(precio_final * 0.15)
-                ganancia_idol = precio_final - comision
+                idol_profile = UserProfile.objects.filter(telegram_user_id=post.idol.telegram_user_id).first()
+                tasa_idol = idol_profile.idol_commission_rate if idol_profile else 0.85
+                ganancia_idol = int(precio_final * tasa_idol)
                 
                 idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
                 idol_wallet.add_funds(ganancia_idol)
                 
                 grant_user_xp(request, tg_id, precio_final, reason="Desbloqueo VIP")
+                grant_user_xp(None, post.idol.telegram_user_id, max(15, precio_final // 2), reason="Venta de Contenido VIP")
 
                 send_telegram_msg(
                     post.idol.telegram_user_id,
                     f"💎 <b>¡Venta VIP en KingdomFans!</b>\n"
                     f"Un noble desbloqueó tu foto por <b>{precio_final} 🪙</b>.\n"
-                    f"Has recibido <b>+{ganancia_idol} 🪙</b> netos en tu Bóveda."
+                    f"Has recibido <b>+{ganancia_idol} 🪙</b> netos ({int(tasa_idol*100)}%) y EXP en tu Bóveda."
                 )
                 
                 desc_txt = " (con 15% de descuento por tu Víbora)" if (pet and pet.species == 'viper') else ""
@@ -384,6 +376,9 @@ def create_post(request):
         messages.error(request, "Debes registrar al menos una Idol antes de publicar.")
         return redirect(f'/idols/?tg_id={tg_id}')
         
+    creator_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+    max_price = creator_profile.max_post_price_allowed if creator_profile else 80
+
     if request.method == 'POST':
         idol_id = request.POST.get('idol_id')
         network = request.POST.get('network')
@@ -398,6 +393,8 @@ def create_post(request):
             idol = mis_idols.get(id=idol_id)
             if not image:
                 messages.error(request, "Debes adjuntar una foto para el post.")
+            elif network == 'fans' and int(price) > max_price:
+                messages.error(request, f"Tu rango actual de Musa solo permite fijar precios de hasta {max_price} 🪙 por foto.")
             else:
                 Post.objects.create(
                     idol=idol,
@@ -406,8 +403,8 @@ def create_post(request):
                     image=image,
                     price=int(price) if network == 'fans' else 0
                 )
-                grant_user_xp(request, tg_id, 15, reason="Nuevo Post Publicado")
-                messages.success(request, f"¡Post publicado exitosamente como {idol.stage_name}!")
+                grant_user_xp(request, tg_id, 20, reason="Nuevo Post Publicado")
+                messages.success(request, f"¡Post publicado exitosamente como {idol.stage_name}! (+20 EXP)")
                 return redirect(f'/idols/feed/?tg_id={tg_id}')
                 
         except IdolProfile.DoesNotExist:
@@ -415,7 +412,7 @@ def create_post(request):
         except ValueError:
             messages.error(request, "El precio ingresado no es válido.")
             
-    return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols})
+    return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
 
 
 def toggle_like(request, post_id):
@@ -484,12 +481,13 @@ def send_tip(request, post_id):
             idol_wallet.add_funds(neto_idol)
             
             grant_user_xp(request, tg_id, amount, reason="Propina a Musa")
+            grant_user_xp(None, post.idol.telegram_user_id, amount // 2, reason="Propina Recibida")
 
             send_telegram_msg(
                 post.idol.telegram_user_id,
                 f"🥂 <b>¡Te han invitado un trago!</b>\n"
                 f"Un noble te obsequió <b>{amount} 🪙</b> en el Muro.\n"
-                f"Has recibido <b>+{neto_idol} 🪙</b> directos a tu Bóveda."
+                f"Has recibido <b>+{neto_idol} 🪙</b> directos a tu Bóveda y EXP de artista."
             )
             messages.success(request, f"🥂 ¡Le has invitado un trago de {amount} 🪙 a {post.idol.stage_name}!")
         else:
