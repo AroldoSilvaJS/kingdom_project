@@ -2,7 +2,7 @@ import random
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.utils import timezone
-
+from django.http import JsonResponse
 from .models import Wallet
 from core.models import UserProfile
 from core.utils import grant_user_xp
@@ -39,25 +39,28 @@ def casino_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    resultado = None
-    ganancia = 0
-    numero_ganador = None
-    color_ganador = None
     
     max_bet = profile.max_bet_allowed
     ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
         
     if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         try:
             apuesta = int(request.POST.get('bet_amount', 0))
             eleccion = request.POST.get('bet_choice', 'red')
             
             if apuesta <= 0:
-                messages.error(request, "La apuesta debe ser mayor a 0.")
+                err_msg = "La apuesta debe ser mayor a 0."
+                if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
+                messages.error(request, err_msg)
             elif apuesta > max_bet:
-                messages.error(request, f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙.")
+                err_msg = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
+                if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
+                messages.error(request, err_msg)
             elif apuesta > wallet.balance:
-                messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+                err_msg = "No tienes suficiente oro en tu Bóveda."
+                if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
+                messages.error(request, err_msg)
             else:
                 numero_ganador = random.randint(0, 36)
                 
@@ -86,19 +89,29 @@ def casino_game(request):
                     ganancia = apuesta
 
                 grant_user_xp(request, tg_id, max(3, apuesta // 3), reason="Ruleta Imperial")
+
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'resultado': resultado,
+                        'ganancia': ganancia,
+                        'numero_ganador': numero_ganador,
+                        'color_ganador': color_ganador,
+                        'nuevo_saldo': wallet.balance,
+                        'current_xp': profile.current_xp,
+                        'level': profile.level
+                    })
                     
         except ValueError:
-            messages.error(request, "Por favor, ingresa un número válido.")
+            err_msg = "Por favor, ingresa un número válido."
+            if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
+            messages.error(request, err_msg)
             
     return render(request, 'economy/casino.html', {
         'tg_id': tg_id, 
         'wallet': wallet,
         'profile': profile,
         'max_bet': max_bet,
-        'resultado': resultado,
-        'ganancia': ganancia,
-        'numero_ganador': numero_ganador,
-        'color_ganador': color_ganador
     })
 
 
