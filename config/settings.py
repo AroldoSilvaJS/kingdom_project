@@ -157,3 +157,9 @@ TELEGRAM_GROUP_ID = -1004393120413
 
 # Permitir que Telegram WebApp cargue el sitio en su iframe
 X_FRAME_OPTIONS = 'ALLOWALL'
+
+# Permitir que la sesión sobreviva dentro del iframe de Telegram
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SECURE = True

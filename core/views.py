@@ -85,6 +85,11 @@ def choose_role(request):
     if str(tg_id) != ADMIN_TG_ID and not is_user_in_group(tg_id):
         return render(request, 'core/access_denied.html', {'tg_id': tg_id})
 
+    
+    existing_role = UserRole.objects.filter(telegram_id=tg_id).first()
+    if existing_role and request.method != 'POST':
+        return redirect(f'/?tg_id={tg_id}')
+
     if request.method == 'POST':
         selected_role = request.POST.get('role', 'cliente')
         real_tg_id = request.POST.get('tg_id') or tg_id
