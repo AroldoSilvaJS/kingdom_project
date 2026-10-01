@@ -190,41 +190,115 @@ def my_profile(request):
 
     user_rank = profile.get_rank_name(is_idol=is_idol)
 
+    # Métricas para condecoraciones
     unlocks_count = PostUnlock.objects.filter(client_telegram_id=tg_id).count()
     pet_level = pet.level if pet else 0
+    pet_has_expedition = pet and pet.last_expedition is not None
     
+    # 🏆 SISTEMA DE 12 LOGROS IMPERIALES
     achievements = [
+        # Categoría Oro y Fortuna
+        {
+            'id': 'gold_novice',
+            'name': 'Primer Arca',
+            'desc': 'Alcanzar una fortuna de al menos 300 🪙 en Bóveda',
+            'icon': '🪙',
+            'unlocked': wallet.balance >= 300,
+            'progress': f"{wallet.balance}/300 🪙",
+        },
         {
             'id': 'gold_midas',
             'name': 'Bóveda de Midas',
-            'desc': 'Acumular una fortuna de al menos 1,500 🪙 en tu Bóveda',
+            'desc': 'Acumular una fortuna de al menos 1,500 🪙',
             'icon': '🏦',
             'unlocked': wallet.balance >= 1500,
             'progress': f"{wallet.balance}/1500 🪙",
         },
         {
-            'id': 'star_prestige' if is_idol else 'mecenas_supremo',
-            'name': 'Diva Consagrada' if is_idol else 'Mecenas Supremo',
-            'desc': 'Lograr al menos 5 ventas de contenido VIP' if is_idol else 'Coleccionar al menos 5 fotos exclusivas de KingdomFans',
-            'icon': '💎',
-            'unlocked': (ventas_vip >= 5) if is_idol else (unlocks_count >= 5),
-            'progress': f"{ventas_vip}/5 ventas" if is_idol else f"{unlocks_count}/5 fotos",
+            'id': 'gold_emperor',
+            'name': 'Emperador del Tesoro',
+            'desc': 'Alcanzar la legendaria cifra de 5,000 🪙 en Bóveda',
+            'icon': '💰',
+            'unlocked': wallet.balance >= 5000,
+            'progress': f"{wallet.balance}/5000 🪙",
+        },
+        
+        # Categoría Nivel y Linaje
+        {
+            'id': 'court_iniciado',
+            'name': 'Bautismo Real',
+            'desc': 'Alcanzar el Nivel 5 en el Reino del Placer',
+            'icon': '✨',
+            'unlocked': profile.level >= 5,
+            'progress': f"Lvl {profile.level}/5",
         },
         {
-            'id': 'beast_master',
+            'id': 'court_noble',
+            'name': 'Caballero Consagrado',
+            'desc': 'Alcanzar el Nivel 15 de linaje imperial',
+            'icon': '🥂',
+            'unlocked': profile.level >= 15,
+            'progress': f"Lvl {profile.level}/15",
+        },
+        {
+            'id': 'court_legend',
+            'name': 'Leyenda de la Corte',
+            'desc': 'Alcanzar el prestigioso Nivel 30',
+            'icon': '👑',
+            'unlocked': profile.level >= 30,
+            'progress': f"Lvl {profile.level}/30",
+        },
+
+        # Categoría Mascotas y Santuario
+        {
+            'id': 'beast_tamer',
+            'name': 'Domador de Bestias',
+            'desc': 'Despertar a tu compañero espiritual en el Santuario',
+            'icon': '🥚',
+            'unlocked': pet is not None,
+            'progress': "1/1 Adoptado" if pet else "0/1 Pendiente",
+        },
+        {
+            'id': 'beast_explorer',
+            'name': 'Paso por las Sombras',
+            'desc': 'Enviar a tu mascota a su primera expedición al bosque',
+            'icon': '🌲',
+            'unlocked': bool(pet_has_expedition),
+            'progress': "Completado" if pet_has_expedition else "Pendiente",
+        },
+        {
+            'id': 'beast_alpha',
             'name': 'Vínculo Ancestral',
-            'desc': 'Elevar la lealtad y poder de tu mascota a Nivel 5 o más',
+            'desc': 'Elevar a tu mascota espiritual al Nivel 5 o superior',
             'icon': '🐾',
             'unlocked': pet_level >= 5,
             'progress': f"Lvl {pet_level}/5",
         },
+
+        # Categoría Rol y Creadoras
         {
-            'id': 'court_veteran',
-            'name': 'Reina del Reino' if is_idol else 'Círculo de la Corona',
-            'desc': 'Alcanzar el Nivel 15 de experiencia en el Reino del Placer',
-            'icon': '👑',
-            'unlocked': profile.level >= 15,
-            'progress': f"Nivel {profile.level}/15",
+            'id': 'supporter_first',
+            'name': 'Primer Deleite',
+            'desc': 'Desbloquear tu primera foto privada en KingdomFans' if not is_idol else 'Conseguir tu primera venta VIP',
+            'icon': '🔞',
+            'unlocked': (ventas_vip >= 1) if is_idol else (unlocks_count >= 1),
+            'progress': f"{ventas_vip}/1" if is_idol else f"{unlocks_count}/1",
+        },
+        {
+            'id': 'star_prestige',
+            'name': 'Diva Consagrada' if is_idol else 'Mecenas Supremo',
+            'desc': 'Acumular 10 ventas de contenido VIP' if is_idol else 'Coleccionar al menos 10 fotos exclusivas en tu Colección',
+            'icon': '💎',
+            'unlocked': (ventas_vip >= 10) if is_idol else (unlocks_count >= 10),
+            'progress': f"{ventas_vip}/10" if is_idol else f"{unlocks_count}/10",
+        },
+        {
+            'id': 'devotion_mark',
+            'name': 'Pacto Eterno',
+            'desc': 'Consagrar tu corazón eligiendo a tu Musa Favorita oficial' if not is_idol else 'Crear 2 fichas de Musas activas',
+            'icon': '🌹',
+            'unlocked': (mis_idols.count() >= 2) if is_idol else (profile.favorite_idol is not None),
+            'progress': "Completado" if (mis_idols.count() >= 2 if is_idol else profile.favorite_idol is not None) else "Pendiente",
         },
     ]
 

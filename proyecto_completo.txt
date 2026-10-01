@@ -3925,16 +3925,17 @@ class Pet(models.Model):
     level = models.PositiveIntegerField("Nivel", default=1)
     xp = models.PositiveIntegerField("Experiencia", default=0)
     energy = models.PositiveIntegerField("Energía / Saciedad", default=80)
-    happiness = models.PositiveIntegerField("Felicidad / Vínculo", default=75)
+    happiness = models.PositiveIntegerField("Felicidad / Vínculo", default=70)
     
-    last_fed = models.DateTimeField(auto_now_add=True)
-    last_petted = models.DateTimeField(auto_now_add=True)
-    last_expedition = models.DateTimeField(null=True, blank=True, verbose_name="Última Expedición")
+    last_fed = models.DateTimeField(null=True, blank=True)
+    last_petted = models.DateTimeField(null=True, blank=True)
+    last_expedition = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
     def xp_to_next_level(self):
-        return self.level * 100
+        # Curva de nivel de mascota: Nivel 1 = 100, Nivel 2 = 180, Nivel 3 = 260...
+        return 100 + ((self.level - 1) * 80)
 
     @property
     def xp_percentage(self):
@@ -3943,33 +3944,50 @@ class Pet(models.Model):
             return 0
         return min(100, int((self.xp / needed) * 100))
 
-    def xp_needed_for_next_level(self):
-        return self.level * 100
+    # --- REGLA 1: COOLDOWN DE CARICIAS (30 MINUTOS) ---
+    def can_be_petted(self):
+        if not self.last_petted:
+            return True
+        return timezone.now() >= self.last_petted + timedelta(minutes=30)
+
+    def minutes_until_next_pet(self):
+        if self.can_be_petted():
+            return 0
+        tiempo_restante = (self.last_petted + timedelta(minutes=30)) - timezone.now()
+        return max(1, int(tiempo_restante.total_seconds() // 60))
+
+    # --- REGLA 2: COOLDOWN DE EXPEDICIÓN (1 HORA Y MEDIA) ---
+    def can_go_expedition(self):
+        if not self.last_expedition:
+            return True
+        return timezone.now() >= self.last_expedition + timedelta(minutes=90)
+
+    def minutes_until_next_expedition(self):
+        if self.can_go_expedition():
+            return 0
+        tiempo_restante = (self.last_expedition + timedelta(minutes=90)) - timezone.now()
+        return max(1, int(tiempo_restante.total_seconds() // 60))
 
     def feed(self):
+        """Alimenta a la mascota sin pasar del 100% de energía"""
         self.energy = min(100, self.energy + 25)
-        self.happiness = min(100, self.happiness + 15)
-        self.xp += 30
-        if self.xp >= self.xp_needed_for_next_level():
-            self.xp -= self.xp_needed_for_next_level()
+        self.happiness = min(100, self.happiness + 10)
+        self.xp += 20
+        if self.xp >= self.xp_to_next_level:
+            self.xp -= self.xp_to_next_level
             self.level += 1
         self.last_fed = timezone.now()
         self.save()
 
     def pet_action(self):
+        """Acaricia a la mascota (solo si el cooldown lo permite)"""
         self.happiness = min(100, self.happiness + 20)
-        self.xp += 10
-        if self.xp >= self.xp_needed_for_next_level():
-            self.xp -= self.xp_needed_for_next_level()
+        self.xp += 15
+        if self.xp >= self.xp_to_next_level:
+            self.xp -= self.xp_to_next_level
             self.level += 1
         self.last_petted = timezone.now()
         self.save()
-
-    def can_go_expedition(self):
-        """Puede salir a cazar/explorar cada 2 horas"""
-        if not self.last_expedition:
-            return True
-        return timezone.now() >= self.last_expedition + timedelta(hours=2)
 
     def get_image_url(self):
         mapping = {
@@ -4081,53 +4099,70 @@ def interact_pet(request):
         action = request.POST.get('action')
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         
+        # 1. ACCIÓN ALIMENTAR (Validando que no esté lleno)
         if action == 'feed':
+            if pet.energy >= 100:
+                messages.info(request, f"🍖 {pet.name} está lleno y saciado (100% de energía). Envíalo a explorar antes de alimentarlo otra vez.")
+                return redirect(f'/pets/?tg_id={tg_id}')
+
             wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
             if wallet.remove_funds(15):
                 pet.feed()
-                grant_user_xp(request, tg_id, 15, reason="Alimentar Mascota")
-                messages.success(request, f"🍖 ¡Alimentaste a {pet.name}! (+25 Energía, +15 Felicidad, +30 XP Mascota, +15 EXP Jugador) (-15 🪙).")
+                grant_user_xp(request, tg_id, 10, reason="Alimentar Mascota")
+                messages.success(request, f"🍖 ¡Alimentaste a {pet.name}! (+25 Energía, +10 Vínculo, +20 XP Mascota) (-15 🪙).")
             else:
                 messages.error(request, f"No tienes suficientes monedas (15 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
                 
+        # 2. ACCIÓN ACARICIAR (Con Cooldown de 30 minutos)
         elif action == 'pet':
+            if not pet.can_be_petted():
+                minutos = pet.minutes_until_next_pet()
+                messages.info(request, f"💤 {pet.name} está descansando plácidamente. Podrás acariciarlo en {minutos} minutos.")
+                return redirect(f'/pets/?tg_id={tg_id}')
+
             pet.pet_action()
             grant_user_xp(request, tg_id, 5, reason="Acariciar Mascota")
-            messages.success(request, f"✨ ¡Acariciaste a {pet.name}! (+20 Felicidad, +10 XP Mascota, +5 EXP Jugador)")
+            messages.success(request, f"💖 ¡Acariciaste a {pet.name}! (+20 Vínculo, +15 XP Mascota, +5 EXP Jugador).")
             
         return redirect(f'/pets/?tg_id={tg_id}')
 
 def expedition_pet(request):
-    """Envía a la mascota a explorar los bosques del Reino en busca de oro y tesoros"""
+    """Envía a la mascota a explorar en busca de oro (gasta energía y tiene cooldown)"""
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         
-        if pet.energy < 20:
-            messages.error(request, f"⚠️ {pet.name} está muy agotado ({pet.energy}% energía). Aliméntalo antes de explorar.")
+        if pet.energy < 25:
+            messages.error(request, f"⚠️ {pet.name} no tiene suficiente energía ({pet.energy}%). Necesita al menos 25% para explorar.")
             return redirect(f'/pets/?tg_id={tg_id}')
 
-        if pet.can_go_expedition():
-            pet.energy = max(0, pet.energy - 25)
-            gold_found = random.randint(15, 35) + (pet.level * 3)
-            xp_mascota = 40
-            
-            pet.xp += xp_mascota
-            if pet.xp >= pet.xp_needed_for_next_level():
-                pet.xp -= pet.xp_needed_for_next_level()
-                pet.level += 1
+        if not pet.can_go_expedition():
+            minutos = pet.minutes_until_next_expedition()
+            messages.info(request, f"⏳ {pet.name} aún está exhausto de su último viaje. Podrá salir de expedición en {minutos} minutos.")
+            return redirect(f'/pets/?tg_id={tg_id}')
 
-            pet.last_expedition = timezone.now()
-            pet.save()
+        # Gastar energía
+        pet.energy = max(0, pet.energy - 25)
+        pet.last_expedition = timezone.now()
 
-            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-            wallet.add_funds(gold_found)
-            grant_user_xp(request, tg_id, 20, reason="Expedición de Mascota")
+        # Botín aleatorio de oro según el nivel de la mascota
+        gold_found = random.randint(15, 30) + (pet.level * 2)
+        xp_mascota = 35
+        
+        pet.xp += xp_mascota
+        if pet.xp >= pet.xp_to_next_level:
+            pet.xp -= pet.xp_to_next_level
+            pet.level += 1
+            messages.success(request, f"🎉 ¡{pet.name} subió al Nivel {pet.level}!")
 
-            messages.success(request, f"🌲 ¡{pet.name} regresó de su expedición con un botín de +{gold_found} 🪙 y +{xp_mascota} XP!")
-        else:
-            messages.info(request, f"⏳ {pet.name} aún está descansando de su última expedición. Vuelve más tarde.")
+        pet.save()
 
+        # Entregar botín al jugador
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        wallet.add_funds(gold_found)
+        grant_user_xp(request, tg_id, 15, reason="Expedición de Mascota")
+
+        messages.success(request, f"🌲 ¡{pet.name} regresó de los bosques con un tesoro de +{gold_found} 🪙 y +{xp_mascota} XP! (-25% Energía)")
         return redirect(f'/pets/?tg_id={tg_id}')
 
 def change_pet(request):
@@ -7425,45 +7460,63 @@ ARCHIVO: .\templates\pets\sanctuary.html
             </div>
         </div>
 
-        <!-- BOTONES DE INTERACCIÓN (ALIMENTAR, ACARICIAR, EXPEDICIÓN) -->
-        <div class="grid grid-cols-3 gap-2 w-full">
-            <!-- Alimentar (15 🪙) -->
+        <!-- BOTONES DE INTERACCIÓN BALANCEADOS -->
+        <div class="grid grid-cols-3 gap-2 w-full mt-2">
+            
+            <!-- 1. Alimentar (15 🪙) -->
             <form action="{% url 'pets:interact' %}" method="POST" class="m-0">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
                 <input type="hidden" name="action" value="feed">
                 <button type="submit" 
-                        class="w-full btn-gold py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider">
+                        class="w-full btn-gold py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider {% if pet.energy >= 100 %}opacity-60 cursor-not-allowed{% endif %}">
                     <span class="text-sm mb-0.5">🍖</span>
                     <span>Alimentar</span>
-                    <span class="text-[8px] font-mono opacity-80">-15 🪙</span>
+                    <span class="text-[8px] font-mono opacity-80">
+                        {% if pet.energy >= 100 %}Lleno{% else %}-15 🪙{% endif %}
+                    </span>
                 </button>
             </form>
 
-            <!-- Acariciar (Gratis) -->
+            <!-- 2. Acariciar (Cooldown de 30 min) -->
             <form action="{% url 'pets:interact' %}" method="POST" class="m-0">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
                 <input type="hidden" name="action" value="pet">
                 <button type="submit" 
-                        class="w-full bg-purple-950/80 border border-purple-500/70 text-purple-200 py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider hover:bg-purple-900 active:scale-95 transition-all shadow-md">
+                        class="w-full py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider transition-all shadow-md
+                        {% if pet.can_be_petted %}
+                            bg-purple-950/80 border border-purple-500/70 text-purple-200 hover:bg-purple-900 active:scale-95
+                        {% else %}
+                            bg-black/60 border border-neutral-800 text-stone-500 opacity-60
+                        {% endif %}">
                     <span class="text-sm mb-0.5">💖</span>
                     <span>Acariciar</span>
-                    <span class="text-[8px] font-mono text-purple-300">+10 XP</span>
+                    <span class="text-[8px] font-mono">
+                        {% if pet.can_be_petted %}+15 XP{% else %}{{ pet.minutes_until_next_pet }}m esp.{% endif %}
+                    </span>
                 </button>
             </form>
 
-            <!-- Expedición Clandestina (Nuevo Botín) -->
+            <!-- 3. Expedición (Cooldown de 90 min) -->
             <form action="{% url 'pets:expedition' %}" method="POST" class="m-0">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
                 <button type="submit" 
-                        class="w-full bg-emerald-950/80 border border-emerald-500/70 text-emerald-200 py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider hover:bg-emerald-900 active:scale-95 transition-all shadow-md">
+                        class="w-full py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider transition-all shadow-md
+                        {% if pet.can_go_expedition and pet.energy >= 25 %}
+                            bg-emerald-950/80 border border-emerald-500/70 text-emerald-200 hover:bg-emerald-900 active:scale-95
+                        {% else %}
+                            bg-black/60 border border-neutral-800 text-stone-500 opacity-60
+                        {% endif %}">
                     <span class="text-sm mb-0.5">🌲</span>
                     <span>Explorar</span>
-                    <span class="text-[8px] font-mono text-emerald-300">Botín Oro</span>
+                    <span class="text-[8px] font-mono">
+                        {% if pet.can_go_expedition %}Botín Oro{% else %}{{ pet.minutes_until_next_expedition }}m esp.{% endif %}
+                    </span>
                 </button>
             </form>
+
         </div>
 
         <!-- BOTÓN DE TRANSMUTACIÓN / CAMBIO DE ESPECIE -->

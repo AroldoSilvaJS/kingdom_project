@@ -5,25 +5,28 @@ class UserProfile(models.Model):
     telegram_user_id = models.BigIntegerField(unique=True, verbose_name="ID de Telegram")
     username = models.CharField(max_length=100, blank=True, null=True, verbose_name="Usuario de Telegram")
     
-    # --- SISTEMA DE NIVELES Y EXPERIENCIA BALANCEADO ---
+    # --- SISTEMA DE NIVELES Y EXPERIENCIA AVANZADO (HASTA LVL 100) ---
     level = models.PositiveIntegerField(default=1, verbose_name="Nivel Nobiliario")
-    current_xp = models.PositiveIntegerField(default=0, verbose_name="EXP Acumulada en Nivel Actual")
+    current_xp = models.PositiveIntegerField(default=0, verbose_name="EXP en Nivel Actual")
     total_xp = models.PositiveIntegerField(default=0, verbose_name="EXP Histórica Total")
 
     title = models.CharField(
         max_length=50,
         choices=[
             ('plebeyo', 'Curioso Clandestino 🍷'),
+            ('iniciado', 'Iniciado del Placer ✨'),
             ('caballero', 'Caballero VIP 🥂'),
-            ('conde', 'Conde de la Fortuna 🪙'),
+            ('baron', 'Barón de la Fortuna 🪙'),
+            ('conde', 'Conde Estelar 💎'),
+            ('marques', 'Marqués del Deseo 🌹'),
             ('duque', 'Duque Imperial 👑'),
-            ('archiduque', 'Archiduque del Placer 💎'),
+            ('soberano', 'Soberano Absoluto ⚜️'),
         ],
         default='plebeyo',
         verbose_name="Título Nobiliario"
     )
 
-    motto = models.CharField(max_length=100, blank=True, null=True, verbose_name="Lema o Frase Insignia")
+    motto = models.CharField(max_length=120, blank=True, null=True, verbose_name="Lema o Frase Insignia")
     profile_theme = models.CharField(
         max_length=30,
         choices=[
@@ -48,7 +51,7 @@ class UserProfile(models.Model):
         verbose_name="Insignia Nobiliaria"
     )
     
-    bio = models.CharField(max_length=200, blank=True, null=True, verbose_name="Biografía / Presentación")
+    bio = models.CharField(max_length=250, blank=True, null=True, verbose_name="Biografía / Presentación")
     avatar_frame = models.CharField(
         max_length=20,
         choices=[
@@ -73,16 +76,22 @@ class UserProfile(models.Model):
     def __str__(self):
         return f"{self.username or self.telegram_user_id} - Nivel {self.level}"
 
-    # --- MATEMÁTICA Y CURVA DE PROGRESIÓN ---
-    # --- MATEMÁTICA Y CURVA DE PROGRESIÓN ESTABLE ---
+    # --- MATEMÁTICA Y CURVA DE PROGRESIÓN PROFUNDA ---
     @property
     def xp_needed_for_next_level(self):
-        """Curva de EXP balanceada: Nivel 1 = 100 XP, Nivel 2 = 140 XP, etc."""
-        return int(100 + ((self.level - 1) * 40) + ((self.level - 1) ** 1.35 * 15))
+        """
+        Curva balanceada progresiva:
+        Nivel 1 -> 120 XP
+        Nivel 5 -> 380 XP
+        Nivel 15 -> 1,150 XP
+        Nivel 30 -> 2,800 XP
+        Nivel 50+ -> Requiere dedicación real
+        """
+        lvl = max(1, self.level)
+        return int(120 + ((lvl - 1) * 65) + (lvl ** 1.55 * 18))
 
     @property
     def xp_progress_percentage(self):
-        """Porcentaje de progreso exacto del 0 al 100 para la barra visual"""
         needed = self.xp_needed_for_next_level
         if needed <= 0:
             return 0
@@ -90,49 +99,64 @@ class UserProfile(models.Model):
         return max(0, min(100, int(porcentaje)))
 
     @property
+    def max_bet_allowed(self):
+        """
+        Límite dinámico de apuesta en Casino según estatus:
+        Niveles 1-5: 25 🪙 (protege al novato)
+        Niveles 6-15: 50 🪙
+        Niveles 16-30: 100 🪙
+        Niveles 31+: 200 🪙 (Sala de Grandes Apostadores)
+        """
+        if self.level >= 31:
+            return 200
+        elif self.level >= 16:
+            return 100
+        elif self.level >= 6:
+            return 50
+        return 25
+
+    @property
     def idol_rank_name(self):
-        """Rango escénico para Idols"""
-        if self.level >= 45:
-            return "Reina Absoluta del Placer 👑"
-        elif self.level >= 30:
-            return "Diva Consagrada del Reino 💎"
-        elif self.level >= 18:
+        if self.level >= 70:
+            return "Reina Absoluta del Reino ⚜️"
+        elif self.level >= 50:
+            return "Diva Primordial del Placer 👑"
+        elif self.level >= 35:
+            return "Musa Consagrada Imperial 💎"
+        elif self.level >= 22:
             return "Musa Clandestina Estelar 🌹"
-        elif self.level >= 8:
-            return "Musa de la Corte ✨"
-        return "Debutante Exclusiva 🎭"
+        elif self.level >= 12:
+            return "Musa de la Corte 🥂"
+        elif self.level >= 5:
+            return "Aspirante Exclusiva ✨"
+        return "Debutante Clandestina 🎭"
 
     @property
     def noble_rank_name(self):
-        """Rango feudal para Clientes Nobles"""
-        if self.level >= 45:
-            return "Archiduque del Placer 💎"
-        elif self.level >= 30:
+        if self.level >= 70:
+            return "Soberano del Reino ⚜️"
+        elif self.level >= 50:
             return "Duque Imperial 👑"
-        elif self.level >= 18:
+        elif self.level >= 35:
+            return "Marqués del Deseo 🌹"
+        elif self.level >= 22:
             return "Conde de la Fortuna 🪙"
-        elif self.level >= 8:
+        elif self.level >= 12:
             return "Caballero VIP 🥂"
+        elif self.level >= 5:
+            return "Iniciado del Placer ✨"
         return "Curioso Clandestino 🍷"
 
     def get_rank_name(self, is_idol=False):
         return self.idol_rank_name if is_idol else self.noble_rank_name
 
     def get_daily_bonus_amount(self):
-        """Bono diario escalonado balanceado según el nivel"""
-        if self.level >= 45:
-            return 50
-        elif self.level >= 25:
-            return 45
-        elif self.level >= 10:
-            return 40
-        return 35
+        """Recompensa diaria que premia el rango alcanzado"""
+        base = 30
+        incremento = min(70, self.level * 2)
+        return base + incremento
 
     def add_xp(self, amount):
-        """
-        Suma EXP de forma segura, maneja saltos de múltiples niveles 
-        y recompensa con oro sin desbordar la experiencia.
-        """
         if amount <= 0:
             return (False, self.level, 0)
 
@@ -141,14 +165,13 @@ class UserProfile(models.Model):
         leveled_up = False
         gold_reward = 0
 
-        # Procesar ascensos uno por uno con el costo exacto de cada nivel
         while True:
-            costo_nivel_actual = self.xp_needed_for_next_level
-            if self.current_xp >= costo_nivel_actual:
-                self.current_xp -= costo_nivel_actual
+            costo = self.xp_needed_for_next_level
+            if self.current_xp >= costo:
+                self.current_xp -= costo
                 self.level += 1
                 leveled_up = True
-                gold_reward += 15 + (self.level * 2)
+                gold_reward += 20 + (self.level * 3)
             else:
                 break
 

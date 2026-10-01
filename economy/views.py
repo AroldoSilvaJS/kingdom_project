@@ -40,11 +40,13 @@ def wallet_dashboard(request):
 def casino_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     resultado = None
     ganancia = 0
     numero_ganador = None
     color_ganador = None
     
+    max_bet = profile.max_bet_allowed  # 👈 Límite dinámico según nivel
     ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
         
     if request.method == 'POST':
@@ -54,8 +56,8 @@ def casino_game(request):
             
             if apuesta <= 0:
                 messages.error(request, "La apuesta debe ser mayor a 0.")
-            elif apuesta > 100:
-                messages.error(request, "La apuesta máxima del Casino Imperial es de 100 🪙.")
+            elif apuesta > max_bet:
+                messages.error(request, f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙.")
             elif apuesta > wallet.balance:
                 messages.error(request, "No tienes suficiente oro en tu Bóveda.")
             else:
@@ -72,9 +74,8 @@ def casino_game(request):
                     if eleccion == 'zero':
                         ganancia = int(apuesta * 14)
                     else:
-                        ganancia = int(apuesta * 1.95)
+                        ganancia = int(apuesta * 2.0) # 1:1 pago limpio
                     
-                    # Buff Pantera: +10%
                     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
                     if pet and pet.species == 'panther':
                         ganancia = int(ganancia * 1.10)
@@ -86,7 +87,7 @@ def casino_game(request):
                     resultado = "lose"
                     ganancia = apuesta
 
-                grant_user_xp(request, tg_id, max(2, apuesta // 5), reason="Ruleta Imperial")
+                grant_user_xp(request, tg_id, max(3, apuesta // 3), reason="Ruleta Imperial")
                     
         except ValueError:
             messages.error(request, "Por favor, ingresa un número válido.")
@@ -94,6 +95,8 @@ def casino_game(request):
     return render(request, 'economy/casino.html', {
         'tg_id': tg_id, 
         'wallet': wallet,
+        'profile': profile,
+        'max_bet': max_bet,
         'resultado': resultado,
         'ganancia': ganancia,
         'numero_ganador': numero_ganador,
@@ -128,6 +131,8 @@ def claim_bonus(request):
 def slots_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    max_bet = profile.max_bet_allowed
     resultado = None
     ganancia = 0
     reels = ['👑', '💎', '⭐']
@@ -139,13 +144,13 @@ def slots_game(request):
             
             if apuesta <= 0:
                 messages.error(request, "La apuesta debe ser mayor a 0.")
-            elif apuesta > 100:
-                messages.error(request, "La apuesta máxima de la Tragaperras es de 100 🪙.")
+            elif apuesta > max_bet:
+                messages.error(request, f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙.")
             elif apuesta > wallet.balance:
                 messages.error(request, "No tienes suficiente oro en tu Bóveda.")
             else:
                 pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                if pet and pet.species == 'raven' and random.random() < 0.12:
+                if pet and pet.species == 'raven' and random.random() < 0.10:
                     reels = ['👑', '👑', '👑']
                 else:
                     reels = [random.choice(SIMBOLOS) for _ in range(3)]
@@ -160,7 +165,7 @@ def slots_game(request):
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "jackpot"
                 elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-                    ganancia = int(apuesta * 1.5)
+                    ganancia = int(apuesta * 1.4)
                     if pet and pet.species == 'panther':
                         ganancia = int(ganancia * 1.10)
                         
@@ -171,9 +176,9 @@ def slots_game(request):
                     resultado = "lose"
                     ganancia = apuesta
 
-                xp_gain = max(2, apuesta // 5)
+                xp_gain = max(2, apuesta // 4)
                 if resultado == "jackpot":
-                    xp_gain += 30
+                    xp_gain += 25
                 grant_user_xp(request, tg_id, xp_gain, reason="Tragaperras Imperial")
                     
         except ValueError:
@@ -182,6 +187,8 @@ def slots_game(request):
     return render(request, 'economy/slots.html', {
         'tg_id': tg_id,
         'wallet': wallet,
+        'profile': profile,
+        'max_bet': max_bet,
         'reels': reels,
         'resultado': resultado,
         'ganancia': ganancia
@@ -215,6 +222,8 @@ def calculate_hand_value(hand):
 def blackjack_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    max_bet = profile.max_bet_allowed
         
     session_bj = request.session.get('blackjack_state')
     resultado = None
@@ -228,8 +237,8 @@ def blackjack_game(request):
                 apuesta = int(request.POST.get('bet_amount', 25))
                 if apuesta <= 0:
                     messages.error(request, "La apuesta debe ser mayor a 0.")
-                elif apuesta > 100:
-                    messages.error(request, "La apuesta máxima de Blackjack es de 100 🪙.")
+                elif apuesta > max_bet:
+                    messages.error(request, f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙.")
                 elif apuesta > wallet.balance:
                     messages.error(request, "No tienes suficiente oro en tu Bóveda.")
                 else:
@@ -247,7 +256,7 @@ def blackjack_game(request):
                         wallet.add_funds(ganancia)
                         resultado = 'blackjack'
                         session_bj = None
-                        grant_user_xp(request, tg_id, 25, reason="Blackjack Natural")
+                        grant_user_xp(request, tg_id, 20, reason="Blackjack Natural")
                     else:
                         session_bj = {
                             'bet': apuesta,
@@ -290,7 +299,7 @@ def blackjack_game(request):
                     
                 wallet.add_funds(ganancia)
                 resultado = 'win'
-                grant_user_xp(request, tg_id, 15, reason="Victoria Blackjack")
+                grant_user_xp(request, tg_id, 12, reason="Victoria Blackjack")
             elif p_val == d_val:
                 wallet.add_funds(apuesta)
                 resultado = 'push'
@@ -315,6 +324,8 @@ def blackjack_game(request):
     return render(request, 'economy/blackjack.html', {
         'tg_id': tg_id,
         'wallet': wallet,
+        'profile': profile,
+        'max_bet': max_bet,
         'player_cards': p_cards,
         'dealer_cards': d_cards,
         'player_score': p_score,
