@@ -281,17 +281,30 @@ def blackjack_game(request):
                     player_hand = [draw_card(), draw_card()]
                     dealer_hand = [draw_card(), draw_card()]
                     p_val = calculate_hand_value(player_hand)
+                    d_init_val = calculate_hand_value(dealer_hand)
                     
                     if p_val == 21:
-                        ganancia = int(apuesta * 2.5)
-                        pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                        if pet and pet.species == 'panther':
-                            ganancia = int(ganancia * 1.10)
-                            
-                        wallet.add_funds(ganancia)
-                        resultado = 'blackjack'
-                        session_bj = None
-                        grant_user_xp(request, tg_id, 20, reason="Blackjack Natural")
+                        if d_init_val == 21:
+                            # Empate con Blackjack de ambos
+                            wallet.add_funds(apuesta)
+                            resultado = 'push'
+                            ganancia = apuesta
+                        else:
+                            ganancia = int(apuesta * 2.5)
+                            pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                            if pet and pet.species == 'panther':
+                                ganancia = int(ganancia * 1.10)
+                                
+                            wallet.add_funds(ganancia)
+                            resultado = 'blackjack'
+                            grant_user_xp(request, tg_id, 20, reason="Blackjack Natural")
+                        
+                        session_bj = {
+                            'bet': apuesta,
+                            'player_hand': player_hand,
+                            'dealer_hand': dealer_hand,
+                            'finished': True
+                        }
                     else:
                         session_bj = {
                             'bet': apuesta,
@@ -314,9 +327,15 @@ def blackjack_game(request):
                 resultado = 'bust'
                 ganancia = session_bj['bet']
                 session_bj['finished'] = True
-                request.session['blackjack_state'] = None
-            else:
-                request.session['blackjack_state'] = session_bj
+
+                # Protección de Lobo (10% de salvar la apuesta)
+                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                if pet and pet.species == 'wolf' and random.random() < 0.10:
+                    wallet.add_funds(session_bj['bet'])
+                    resultado = 'push'
+                    ganancia = session_bj['bet']
+
+            request.session['blackjack_state'] = session_bj
                 
         elif action == 'stand' and session_bj and not session_bj.get('finished'):
             p_val = calculate_hand_value(session_bj['player_hand'])
@@ -344,9 +363,16 @@ def blackjack_game(request):
             else:
                 resultado = 'lose'
                 ganancia = apuesta
+
+                # Protección de Lobo (10% de salvar la apuesta)
+                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                if pet and pet.species == 'wolf' and random.random() < 0.10:
+                    wallet.add_funds(apuesta)
+                    resultado = 'push'
+                    ganancia = apuesta
                 
             session_bj['finished'] = True
-            request.session['blackjack_state'] = None
+            request.session['blackjack_state'] = session_bj
 
         if is_ajax:
             p_cards = session_bj['player_hand'] if session_bj else []
@@ -359,7 +385,7 @@ def blackjack_game(request):
                 dealer_visible = [d_cards[0], {'val': '?', 'suit': '👑', 'is_red': False, 'hidden': True}]
                 dealer_score_visible = calculate_hand_value([d_cards[0]])
 
-            return JsonResponse({
+            resp = {
                 'success': True,
                 'in_game': in_game,
                 'resultado': resultado,
@@ -370,7 +396,12 @@ def blackjack_game(request):
                 'dealer_score': dealer_score_visible,
                 'nuevo_saldo': wallet.balance,
                 'current_bet': session_bj['bet'] if session_bj else 25,
-            })
+            }
+
+            if session_bj and session_bj.get('finished', False):
+                request.session['blackjack_state'] = None
+
+            return JsonResponse(resp)
             
     p_cards = session_bj['player_hand'] if session_bj else []
     d_cards = session_bj['dealer_hand'] if session_bj else []

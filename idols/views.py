@@ -507,16 +507,29 @@ def toggle_like(request, post_id):
     return JsonResponse({'error': 'Invalid method'}, status=405)
 
 
+# ✅ REEMPLAZAR POR:
 def my_collection(request):
     tg_id = resolve_safe_tg(request)
     unlocked_posts = []
+    delivered_antojos = []
     
     if tg_id:
         unlocked_posts = Post.objects.filter(
             unlocks__client_telegram_id=tg_id
         ).select_related('idol').order_by('-unlocks__unlocked_at')
         
-    return render(request, 'idols/collection.html', {'tg_id': tg_id, 'posts': unlocked_posts})
+        # 👈 Ahora sí incluimos las fotos exclusivas de antojos entregados:
+        delivered_antojos = CustomRequest.objects.filter(
+            client_telegram_id=tg_id,
+            status='accepted'
+        ).exclude(delivered_photo='').select_related('idol').order_by('-created_at')
+        
+    return render(request, 'idols/collection.html', {
+        'tg_id': tg_id, 
+        'posts': unlocked_posts,
+        'antojos': delivered_antojos,
+        'total_items': len(unlocked_posts) + len(delivered_antojos)
+    })
 
 
 def send_tip(request, post_id):
@@ -569,6 +582,12 @@ def create_custom_request(request, idol_id):
         tg_username = request.POST.get('tg_username') or (profile.username if profile else 'Noble')
         idol = get_object_or_404(IdolProfile, id=idol_id)
         
+        # 1. Bloquear que la Idol se pida un antojo a sí misma
+        if tg_id and tg_id == idol.telegram_user_id:
+            messages.error(request, "No puedes solicitarte un antojo a ti misma.")
+            return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+        # 2. Validar monto y descripción
         try:
             bounty = int(request.POST.get('bounty', 100))
         except ValueError:
@@ -579,11 +598,13 @@ def create_custom_request(request, idol_id):
             messages.error(request, "Por favor completa la descripción y una oferta válida.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
             
+        # 3. Retener el oro en custodia
         client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         if not client_wallet.remove_funds(bounty):
             messages.error(request, f"No tienes suficiente oro ({bounty} 🪙) en tu Bóveda.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
             
+        # 4. Crear la petición
         CustomRequest.objects.create(
             idol=idol,
             client_telegram_id=tg_id,
@@ -593,7 +614,7 @@ def create_custom_request(request, idol_id):
             status='pending'
         )
 
-        # ✅ Mensaje detallado indicando a cuál de tus Idols se le pidió el antojo y con botón directo:
+        # 5. Notificar a la Idol en Telegram con botón directo
         send_telegram_msg(
             chat_id=idol.telegram_user_id,
             text=(

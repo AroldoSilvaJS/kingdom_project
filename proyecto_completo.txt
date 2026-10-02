@@ -2821,15 +2821,22 @@ def slots_game(request):
     SIMBOLOS = ['👑', '💎', '⭐', '🍇', '🍒', '🪙']
         
     if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         try:
             apuesta = int(request.POST.get('bet_amount', 0))
             
             if apuesta <= 0:
-                messages.error(request, "La apuesta debe ser mayor a 0.")
+                err = "La apuesta debe ser mayor a 0."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
             elif apuesta > max_bet:
-                messages.error(request, f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙.")
+                err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
             elif apuesta > wallet.balance:
-                messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+                err = "No tienes suficiente oro en tu Bóveda."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
             else:
                 pet = Pet.objects.filter(telegram_user_id=tg_id).first()
                 if pet and pet.species == 'raven' and random.random() < 0.10:
@@ -2862,9 +2869,22 @@ def slots_game(request):
                 if resultado == "jackpot":
                     xp_gain += 25
                 grant_user_xp(request, tg_id, xp_gain, reason="Tragaperras Imperial")
+
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'reels': reels,
+                        'resultado': resultado,
+                        'ganancia': ganancia,
+                        'nuevo_saldo': wallet.balance,
+                        'current_xp': profile.current_xp,
+                        'level': profile.level
+                    })
                     
         except ValueError:
-            messages.error(request, "Monto inválido.")
+            err = "Monto inválido."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
             
     return render(request, 'economy/slots.html', {
         'tg_id': tg_id,
@@ -2888,13 +2908,13 @@ def calculate_hand_value(hand):
     total = 0
     aces = 0
     for c in hand:
-        val = c['val']
+        val = c.get('val')
         if val in ['J', 'Q', 'K']:
             total += 10
         elif val == 'A':
             aces += 1
             total += 11
-        else:
+        elif str(val).isdigit():
             total += int(val)
     while total > 21 and aces > 0:
         total -= 10
@@ -2912,17 +2932,24 @@ def blackjack_game(request):
     ganancia = 0
     
     if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         action = request.POST.get('action')
         
         if action == 'deal':
             try:
                 apuesta = int(request.POST.get('bet_amount', 25))
                 if apuesta <= 0:
-                    messages.error(request, "La apuesta debe ser mayor a 0.")
+                    err = "La apuesta debe ser mayor a 0."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
                 elif apuesta > max_bet:
-                    messages.error(request, f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙.")
+                    err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
                 elif apuesta > wallet.balance:
-                    messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+                    err = "No tienes suficiente oro en tu Bóveda."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
                 else:
                     wallet.remove_funds(apuesta)
                     player_hand = [draw_card(), draw_card()]
@@ -2949,7 +2976,9 @@ def blackjack_game(request):
                         grant_user_xp(request, tg_id, max(2, apuesta // 5))
                     request.session['blackjack_state'] = session_bj
             except ValueError:
-                messages.error(request, "Monto inválido.")
+                err = "Monto inválido."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
                 
         elif action == 'hit' and session_bj and not session_bj.get('finished'):
             session_bj['player_hand'].append(draw_card())
@@ -2992,6 +3021,30 @@ def blackjack_game(request):
                 
             session_bj['finished'] = True
             request.session['blackjack_state'] = None
+
+        if is_ajax:
+            p_cards = session_bj['player_hand'] if session_bj else []
+            d_cards = session_bj['dealer_hand'] if session_bj else []
+            in_game = session_bj is not None and not session_bj.get('finished', False)
+
+            dealer_visible = d_cards
+            dealer_score_visible = calculate_hand_value(d_cards) if d_cards else 0
+            if in_game and len(d_cards) >= 2:
+                dealer_visible = [d_cards[0], {'val': '?', 'suit': '👑', 'is_red': False, 'hidden': True}]
+                dealer_score_visible = calculate_hand_value([d_cards[0]])
+
+            return JsonResponse({
+                'success': True,
+                'in_game': in_game,
+                'resultado': resultado,
+                'ganancia': ganancia,
+                'player_cards': p_cards,
+                'dealer_cards': dealer_visible,
+                'player_score': calculate_hand_value(p_cards) if p_cards else 0,
+                'dealer_score': dealer_score_visible,
+                'nuevo_saldo': wallet.balance,
+                'current_bet': session_bj['bet'] if session_bj else 25,
+            })
             
     p_cards = session_bj['player_hand'] if session_bj else []
     d_cards = session_bj['dealer_hand'] if session_bj else []
@@ -5443,10 +5496,9 @@ ARCHIVO: .\templates\economy\blackjack.html
         </div>
     </div>
 
-    <!-- MESA DE BLACKJACK CON PAÑO VERDE ESMERALDA Y BORDE DE MADERA REAL -->
+    <!-- MESA DE BLACKJACK CON PAÑO VERDE ESMERALDA -->
     <div class="rounded-3xl p-5 border-4 border-[#b8860b]/60 shadow-[0_12px_40px_rgba(0,0,0,0.95)] bg-gradient-to-b from-[#06331e] via-[#042013] to-[#020d08] flex flex-col items-center relative overflow-hidden">
         
-        <!-- Línea de paño de casino imperial -->
         <div class="absolute inset-2 border border-emerald-500/20 rounded-2xl pointer-events-none"></div>
 
         <div class="flex flex-col items-center z-10">
@@ -5464,57 +5516,45 @@ ARCHIVO: .\templates\economy\blackjack.html
                 <span class="flex items-center gap-1">
                     <span>🤵</span> <span>Croupier Imperial</span>
                 </span>
-                {% if not in_game and dealer_score > 0 %}
-                    <span class="font-mono text-emerald-200 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-full shadow">
-                        {{ dealer_score }} pts
-                    </span>
-                {% else %}
-                    <span class="font-mono text-vip-text/50 bg-black/60 px-2 py-0.5 rounded-full">? pts</span>
-                {% endif %}
+                <span id="dealer-score-badge" class="font-mono text-emerald-200 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-full shadow">
+                    {% if not in_game and dealer_score > 0 %}{{ dealer_score }} pts{% else %}? pts{% endif %}
+                </span>
             </div>
 
-            <!-- Cartas del Croupier con animación de vuelo -->
-            <div class="flex gap-2.5 justify-center min-h-[90px] items-center py-1">
+            <!-- Cartas del Croupier -->
+            <div class="flex gap-2.5 justify-center min-h-[90px] items-center py-1" id="dealer-cards-container">
                 {% if in_game %}
-                    <!-- 1ra Carta Visible -->
                     {% with c=dealer_cards.0 %}
-                    <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative overflow-hidden">
+                    <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative">
                         <div class="flex justify-between items-center text-[11px] font-black leading-none {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                            <span>{{ c.val }}</span>
-                            <span class="text-[10px]">{{ c.suit }}</span>
+                            <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                         </div>
                         <div class="text-2xl self-center leading-none filter drop-shadow {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
                             {{ c.suit }}
                         </div>
                         <div class="flex justify-between items-center text-[11px] font-black leading-none rotate-180 {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                            <span>{{ c.val }}</span>
-                            <span class="text-[10px]">{{ c.suit }}</span>
+                            <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                         </div>
                     </div>
                     {% endwith %}
 
-                    <!-- Carta Oculta con Holograma Imperial -->
+                    <!-- Carta Oculta -->
                     <div class="card-deal w-14 h-20 rounded-xl shadow-2xl border-2 border-yellow-500/70 bg-gradient-to-br from-[#4a0815] via-[#850d24] to-[#2b040b] flex flex-col items-center justify-center relative select-none animate-pulse">
                         <div class="w-10 h-16 border border-yellow-500/40 rounded-lg flex items-center justify-center">
                             <span class="text-base text-yellow-300 drop-shadow">👑</span>
                         </div>
                     </div>
-
                 {% elif dealer_cards %}
-                    <!-- Todas visibles al finalizar la mano -->
                     {% for c in dealer_cards %}
-                    <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative" 
-                         style="animation-delay: {{ forloop.counter0 }}00ms;">
+                    <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative">
                         <div class="flex justify-between items-center text-[11px] font-black leading-none {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                            <span>{{ c.val }}</span>
-                            <span class="text-[10px]">{{ c.suit }}</span>
+                            <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                         </div>
                         <div class="text-2xl self-center leading-none filter drop-shadow {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
                             {{ c.suit }}
                         </div>
                         <div class="flex justify-between items-center text-[11px] font-black leading-none rotate-180 {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                            <span>{{ c.val }}</span>
-                            <span class="text-[10px]">{{ c.suit }}</span>
+                            <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                         </div>
                     </div>
                     {% endfor %}
@@ -5530,138 +5570,251 @@ ARCHIVO: .\templates\economy\blackjack.html
                 <span class="flex items-center gap-1">
                     <span>👑</span> <span>Tu Mano</span>
                 </span>
-                {% if player_score > 0 %}
-                    <span class="font-mono text-white bg-amber-950/80 border border-yellow-500/40 px-2 py-0.5 rounded-full shadow">
-                        {{ player_score }} pts
-                    </span>
-                {% endif %}
+                <span id="player-score-badge" class="font-mono text-white bg-amber-950/80 border border-yellow-500/40 px-2 py-0.5 rounded-full shadow">
+                    {% if player_score > 0 %}{{ player_score }} pts{% else %}0 pts{% endif %}
+                </span>
             </div>
 
             <!-- Cartas del Jugador -->
-            <div class="flex gap-2.5 justify-center min-h-[90px] items-center flex-wrap py-1">
+            <div class="flex gap-2.5 justify-center min-h-[90px] items-center flex-wrap py-1" id="player-cards-container">
                 {% for c in player_cards %}
-                <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative hover:scale-105 transition-transform"
-                     style="animation-delay: {{ forloop.counter0 }}50ms;">
+                <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative">
                     <div class="flex justify-between items-center text-[11px] font-black leading-none {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                        <span>{{ c.val }}</span>
-                        <span class="text-[10px]">{{ c.suit }}</span>
+                        <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                     </div>
                     <div class="text-2xl self-center leading-none filter drop-shadow {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
                         {{ c.suit }}
                     </div>
                     <div class="flex justify-between items-center text-[11px] font-black leading-none rotate-180 {% if c.is_red %}text-rose-600{% else %}text-neutral-900{% endif %}">
-                        <span>{{ c.val }}</span>
-                        <span class="text-[10px]">{{ c.suit }}</span>
+                        <span>{{ c.val }}</span><span>{{ c.suit }}</span>
                     </div>
                 </div>
                 {% empty %}
-                    <span class="text-xs text-vip-text/40 italic py-6 font-medium">Elige tu apuesta y desafía al crupier</span>
+                    <span class="text-xs text-vip-text/40 italic py-6 font-medium" id="empty-player-text">Elige tu apuesta y desafía al crupier</span>
                 {% endfor %}
             </div>
         </div>
 
-        <!-- BANNER DE RESULTADO CON EFECTO DE GLOW -->
-        {% if resultado %}
-        <div class="w-full my-2 animate-bounce">
-            {% if resultado == 'blackjack' %}
-                <div class="p-3 bg-gradient-to-r from-yellow-600 via-amber-300 to-yellow-600 text-stone-950 text-xs font-black uppercase rounded-xl text-center shadow-[0_0_20px_rgba(234,179,8,0.7)] tracking-wider">
-                    👑 ¡BLACKJACK REAL! Pago Especial x2.5 (+{{ ganancia }} 🪙)
-                </div>
-            {% elif resultado == 'win' %}
-                <div class="p-2.5 bg-emerald-950/90 border-2 border-emerald-500 text-emerald-200 text-xs font-bold rounded-xl text-center shadow-[0_0_15px_rgba(16,185,129,0.5)]">
-                    🎉 ¡Victoria Noble! Superaste al Croupier (+{{ ganancia }} 🪙).
-                </div>
-            {% elif resultado == 'push' %}
-                <div class="p-2.5 bg-amber-950/90 border-2 border-amber-500 text-amber-200 text-xs font-bold rounded-xl text-center shadow">
-                    🤝 Empate (Push). Se reintegra tu apuesta de {{ ganancia }} 🪙.
-                </div>
-            {% elif resultado == 'bust' %}
-                <div class="p-2.5 bg-rose-950/90 border-2 border-rose-600 text-rose-200 text-xs font-bold rounded-xl text-center shadow">
-                    💥 Te pasaste de 21 puntos. Pierdes {{ ganancia }} 🪙 de oro.
-                </div>
-            {% elif resultado == 'lose' %}
-                <div class="p-2.5 bg-rose-950/90 border-2 border-rose-600 text-rose-200 text-xs font-bold rounded-xl text-center shadow">
-                    💀 El Croupier gana esta mano. Pierdes {{ ganancia }} 🪙 de oro.
-                </div>
-            {% endif %}
+        <!-- BANNER DE RESULTADO DINÁMICO -->
+        <div id="bj-result-box" class="w-full my-2"></div>
+
+        <!-- CONTROLES DINÁMICOS (EN JUEGO vs NUEVA APUESTA) -->
+        <div id="ingame-controls" class="{% if not in_game %}hidden{% endif %} grid grid-cols-2 gap-3 w-full mt-3">
+            <button type="button" onclick="handleBJAction('hit')" 
+                    class="w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all">
+                <span>🎴</span> <span>Pedir Carta</span>
+            </button>
+            <button type="button" onclick="handleBJAction('stand')" 
+                    class="w-full bg-rose-950 border-2 border-rose-500 text-rose-200 hover:bg-rose-900 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all">
+                <span>✋</span> <span>Plantarse</span>
+            </button>
         </div>
-        {% endif %}
 
-        <!-- CONTROLES DINÁMICOS -->
-        {% if in_game %}
-            <!-- BOTONES DURANTE LA MANO: PEDIR O PLANTARSE -->
-            <div class="grid grid-cols-2 gap-3 w-full mt-3">
-                <form method="POST" class="m-0">
-                    {% csrf_token %}
-                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                    <input type="hidden" name="action" value="hit">
-                    <button type="submit" 
-                            class="w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all">
-                        <span>🎴</span> <span>Pedir Carta</span>
-                    </button>
-                </form>
-
-                <form method="POST" class="m-0">
-                    {% csrf_token %}
-                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                    <input type="hidden" name="action" value="stand">
-                    <button type="submit" 
-                            class="w-full bg-rose-950 border-2 border-rose-500 text-rose-200 hover:bg-rose-900 py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition-all">
-                        <span>✋</span> <span>Plantarse</span>
-                    </button>
-                </form>
-            </div>
-        {% else %}
-            <!-- FORMULARIO DE NUEVA PARTIDA / APUESTA -->
-            <form method="POST" class="w-full flex flex-col gap-2.5 mt-3">
-                {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <input type="hidden" name="action" value="deal">
-
-                <div>
-                    <label class="block text-[11px] text-emerald-300 uppercase font-bold mb-1.5 text-left">Monto de la Apuesta (Máx: 100 🪙)</label>
-                    <div class="grid grid-cols-4 gap-1.5 mb-2">
-                        <button type="button" onclick="setBet(10)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">10</button>
-                        <button type="button" onclick="setBet(25)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">25</button>
-                        <button type="button" onclick="setBet(50)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
-                        <button type="button" onclick="setBet(100)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">100</button>
-                    </div>
-                    <input type="number" id="bet_amount_input" name="bet_amount" min="1" max="100" value="25" required
-                           class="w-full bg-black/80 border border-emerald-500/50 rounded-xl p-2.5 text-center font-mono font-bold text-white text-base focus:outline-none focus:border-yellow-400">
+        <div id="bet-controls" class="{% if in_game %}hidden{% endif %} w-full flex flex-col gap-2.5 mt-3">
+            <div>
+                <label class="block text-[11px] text-emerald-300 uppercase font-bold mb-1.5 text-left">Monto de la Apuesta (Máx: {{ max_bet }} 🪙)</label>
+                <div class="grid grid-cols-4 gap-1.5 mb-2">
+                    <button type="button" onclick="setBJBet(10)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">10</button>
+                    <button type="button" onclick="setBJBet(25)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">25</button>
+                    <button type="button" onclick="setBJBet(50)" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
+                    <button type="button" onclick="setBJBet({{ max_bet }})" class="bg-black/60 border border-emerald-500/40 hover:border-emerald-300 text-emerald-300 py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">{{ max_bet }}</button>
                 </div>
+                <input type="number" id="bj_bet_input" min="1" max="{{ max_bet }}" value="25"
+                       class="w-full bg-black/80 border border-emerald-500/50 rounded-xl p-2.5 text-center font-mono font-bold text-white text-base focus:outline-none focus:border-yellow-400">
+            </div>
 
-                <button type="submit" 
-                        class="btn-gold py-4 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-all">
-                    <span>🃏</span> <span>Repartir Cartas</span>
-                </button>
-            </form>
-        {% endif %}
+            <button type="button" onclick="handleBJAction('deal')" 
+                    class="btn-gold py-4 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-all">
+                <span>🃏</span> <span>Repartir Cartas</span>
+            </button>
+        </div>
 
     </div>
 
 </div>
 
-<!-- ESTILOS DE ANIMACIÓN DE CARTAS REALISTAS -->
+<!-- SINTETIZADOR DE AUDIO CASINO VIP -->
+<script>
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function getAudioCtx() {
+        if (!audioCtx) audioCtx = new AudioCtx();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+    }
+
+    // Sonido de naipe deslizándose en el paño
+    function playCardSound() {
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(450, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.09);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.09);
+        } catch(e) {}
+    }
+
+    // Tintineo de monedas
+    function playCoins() {
+        try {
+            const ctx = getAudioCtx();
+            [987, 1318, 1567, 2093].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.08));
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + (idx * 0.08));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.08) + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.08));
+                osc.stop(ctx.currentTime + (idx * 0.08) + 0.25);
+            });
+        } catch(e) {}
+    }
+</script>
+
 <style>
     .card-deal {
-        animation: cardFly 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+        animation: cardFly 0.32s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
     }
     @keyframes cardFly {
-        0% {
-            opacity: 0;
-            transform: translateY(-50px) scale(0.6) rotate(-15deg);
-        }
-        100% {
-            opacity: 1;
-            transform: translateY(0) scale(1) rotate(0deg);
-        }
+        0% { opacity: 0; transform: translateY(-40px) scale(0.7) rotate(-10deg); }
+        100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
     }
 </style>
 
 <script>
-    function setBet(val) {
-        const input = document.getElementById('bet_amount_input');
-        if (input) input.value = val;
+    function setBJBet(val) {
+        document.getElementById('bj_bet_input').value = val;
+    }
+
+    function renderCardHTML(c) {
+        if (c.hidden) {
+            return `
+            <div class="card-deal w-14 h-20 rounded-xl shadow-2xl border-2 border-yellow-500/70 bg-gradient-to-br from-[#4a0815] via-[#850d24] to-[#2b040b] flex flex-col items-center justify-center relative select-none animate-pulse">
+                <div class="w-10 h-16 border border-yellow-500/40 rounded-lg flex items-center justify-center">
+                    <span class="text-base text-yellow-300 drop-shadow">👑</span>
+                </div>
+            </div>`;
+        }
+        const colorClass = c.is_red ? 'text-rose-600' : 'text-neutral-900';
+        return `
+        <div class="card-deal w-14 h-20 bg-white rounded-xl shadow-2xl border border-neutral-300 flex flex-col justify-between p-1.5 select-none relative">
+            <div class="flex justify-between items-center text-[11px] font-black leading-none ${colorClass}">
+                <span>${c.val}</span><span>${c.suit}</span>
+            </div>
+            <div class="text-2xl self-center leading-none filter drop-shadow ${colorClass}">
+                ${c.suit}
+            </div>
+            <div class="flex justify-between items-center text-[11px] font-black leading-none rotate-180 ${colorClass}">
+                <span>${c.val}</span><span>${c.suit}</span>
+            </div>
+        </div>`;
+    }
+
+    async function handleBJAction(action) {
+        playCardSound();
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+
+        const betVal = parseInt(document.getElementById('bj_bet_input').value, 10);
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('action', action);
+        formData.append('bet_amount', betVal);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            const resp = await fetch("{% url 'economy:blackjack' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            if (!data.success) {
+                alert(data.error);
+                return;
+            }
+
+            // Actualizar Saldo
+            const balanceElem = document.getElementById('bj-balance');
+            if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
+
+            // Renderizar cartas Jugador
+            const pCont = document.getElementById('player-cards-container');
+            pCont.innerHTML = data.player_cards.map(c => renderCardHTML(c)).join('');
+
+            // Renderizar cartas Croupier
+            const dCont = document.getElementById('dealer-cards-container');
+            dCont.innerHTML = data.dealer_cards.map(c => renderCardHTML(c)).join('');
+
+            // Puntuaciones
+            document.getElementById('player-score-badge').innerText = `${data.player_score} pts`;
+            document.getElementById('dealer-score-badge').innerText = `${data.dealer_score} pts`;
+
+            // Alternar controles
+            const inGameControls = document.getElementById('ingame-controls');
+            const betControls = document.getElementById('bet-controls');
+            const resultBox = document.getElementById('bj-result-box');
+
+            if (data.in_game) {
+                inGameControls.classList.remove('hidden');
+                betControls.classList.add('hidden');
+                resultBox.innerHTML = '';
+            } else {
+                inGameControls.classList.add('hidden');
+                betControls.classList.remove('hidden');
+
+                // Resultado
+                if (data.resultado === 'blackjack') {
+                    playCoins();
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                    resultBox.innerHTML = `
+                    <div class="p-3 bg-gradient-to-r from-yellow-600 via-amber-300 to-yellow-600 text-stone-950 text-xs font-black uppercase rounded-xl text-center shadow-[0_0_20px_rgba(234,179,8,0.7)] tracking-wider animate-bounce">
+                        👑 ¡BLACKJACK REAL! Pago x2.5 (+${data.ganancia} 🪙)
+                    </div>`;
+                } else if (data.resultado === 'win') {
+                    playCoins();
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                    resultBox.innerHTML = `
+                    <div class="p-2.5 bg-emerald-950/90 border-2 border-emerald-500 text-emerald-200 text-xs font-bold rounded-xl text-center shadow-[0_0_15px_rgba(16,185,129,0.5)]">
+                        🎉 ¡Victoria Noble! Superaste al Croupier (+${data.ganancia} 🪙).
+                    </div>`;
+                } else if (data.resultado === 'push') {
+                    resultBox.innerHTML = `
+                    <div class="p-2.5 bg-amber-950/90 border-2 border-amber-500 text-amber-200 text-xs font-bold rounded-xl text-center shadow">
+                        🤝 Empate. Se reintegra tu apuesta de ${data.ganancia} 🪙.
+                    </div>`;
+                } else if (data.resultado === 'bust') {
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
+                    resultBox.innerHTML = `
+                    <div class="p-2.5 bg-rose-950/90 border-2 border-rose-600 text-rose-200 text-xs font-bold rounded-xl text-center shadow">
+                        💥 Te pasaste de 21 puntos. Pierdes ${data.ganancia} 🪙 de oro.
+                    </div>`;
+                } else if (data.resultado === 'lose') {
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
+                    resultBox.innerHTML = `
+                    <div class="p-2.5 bg-rose-950/90 border-2 border-rose-600 text-rose-200 text-xs font-bold rounded-xl text-center shadow">
+                        💀 El Croupier gana esta mano. Pierdes ${data.ganancia} 🪙 de oro.
+                    </div>`;
+                }
+            }
+
+        } catch(e) {
+            alert("Error de conexión al jugar.");
+        }
     }
 </script>
 {% endblock %}
@@ -5952,7 +6105,7 @@ ARCHIVO: .\templates\economy\slots.html
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2">
+<div class="flex flex-col gap-4 mt-2 pb-36">
     
     <!-- ENCABEZADO Y VOLVER -->
     <div class="flex justify-between items-center px-1">
@@ -5960,21 +6113,21 @@ ARCHIVO: .\templates\economy\slots.html
           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
           ⬅ Bóveda
         </button>
-        <div class="flex items-center gap-1.5 bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full">
+        <div class="flex items-center gap-1.5 bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full shadow-inner">
             <span class="text-xs">🪙</span>
-            <span class="text-xs font-mono font-bold text-gold-gradient" id="user-balance">{{ wallet.balance }}</span>
+            <span class="text-xs font-mono font-bold text-gold-gradient" id="slots-balance">{{ wallet.balance }}</span>
         </div>
     </div>
 
-    <!-- MÁQUINA DE SLOTS CON ANIMACIÓN DE SUSPENSO -->
-    <div class="vip-panel p-5 text-center relative overflow-hidden flex flex-col items-center">
+    <!-- MÁQUINA DE SLOTS -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden flex flex-col items-center border border-vip-gold/40 shadow-2xl">
         
         <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
             Tragaperras Imperial
         </h2>
         <p class="text-[11px] text-vip-text/60 mb-2">Alinea las gemas y desata el Jackpot</p>
 
-        <!-- CABINA DE LOS 3 RODILLOS (ANIMADOS EN TIEMPO REAL) -->
+        <!-- CABINA DE LOS 3 RODILLOS -->
         <div class="w-full my-3 p-4 bg-gradient-to-b from-[#180a29] via-black to-[#130724] border-2 border-vip-gold/50 rounded-2xl shadow-[0_0_25px_rgba(212,175,55,0.25)] flex justify-center gap-3">
             
             <!-- Rodillo 1 -->
@@ -6000,46 +6153,31 @@ ARCHIVO: .\templates\economy\slots.html
 
         </div>
 
-        <!-- BANNER DE RESULTADO (SE MUESTRA SOLO AL FRENAR EL 3ER RODILLO) -->
+        <!-- BANNER DE RESULTADO DINÁMICO -->
         <div id="result-box" class="w-full min-h-[45px] flex items-center justify-center">
-            {% if resultado == 'jackpot' %}
-                <div class="p-3 bg-gradient-to-r from-yellow-950 via-yellow-600 to-yellow-950 border border-yellow-300 rounded-xl text-black text-xs font-black uppercase tracking-wider w-full animate-bounce shadow-lg">
-                    👑 ¡JACKPOT IMPERIAL! Has ganado +{{ ganancia }} 🪙 de oro.
-                </div>
-            {% elif resultado == 'pair' %}
-                <div class="p-2.5 bg-purple-950/80 border border-purple-500 rounded-xl text-purple-200 text-xs font-bold w-full">
-                    ✨ ¡Par conseguido! Recuperas tu apuesta con ganancia (+{{ ganancia }} 🪙).
-                </div>
-            {% elif resultado == 'lose' %}
-                <div class="p-2.5 bg-red-950/80 border border-red-500 rounded-xl text-red-200 text-xs font-bold w-full">
-                    💀 No hubo coincidencia. Pierdes {{ ganancia }} 🪙 de oro.
-                </div>
-            {% endif %}
+            <span class="text-xs text-vip-text/50">Elige tu apuesta y baja la palanca</span>
         </div>
 
-        <!-- FORMULARIO DE APUESTA -->
-        <form method="POST" id="slots-form" class="w-full flex flex-col gap-3 mt-3">
-            {% csrf_token %}
-            <input type="hidden" name="tg_id" value="{{ tg_id }}">
-
+        <!-- CONTROLES DE APUESTA -->
+        <div class="w-full flex flex-col gap-3 mt-2">
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5">Monto de la Tirada (Máx: 100 🪙)</label>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5">Monto de la Tirada (Máx: {{ max_bet }} 🪙)</label>
                 <div class="grid grid-cols-4 gap-1.5 mb-2">
-                    <button type="button" onclick="setBet(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">10</button>
-                    <button type="button" onclick="setBet(25)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">25</button>
-                    <button type="button" onclick="setBet(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">50</button>
-                    <button type="button" onclick="setBet(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">100</button>
+                    <button type="button" onclick="setBet(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">10</button>
+                    <button type="button" onclick="setBet(25)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">25</button>
+                    <button type="button" onclick="setBet(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
+                    <button type="button" onclick="setBet({{ max_bet }})" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">{{ max_bet }}</button>
                 </div>
-                <input type="number" id="bet_amount_input" name="bet_amount" min="1" max="100" value="25" required
+                <input type="number" id="bet_amount_input" min="1" max="{{ max_bet }}" value="25"
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-bold text-white text-base focus:outline-none focus:border-vip-gold">
             </div>
 
             <!-- BOTÓN DE PALANCA DORADA -->
-            <button type="button" id="spin-btn" onclick="startSpinAnimation()" 
-                    class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] mt-1 flex items-center justify-center gap-2 active:scale-95 transition-all">
+            <button type="button" id="spin-btn" onclick="spinSlots()" 
+                    class="btn-gold py-4 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] mt-1 flex items-center justify-center gap-2 active:scale-95 transition-all">
                 <span>🎰</span> Bajar Palanca (Tirar)
             </button>
-        </form>
+        </div>
 
         <!-- TABLA DE PREMIOS -->
         <div class="w-full mt-4 bg-black/40 border border-vip-gold/20 p-3 rounded-xl text-left">
@@ -6048,7 +6186,7 @@ ARCHIVO: .\templates\economy\slots.html
                 <span>👑👑👑 Triple Corona: <strong class="text-yellow-400">x15</strong></span>
                 <span>💎💎💎 Triple Diamante: <strong class="text-purple-300">x10</strong></span>
                 <span>⭐⭐⭐ Triple Estrella: <strong class="text-yellow-200">x6</strong></span>
-                <span>✨ Par de cualquier gema: <strong class="text-white">x1.5</strong></span>
+                <span>✨ Par de cualquier gema: <strong class="text-white">x1.4</strong></span>
             </div>
         </div>
 
@@ -6056,110 +6194,210 @@ ARCHIVO: .\templates\economy\slots.html
 
 </div>
 
-<!-- ESTILOS Y SCRIPT DE ANIMACIÓN DE ALTA PRECISIÓN -->
+<!-- SINTETIZADOR DE AUDIO CASINO VIP (Sin dependencias externas) -->
+<script>
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function getAudioCtx() {
+        if (!audioCtx) audioCtx = new AudioCtx();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+    }
+
+    // Sonido de clic mecánico de rodillo
+    function playClack() {
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(220, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.08);
+            gain.gain.setValueAtTime(0.5, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.08);
+        } catch(e) {}
+    }
+
+    // Sonido de tintineo de monedas de oro
+    function playCoins() {
+        try {
+            const ctx = getAudioCtx();
+            [987, 1318, 1567, 2093].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.08));
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + (idx * 0.08));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.08) + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.08));
+                osc.stop(ctx.currentTime + (idx * 0.08) + 0.25);
+            });
+        } catch(e) {}
+    }
+</script>
+
 <style>
-    /* Efecto de rodillo a toda velocidad con desenfoque de movimiento */
     .spinning-reel {
         animation: spinBlur 0.08s infinite linear;
         filter: blur(2px);
     }
     @keyframes spinBlur {
-        0% { transform: translateY(-40px) scale(0.9); opacity: 0.6; }
+        0% { transform: translateY(-35px) scale(0.9); opacity: 0.5; }
         50% { transform: translateY(0px) scale(1.05); opacity: 1; }
-        100% { transform: translateY(40px) scale(0.9); opacity: 0.6; }
+        100% { transform: translateY(35px) scale(0.9); opacity: 0.5; }
     }
-
-    /* Golpe de freno seco */
     .reel-stop {
-        animation: stopBounce 0.35s ease-out;
+        animation: stopBounce 0.28s ease-out;
     }
     @keyframes stopBounce {
-        0% { transform: translateY(-30px); }
-        60% { transform: translateY(10px); }
+        0% { transform: translateY(-25px); }
+        60% { transform: translateY(8px); }
         100% { transform: translateY(0); }
     }
 </style>
 
 <script>
     const SYMBOLS = ['👑', '💎', '⭐', '🍇', '🍒', '🪙'];
-    const tg = window.Telegram?.WebApp;
+    let isSpinning = false;
 
     function setBet(val) {
-        document.getElementById('bet_amount_input').value = val;
+        if (!isSpinning) document.getElementById('bet_amount_input').value = val;
     }
 
-    // Si viene de un POST anterior, ejecutamos la animación antes de revelar el premio
-    const shouldAnimate = "{{ resultado|default:'' }}" !== "";
-
-    if (shouldAnimate) {
-        const finalReels = ['{{ reels.0 }}', '{{ reels.1 }}', '{{ reels.2 }}'];
+    async function spinSlots() {
+        if (isSpinning) return;
+        const betInput = document.getElementById('bet_amount_input');
+        const betVal = parseInt(betInput.value, 10);
         const resultBox = document.getElementById('result-box');
-        
-        // Ocultamos temporalmente el resultado mientras ruedan
-        const originalResultHTML = resultBox.innerHTML;
-        resultBox.innerHTML = '<span class="text-xs text-vip-gold animate-pulse">Rodillos girando a toda velocidad...</span>';
+        const btn = document.getElementById('spin-btn');
+        const balanceElem = document.getElementById('slots-balance');
+
+        if (!betVal || betVal <= 0) {
+            resultBox.innerHTML = '<span class="text-xs text-red-400 font-bold">⚠️ Apuesta inválida</span>';
+            return;
+        }
+
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('bet_amount', betVal);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        isSpinning = true;
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+        btn.innerHTML = '<span>⏳</span> Rodillos Girando...';
+
+        resultBox.innerHTML = '<span class="text-xs text-yellow-300 font-bold animate-pulse">Rodillos a toda velocidad...</span>';
 
         const r1 = document.getElementById('reel-1');
         const r2 = document.getElementById('reel-2');
         const r3 = document.getElementById('reel-3');
 
-        // Empezar a rodar con blur
         r1.classList.add('spinning-reel');
         r2.classList.add('spinning-reel');
         r3.classList.add('spinning-reel');
 
-        // Bucle aleatorio para cambiar los iconos mientras giran
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
+
         const int1 = setInterval(() => { r1.innerText = SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)]; }, 70);
         const int2 = setInterval(() => { r2.innerText = SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)]; }, 70);
-        const int3={};
-        const int3_val = setInterval(() => { r3.innerText = SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)]; }, 70);
+        const int3 = setInterval(() => { r3.innerText = SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)]; }, 70);
 
-        // Freno 1: 0.7 segundos (CLAC!)
-        setTimeout(() => {
-            clearInterval(int1);
-            r1.classList.remove('spinning-reel');
-            r1.innerText = finalReels[0];
-            r1.classList.add('reel-stop');
-            tg?.HapticFeedback?.impactOccurred('medium');
-        }, 700);
+        try {
+            const resp = await fetch("{% url 'economy:slots' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
 
-        // Freno 2: 1.3 segundos (CLAC!!)
-        setTimeout(() => {
-            clearInterval(int2);
-            r2.classList.remove('spinning-reel');
-            r2.innerText = finalReels[1];
-            r2.classList.add('reel-stop');
-            tg?.HapticFeedback?.impactOccurred('medium');
-        }, 1300);
-
-        // Freno 3: 2.0 segundos (¡¡CLAC FINAL!!)
-        setTimeout(() => {
-            clearInterval(int3_val);
-            r3.classList.remove('spinning-reel');
-            r3.innerText = finalReels[2];
-            r3.classList.add('reel-stop');
-            
-            // Revelar resultado final
-            resultBox.innerHTML = originalResultHTML;
-
-            const res = "{{ resultado }}";
-            if (res === 'jackpot') {
-                tg?.HapticFeedback?.notificationOccurred('success');
-            } else if (res === 'lose') {
-                tg?.HapticFeedback?.notificationOccurred('error');
-            } else {
-                tg?.HapticFeedback?.impactOccurred('heavy');
+            if (!data.success) {
+                clearInterval(int1); clearInterval(int2); clearInterval(int3);
+                r1.classList.remove('spinning-reel'); r2.classList.remove('spinning-reel'); r3.classList.remove('spinning-reel');
+                isSpinning = false;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                btn.innerHTML = '<span>🎰</span> Bajar Palanca (Tirar)';
+                resultBox.innerHTML = `<span class="text-xs text-red-400 font-bold">❌ ${data.error}</span>`;
+                return;
             }
-        }, 2000);
-    }
 
-    function startSpinAnimation() {
-        const btn = document.getElementById('spin-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<span>⏳</span> Girando...';
-        btn.classList.add('opacity-50');
-        tg?.HapticFeedback?.impactOccurred('heavy');
-        document.getElementById('slots-form').submit();
+            // Freno 1: 0.6s
+            setTimeout(() => {
+                clearInterval(int1);
+                r1.classList.remove('spinning-reel');
+                r1.innerText = data.reels[0];
+                r1.classList.add('reel-stop');
+                playClack();
+                try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+            }, 600);
+
+            // Freno 2: 1.1s
+            setTimeout(() => {
+                clearInterval(int2);
+                r2.classList.remove('spinning-reel');
+                r2.innerText = data.reels[1];
+                r2.classList.add('reel-stop');
+                playClack();
+                try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+            }, 1100);
+
+            // Freno 3: 1.6s (Final)
+            setTimeout(() => {
+                clearInterval(int3);
+                r3.classList.remove('spinning-reel');
+                r3.innerText = data.reels[2];
+                r3.classList.add('reel-stop');
+                playClack();
+
+                isSpinning = false;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                btn.innerHTML = '<span>🎰</span> Bajar Palanca (Tirar)';
+
+                if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
+
+                if (data.resultado === 'jackpot') {
+                    playCoins();
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                    resultBox.innerHTML = `
+                        <div class="p-3 bg-gradient-to-r from-yellow-950 via-yellow-600 to-yellow-950 border border-yellow-300 rounded-xl text-black text-xs font-black uppercase tracking-wider w-full animate-bounce shadow-lg">
+                            👑 ¡JACKPOT IMPERIAL! Has ganado +${data.ganancia} 🪙 de oro.
+                        </div>`;
+                } else if (data.resultado === 'pair') {
+                    playCoins();
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                    resultBox.innerHTML = `
+                        <div class="p-2.5 bg-purple-950/80 border border-purple-500 rounded-xl text-purple-200 text-xs font-bold w-full">
+                            ✨ ¡Par conseguido! Recuperas tu apuesta con ganancia (+${data.ganancia} 🪙).
+                        </div>`;
+                } else {
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
+                    resultBox.innerHTML = `
+                        <div class="p-2.5 bg-rose-950/80 border border-rose-500 rounded-xl text-rose-200 text-xs font-bold w-full">
+                            💀 Sin coincidencia. Pierdes ${betVal} 🪙 de oro.
+                        </div>`;
+                }
+
+            }, 1600);
+
+        } catch(e) {
+            clearInterval(int1); clearInterval(int2); clearInterval(int3);
+            isSpinning = false;
+            btn.disabled = false;
+            btn.classList.remove('opacity-50');
+            btn.innerHTML = '<span>🎰</span> Bajar Palanca (Tirar)';
+            resultBox.innerHTML = '<span class="text-xs text-red-400 font-bold">⚠️ Error de conexión</span>';
+        }
     }
 </script>
 {% endblock %}
@@ -7070,14 +7308,14 @@ ARCHIVO: .\templates\idols\feed.html
     {% endif %}
 
     <!-- FEED DE PUBLICACIONES -->
-    <div class="flex flex-col gap-4" id="feed-container">
+    <div class="flex flex-col gap-5" id="feed-container">
         {% for post in posts %}
-        <article class="vip-panel overflow-hidden border border-vip-gold/30 rounded-3xl feed-item {% if post.network == 'fans' %}is-vip{% else %}is-public{% endif %}" data-network="{{ post.network }}">
+        <article class="vip-panel overflow-hidden border border-vip-gold/30 rounded-3xl feed-item shadow-2xl {% if post.network == 'fans' %}is-vip{% else %}is-public{% endif %}" data-network="{{ post.network }}">
             
             <!-- Cabecera del Post: Idol Info y Botones de Gestión -->
             <div class="p-3.5 flex items-center justify-between border-b border-vip-gold/15 bg-black/40">
                 <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" class="flex items-center gap-2.5 group">
-                    <div class="w-10 h-10 rounded-full overflow-hidden border border-vip-gold/50 group-hover:scale-105 transition-transform bg-black">
+                    <div class="w-10 h-10 rounded-full overflow-hidden border border-vip-gold/50 group-hover:scale-105 transition-transform bg-black flex-shrink-0">
                         {% if post.idol.photo %}
                             <img src="{{ post.idol.photo.url }}" alt="{{ post.idol.stage_name }}" class="w-full h-full object-cover">
                         {% else %}
@@ -7109,10 +7347,10 @@ ARCHIVO: .\templates\idols\feed.html
                         </span>
                     {% endif %}
 
-                    <!-- BOTONES PARA LA DUEÑA DE LA IDOL O ADMINISTRADORES -->
+                    <!-- Botones para la dueña o admin -->
                     {% if is_admin or post.idol.telegram_user_id == tg_id %}
                         <button type="button" onclick="universalNav('{% url 'idols:edit_post' post.id %}')" 
-                                class="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-0.5 rounded-lg bg-black/70 border border-yellow-500/40" title="Editar Publicación">
+                                class="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-0.5 rounded-lg bg-black/70 border border-yellow-500/40" title="Editar">
                             ✏️
                         </button>
                         <form action="{% url 'idols:delete_post' post.id %}" method="POST" class="m-0" 
@@ -7120,7 +7358,7 @@ ARCHIVO: .\templates\idols\feed.html
                             {% csrf_token %}
                             <input type="hidden" name="tg_id" value="{{ tg_id }}">
                             <button type="submit" 
-                                    class="text-rose-400 hover:text-rose-300 text-xs px-2 py-0.5 rounded-lg bg-rose-950/70 border border-rose-500/50" title="Eliminar Publicación">
+                                    class="text-rose-400 hover:text-rose-300 text-xs px-2 py-0.5 rounded-lg bg-rose-950/70 border border-rose-500/50" title="Eliminar">
                                 🗑️
                             </button>
                         </form>
@@ -7128,29 +7366,30 @@ ARCHIVO: .\templates\idols\feed.html
                 </div>
             </div>
 
-            <!-- IMAGEN O CONTENIDO CENSURADO VIP -->
-            <div class="relative w-full aspect-square bg-black overflow-hidden flex items-center justify-center">
+            <!-- IMAGEN PRINCIPAL (MÁS GRANDE, COMPLETA Y SIN CORTES) -->
+            <div class="relative w-full bg-black min-h-[340px] max-h-[560px] flex items-center justify-center overflow-hidden">
                 {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
                     <!-- IMAGEN PÚBLICA O DESBLOQUEADA -->
                     {% if post.image %}
-                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover">
+                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
+                             class="w-full max-h-[560px] object-contain sm:object-cover">
                     {% else %}
-                        <div class="w-full h-full flex items-center justify-center text-4xl">📸</div>
+                        <div class="w-full h-80 flex items-center justify-center text-4xl">📸</div>
                     {% endif %}
 
                     {% if post.network == 'fans' and post.id in unlocked_ids %}
-                        <span class="absolute top-3 right-3 bg-green-950/80 border border-green-500 text-green-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow backdrop-blur-sm">
+                        <span class="absolute top-3 right-3 bg-green-950/90 border border-green-500 text-green-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow backdrop-blur-md">
                             ✓ Desbloqueada
                         </span>
                     {% endif %}
                 {% else %}
                     <!-- CONTENIDO VIP BLOQUEADO / CENSURA ELEGANTE -->
                     {% if post.image %}
-                        <img src="{{ post.image.url }}" alt="VIP" class="w-full h-full object-cover filter blur-xl brightness-[0.35] scale-110">
+                        <img src="{{ post.image.url }}" alt="VIP" class="w-full max-h-[560px] object-cover filter blur-2xl brightness-[0.25] scale-110">
                     {% endif %}
                     
                     <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
-                        <div class="w-14 h-14 rounded-2xl bg-black/70 border border-purple-500/60 flex items-center justify-center text-2xl shadow-[0_0_20px_rgba(168,85,247,0.4)] mb-3 animate-pulse">
+                        <div class="w-16 h-16 rounded-2xl bg-black/75 border border-purple-500/60 flex items-center justify-center text-3xl shadow-[0_0_25px_rgba(168,85,247,0.5)] mb-3 animate-pulse">
                             🔒
                         </div>
                         <h4 class="font-serif text-sm font-black text-purple-200 uppercase tracking-wider mb-1">
@@ -7174,7 +7413,37 @@ ARCHIVO: .\templates\idols\feed.html
                 {% endif %}
             </div>
 
-            <!-- Pie del Post: Descripción y Acciones -->
+            <!-- BARRA DE ACCIONES: LIKE, COMENTARIOS E INVITAR TRAGO -->
+            <div class="px-4 pt-3 pb-2 flex items-center justify-between border-b border-vip-gold/10 bg-black/30">
+                <div class="flex items-center gap-4">
+                    <!-- BOTÓN DE LIKE INTERACTIVO (AJAX) -->
+                    <button type="button" onclick="handleLike({{ post.id }})" id="like-btn-{{ post.id }}"
+                            class="flex items-center gap-1.5 text-sm font-bold transition-all active:scale-125 select-none {% if post.id in liked_ids %}text-rose-500{% else %}text-stone-400 hover:text-rose-400{% endif %}">
+                        <span id="like-icon-{{ post.id }}">{% if post.id in liked_ids %}❤️{% else %}🤍{% endif %}</span>
+                        <span id="like-count-{{ post.id }}" class="text-xs font-mono font-bold">{{ post.likes }}</span>
+                    </button>
+
+                    <!-- BOTÓN DE COMENTARIOS -->
+                    <button type="button" onclick="toggleComments({{ post.id }})" 
+                            class="flex items-center gap-1.5 text-stone-400 hover:text-purple-300 text-sm font-bold active:scale-95 transition-all select-none">
+                        <span>💬</span>
+                        <span class="text-xs font-mono font-bold" id="comment-count-{{ post.id }}">{{ post.comments.count }}</span>
+                    </button>
+
+                    <!-- INVITAR UN TRAGO -->
+                    <button type="button" onclick="openTipModal('{{ post.id }}', '{{ post.idol.stage_name }}')" 
+                            class="flex items-center gap-1 text-purple-300 hover:text-yellow-300 text-xs font-bold bg-purple-950/60 border border-purple-500/40 px-2.5 py-1 rounded-full active:scale-95 transition-all">
+                        <span>🥂</span> <span>Invitar Trago</span>
+                    </button>
+                </div>
+
+                <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" 
+                   class="text-[11px] text-vip-gold/80 hover:text-vip-gold font-semibold uppercase tracking-wider">
+                    Ver Perfil ➔
+                </a>
+            </div>
+
+            <!-- PIE DEL POST: DESCRIPCIÓN Y COMENTARIOS -->
             <div class="p-4 flex flex-col gap-2.5 bg-gradient-to-t from-black/60 to-transparent">
                 <!-- Leyenda / Caption -->
                 {% if post.caption %}
@@ -7183,17 +7452,40 @@ ARCHIVO: .\templates\idols\feed.html
                     </p>
                 {% endif %}
 
-                <!-- Barra de interacción inferior: Invitar trago / dar propina -->
-                <div class="flex justify-between items-center border-t border-vip-gold/15 pt-2.5 mt-1">
-                    <button type="button" onclick="openTipModal('{{ post.id }}', '{{ post.idol.stage_name }}')" 
-                            class="text-xs text-purple-300 hover:text-white bg-purple-950/60 border border-purple-500/40 px-3 py-1.5 rounded-full flex items-center gap-1.5 active:scale-95 transition-all">
-                        <span>🥂</span> Invitar un Trago
-                    </button>
+                <!-- SECCIÓN DESPLEGABLE DE COMENTARIOS -->
+                <div id="comments-section-{{ post.id }}" class="hidden mt-2 pt-2 border-t border-vip-gold/15 flex flex-col gap-2.5">
+                    
+                    <!-- Lista de Comentarios Existentes -->
+                    <div class="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                        {% for c in post.comments.all %}
+                            <div class="bg-black/60 border border-vip-gold/15 p-2 rounded-xl text-xs flex flex-col gap-0.5">
+                                <div class="flex justify-between items-center text-[10px]">
+                                    <span class="font-bold text-yellow-300">{{ c.author_name }}</span>
+                                    <span class="text-stone-500 font-mono">{{ c.created_at|timesince }} atrás</span>
+                                </div>
+                                <p class="text-stone-300">{{ c.text }}</p>
+                            </div>
+                        {% empty %}
+                            <p class="text-center text-[11px] text-stone-500 py-1 italic" id="empty-comment-{{ post.id }}">
+                                Sé el primero en dejar un comentario o halago...
+                            </p>
+                        {% endfor %}
+                    </div>
 
-                    <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" 
-                       class="text-[11px] text-vip-gold/80 hover:text-vip-gold font-semibold uppercase tracking-wider">
-                        Ver Perfil ➔
-                    </a>
+                    <!-- Formulario de Nuevo Comentario -->
+                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 m-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                        <input type="hidden" name="tg_username" value="{{ tg_username }}">
+                        
+                        <input type="text" name="text" required placeholder="Escribe un comentario..." 
+                               class="flex-1 bg-black/80 border border-vip-gold/30 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
+                        
+                        <button type="submit" 
+                                class="bg-purple-900 hover:bg-purple-800 border border-purple-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold active:scale-95 transition-all">
+                            Enviar
+                        </button>
+                    </form>
                 </div>
             </div>
 
@@ -7211,8 +7503,8 @@ ARCHIVO: .\templates\idols\feed.html
 
 <!-- MODAL PARA INVITAR UN TRAGO / PROPINA -->
 <div id="tip-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="vip-panel max-w-sm w-full p-6 relative border-purple-500/60">
-        <button onclick="closeTipModal()" class="absolute top-4 right-4 text-vip-text/50 hover:text-white text-lg">✕</button>
+    <div class="vip-panel max-w-sm w-full p-6 relative border-purple-500/60 shadow-2xl">
+        <button onclick="closeTipModal()" class="absolute top-4 right-4 text-vip-text/50 hover:text-white text-lg">&times;</button>
         
         <div class="text-center flex flex-col items-center">
             <span class="text-4xl my-1">🥂</span>
@@ -7236,7 +7528,7 @@ ARCHIVO: .\templates\idols\feed.html
                     <button type="button" onclick="setTipAmount(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">100 🪙</button>
                 </div>
                 <input type="number" id="tip-amount-input" name="tip_amount" min="10" value="20" required
-                       class="mt-2 w-full bg-black/70 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-bold text-white text-sm">
+                       class="mt-2 w-full bg-black/70 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-bold text-white text-sm focus:outline-none focus:border-yellow-400">
             </div>
 
             <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider mt-1">
@@ -7247,41 +7539,80 @@ ARCHIVO: .\templates\idols\feed.html
 </div>
 
 <script>
+    // Like AJAX interactivo
+    async function handleLike(postId) {
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+        
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            const resp = await fetch(`/idols/feed/like/${postId}/`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+
+            const btn = document.getElementById(`like-btn-${postId}`);
+            const icon = document.getElementById(`like-icon-${postId}`);
+            const count = document.getElementById(`like-count-${postId}`);
+
+            if (data.liked) {
+                icon.innerText = '❤️';
+                btn.className = "flex items-center gap-1.5 text-sm font-bold transition-all active:scale-125 select-none text-rose-500";
+            } else {
+                icon.innerText = '🤍';
+                btn.className = "flex items-center gap-1.5 text-sm font-bold transition-all active:scale-125 select-none text-stone-400 hover:text-rose-400";
+            }
+            count.innerText = data.likes;
+        } catch(e) {}
+    }
+
+    // Desplegar u ocultar comentarios
+    function toggleComments(postId) {
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+        const section = document.getElementById(`comments-section-${postId}`);
+        if (section) section.classList.toggle('hidden');
+    }
+
+    // Filtros de Muro
     function filterFeed(type) {
         const items = document.querySelectorAll('.feed-item');
         const btnAll = document.getElementById('btn-filter-all');
         const btnVip = document.getElementById('btn-filter-vip');
 
         if (type === 'vip') {
-            btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-gradient-to-r from-purple-800 to-fuchsia-700 text-white shadow-md";
-            btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
+            if (btnVip) btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-gradient-to-r from-purple-800 to-fuchsia-700 text-white shadow-md";
+            if (btnAll) btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
             items.forEach(el => {
-                if (el.dataset.network === 'fans') {
-                    el.style.display = 'block';
-                } else {
-                    el.style.display = 'none';
-                }
+                el.style.display = (el.dataset.network === 'fans') ? 'block' : 'none';
             });
         } else {
-            btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-vip-gold text-black shadow-md";
-            btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
+            if (btnAll) btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-vip-gold text-black shadow-md";
+            if (btnVip) btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
             items.forEach(el => el.style.display = 'block');
         }
     }
 
     function openTipModal(postId, idolName) {
         const form = document.getElementById('tip-form');
-        form.action = `/idols/feed/tip/${postId}/`;
-        document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
-        document.getElementById('tip-modal').classList.remove('hidden');
+        if (form) form.action = `/idols/feed/tip/${postId}/`;
+        const target = document.getElementById('tip-idol-target');
+        if (target) target.innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
+        const modal = document.getElementById('tip-modal');
+        if (modal) modal.classList.remove('hidden');
     }
 
     function closeTipModal() {
-        document.getElementById('tip-modal').classList.add('hidden');
+        const modal = document.getElementById('tip-modal');
+        if (modal) modal.classList.add('hidden');
     }
 
     function setTipAmount(val) {
-        document.getElementById('tip-amount-input').value = val;
+        const input = document.getElementById('tip-amount-input');
+        if (input) input.value = val;
     }
 </script>
 {% endblock %}
