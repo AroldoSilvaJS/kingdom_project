@@ -2955,17 +2955,30 @@ def blackjack_game(request):
                     player_hand = [draw_card(), draw_card()]
                     dealer_hand = [draw_card(), draw_card()]
                     p_val = calculate_hand_value(player_hand)
+                    d_init_val = calculate_hand_value(dealer_hand)
                     
                     if p_val == 21:
-                        ganancia = int(apuesta * 2.5)
-                        pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                        if pet and pet.species == 'panther':
-                            ganancia = int(ganancia * 1.10)
-                            
-                        wallet.add_funds(ganancia)
-                        resultado = 'blackjack'
-                        session_bj = None
-                        grant_user_xp(request, tg_id, 20, reason="Blackjack Natural")
+                        if d_init_val == 21:
+                            # Empate con Blackjack de ambos
+                            wallet.add_funds(apuesta)
+                            resultado = 'push'
+                            ganancia = apuesta
+                        else:
+                            ganancia = int(apuesta * 2.5)
+                            pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                            if pet and pet.species == 'panther':
+                                ganancia = int(ganancia * 1.10)
+                                
+                            wallet.add_funds(ganancia)
+                            resultado = 'blackjack'
+                            grant_user_xp(request, tg_id, 20, reason="Blackjack Natural")
+                        
+                        session_bj = {
+                            'bet': apuesta,
+                            'player_hand': player_hand,
+                            'dealer_hand': dealer_hand,
+                            'finished': True
+                        }
                     else:
                         session_bj = {
                             'bet': apuesta,
@@ -2988,9 +3001,15 @@ def blackjack_game(request):
                 resultado = 'bust'
                 ganancia = session_bj['bet']
                 session_bj['finished'] = True
-                request.session['blackjack_state'] = None
-            else:
-                request.session['blackjack_state'] = session_bj
+
+                # Protección de Lobo (10% de salvar la apuesta)
+                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                if pet and pet.species == 'wolf' and random.random() < 0.10:
+                    wallet.add_funds(session_bj['bet'])
+                    resultado = 'push'
+                    ganancia = session_bj['bet']
+
+            request.session['blackjack_state'] = session_bj
                 
         elif action == 'stand' and session_bj and not session_bj.get('finished'):
             p_val = calculate_hand_value(session_bj['player_hand'])
@@ -3018,9 +3037,16 @@ def blackjack_game(request):
             else:
                 resultado = 'lose'
                 ganancia = apuesta
+
+                # Protección de Lobo (10% de salvar la apuesta)
+                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                if pet and pet.species == 'wolf' and random.random() < 0.10:
+                    wallet.add_funds(apuesta)
+                    resultado = 'push'
+                    ganancia = apuesta
                 
             session_bj['finished'] = True
-            request.session['blackjack_state'] = None
+            request.session['blackjack_state'] = session_bj
 
         if is_ajax:
             p_cards = session_bj['player_hand'] if session_bj else []
@@ -3033,7 +3059,7 @@ def blackjack_game(request):
                 dealer_visible = [d_cards[0], {'val': '?', 'suit': '👑', 'is_red': False, 'hidden': True}]
                 dealer_score_visible = calculate_hand_value([d_cards[0]])
 
-            return JsonResponse({
+            resp = {
                 'success': True,
                 'in_game': in_game,
                 'resultado': resultado,
@@ -3044,7 +3070,12 @@ def blackjack_game(request):
                 'dealer_score': dealer_score_visible,
                 'nuevo_saldo': wallet.balance,
                 'current_bet': session_bj['bet'] if session_bj else 25,
-            })
+            }
+
+            if session_bj and session_bj.get('finished', False):
+                request.session['blackjack_state'] = None
+
+            return JsonResponse(resp)
             
     p_cards = session_bj['player_hand'] if session_bj else []
     d_cards = session_bj['dealer_hand'] if session_bj else []
@@ -3892,16 +3923,29 @@ def toggle_like(request, post_id):
     return JsonResponse({'error': 'Invalid method'}, status=405)
 
 
+# ✅ REEMPLAZAR POR:
 def my_collection(request):
     tg_id = resolve_safe_tg(request)
     unlocked_posts = []
+    delivered_antojos = []
     
     if tg_id:
         unlocked_posts = Post.objects.filter(
             unlocks__client_telegram_id=tg_id
         ).select_related('idol').order_by('-unlocks__unlocked_at')
         
-    return render(request, 'idols/collection.html', {'tg_id': tg_id, 'posts': unlocked_posts})
+        # 👈 Ahora sí incluimos las fotos exclusivas de antojos entregados:
+        delivered_antojos = CustomRequest.objects.filter(
+            client_telegram_id=tg_id,
+            status='accepted'
+        ).exclude(delivered_photo='').select_related('idol').order_by('-created_at')
+        
+    return render(request, 'idols/collection.html', {
+        'tg_id': tg_id, 
+        'posts': unlocked_posts,
+        'antojos': delivered_antojos,
+        'total_items': len(unlocked_posts) + len(delivered_antojos)
+    })
 
 
 def send_tip(request, post_id):
@@ -3954,6 +3998,12 @@ def create_custom_request(request, idol_id):
         tg_username = request.POST.get('tg_username') or (profile.username if profile else 'Noble')
         idol = get_object_or_404(IdolProfile, id=idol_id)
         
+        # 1. Bloquear que la Idol se pida un antojo a sí misma
+        if tg_id and tg_id == idol.telegram_user_id:
+            messages.error(request, "No puedes solicitarte un antojo a ti misma.")
+            return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+        # 2. Validar monto y descripción
         try:
             bounty = int(request.POST.get('bounty', 100))
         except ValueError:
@@ -3964,11 +4014,13 @@ def create_custom_request(request, idol_id):
             messages.error(request, "Por favor completa la descripción y una oferta válida.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
             
+        # 3. Retener el oro en custodia
         client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         if not client_wallet.remove_funds(bounty):
             messages.error(request, f"No tienes suficiente oro ({bounty} 🪙) en tu Bóveda.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
             
+        # 4. Crear la petición
         CustomRequest.objects.create(
             idol=idol,
             client_telegram_id=tg_id,
@@ -3978,7 +4030,7 @@ def create_custom_request(request, idol_id):
             status='pending'
         )
 
-        # ✅ Mensaje detallado indicando a cuál de tus Idols se le pidió el antojo y con botón directo:
+        # 5. Notificar a la Idol en Telegram con botón directo
         send_telegram_msg(
             chat_id=idol.telegram_user_id,
             text=(
@@ -6644,61 +6696,84 @@ ARCHIVO: .\templates\idols\collection.html
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="p-4 mt-4 flex flex-col gap-4 mx-auto w-full max-w-md pb-16">
+<div class="p-4 mt-2 flex flex-col gap-4 mx-auto w-full max-w-md pb-32">
     
     <!-- Encabezado -->
-    <div class="flex justify-between items-center mb-2 px-2 border-b border-vip-gold/30 pb-3">
+    <div class="flex justify-between items-center mb-1 px-1 border-b border-vip-gold/30 pb-3">
         <div>
-            <h2 class="text-xl font-bold text-vip-gold tracking-wide">💎 Mi Colección Privada</h2>
-            <p class="text-xs text-vip-text/60">Tus fotos y antojos VIP desbloqueados</p>
+            <h2 class="text-xl font-bold font-serif text-vip-gold tracking-wide">💎 Mi Colección Privada</h2>
+            <p class="text-xs text-vip-text/60">Tus fotos y antojos exclusivos en tu poder</p>
         </div>
-        <a href="javascript:void(0)" onclick="navGo('/economy/wallet/')" class="text-xs text-vip-text/70 hover:text-vip-text bg-vip-panel px-3 py-1.5 rounded-full border border-vip-gold/30">
+        <button type="button" onclick="universalNav('/economy/wallet/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
             ⬅ Bóveda
-         </a>
+        </button>
     </div>
 
-    <!-- Estadísticas de la colección -->
-    <div class="bg-vip-panel border border-vip-gold/20 p-3 rounded-xl flex items-center justify-between px-4">
-        <span class="text-xs text-vip-text/70 uppercase tracking-wider">Antojos en tu poder</span>
-        <span class="text-sm font-bold text-vip-gold font-mono bg-black/40 px-2.5 py-1 rounded-lg border border-vip-gold/30">
-            {{ posts|length }} fotos 🔞
+    <!-- Contador total -->
+    <div class="vip-panel p-3 flex items-center justify-between px-4">
+        <span class="text-xs text-vip-text/70 uppercase tracking-wider font-bold">Tesoros Desbloqueados</span>
+        <span class="text-xs font-bold text-yellow-400 font-mono bg-black/60 px-2.5 py-1 rounded-lg border border-vip-gold/30">
+            {{ total_items }} fotos 🔞
         </span>
     </div>
 
-   <!-- Cuadrícula de Fotos Desbloqueadas -->
-    {% if posts %}
-        <div class="grid grid-cols-2 gap-3 mt-2">
-            {% for post in posts %}
-                <div class="relative rounded-xl overflow-hidden border border-vip-gold/30 aspect-[3/4] group bg-black shadow-md flex flex-col justify-end">
-                    <!-- Foto en alta calidad sin censura (Con verificación de existencia) -->
-                    {% if post.image %}
-                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
-                    {% else %}
-                        <div class="absolute inset-0 w-full h-full bg-purple-950/60 flex items-center justify-center text-3xl">🔞</div>
-                    {% endif %}
-                    
-                    <!-- Sombra para leer datos -->
-                    <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
-                    
-                    <!-- Datos de la foto -->
-                    <div class="relative z-10 p-2.5 flex flex-col">
-                        <span class="text-[10px] text-purple-400 font-bold uppercase tracking-wider">VIP</span>
-                        <h4 class="text-xs font-bold text-vip-gold truncate">{{ post.idol.stage_name }}</h4>
-                        <p class="text-[10px] text-vip-text/70 line-clamp-1 italic">"{{ post.caption }}"</p>
+    <!-- SECCIÓN 1: ANTOJOS PERSONALIZADOS ENTREGADOS -->
+    {% if antojos %}
+        <div class="flex flex-col gap-2.5 mt-2">
+            <h3 class="text-xs font-bold text-yellow-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span>🔥</span> Antojos Personalizados Entregados ({{ antojos|length }})
+            </h3>
+            <div class="grid grid-cols-2 gap-3">
+                {% for ant in antojos %}
+                    <div class="relative rounded-2xl overflow-hidden border border-yellow-500/50 aspect-[3/4] bg-black shadow-lg flex flex-col justify-end group">
+                        <img src="{{ ant.delivered_photo.url }}" alt="{{ ant.description }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
+                        <div class="relative z-10 p-2.5 flex flex-col">
+                            <span class="text-[9px] bg-yellow-500 text-black font-black uppercase px-1.5 py-0.2 rounded w-fit mb-1">Antojo Exclusivo</span>
+                            <h4 class="text-xs font-bold text-white truncate">{{ ant.idol.stage_name }}</h4>
+                            <p class="text-[10px] text-stone-300 line-clamp-1 italic">"{{ ant.description }}"</p>
+                        </div>
                     </div>
-                </div>
-            {% endfor %}
+                {% endfor %}
+            </div>
         </div>
-    {% else %}
-        <div class="text-center py-12 px-4 border border-vip-gold/10 rounded-2xl bg-vip-panel/40 flex flex-col items-center gap-3 mt-4">
+    {% endif %}
+
+    <!-- SECCIÓN 2: FOTOS DE KINGDOMFANS DESBLOQUEADAS -->
+    {% if posts %}
+        <div class="flex flex-col gap-2.5 mt-2">
+            <h3 class="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                <span>🔒</span> Publicaciones VIP Desbloqueadas ({{ posts|length }})
+            </h3>
+            <div class="grid grid-cols-2 gap-3">
+                {% for post in posts %}
+                    <div class="relative rounded-2xl overflow-hidden border border-purple-500/40 aspect-[3/4] bg-black shadow-md flex flex-col justify-end group">
+                        {% if post.image %}
+                            <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                        {% endif %}
+                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
+                        <div class="relative z-10 p-2.5 flex flex-col">
+                            <span class="text-[9px] text-purple-400 font-bold uppercase tracking-wider">KingdomFans</span>
+                            <h4 class="text-xs font-bold text-white truncate">{{ post.idol.stage_name }}</h4>
+                            <p class="text-[10px] text-stone-300 line-clamp-1 italic">"{{ post.caption }}"</p>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- SI NO TIENE NADA AÚN -->
+    {% if not posts and not antojos %}
+        <div class="text-center py-12 px-4 border border-vip-gold/15 rounded-3xl bg-black/40 flex flex-col items-center gap-3 mt-4">
             <span class="text-4xl">🔐</span>
-            <p class="text-sm text-vip-text/70 font-semibold">Tu colección aún está vacía.</p>
-            <p class="text-xs text-vip-text/50 max-w-xs">
-                Cuando desbloquees fotos exclusivas en el Muro VIP, aparecerán aquí para siempre.
+            <p class="text-sm text-white font-bold">Tu colección aún está vacía.</p>
+            <p class="text-xs text-vip-text/50 max-w-xs leading-relaxed">
+                Cuando desbloquees fotos en el Muro VIP o una Idol te entregue un antojo exclusivo, aparecerán aquí para siempre.
             </p>
-            <a href="javascript:void(0)" onclick="navGo('/idols/feed/')" class="mt-2 bg-gradient-to-r from-vip-gold to-yellow-600 text-black text-xs font-bold px-4 py-2.5 rounded-xl uppercase tracking-wider hover:brightness-110 transition-all shadow-md">
-              Ir al Muro VIP
-             </a>
+            <button type="button" onclick="universalNav('/idols/feed/')" class="mt-2 btn-gold text-xs font-bold px-4 py-2.5 rounded-xl uppercase tracking-wider shadow">
+                Explorar el Muro VIP
+            </button>
         </div>
     {% endif %}
 
@@ -7891,23 +7966,24 @@ ARCHIVO: .\templates\idols\list.html
                         "{{ req.description }}"
                     </p>
 
-                    <!-- Formulario de Entrega / Rechazo -->
+                    <!-- Formulario de Entrega / Rechazo con tg_id blindado -->
                     <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-1">
                         {% csrf_token %}
                         <input type="hidden" name="request_id" value="{{ req.id }}">
+                        <input type="hidden" name="tg_id" value="{{ tg_id }}"> <!-- 👈 ESTA LÍNEA ES VITAL -->
 
-                        <label class="block text-[10px] text-vip-gold uppercase">Subir foto del antojo:</label>
-                        <input type="file" name="delivered_photo" accept="image/*"
-                               class="w-full bg-vip-base border border-vip-gold/30 rounded p-1.5 text-[11px] text-white file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-vip-gold file:text-black hover:file:bg-yellow-500 cursor-pointer">
+                        <label class="block text-[10px] text-yellow-400 uppercase font-bold">Subir foto para entregar el antojo:</label>
+                        <input type="file" name="delivered_photo" accept="image/*" required
+                               class="w-full bg-black/60 border border-vip-gold/30 rounded p-1.5 text-[11px] text-white file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-vip-gold file:text-black hover:file:bg-yellow-500 cursor-pointer">
 
                         <div class="grid grid-cols-2 gap-2 mt-1">
                             <button type="submit" name="action" value="accept_request"
-                                    class="bg-green-700/80 border border-green-500 text-white font-bold py-1.5 rounded text-xs hover:bg-green-600 transition-colors uppercase tracking-wider">
-                                ✅ Entregar Foto
+                                    class="bg-emerald-700 hover:bg-emerald-600 text-white font-black py-2 rounded-xl text-xs uppercase tracking-wider shadow">
+                                ✅ Entregar Foto (+{{ req.bounty }} 🪙)
                             </button>
                             <button type="submit" name="action" value="reject_request"
-                                    class="bg-red-900/60 border border-red-500/50 text-red-200 font-bold py-1.5 rounded text-xs hover:bg-red-700 transition-colors uppercase tracking-wider">
-                                ❌ Rechazar
+                                    class="bg-rose-950 border border-rose-600 hover:bg-rose-900 text-rose-200 font-bold py-2 rounded-xl text-xs uppercase tracking-wider">
+                                ❌ Rechazar (Devolver Oro)
                             </button>
                         </div>
                     </form>

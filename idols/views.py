@@ -6,15 +6,19 @@ from django.contrib import messages
 
 from .models import IdolProfile, Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
 from economy.models import Wallet
-from core.models import UserProfile
+from core.models import UserProfile, UserRole
 from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
-from core.models import UserRole
 
 
 def resolve_safe_tg(request):
-    raw_id = request.POST.get('tg_id') or request.GET.get('tg_id') or request.session.get('tg_id')
+    raw_id = (
+        request.POST.get('tg_id') or 
+        request.GET.get('tg_id') or 
+        request.COOKIES.get('tg_id') or 
+        request.session.get('tg_id')
+    )
     if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null']:
         try:
             val = int(raw_id)
@@ -72,11 +76,16 @@ def idol_list(request):
                 req_obj.status = 'rejected'
                 req_obj.save()
                 
+                # Aviso con botón a la Bóveda del Cliente
                 send_telegram_msg(
-                    req_obj.client_telegram_id,
-                    f"⚠️ <b>Petición de Antojo Rechazada</b>\n"
-                    f"{req_obj.idol.stage_name} no pudo atender tu petición en este momento.\n"
-                    f"Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos a tu Bóveda."
+                    chat_id=req_obj.client_telegram_id,
+                    text=(
+                        f"⚠️ <b>Petición de Antojo Rechazada</b>\n\n"
+                        f"{req_obj.idol.stage_name} no pudo atender tu deseo en este momento.\n"
+                        f"Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos intactos a tu Bóveda."
+                    ),
+                    button_text="🪙 Revisar Mi Bóveda",
+                    button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={req_obj.client_telegram_id}"
                 )
                 messages.info(request, f"Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al cliente.")
                 
@@ -93,13 +102,19 @@ def idol_list(request):
                     idol_wallet.add_funds(req_obj.bounty)
                     grant_user_xp(request, tg_id, 40, reason="Entrega de Antojo")
                     
+                    # Notificación al cliente con botón directo a la Colección
                     send_telegram_msg(
-                        req_obj.client_telegram_id,
-                        f"🔥 <b>¡Tu Antojo ha sido entregado!</b>\n"
-                        f"{req_obj.idol.stage_name} ha subido tu foto exclusiva solicitada.\n"
-                        f"Ya puedes verla en tu Colección Privada."
+                        chat_id=req_obj.client_telegram_id,
+                        text=(
+                            f"🔥 <b>¡Tu Antojo ha sido entregado!</b> 🔞\n\n"
+                            f"🌹 <b>Musa:</b> {req_obj.idol.stage_name}\n"
+                            f"📝 <b>Petición:</b> <i>«{req_obj.description}»</i>\n\n"
+                            f"La foto exclusiva ya se encuentra guardada en tu Colección Privada para siempre."
+                        ),
+                        button_text="💎 Ver Mi Colección Privada",
+                        button_url=f"https://kingdom-pleasure-app.onrender.com/idols/collection/?tg_id={req_obj.client_telegram_id}"
                     )
-                    messages.success(request, f"¡Antojo entregado con éxito! Recibiste +{req_obj.bounty} 🪙 en tu Bóveda (+40 EXP).")
+                    messages.success(request, f"¡Antojo entregado con éxito! Recibiste +{req_obj.bounty} 🪙 (+40 EXP).")
                     
             return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
     
@@ -172,7 +187,8 @@ def idol_edit(request, idol_id):
     tg_id = resolve_safe_tg(request)
     idol = get_object_or_404(IdolProfile, id=idol_id)
     
-    if tg_id != idol.telegram_user_id and str(tg_id) != '7474444797':
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    if tg_id != idol.telegram_user_id and not is_admin:
         messages.error(request, "No tienes permiso para editar esta Idol.")
         return redirect(f'/idols/?tg_id={tg_id}')
         
@@ -274,11 +290,17 @@ def idol_detail(request, idol_id):
                     grant_user_xp(request, tg_id, 25, reason="Reseña de Idol")
                     grant_user_xp(None, idol.telegram_user_id, 35 if rating_val == 5 else 20, reason="Calificación Recibida")
                     
+                    # Notificación a la Idol con botón directo
                     send_telegram_msg(
-                        idol.telegram_user_id,
-                        f"⭐ <b>¡Nueva Reseña para {idol.stage_name}!</b>\n"
-                        f"El noble <b>{tg_username}</b> te calificó con <b>{rating_val}★</b>:\n"
-                        f"<i>«{comment_val}»</i>"
+                        chat_id=idol.telegram_user_id,
+                        text=(
+                            f"⭐ <b>¡Nueva Reseña para {idol.stage_name}!</b>\n\n"
+                            f"👤 <b>Noble:</b> {tg_username}\n"
+                            f"✨ <b>Puntuación:</b> {rating_val}★\n"
+                            f"💬 <i>«{comment_val}»</i>"
+                        ),
+                        button_text=f"🌹 Ver Perfil de {idol.stage_name}",
+                        button_url=f"https://kingdom-pleasure-app.onrender.com/idols/{idol.id}/?tg_id={idol.telegram_user_id}"
                     )
                     messages.success(request, "¡Tu reseña fue publicada con éxito (+25 EXP)!")
                     return redirect(f'/idols/{idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
@@ -324,11 +346,11 @@ def social_feed(request):
         'is_admin': is_admin,
     })
 
+
 def delete_post(request, post_id):
     tg_id = resolve_safe_tg(request)
     post = get_object_or_404(Post, id=post_id)
     
-    from core.models import UserRole
     is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
     is_owner = (tg_id == post.idol.telegram_user_id)
 
@@ -347,7 +369,6 @@ def edit_post(request, post_id):
     tg_id = resolve_safe_tg(request)
     post = get_object_or_404(Post, id=post_id)
     
-    from core.models import UserRole
     is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
     is_owner = (tg_id == post.idol.telegram_user_id)
 
@@ -419,11 +440,22 @@ def unlock_post(request, post_id):
                 grant_user_xp(request, tg_id, precio_final, reason="Desbloqueo VIP")
                 grant_user_xp(None, post.idol.telegram_user_id, max(15, precio_final // 2), reason="Venta de Contenido VIP")
 
+                # Notificación detallada de venta VIP con botón a la Bóveda
+                client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+                comprador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
+                
                 send_telegram_msg(
-                    post.idol.telegram_user_id,
-                    f"💎 <b>¡Venta VIP en KingdomFans!</b>\n"
-                    f"Un noble desbloqueó tu foto por <b>{precio_final} 🪙</b>.\n"
-                    f"Has recibido <b>+{ganancia_idol} 🪙</b> netos ({int(tasa_idol*100)}%) y EXP en tu Bóveda."
+                    chat_id=post.idol.telegram_user_id,
+                    text=(
+                        f"💎 <b>¡Venta VIP en KingdomFans!</b> 🔞\n\n"
+                        f"🌹 <b>Musa:</b> {post.idol.stage_name}\n"
+                        f"👤 <b>Comprador:</b> {comprador}\n"
+                        f"🪙 <b>Precio:</b> {precio_final} 🪙\n"
+                        f"💰 <b>Ganancia neta:</b> <b>+{ganancia_idol} 🪙</b> ({int(tasa_idol*100)}%)\n\n"
+                        f"Tu oro ya se encuentra disponible en tu Bóveda."
+                    ),
+                    button_text="🪙 Ver Mi Bóveda",
+                    button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={post.idol.telegram_user_id}"
                 )
                 
                 desc_txt = " (con 15% de descuento por tu Víbora)" if (pet and pet.species == 'viper') else ""
@@ -507,7 +539,6 @@ def toggle_like(request, post_id):
     return JsonResponse({'error': 'Invalid method'}, status=405)
 
 
-# ✅ REEMPLAZAR POR:
 def my_collection(request):
     tg_id = resolve_safe_tg(request)
     unlocked_posts = []
@@ -518,7 +549,7 @@ def my_collection(request):
             unlocks__client_telegram_id=tg_id
         ).select_related('idol').order_by('-unlocks__unlocked_at')
         
-        # 👈 Ahora sí incluimos las fotos exclusivas de antojos entregados:
+        # Incluye las fotos de antojos entregados
         delivered_antojos = CustomRequest.objects.filter(
             client_telegram_id=tg_id,
             status='accepted'
@@ -562,11 +593,20 @@ def send_tip(request, post_id):
             grant_user_xp(request, tg_id, amount, reason="Propina a Musa")
             grant_user_xp(None, post.idol.telegram_user_id, amount // 2, reason="Propina Recibida")
 
+            # Notificación de propina/trago con botón a la Bóveda
+            client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+            invitador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
+            
             send_telegram_msg(
-                post.idol.telegram_user_id,
-                f"🥂 <b>¡Te han invitado un trago!</b>\n"
-                f"Un noble te obsequió <b>{amount} 🪙</b> en el Muro.\n"
-                f"Has recibido <b>+{neto_idol} 🪙</b> directos a tu Bóveda y EXP de artista."
+                chat_id=post.idol.telegram_user_id,
+                text=(
+                    f"🥂 <b>¡Te han invitado un trago Real!</b>\n\n"
+                    f"🌹 <b>Para tu Musa:</b> {post.idol.stage_name}\n"
+                    f"👤 <b>De parte de:</b> {invitador}\n"
+                    f"🪙 <b>Ofrenda:</b> +{neto_idol} 🪙 netos directos a tu Bóveda."
+                ),
+                button_text="🥂 Ver Mi Bóveda",
+                button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={post.idol.telegram_user_id}"
             )
             messages.success(request, f"🥂 ¡Le has invitado un trago de {amount} 🪙 a {post.idol.stage_name}!")
         else:
@@ -648,6 +688,21 @@ def add_comment(request, post_id):
                 author_name=nombre_final,
                 text=text
             )
-            messages.success(request, "Comentario publicado.")
+            grant_user_xp(request, tg_id, 5, reason="Comentario en Muro")
+
+            # Notificar a la Idol si otro noble le comenta
+            if tg_id != post.idol.telegram_user_id:
+                send_telegram_msg(
+                    chat_id=post.idol.telegram_user_id,
+                    text=(
+                        f"💬 <b>¡Nuevo comentario para tu Musa {post.idol.stage_name}!</b>\n\n"
+                        f"👤 <b>Noble:</b> {nombre_final}\n"
+                        f"📝 <i>«{text}»</i>"
+                    ),
+                    button_text="📱 Ver Publicación",
+                    button_url=f"https://kingdom-pleasure-app.onrender.com/idols/feed/?tg_id={post.idol.telegram_user_id}"
+                )
+
+            messages.success(request, "Comentario publicado (+5 EXP).")
             
         return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')

@@ -132,10 +132,10 @@
             <!-- BOTONES DE CONTACTO Y ANTOJOS -->
             {% if idol.owner_username %}
             <div class="flex flex-col gap-2 mt-3">
-                <button type="button" onclick="contactIdol('{{ idol.owner_username }}')" 
-                        class="w-full bg-gradient-to-r from-purple-900 to-fuchsia-900 border border-purple-400 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)] text-xs uppercase tracking-wider active:scale-95 transition-all">
-                    <span>💬</span> <span>Contactar en Telegram a {{ idol.stage_name }}</span>
-                </button>
+                <button type="button" onclick="contactIdol('{{ idol.owner_username }}', '{{ idol.telegram_user_id }}')" 
+                    class="w-full bg-gradient-to-r from-purple-900 to-fuchsia-900 border border-purple-400 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)] text-xs uppercase tracking-wider active:scale-95 transition-all">
+                 <span>💬</span> <span>Contactar en Telegram a {{ idol.stage_name }}</span>
+                 </button>
                 
                 <button type="button" onclick="toggleCustomRequestModal()" 
                         class="w-full btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow active:scale-95 transition-all">
@@ -290,25 +290,27 @@
         }
     });
 
-    function contactIdol(rawUsername) {
-        if (!rawUsername || rawUsername.trim() === '') {
-            alert("Esta Musa no tiene un usuario de Telegram configurado.");
+    function contactIdol(rawUsername, fallbackId) {
+        let cleanUser = String(rawUsername || '').replace('@', '').trim();
+
+        // 1. Si no tiene @username público, abrir chat directo por su ID de Telegram
+        if (!cleanUser || cleanUser === 'None' || cleanUser === 'undefined' || cleanUser === 'MusaReal') {
+            if (fallbackId) {
+                window.location.href = `tg://user?id=${fallbackId}`;
+                return;
+            }
+            alert("Esta Musa no tiene un enlace de contacto activo.");
             return;
         }
 
-        // Limpiar @ y espacios
-        let cleanUser = String(rawUsername).replace('@', '').trim();
-
-        // 1. Si es un ID numérico puro
+        // 2. Si es numérico
         if (/^\d+$/.test(cleanUser)) {
             window.location.href = `tg://user?id=${cleanUser}`;
             return;
         }
 
-        // 2. Esquema universal nativo de Telegram (funciona en iOS y Android)
-        const tgAppUrl = `tg://resolve?domain=${cleanUser}`;
+        // 3. Si tiene @username real
         const tgWebUrl = `https://t.me/${cleanUser}`;
-
         if (window.Telegram?.WebApp?.openTelegramLink) {
             try {
                 window.Telegram.WebApp.openTelegramLink(tgWebUrl);
@@ -316,11 +318,8 @@
             } catch(e) {}
         }
 
-        // Fallback inmediato
-        window.location.href = tgAppUrl;
-        setTimeout(() => {
-            window.open(tgWebUrl, '_blank');
-        }, 500);
+        window.location.href = `tg://resolve?domain=${cleanUser}`;
+        setTimeout(() => { window.open(tgWebUrl, '_blank'); }, 500);
     }
 
     function toggleCustomRequestModal() {
