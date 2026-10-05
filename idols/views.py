@@ -710,7 +710,7 @@ def add_comment(request, post_id):
 
 
 
-# 1. PANTALLA PRINCIPAL DE CAJAS DISPONIBLES (Para Idols y Nobles)
+# 1. PANTALLA DE CAJAS
 def photocard_boxes_view(request):
     tg_id = resolve_safe_tg(request)
     if not tg_id:
@@ -719,7 +719,6 @@ def photocard_boxes_view(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     boxes = PhotocardBox.objects.filter(is_active=True).prefetch_related('cards')
     
-    # Comprobar si el usuario es Admin o Moderador para mostrar el botón de gestión
     is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
         telegram_id=tg_id, 
         role__in=['admin', 'moderador']
@@ -736,7 +735,7 @@ def photocard_boxes_view(request):
     })
 
 
-# 2. ENDPOINT AJAX PARA ABRIR LA CAJA Y GENERAR LA RULETA CS
+# 2. RULETA COUNTER-STRIKE (AJAX)
 def open_photocard_box_ajax(request, box_id):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
@@ -748,7 +747,6 @@ def open_photocard_box_ajax(request, box_id):
     box = get_object_or_404(PhotocardBox, id=box_id, is_active=True)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-    # Verificar saldo
     if wallet.balance < box.price:
         return JsonResponse({'success': False, 'error': f'No tienes suficiente oro ({box.price} 🪙 necesarios).'}, status=400)
 
@@ -756,10 +754,9 @@ def open_photocard_box_ajax(request, box_id):
     if not all_cards:
         return JsonResponse({'success': False, 'error': 'Esta caja aún no tiene cartas cargadas.'}, status=400)
 
-    # Descontar costo de la caja
     wallet.remove_funds(box.price)
 
-    # --- ALGORITMO DE PROBABILIDAD ESTILO COUNTER-STRIKE ---
+    # Probabilidades CS
     roll = random.random() * 100
     if roll < 3.0:
         target_rarity = 'legendary'
@@ -773,14 +770,11 @@ def open_photocard_box_ajax(request, box_id):
     pool = [c for c in all_cards if c.rarity == target_rarity]
     winner = random.choice(pool) if pool else random.choice(all_cards)
 
-    # Guardar en la colección del usuario (Idol o Noble)
     UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=winner)
 
-    # Otorgar EXP
     xp_map = {'common': 15, 'rare': 30, 'epic': 60, 'legendary': 150}
     grant_user_xp(request, tg_id, xp_map.get(winner.rarity, 20), reason=f"Photocard {winner.get_rarity_display()}")
 
-    # Generar cinta de 35 cartas para la ruleta horizontal
     reel = []
     for i in range(35):
         card_item = winner if i == 28 else random.choice(all_cards)
@@ -811,7 +805,30 @@ def open_photocard_box_ajax(request, box_id):
     })
 
 
-# 4. PANEL DE GESTIÓN COMPLETO (CRUD CAJAS Y PHOTOCARDS) PARA ADMINS
+# 3. ÁLBUM PERSONAL (ESTA ERA LA QUE FALTABA)
+def my_photocards_album(request):
+    tg_id = resolve_safe_tg(request)
+    if not tg_id:
+        return redirect('/')
+
+    user_cards = UserPhotocard.objects.filter(
+        telegram_user_id=tg_id
+    ).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at')
+
+    total = user_cards.count()
+    legendaries = user_cards.filter(photocard__rarity='legendary').count()
+    epics = user_cards.filter(photocard__rarity='epic').count()
+
+    return render(request, 'idols/photocards_album.html', {
+        'tg_id': tg_id,
+        'user_cards': user_cards,
+        'total': total,
+        'legendaries': legendaries,
+        'epics': epics,
+    })
+
+
+# 4. PANEL DE GESTIÓN PARA ADMINS
 def admin_photocards_manage(request):
     tg_id = resolve_safe_tg(request)
     is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
@@ -826,7 +843,6 @@ def admin_photocards_manage(request):
     if request.method == 'POST':
         action = request.POST.get('action')
 
-        # --- GESTIÓN DE CAJAS ---
         if action == 'create_box':
             name = request.POST.get('name', '').strip()
             description = request.POST.get('description', '').strip()
@@ -862,7 +878,6 @@ def admin_photocards_manage(request):
             estado = "Activada" if box.is_active else "Pausada"
             messages.info(request, f"Caja {box.name} {estado}.")
 
-        # --- GESTIÓN DE PHOTOCARDS ---
         elif action == 'upload_card':
             box_id = request.POST.get('box_id')
             idol_name = request.POST.get('idol_name', '').strip()
