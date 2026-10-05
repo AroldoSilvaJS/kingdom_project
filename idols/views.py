@@ -872,8 +872,19 @@ def admin_photocards_manage(request):
             box_id = request.POST.get('box_id')
             box = get_object_or_404(PhotocardBox, id=box_id)
             box_name = box.name
-            box.delete()
-            messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
+
+            # Verificar si los usuarios ya tienen cartas de esta caja en sus álbumes
+            owned_cards = UserPhotocard.objects.filter(photocard__box=box).count()
+            if owned_cards > 0:
+                # En lugar de destruir inventarios, solo pausamos la caja
+                box.is_active = False
+                box.save()
+                messages.error(request, f"⚠️ La caja «{box_name}» no se puede eliminar porque los usuarios ya tienen {owned_cards} cartas en sus álbumes. La caja fue PAUSADA para que nadie más la abra.")
+            else:
+                # Si nadie ha sacado cartas de esta caja, es seguro eliminarla
+                box.cards.all().delete()
+                box.delete()
+                messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
 
         elif action == 'toggle_box':
             box_id = request.POST.get('box_id')

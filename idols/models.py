@@ -252,7 +252,7 @@ class Photocard(models.Model):
         ('legendary', 'Legendaria 👑'),
     ]
 
-    box = models.ForeignKey(PhotocardBox, on_delete=models.CASCADE, related_name='cards', verbose_name="Caja a la que pertenece")
+    box = models.ForeignKey(PhotocardBox, on_delete=models.SET_NULL, null=True, blank=True, related_name='cards', verbose_name="Caja a la que pertenece")
     idol = models.ForeignKey(IdolProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='photocards', verbose_name="Musa del Rol (Opcional)")
     idol_name = models.CharField("Idol de K-Pop / Artista", max_length=100, default='', blank=True) # 👈 LIBRE PARA CUALQUIER IDOL
     name = models.CharField("Nombre de la Carta", max_length=100)
