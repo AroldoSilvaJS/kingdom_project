@@ -11,7 +11,7 @@ from django.conf import settings
 
 from core.models import UserRole, UserProfile, KingdomSetting, AdminAuditLog
 from economy.models import Wallet
-from idols.models import IdolProfile, Post, PostUnlock, CustomRequest
+from idols.models import IdolProfile, Post, PostUnlock, CustomRequest, UserPhotocard, Review, PostComment
 from pets.models import Pet
 from core.telegram_auth import is_user_in_group
 from core.telegram_notify import send_telegram_msg
@@ -90,7 +90,6 @@ def choose_role(request):
 
     if str(tg_id) != ADMIN_TG_ID and not is_user_in_group(tg_id):
         return render(request, 'core/access_denied.html', {'tg_id': tg_id})
-
     
     existing_role = UserRole.objects.filter(telegram_id=tg_id).first()
     if existing_role and request.method != 'POST':
@@ -173,39 +172,41 @@ def my_profile(request):
 
     user_rank = profile.get_rank_name(is_idol=is_idol)
     unlocks_count = PostUnlock.objects.filter(client_telegram_id=tg_id).count()
+    user_photocards_count = UserPhotocard.objects.filter(telegram_user_id=tg_id).count()
     pet_level = pet.level if pet else 0
     pet_has_expedition = pet and pet.last_expedition is not None
     
-    # --- ÁRBOL DE 12 LOGROS DINÁMICOS (IDOLS VS CLIENTES) ---
+    # --- ÁRBOL DE 12 LOGROS DINÁMICOS REBALANCEADOS ---
     if is_idol:
         achievements = [
             {'id': 'idol_born', 'name': 'Primera Huella', 'desc': 'Consagrar tu primer perfil de Idol en el Reino', 'icon': '🎭', 'unlocked': mis_idols.count() >= 1, 'progress': f"{mis_idols.count()}/1 Ficha"},
             {'id': 'idol_post', 'name': 'Sesión Inaugural', 'desc': 'Publicar tu primer post en el Muro', 'icon': '📸', 'unlocked': idol_posts.count() >= 1, 'progress': f"{idol_posts.count()}/1 Post"},
             {'id': 'idol_first_sale', 'name': 'Primera Venta VIP', 'desc': 'Lograr que un noble desbloquee tu contenido de pago', 'icon': '🔒', 'unlocked': ventas_vip >= 1, 'progress': f"{ventas_vip}/1 Venta"},
             {'id': 'idol_hot_seller', 'name': 'Musa Cotizada', 'desc': 'Alcanzar 5 ventas de contenido VIP en KingdomFans', 'icon': '💎', 'unlocked': ventas_vip >= 5, 'progress': f"{ventas_vip}/5 Ventas"},
-            {'id': 'idol_wealth', 'name': 'Fortuna de la Noche', 'desc': 'Acumular al menos 1,000 🪙 de ganancias en tu Bóveda', 'icon': '🏦', 'unlocked': wallet.balance >= 1000, 'progress': f"{wallet.balance}/1000 🪙"},
-            {'id': 'idol_drinks', 'name': 'Copas de Adhesión', 'desc': 'Recibir invitaciones de tragos o propinas de admiradores', 'icon': '🥂', 'unlocked': total_servicios >= 1, 'progress': f"{total_servicios}/1 Rol"},
-            {'id': 'idol_first_5star', 'name': 'Ovación Estelar', 'desc': 'Recibir una reseña perfecta de 5 estrellas', 'icon': '⭐', 'unlocked': any(i.rating >= 4.9 for i in mis_idols), 'progress': "5.0★ Obtenida" if any(i.rating >= 4.9 for i in mis_idols) else "Pendiente"},
-            {'id': 'idol_antojo_delivered', 'name': 'Deseo Satisfecho', 'desc': 'Completar y entregar una petición de Antojo Personalizado', 'icon': '🔥', 'unlocked': CustomRequest.objects.filter(idol__in=mis_idols, status='accepted').exists(), 'progress': "Completado" if CustomRequest.objects.filter(idol__in=mis_idols, status='accepted').exists() else "0/1 Pendiente"},
+            {'id': 'idol_wealth', 'name': 'Bóveda de Oro', 'desc': 'Acumular al menos 500 🪙 de ganancias en tu Bóveda', 'icon': '🏦', 'unlocked': wallet.balance >= 500, 'progress': f"{wallet.balance}/500 🪙"},
+            {'id': 'idol_reviews', 'name': 'Ovación de la Corte', 'desc': 'Recibir tus primeros roles o reseñas de admiradores', 'icon': '🥂', 'unlocked': total_servicios >= 1, 'progress': f"{total_servicios}/1 Rol"},
+            # Corregido: Requiere al menos 1 reseña real de un noble
+            {'id': 'idol_first_5star', 'name': 'Estrella Perfecta', 'desc': 'Recibir una calificación real perfecta de 5.0★', 'icon': '⭐', 'unlocked': any(i.rating >= 4.9 and i.services_done >= 1 for i in mis_idols), 'progress': "5.0★ Obtenida" if any(i.rating >= 4.9 and i.services_done >= 1 for i in mis_idols) else "0/1 Pendiente"},
+            {'id': 'idol_antojo_delivered', 'name': 'Deseo Satisfecho', 'desc': 'Completar y entregar una petición especial', 'icon': '🔥', 'unlocked': CustomRequest.objects.filter(idol__in=mis_idols, status='accepted').exists(), 'progress': "Completado" if CustomRequest.objects.filter(idol__in=mis_idols, status='accepted').exists() else "0/1 Pendiente"},
+            {'id': 'idol_card_collector', 'name': 'Coleccionista de Arte', 'desc': 'Poseer al menos 1 Photocard en tu Álbum', 'icon': '🎴', 'unlocked': user_photocards_count >= 1, 'progress': f"{user_photocards_count}/1 Carta"},
             {'id': 'idol_double_trouble', 'name': 'Doble Identidad', 'desc': 'Mantener activas tus 2 fichas de Idols oficiales', 'icon': '👑', 'unlocked': mis_idols.count() >= 2, 'progress': f"{mis_idols.count()}/2 Musas"},
-            {'id': 'idol_pet_charm', 'name': 'Familiar Escénico', 'desc': 'Entrenar a tu mascota hasta Nivel 5 para potenciar tu carisma', 'icon': '🐾', 'unlocked': pet_level >= 5, 'progress': f"Lvl {pet_level}/5"},
-            {'id': 'idol_star_30', 'name': 'Diva Consagrada', 'desc': 'Alcanzar el Nivel 25 de estrellato en el Reino', 'icon': '💄', 'unlocked': profile.level >= 25, 'progress': f"Lvl {profile.level}/25"},
-            {'id': 'idol_legend_50', 'name': 'Diosa del Olimpo', 'desc': 'Alcanzar el legendario Nivel 50 de reputación absoluta', 'icon': '⚜️', 'unlocked': profile.level >= 50, 'progress': f"Lvl {profile.level}/50"},
+            {'id': 'idol_star_15', 'name': 'Musa Consagrada', 'desc': 'Alcanzar el Nivel 15 de estrellato en el Reino', 'icon': '💄', 'unlocked': profile.level >= 15, 'progress': f"Lvl {profile.level}/15"},
+            {'id': 'idol_legend_30', 'name': 'Diosa del Olimpo', 'desc': 'Alcanzar el prestigioso Nivel 30 de reputación absoluta', 'icon': '⚜️', 'unlocked': profile.level >= 30, 'progress': f"Lvl {profile.level}/30"},
         ]
     else:
         achievements = [
-            {'id': 'gold_novice', 'name': 'Primer Arca', 'desc': 'Alcanzar una fortuna de al menos 300 🪙 en Bóveda', 'icon': '🪙', 'unlocked': wallet.balance >= 300, 'progress': f"{wallet.balance}/300 🪙"},
-            {'id': 'gold_midas', 'name': 'Bóveda de Midas', 'desc': 'Acumular una fortuna de al menos 1,500 🪙', 'icon': '🏦', 'unlocked': wallet.balance >= 1500, 'progress': f"{wallet.balance}/1500 🪙"},
-            {'id': 'gold_emperor', 'name': 'Emperador del Tesoro', 'desc': 'Alcanzar la legendaria cifra de 5,000 🪙 en Bóveda', 'icon': '💰', 'unlocked': wallet.balance >= 5000, 'progress': f"{wallet.balance}/5000 🪙"},
+            {'id': 'gold_novice', 'name': 'Primer Arca', 'desc': 'Alcanzar una fortuna de al menos 250 🪙 en Bóveda', 'icon': '🪙', 'unlocked': wallet.balance >= 250, 'progress': f"{wallet.balance}/250 🪙"},
+            {'id': 'gold_midas', 'name': 'Bóveda de Midas', 'desc': 'Acumular una fortuna de al menos 800 🪙', 'icon': '🏦', 'unlocked': wallet.balance >= 800, 'progress': f"{wallet.balance}/800 🪙"},
+            {'id': 'gold_emperor', 'name': 'Emperador del Tesoro', 'desc': 'Alcanzar la legendaria cifra de 2,500 🪙 en Bóveda', 'icon': '💰', 'unlocked': wallet.balance >= 2500, 'progress': f"{wallet.balance}/2500 🪙"},
             {'id': 'court_iniciado', 'name': 'Bautismo Real', 'desc': 'Alcanzar el Nivel 5 en el Reino del Placer', 'icon': '✨', 'unlocked': profile.level >= 5, 'progress': f"Lvl {profile.level}/5"},
             {'id': 'court_noble', 'name': 'Caballero Consagrado', 'desc': 'Alcanzar el Nivel 15 de linaje imperial', 'icon': '🥂', 'unlocked': profile.level >= 15, 'progress': f"Lvl {profile.level}/15"},
             {'id': 'court_legend', 'name': 'Leyenda de la Corte', 'desc': 'Alcanzar el prestigioso Nivel 30', 'icon': '👑', 'unlocked': profile.level >= 30, 'progress': f"Lvl {profile.level}/30"},
             {'id': 'beast_tamer', 'name': 'Domador de Bestias', 'desc': 'Despertar a tu compañero espiritual en el Santuario', 'icon': '🥚', 'unlocked': pet is not None, 'progress': "1/1 Adoptado" if pet else "0/1 Pendiente"},
             {'id': 'beast_explorer', 'name': 'Paso por las Sombras', 'desc': 'Enviar a tu mascota a su primera expedición al bosque', 'icon': '🌲', 'unlocked': bool(pet_has_expedition), 'progress': "Completado" if pet_has_expedition else "Pendiente"},
-            {'id': 'beast_alpha', 'name': 'Vínculo Ancestral', 'desc': 'Elevar a tu mascota espiritual al Nivel 5 o superior', 'icon': '🐾', 'unlocked': pet_level >= 5, 'progress': f"Lvl {pet_level}/5"},
             {'id': 'supporter_first', 'name': 'Primer Deleite', 'desc': 'Desbloquear tu primera foto privada en KingdomFans', 'icon': '🔞', 'unlocked': unlocks_count >= 1, 'progress': f"{unlocks_count}/1 Foto"},
-            {'id': 'star_prestige', 'name': 'Mecenas Supremo', 'desc': 'Coleccionar al menos 10 fotos exclusivas en tu Colección', 'icon': '💎', 'unlocked': unlocks_count >= 10, 'progress': f"{unlocks_count}/10 Fotos"},
-            {'id': 'devotion_mark', 'name': 'Pacto Eterno', 'desc': 'Consagrar tu corazón eligiendo a tu Musa Favorita oficial', 'icon': '🌹', 'unlocked': profile.favorite_idol is not None, 'progress': "Consagrado" if profile.favorite_idol is not None else "Pendiente"},
+            {'id': 'photocard_unboxing', 'name': 'Coleccionista de Cartas', 'desc': 'Abrir y poseer al menos 1 Photocard en tu Álbum', 'icon': '🎴', 'unlocked': user_photocards_count >= 1, 'progress': f"{user_photocards_count}/1 Carta"},
+            {'id': 'star_prestige', 'name': 'Mecenas Supremo', 'desc': 'Coleccionar al menos 5 fotos exclusivas en tu Colección', 'icon': '💎', 'unlocked': unlocks_count >= 5, 'progress': f"{unlocks_count}/5 Fotos"},
+            {'id': 'devotion_mark', 'name': 'Pacto Eterno', 'desc': 'Consagrar tu devoción eligiendo a tu Musa Favorita oficial', 'icon': '🌹', 'unlocked': profile.favorite_idol is not None, 'progress': "Consagrado" if profile.favorite_idol is not None else "Pendiente"},
         ]
 
     return render(request, 'core/profile.html', {
@@ -285,7 +286,10 @@ def admin_panel(request, admin_tg_id):
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
         elif accion == 'purge_test_data':
-            from idols.models import Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
+            from idols.models import Review, Post, PostUnlock, PostLike, CustomRequest, PostComment, Photocard, PhotocardBox, UserPhotocard
+            UserPhotocard.objects.all().delete()
+            Photocard.objects.all().delete()
+            PhotocardBox.objects.all().delete()
             PostComment.objects.all().delete()
             PostUnlock.objects.all().delete()
             PostLike.objects.all().delete()
@@ -304,7 +308,7 @@ def admin_panel(request, admin_tg_id):
             w.balance = 1000
             w.save()
 
-            messages.success(request, "🧹 ¡Purga completada! Todos los usuarios de prueba, idols y datos viejos fueron eliminados. Solo queda la Corona.")
+            messages.success(request, "🧹 ¡Purga completada! Todos los datos viejos fueron eliminados. Solo queda la Corona.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
         elif accion == 'mass_gold':
@@ -468,7 +472,6 @@ def notifications_inbox(request):
     is_idol = (role_obj.role == 'idol') or has_idols_created or (str(tg_id) == ADMIN_TG_ID and has_idols_created)
     user_profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     
-    from idols.models import Review, PostComment
     notifications = []
     
     # 1. Decreto Imperial global (para ambos roles)
@@ -489,7 +492,6 @@ def notifications_inbox(request):
 
     if is_idol:
         # --- BUZÓN DE LA MUSA / IDOL ---
-        # A. Peticiones de antojo
         antojos = CustomRequest.objects.filter(idol__telegram_user_id=tg_id).select_related('idol').order_by('-created_at')[:20]
         for ant in antojos:
             if ant.status == 'pending':
@@ -526,7 +528,6 @@ def notifications_inbox(request):
                 'cta_text': cta_text
             })
 
-        # B. Ventas de fotos VIP en KingdomFans
         unlocks = PostUnlock.objects.filter(post__idol__telegram_user_id=tg_id).select_related('post', 'post__idol').order_by('-unlocked_at')[:20]
         for unl in unlocks:
             rate = user_profile.idol_commission_rate
@@ -543,7 +544,6 @@ def notifications_inbox(request):
                 'cta_text': 'Ver Bóveda'
             })
 
-        # C. Reseñas y Calificaciones recibidas
         reviews = Review.objects.filter(idol__telegram_user_id=tg_id).select_related('idol').order_by('-created_at')[:10]
         for rev in reviews:
             notifications.append({
@@ -558,7 +558,6 @@ def notifications_inbox(request):
                 'cta_text': 'Ver Perfil'
             })
 
-        # D. Comentarios en el Muro
         comments = PostComment.objects.filter(post__idol__telegram_user_id=tg_id).exclude(author_telegram_id=tg_id).select_related('post', 'post__idol').order_by('-created_at')[:10]
         for com in comments:
             notifications.append({
@@ -575,7 +574,6 @@ def notifications_inbox(request):
 
     else:
         # --- BUZÓN DEL NOBLE / CLIENTE ---
-        # A. Estado de sus antojos solicitados
         mis_antojos = CustomRequest.objects.filter(client_telegram_id=tg_id).select_related('idol').order_by('-created_at')[:20]
         for ant in mis_antojos:
             if ant.status == 'accepted':
@@ -612,7 +610,6 @@ def notifications_inbox(request):
                 'cta_text': cta_text
             })
 
-        # B. Compras VIP desbloqueadas
         unlocks = PostUnlock.objects.filter(client_telegram_id=tg_id).select_related('post', 'post__idol').order_by('-unlocked_at')[:15]
         for unl in unlocks:
             notifications.append({
@@ -627,7 +624,6 @@ def notifications_inbox(request):
                 'cta_text': 'Ver Foto'
             })
 
-    # Ordenar cronológicamente (más recientes arriba)
     notifications.sort(key=lambda x: x['time'], reverse=True)
 
     return render(request, 'core/inbox.html', {

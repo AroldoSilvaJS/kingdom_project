@@ -76,11 +76,15 @@ class UserProfile(models.Model):
     def __str__(self):
         return f"{self.username or self.telegram_user_id} - Nivel {self.level}"
 
-    # --- MATEMÁTICA Y CURVA DE PROGRESIÓN PROFUNDA ---
+    # --- MATEMÁTICA Y CURVA DE PROGRESIÓN PROFUNDA (REBALANCEADA) ---
     @property
     def xp_needed_for_next_level(self):
+        """
+        Curva RPG firme y progresiva:
+        Nivel 1: 235 EXP | Nivel 5: 550 EXP | Nivel 10: 1,250 EXP | Nivel 25: 4,500 EXP
+        """
         lvl = max(1, self.level)
-        return int(120 + ((lvl - 1) * 65) + (lvl ** 1.55 * 18))
+        return int(180 + (lvl * 40) + (lvl ** 1.6 * 15))
 
     @property
     def xp_progress_percentage(self):
@@ -93,13 +97,13 @@ class UserProfile(models.Model):
     @property
     def max_bet_allowed(self):
         """Tope de apuesta en Casino según rango"""
-        if self.level >= 31:
-            return 200
-        elif self.level >= 16:
-            return 100
-        elif self.level >= 6:
-            return 50
-        return 25
+        if self.level >= 30:
+            return 150
+        elif self.level >= 15:
+            return 80
+        elif self.level >= 5:
+            return 40
+        return 20
 
     @property
     def idol_rank_name(self):
@@ -157,11 +161,13 @@ class UserProfile(models.Model):
         return self.idol_rank_name if is_idol else self.noble_rank_name
 
     def get_daily_bonus_amount(self):
-        base = 30
-        incremento = min(70, self.level * 2)
+        """Bono diario noble y controlado (25 a 65 🪙 máximo)"""
+        base = 25
+        incremento = min(40, self.level)
         return base + incremento
 
     def add_xp(self, amount):
+        """Controla el ascenso con recompensa nobiliaria equilibrada (sin bucle infinito)"""
         if amount <= 0:
             return (False, self.level, 0)
 
@@ -176,7 +182,7 @@ class UserProfile(models.Model):
                 self.current_xp -= costo
                 self.level += 1
                 leveled_up = True
-                gold_reward += 20 + (self.level * 3)
+                gold_reward += 15  # Premio fijo y prestigioso de 15 🪙 por ascenso
             else:
                 break
 
@@ -201,6 +207,7 @@ class UserRole(models.Model):
     def __str__(self):
         return f"{self.telegram_id} - {self.role}"
 
+
 class KingdomSetting(models.Model):
     key = models.CharField(max_length=80, unique=True)
     value = models.TextField()
@@ -213,6 +220,7 @@ class KingdomSetting(models.Model):
     @classmethod
     def set_val(cls, key, value):
         cls.objects.update_or_create(key=key, defaults={'value': str(value)})
+
 
 class AdminAuditLog(models.Model):
     admin_tg_id = models.BigIntegerField()
