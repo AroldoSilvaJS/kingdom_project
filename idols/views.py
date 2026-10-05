@@ -1,11 +1,14 @@
+import random
 from urllib.parse import quote as encode_param
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count
 from django.http import JsonResponse
 from django.contrib import messages
-import random
-from .models import PhotocardBox, Photocard, UserPhotocard
-from .models import IdolProfile, Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
+
+from .models import (
+    IdolProfile, Review, Post, PostUnlock, PostLike, 
+    CustomRequest, PostComment, PhotocardBox, Photocard, UserPhotocard
+)
 from economy.models import Wallet
 from core.models import UserProfile, UserRole
 from core.utils import grant_user_xp
@@ -77,13 +80,12 @@ def idol_list(request):
                 req_obj.status = 'rejected'
                 req_obj.save()
                 
-                # Aviso con botón a la Bóveda del Cliente
                 send_telegram_msg(
                     chat_id=req_obj.client_telegram_id,
                     text=(
-                        f"⚠️ <b>Petición de Antojo Rechazada</b>\n\n"
-                        f"{req_obj.idol.stage_name} no pudo atender tu deseo en este momento.\n"
-                        f"Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos intactos a tu Bóveda."
+                        f"⚠️ <b>Petición Especial Rechazada</b>\n\n"
+                        f"{req_obj.idol.stage_name} no pudo atender tu solicitud en este momento.\n"
+                        f"Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos a tu Bóveda."
                     ),
                     button_text="🪙 Revisar Mi Bóveda",
                     button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={req_obj.client_telegram_id}"
@@ -93,7 +95,7 @@ def idol_list(request):
             elif action == 'accept_request':
                 delivered_photo = request.FILES.get('delivered_photo')
                 if not delivered_photo:
-                    messages.error(request, "Debes adjuntar la foto del antojo para completar la entrega.")
+                    messages.error(request, "Debes adjuntar la foto para completar la entrega.")
                 else:
                     req_obj.delivered_photo = delivered_photo
                     req_obj.status = 'accepted'
@@ -101,21 +103,20 @@ def idol_list(request):
                     
                     idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
                     idol_wallet.add_funds(req_obj.bounty)
-                    grant_user_xp(request, tg_id, 40, reason="Entrega de Antojo")
+                    grant_user_xp(request, tg_id, 25, reason="Entrega de Petición")
                     
-                    # Notificación al cliente con botón directo a la Colección
                     send_telegram_msg(
                         chat_id=req_obj.client_telegram_id,
                         text=(
-                            f"🔥 <b>¡Tu Antojo ha sido entregado!</b> 🔞\n\n"
+                            f"✨ <b>¡Tu Petición ha sido entregada!</b>\n\n"
                             f"🌹 <b>Musa:</b> {req_obj.idol.stage_name}\n"
-                            f"📝 <b>Petición:</b> <i>«{req_obj.description}»</i>\n\n"
-                            f"La foto exclusiva ya se encuentra guardada en tu Colección Privada para siempre."
+                            f"📝 <b>Detalle:</b> <i>«{req_obj.description}»</i>\n\n"
+                            f"La foto exclusiva ya se encuentra en tu Colección Privada."
                         ),
-                        button_text="💎 Ver Mi Colección Privada",
+                        button_text="💎 Ver Mi Colección",
                         button_url=f"https://kingdom-pleasure-app.onrender.com/idols/collection/?tg_id={req_obj.client_telegram_id}"
                     )
-                    messages.success(request, f"¡Antojo entregado con éxito! Recibiste +{req_obj.bounty} 🪙 (+40 EXP).")
+                    messages.success(request, f"¡Petición entregada con éxito! Recibiste +{req_obj.bounty} 🪙 (+25 EXP).")
                     
             return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
     
@@ -147,7 +148,7 @@ def idol_create(request):
         tg_username = f"@{tg_username}"
 
     if IdolProfile.objects.filter(telegram_user_id=tg_id).count() >= 2:
-        messages.error(request, "Ya has alcanzado el límite máximo de 2 Idols consagradas.")
+        messages.error(request, "Ya has alcanzado el límite máximo de 2 Idols registradas.")
         return redirect(f'/idols/?tg_id={tg_id}')
 
     if request.method == 'POST':
@@ -175,8 +176,8 @@ def idol_create(request):
                 photo=photo,
                 banner=banner
             )
-            grant_user_xp(request, tg_id, 50, reason="Creación de Idol")
-            messages.success(request, f"✨ ¡{stage_name} ha sido consagrada en el Reino! (+50 EXP)")
+            grant_user_xp(request, tg_id, 30, reason="Creación de Idol")
+            messages.success(request, f"✨ ¡{stage_name} ha sido registrada con éxito! (+30 EXP)")
             return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
         except Exception as e:
             messages.error(request, f"Error al registrar: {str(e)}")
@@ -188,7 +189,10 @@ def idol_edit(request, idol_id):
     tg_id = resolve_safe_tg(request)
     idol = get_object_or_404(IdolProfile, id=idol_id)
     
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
+        telegram_id=tg_id, role__in=['admin', 'moderador']
+    ).exists()
+
     if tg_id != idol.telegram_user_id and not is_admin:
         messages.error(request, "No tienes permiso para editar esta Idol.")
         return redirect(f'/idols/?tg_id={tg_id}')
@@ -209,7 +213,7 @@ def idol_edit(request, idol_id):
             idol.banner = request.FILES['banner']
             
         idol.save()
-        messages.success(request, f"¡Perfil de {idol.stage_name} actualizado con éxito!")
+        messages.success(request, f"¡Perfil de {idol.stage_name} actualizado!")
         return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
         
     return render(request, 'idols/form.html', {'idol': idol, 'tg_id': tg_id})
@@ -274,7 +278,7 @@ def idol_detail(request, idol_id):
             comment_val = request.POST.get('comment', '').strip()
             
             if not comment_val:
-                messages.error(request, "Debes escribir un comentario sobre el servicio.")
+                messages.error(request, "Debes escribir un comentario sobre la atención.")
             elif rating_val < 1 or rating_val > 5:
                 messages.error(request, "La calificación debe ser entre 1 y 5 estrellas.")
             else:
@@ -288,22 +292,21 @@ def idol_detail(request, idol_id):
                         rating=rating_val,
                         comment=comment_val
                     )
-                    grant_user_xp(request, tg_id, 25, reason="Reseña de Idol")
-                    grant_user_xp(None, idol.telegram_user_id, 35 if rating_val == 5 else 20, reason="Calificación Recibida")
+                    grant_user_xp(request, tg_id, 15, reason="Reseña de Idol")
+                    grant_user_xp(None, idol.telegram_user_id, 20 if rating_val == 5 else 10, reason="Calificación Recibida")
                     
-                    # Notificación a la Idol con botón directo
                     send_telegram_msg(
                         chat_id=idol.telegram_user_id,
                         text=(
                             f"⭐ <b>¡Nueva Reseña para {idol.stage_name}!</b>\n\n"
-                            f"👤 <b>Noble:</b> {tg_username}\n"
+                            f"👤 <b>Usuario:</b> {tg_username}\n"
                             f"✨ <b>Puntuación:</b> {rating_val}★\n"
                             f"💬 <i>«{comment_val}»</i>"
                         ),
                         button_text=f"🌹 Ver Perfil de {idol.stage_name}",
                         button_url=f"https://kingdom-pleasure-app.onrender.com/idols/{idol.id}/?tg_id={idol.telegram_user_id}"
                     )
-                    messages.success(request, "¡Tu reseña fue publicada con éxito (+25 EXP)!")
+                    messages.success(request, "¡Tu reseña fue publicada con éxito (+15 EXP)!")
                     return redirect(f'/idols/{idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
         except Exception as e:
             messages.error(request, f"Error al procesar reseña: {str(e)}")
@@ -438,17 +441,17 @@ def unlock_post(request, post_id):
                 idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
                 idol_wallet.add_funds(ganancia_idol)
                 
-                grant_user_xp(request, tg_id, precio_final, reason="Desbloqueo VIP")
-                grant_user_xp(None, post.idol.telegram_user_id, max(15, precio_final // 2), reason="Venta de Contenido VIP")
+                # EXP moderada y balanceada
+                grant_user_xp(request, tg_id, max(5, precio_final // 4), reason="Desbloqueo VIP")
+                grant_user_xp(None, post.idol.telegram_user_id, max(5, precio_final // 5), reason="Venta de Contenido VIP")
 
-                # Notificación detallada de venta VIP con botón a la Bóveda
                 client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
                 comprador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
                 
                 send_telegram_msg(
                     chat_id=post.idol.telegram_user_id,
                     text=(
-                        f"💎 <b>¡Venta VIP en KingdomFans!</b> 🔞\n\n"
+                        f"💎 <b>¡Venta VIP en KingdomFans!</b>\n\n"
                         f"🌹 <b>Musa:</b> {post.idol.stage_name}\n"
                         f"👤 <b>Comprador:</b> {comprador}\n"
                         f"🪙 <b>Precio:</b> {precio_final} 🪙\n"
@@ -460,7 +463,7 @@ def unlock_post(request, post_id):
                 )
                 
                 desc_txt = " (con 15% de descuento por tu Víbora)" if (pet and pet.species == 'viper') else ""
-                messages.success(request, f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt} / +{precio_final} EXP)")
+                messages.success(request, f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt})")
             else:
                 messages.error(request, "No tienes suficiente oro en tu Bóveda.")
                 
@@ -493,7 +496,7 @@ def create_post(request):
             if not image:
                 messages.error(request, "Debes adjuntar una foto para el post.")
             elif network == 'fans' and int(price) > max_price:
-                messages.error(request, f"Tu rango actual de Musa solo permite fijar precios de hasta {max_price} 🪙 por foto.")
+                messages.error(request, f"Tu rango actual solo permite fijar precios de hasta {max_price} 🪙 por foto.")
             else:
                 Post.objects.create(
                     idol=idol,
@@ -502,8 +505,8 @@ def create_post(request):
                     image=image,
                     price=int(price) if network == 'fans' else 0
                 )
-                grant_user_xp(request, tg_id, 20, reason="Nuevo Post Publicado")
-                messages.success(request, f"¡Post publicado exitosamente como {idol.stage_name}! (+20 EXP)")
+                grant_user_xp(request, tg_id, 15, reason="Nuevo Post Publicado")
+                messages.success(request, f"¡Post publicado exitosamente como {idol.stage_name}! (+15 EXP)")
                 return redirect(f'/idols/feed/?tg_id={tg_id}')
                 
         except IdolProfile.DoesNotExist:
@@ -550,7 +553,6 @@ def my_collection(request):
             unlocks__client_telegram_id=tg_id
         ).select_related('idol').order_by('-unlocks__unlocked_at')
         
-        # Incluye las fotos de antojos entregados
         delivered_antojos = CustomRequest.objects.filter(
             client_telegram_id=tg_id,
             status='accepted'
@@ -575,11 +577,11 @@ def send_tip(request, post_id):
             amount = 0
             
         if amount <= 0:
-            messages.error(request, "El monto de la propina debe ser mayor a 0.")
+            messages.error(request, "El monto del brindis debe ser mayor a 0.")
             return redirect(f'/idols/feed/?tg_id={tg_id}')
             
         if tg_id and tg_id == post.idol.telegram_user_id:
-            messages.info(request, "No puedes enviarte propinas a ti mismo.")
+            messages.info(request, "No puedes enviarte ofrendas a ti mismo.")
             return redirect(f'/idols/feed/?tg_id={tg_id}')
             
         client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
@@ -591,10 +593,10 @@ def send_tip(request, post_id):
             idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
             idol_wallet.add_funds(neto_idol)
             
-            grant_user_xp(request, tg_id, amount, reason="Propina a Musa")
-            grant_user_xp(None, post.idol.telegram_user_id, amount // 2, reason="Propina Recibida")
+            # EXP calibrada
+            grant_user_xp(request, tg_id, max(5, amount // 5), reason="Ofrenda a Musa")
+            grant_user_xp(None, post.idol.telegram_user_id, max(5, amount // 5), reason="Ofrenda Recibida")
 
-            # Notificación de propina/trago con botón a la Bóveda
             client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
             invitador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
             
@@ -623,12 +625,10 @@ def create_custom_request(request, idol_id):
         tg_username = request.POST.get('tg_username') or (profile.username if profile else 'Noble')
         idol = get_object_or_404(IdolProfile, id=idol_id)
         
-        # 1. Bloquear que la Idol se pida un antojo a sí misma
         if tg_id and tg_id == idol.telegram_user_id:
-            messages.error(request, "No puedes solicitarte un antojo a ti misma.")
+            messages.error(request, "No puedes solicitarte una petición a ti misma.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
 
-        # 2. Validar monto y descripción
         try:
             bounty = int(request.POST.get('bounty', 100))
         except ValueError:
@@ -639,13 +639,11 @@ def create_custom_request(request, idol_id):
             messages.error(request, "Por favor completa la descripción y una oferta válida.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
             
-        # 3. Retener el oro en custodia
         client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         if not client_wallet.remove_funds(bounty):
             messages.error(request, f"No tienes suficiente oro ({bounty} 🪙) en tu Bóveda.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
             
-        # 4. Crear la petición
         CustomRequest.objects.create(
             idol=idol,
             client_telegram_id=tg_id,
@@ -655,17 +653,16 @@ def create_custom_request(request, idol_id):
             status='pending'
         )
 
-        # 5. Notificar a la Idol en Telegram con botón directo
         send_telegram_msg(
             chat_id=idol.telegram_user_id,
             text=(
-                f"📬 <b>¡Nueva Petición de Antojo para tu Musa {idol.stage_name}!</b> 🌹\n\n"
-                f"👤 <b>Noble Solicitante:</b> {tg_username}\n"
+                f"📬 <b>¡Nueva Petición Especial para tu Musa {idol.stage_name}!</b> 🌹\n\n"
+                f"👤 <b>Solicitante:</b> {tg_username}\n"
                 f"🪙 <b>Recompensa en custodia:</b> <b>+{bounty} 🪙</b>\n"
-                f"📝 <b>Deseo:</b> <i>«{description}»</i>\n\n"
-                f"Ingresa a tu panel de Idols para entregar la foto exclusiva o rechazarla."
+                f"📝 <b>Detalle:</b> <i>«{description}»</i>\n\n"
+                f"Ingresa a tu panel de Idols para entregar la foto o rechazarla."
             ),
-            button_text=f"📸 Atender Antojo de {idol.stage_name}",
+            button_text=f"📸 Atender Petición de {idol.stage_name}",
             button_url=f"https://kingdom-pleasure-app.onrender.com/idols/?tg_id={idol.telegram_user_id}"
         )
         messages.success(request, f"¡Petición enviada a {idol.stage_name}! Tu oro quedó en custodia.")
@@ -691,13 +688,12 @@ def add_comment(request, post_id):
             )
             grant_user_xp(request, tg_id, 5, reason="Comentario en Muro")
 
-            # Notificar a la Idol si otro noble le comenta
             if tg_id != post.idol.telegram_user_id:
                 send_telegram_msg(
                     chat_id=post.idol.telegram_user_id,
                     text=(
                         f"💬 <b>¡Nuevo comentario para tu Musa {post.idol.stage_name}!</b>\n\n"
-                        f"👤 <b>Noble:</b> {nombre_final}\n"
+                        f"👤 <b>Usuario:</b> {nombre_final}\n"
                         f"📝 <i>«{text}»</i>"
                     ),
                     button_text="📱 Ver Publicación",
@@ -709,8 +705,10 @@ def add_comment(request, post_id):
         return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
 
 
+# ==========================================
+# SISTEMA DE PHOTOCARDS Y CAJAS CS
+# ==========================================
 
-# 1. PANTALLA DE CAJAS
 def photocard_boxes_view(request):
     tg_id = resolve_safe_tg(request)
     if not tg_id:
@@ -735,7 +733,6 @@ def photocard_boxes_view(request):
     })
 
 
-# 2. RULETA COUNTER-STRIKE (AJAX)
 def open_photocard_box_ajax(request, box_id):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
@@ -756,7 +753,7 @@ def open_photocard_box_ajax(request, box_id):
 
     wallet.remove_funds(box.price)
 
-    # Probabilidades CS
+    # Probabilidades de Counter-Strike
     roll = random.random() * 100
     if roll < 3.0:
         target_rarity = 'legendary'
@@ -772,8 +769,9 @@ def open_photocard_box_ajax(request, box_id):
 
     UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=winner)
 
-    xp_map = {'common': 15, 'rare': 30, 'epic': 60, 'legendary': 150}
-    grant_user_xp(request, tg_id, xp_map.get(winner.rarity, 20), reason=f"Photocard {winner.get_rarity_display()}")
+    # EXP balanceada (sin inflación)
+    xp_map = {'common': 5, 'rare': 12, 'epic': 25, 'legendary': 50}
+    grant_user_xp(request, tg_id, xp_map.get(winner.rarity, 10), reason=f"Photocard {winner.get_rarity_display()}")
 
     reel = []
     for i in range(35):
@@ -805,7 +803,6 @@ def open_photocard_box_ajax(request, box_id):
     })
 
 
-# 3. ÁLBUM PERSONAL (ESTA ERA LA QUE FALTABA)
 def my_photocards_album(request):
     tg_id = resolve_safe_tg(request)
     if not tg_id:
@@ -828,7 +825,6 @@ def my_photocards_album(request):
     })
 
 
-# 4. PANEL DE GESTIÓN PARA ADMINS
 def admin_photocards_manage(request):
     tg_id = resolve_safe_tg(request)
     is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
