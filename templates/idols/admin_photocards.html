@@ -6,8 +6,8 @@
     <!-- ENCABEZADO Y VOLVER -->
     <div class="flex justify-between items-center px-1 border-b border-vip-gold/30 pb-3">
         <div>
-            <h2 class="text-lg font-bold font-serif text-yellow-400 tracking-wide">⚙️ Gestión de Photocards</h2>
-            <p class="text-xs text-vip-text/60">Crear, editar y eliminar cajas y cartas</p>
+            <h2 class="text-lg font-bold font-serif text-yellow-400 tracking-wide">⚙️ Studio de Photocards</h2>
+            <p class="text-xs text-vip-text/60">Panel de creadores y administración de cartas</p>
         </div>
         <button type="button" onclick="universalNav('{% url 'idols:photocard_boxes' %}')" 
            class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
@@ -25,14 +25,14 @@
     {% endif %}
 
     <!-- PESTAÑAS DEL PANEL -->
-    <div class="grid grid-cols-3 gap-1.5 p-1 bg-black/60 border border-vip-gold/20 rounded-xl text-[11px] font-bold uppercase text-center">
-        <button type="button" onclick="switchTab('subir')" id="tab-btn-subir" class="py-2 rounded-lg bg-vip-gold text-black">Subir Carta</button>
-        <button type="button" onclick="switchTab('cajas')" id="tab-btn-cajas" class="py-2 rounded-lg text-stone-400 hover:text-white">Cajas ({{ boxes.count }})</button>
-        <button type="button" onclick="switchTab('cartas')" id="tab-btn-cartas" class="py-2 rounded-lg text-stone-400 hover:text-white">Inventario ({{ all_cards.count }})</button>
+    <div class="grid grid-cols-3 gap-1.5 p-1 bg-black/70 border border-vip-gold/25 rounded-2xl text-[10px] font-bold uppercase text-center shadow-inner">
+        <button type="button" onclick="switchTab('subir')" id="tab-btn-subir" class="py-2 rounded-xl bg-vip-gold text-black font-black">Subir Carta</button>
+        <button type="button" onclick="switchTab('cajas')" id="tab-btn-cajas" class="py-2 rounded-xl text-stone-400 hover:text-white">Cajas ({{ boxes.count }})</button>
+        <button type="button" onclick="switchTab('cartas')" id="tab-btn-cartas" class="py-2 rounded-xl text-stone-400 hover:text-white">Cartas ({{ all_cards.count }})</button>
     </div>
 
-    <!-- SECCIÓN 1: SUBIR NUEVA PHOTOCARD (CANVA + CUALQUIER IDOL K-POP) -->
-    <div id="tab-subir" class="vip-panel p-5 border border-purple-500/50 rounded-3xl shadow-xl flex flex-col gap-3">
+    <!-- SECCIÓN 1: SUBIR NUEVA PHOTOCARD DE CANVA -->
+    <div id="tab-subir" class="vip-panel p-5 border border-purple-500/50 rounded-3xl shadow-xl flex flex-col gap-3 bg-gradient-to-br from-[#180828] to-black">
         <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-500/20 pb-2">
             <span>🎴</span> Subir Diseño de Canva
         </h3>
@@ -75,12 +75,12 @@
                         <option value="{{ idol.stage_name }} (Rol)">
                     {% endfor %}
                 </datalist>
-                <span class="text-[10px] text-stone-500 mt-0.5 block">Puedes escribir libremente cualquier nombre de Idol del K-Pop.</span>
+                <span class="text-[9.5px] text-stone-500 mt-0.5 block">Puedes escribir libremente cualquier nombre de Idol del K-Pop.</span>
             </div>
 
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre o Tema de la Carta *</label>
-                <input type="text" name="name" required placeholder="Ej: Traje de Gala, Sesión Roja, Special Holo..."
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Carta *</label>
+                <input type="text" name="name" required placeholder="Ej: Traje de Gala, Special Holo..."
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
             </div>
 
@@ -94,10 +94,10 @@
                 </select>
             </div>
 
-            <div class="bg-black/40 p-3 rounded-xl border border-vip-gold/20 flex flex-col gap-1">
+            <div class="bg-black/40 p-3 rounded-2xl border border-vip-gold/20 flex flex-col gap-1">
                 <label class="block text-[11px] text-yellow-400 uppercase font-bold">Archivo de Canva (Imagen) *</label>
                 <input type="file" name="image" accept="image/*" required
-                       class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+                       class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
             </div>
 
             <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
@@ -108,8 +108,7 @@
 
     <!-- SECCIÓN 2: GESTIÓN DE CAJAS (CREAR, EDITAR, PAUSAR, ELIMINAR) -->
     <div id="tab-cajas" class="hidden flex flex-col gap-3.5">
-        <!-- Formulario Crear Caja -->
-        <div class="vip-panel p-5 border border-yellow-500/40 rounded-3xl shadow-xl">
+        <div class="vip-panel p-5 border border-yellow-500/40 rounded-3xl shadow-xl bg-gradient-to-br from-[#1a1005] to-black">
             <h3 class="font-serif text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-yellow-500/20 pb-2 mb-3">
                 <span>📦</span> Crear Nueva Caja
             </h3>
@@ -120,15 +119,15 @@
 
                 <div>
                     <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Caja *</label>
-                    <input type="text" name="name" required placeholder="Ej: Colección K-Pop Queens" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2 text-xs text-white">
+                    <input type="text" name="name" required placeholder="Ej: Colección K-Pop Queens" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
                 </div>
                 <div>
                     <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Descripción</label>
-                    <input type="text" name="description" placeholder="Temática de la caja..." class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2 text-xs text-white">
+                    <input type="text" name="description" placeholder="Temática de la caja..." class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
                 </div>
                 <div>
                     <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Precio en Oro (🪙) *</label>
-                    <input type="number" name="price" min="10" value="50" required class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2 text-xs text-white font-mono font-bold">
+                    <input type="number" name="price" min="10" value="50" required class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white font-mono font-bold">
                 </div>
                 <div>
                     <label class="block text-[11px] text-stone-300 uppercase font-bold mb-1">Portada de Caja (Opcional)</label>
@@ -138,7 +137,7 @@
             </form>
         </div>
 
-        <!-- Lista de Cajas Existentes con Edición / Borrado -->
+        <!-- Lista de Cajas Existentes -->
         <div class="flex flex-col gap-2">
             <h4 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1">Cajas Existentes</h4>
             {% for b in boxes %}
@@ -158,7 +157,6 @@
                     </form>
                 </div>
 
-                <!-- Formulario de Edición Rápida -->
                 <details class="text-xs bg-black/40 p-2.5 rounded-xl border border-white/10">
                     <summary class="cursor-pointer text-vip-gold font-bold">✏️ Editar Caja</summary>
                     <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-2">
@@ -175,7 +173,6 @@
                     </form>
                 </details>
 
-                <!-- Borrar Caja -->
                 <form method="POST" class="m-0 self-end" onsubmit="return confirm('¿Seguro que deseas eliminar la caja {{ b.name }} y todas sus cartas?')">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="delete_box">
@@ -187,7 +184,7 @@
         </div>
     </div>
 
-    <!-- SECCIÓN 3: INVENTARIO DE PHOTOCARDS (EDITAR Y ELIMINAR CARTAS) -->
+    <!-- SECCIÓN 3: INVENTARIO DE PHOTOCARDS -->
     <div id="tab-cartas" class="hidden flex flex-col gap-2.5">
         <h4 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1">Todas las Photocards Subidas</h4>
         {% for c in all_cards %}
@@ -204,7 +201,6 @@
 
             <!-- Botones de Acción -->
             <div class="flex items-center gap-1.5 flex-shrink-0">
-                <!-- Modal trigger para editar carta -->
                 <button type="button" onclick="openEditCardModal({{ c.id }}, '{{ c.name|escapejs }}', '{{ c.display_idol_name|escapejs }}', '{{ c.rarity }}', {{ c.box.id }})" 
                         class="text-xs bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 px-2 py-1 rounded-lg font-bold" title="Editar">
                     ✏️
@@ -284,12 +280,12 @@
         document.getElementById('tab-cajas').classList.add('hidden');
         document.getElementById('tab-cartas').classList.add('hidden');
 
-        document.getElementById('tab-btn-subir').className = "py-2 rounded-lg text-stone-400 hover:text-white";
-        document.getElementById('tab-btn-cajas').className = "py-2 rounded-lg text-stone-400 hover:text-white";
-        document.getElementById('tab-btn-cartas').className = "py-2 rounded-lg text-stone-400 hover:text-white";
+        document.getElementById('tab-btn-subir').className = "py-2 rounded-xl text-stone-400 hover:text-white";
+        document.getElementById('tab-btn-cajas').className = "py-2 rounded-xl text-stone-400 hover:text-white";
+        document.getElementById('tab-btn-cartas').className = "py-2 rounded-xl text-stone-400 hover:text-white";
 
         document.getElementById(`tab-${tab}`).classList.remove('hidden');
-        document.getElementById(`tab-btn-${tab}`).className = "py-2 rounded-lg bg-vip-gold text-black font-bold";
+        document.getElementById(`tab-btn-${tab}`).className = "py-2 rounded-xl bg-vip-gold text-black font-black";
     }
 
     function openEditCardModal(cardId, name, idolName, rarity, boxId) {

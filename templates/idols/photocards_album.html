@@ -3,15 +3,15 @@
 {% block content %}
 <div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
-    <!-- ENCABEZADO Y ACCESOS -->
+    <!-- ENCABEZADO Y ACCESOS RÁPIDOS -->
     <div class="flex justify-between items-center px-1 border-b border-vip-gold/30 pb-3">
         <div>
-            <h2 class="text-xl font-bold font-serif text-vip-gold tracking-wide">🎴 Álbum de Photocards</h2>
-            <p class="text-xs text-vip-text/60">Toca cualquier carta para venderla o intercambiarla</p>
+            <h2 class="text-xl font-bold font-serif text-gold-gradient tracking-wide">🎴 Álbum de Coleccionista</h2>
+            <p class="text-xs text-vip-text/60">Toca cualquier carta para inspeccionar, vender o intercambiar</p>
         </div>
         <div class="flex items-center gap-1.5">
             <button type="button" onclick="universalNav('{% url 'idols:photocards_market' %}')" 
-               class="text-xs text-yellow-300 bg-yellow-950/80 border border-yellow-500/50 hover:bg-yellow-900 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 shadow">
+               class="text-xs text-yellow-300 bg-yellow-950/80 border border-yellow-500/50 hover:bg-yellow-900 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 shadow active:scale-95 transition-all">
                 <span>🛒</span> <span>Mercado</span>
             </button>
             <button type="button" onclick="universalNav('{% url 'idols:photocard_boxes' %}')" 
@@ -30,58 +30,58 @@
         {% endfor %}
     {% endif %}
 
-    <!-- ESTADÍSTICAS DEL COLECCIONISTA -->
+    <!-- TABLERO DE RELIQUIAS (ESTADÍSTICAS) -->
     <div class="grid grid-cols-3 gap-2 text-center">
-        <div class="vip-panel p-2.5 rounded-xl border border-vip-gold/30">
-            <span class="text-[9px] text-stone-400 uppercase font-bold block">Total Cartas</span>
-            <span class="font-mono text-sm font-black text-white mt-0.5">{{ total }}</span>
+        <div class="vip-panel p-2.5 rounded-2xl border border-vip-gold/30 bg-black/50 shadow">
+            <span class="text-[9px] text-stone-400 uppercase font-bold block">Colección</span>
+            <span class="font-mono text-base font-black text-white mt-0.5">{{ total }}</span>
         </div>
-        <div class="vip-panel p-2.5 rounded-xl border border-purple-500/40">
+        <div class="vip-panel p-2.5 rounded-2xl border border-purple-500/40 bg-purple-950/20 shadow">
             <span class="text-[9px] text-purple-300 uppercase font-bold block">Épicas 🟣</span>
-            <span class="font-mono text-sm font-black text-purple-300 mt-0.5">{{ epics }}</span>
+            <span class="font-mono text-base font-black text-purple-300 mt-0.5">{{ epics }}</span>
         </div>
-        <div class="vip-panel p-2.5 rounded-xl border border-yellow-500/50">
+        <div class="vip-panel p-2.5 rounded-2xl border border-yellow-500/50 bg-amber-950/20 shadow">
             <span class="text-[9px] text-yellow-400 uppercase font-bold block">Legendarias 👑</span>
-            <span class="font-mono text-sm font-black text-yellow-300 mt-0.5">{{ legendaries }}</span>
+            <span class="font-mono text-base font-black text-yellow-300 mt-0.5">{{ legendaries }}</span>
         </div>
     </div>
 
-    <!-- FILTROS DE RAREZA -->
-    <div class="grid grid-cols-5 gap-1 p-1 bg-black/60 border border-vip-gold/20 rounded-xl text-[10px] font-bold uppercase text-center">
-        <button onclick="filterAlbum('all')" class="py-1.5 rounded-lg bg-vip-gold text-black filter-btn" id="f-all">Todas</button>
-        <button onclick="filterAlbum('common')" class="py-1.5 rounded-lg text-stone-400 hover:text-white filter-btn" id="f-common">Común</button>
-        <button onclick="filterAlbum('rare')" class="py-1.5 rounded-lg text-blue-400 hover:text-white filter-btn" id="f-rare">Rara</button>
-        <button onclick="filterAlbum('epic')" class="py-1.5 rounded-lg text-purple-400 hover:text-white filter-btn" id="f-epic">Épica</button>
-        <button onclick="filterAlbum('legendary')" class="py-1.5 rounded-lg text-yellow-400 hover:text-white filter-btn" id="f-legendary">👑</button>
+    <!-- FILTROS DE RAREZA CON ESTILO CS2 -->
+    <div class="grid grid-cols-5 gap-1 p-1 bg-black/70 border border-vip-gold/25 rounded-2xl text-[10px] font-bold uppercase text-center shadow-inner">
+        <button onclick="filterAlbum('all')" class="py-1.5 rounded-xl bg-vip-gold text-black filter-btn" id="f-all">Todas</button>
+        <button onclick="filterAlbum('common')" class="py-1.5 rounded-xl text-stone-400 hover:text-white filter-btn" id="f-common">Común</button>
+        <button onclick="filterAlbum('rare')" class="py-1.5 rounded-xl text-blue-400 hover:text-white filter-btn" id="f-rare">Rara</button>
+        <button onclick="filterAlbum('epic')" class="py-1.5 rounded-xl text-purple-400 hover:text-white filter-btn" id="f-epic">Épica</button>
+        <button onclick="filterAlbum('legendary')" class="py-1.5 rounded-xl text-yellow-400 hover:text-white filter-btn" id="f-legendary">👑</button>
     </div>
 
-    <!-- CUADRÍCULA DE CARTAS -->
+    <!-- CUADRÍCULA DE CARTAS CON PROPORCIÓN FÍSICA Y REFLEJOS -->
     {% if user_cards %}
     <div class="grid grid-cols-2 gap-3 mt-1" id="album-grid">
         {% for uc in user_cards %}
         <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.photocard.image.url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }})"
-             class="album-card relative rounded-2xl overflow-hidden aspect-[3/4] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl select-none cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
+             class="album-card relative rounded-2xl overflow-hidden aspect-[5/7] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl select-none cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
              data-rarity="{{ uc.photocard.rarity }}"
-             style="border-color: {{ uc.photocard.get_color_hex }};">
+             style="border-color: {{ uc.photocard.get_color_hex }}; {% if uc.photocard.rarity == 'legendary' %}box-shadow: 0 0 18px rgba(234,179,8,0.45);{% elif uc.photocard.rarity == 'epic' %}box-shadow: 0 0 14px rgba(168,85,247,0.35);{% endif %}">
             
             <img src="{{ uc.photocard.image.url }}" alt="{{ uc.photocard.name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
-            <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent pointer-events-none"></div>
 
-            <!-- Si está puesta a la venta -->
+            <!-- Distintivo de venta -->
             {% if uc.is_for_sale %}
-            <span class="absolute top-2 right-2 bg-yellow-950/90 text-yellow-300 border border-yellow-500 text-[9px] font-mono font-black px-2 py-0.5 rounded-full shadow">
-                🏷️ Venta: {{ uc.sale_price }} 🪙
+            <span class="absolute top-2 right-2 bg-yellow-950/90 text-yellow-300 border border-yellow-500 text-[8.5px] font-mono font-black px-2 py-0.5 rounded-full shadow z-10">
+                🏷️ {{ uc.sale_price }} 🪙
             </span>
             {% endif %}
 
-            <!-- Datos de la Carta -->
-            <div class="relative z-10 flex flex-col">
-                <span class="text-[8px] font-mono font-bold uppercase px-1.5 py-0.2 rounded w-fit mb-0.5 border"
+            <!-- Barra inferior con datos de la carta -->
+            <div class="relative z-10 flex flex-col bg-black/65 backdrop-blur-sm p-1.5 rounded-xl border border-white/10">
+                <span class="text-[7.5px] font-mono font-bold uppercase px-1 py-0.2 rounded w-fit mb-0.5 border"
                       style="color: {{ uc.photocard.get_color_hex }}; border-color: {{ uc.photocard.get_color_hex }}; background: rgba(0,0,0,0.8);">
                     {{ uc.photocard.get_rarity_display }}
                 </span>
                 <h4 class="text-xs font-black text-white leading-tight truncate">{{ uc.photocard.name }}</h4>
-                <div class="flex justify-between items-center text-[9px] text-stone-300 mt-0.5 font-mono">
+                <div class="flex justify-between items-center text-[8.5px] text-stone-300 mt-0.5 font-mono">
                     <span class="truncate text-yellow-400 font-bold">{{ uc.photocard.display_idol_name }}</span>
                     <span class="text-stone-400">{{ uc.obtained_at|date:"d/m" }}</span>
                 </div>
@@ -91,7 +91,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <div class="vip-panel p-10 text-center flex flex-col items-center">
+    <div class="vip-panel p-10 text-center flex flex-col items-center rounded-3xl">
         <span class="text-5xl my-2">🎴</span>
         <h4 class="font-serif text-sm font-bold text-white">Álbum Vacío</h4>
         <p class="text-xs text-vip-text/60 mt-1 max-w-xs">
@@ -108,13 +108,13 @@
 
 <!-- 🔍 MODAL DE ACCIÓN DE CARTA (VENDER O INTERCAMBIAR) -->
 <div id="card-action-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="vip-panel p-5 max-w-sm w-full border-2 rounded-3xl relative flex flex-col items-center text-center shadow-2xl" id="modal-card-container">
+    <div class="vip-panel p-5 max-w-sm w-full border-2 rounded-3xl relative flex flex-col items-center text-center shadow-2xl bg-gradient-to-b from-[#1a0928] to-black" id="modal-card-container">
         
-        <button onclick="closeCardActionModal()" class="absolute top-3 right-3 text-stone-400 hover:text-white text-2xl">&times;</button>
+        <button onclick="closeCardActionModal()" class="absolute top-3.5 right-3.5 text-stone-400 hover:text-white text-2xl">&times;</button>
 
-        <span class="text-[10px] font-mono uppercase font-black px-2.5 py-0.5 rounded-full border mb-2" id="modal-card-rarity"></span>
+        <span class="text-[10px] font-mono uppercase font-black px-3 py-0.5 rounded-full border mb-2" id="modal-card-rarity"></span>
         
-        <div class="w-32 h-44 rounded-2xl border-2 overflow-hidden shadow-2xl bg-black relative mb-2" id="modal-card-box">
+        <div class="w-36 h-50 rounded-2xl border-2 overflow-hidden shadow-2xl bg-black relative mb-2" id="modal-card-box">
             <img id="modal-card-img" src="" class="w-full h-full object-cover">
         </div>
 
@@ -123,8 +123,8 @@
 
         <!-- Si la carta YA ESTÁ A LA VENTA -->
         <div id="modal-is-for-sale-box" class="hidden w-full flex flex-col gap-2">
-            <p class="text-xs text-yellow-300 font-mono bg-yellow-950/60 p-2 rounded-xl border border-yellow-500/40">
-                Esta carta está publicada en el Mercado por <span id="modal-sale-price-label"></span> 🪙.
+            <p class="text-xs text-yellow-300 font-mono bg-yellow-950/60 p-2.5 rounded-xl border border-yellow-500/40">
+                Esta carta está publicada en el Mercado por <span id="modal-sale-price-label" class="font-bold text-white"></span> 🪙.
             </p>
             <form id="cancel-sale-form" method="POST" action="">
                 {% csrf_token %}
@@ -167,16 +167,14 @@
                     <span>🤝</span> Proponer Intercambio
                 </span>
 
-                <!-- SELECTOR DESPLEGABLE INTELIGENTE -->
                 <div>
                     <label class="block text-[10px] text-stone-400 text-left mb-1">¿A quién se la ofreces?</label>
                     <select name="target_user" required class="w-full bg-black border border-purple-500/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-purple-400">
                         <option value="open">📢 Publicar Intercambio Abierto (Cualquiera en el Reino)</option>
-                        
                         <optgroup label="── Miembros y Musas del Reino ──">
                             {% for m in members %}
                                 <option value="{{ m.telegram_user_id }}">
-                                    👤 {{ m.username|default:"Noble" }} (Lvl {{ m.level }} • {{ m.title|default:"Clandestino" }})
+                                    👤 {{ m.username|default:"Noble" }} (Lvl {{ m.level }})
                                 </option>
                             {% endfor %}
                         </optgroup>
@@ -198,8 +196,8 @@
         const cards = document.querySelectorAll('.album-card');
         const btns = document.querySelectorAll('.filter-btn');
 
-        btns.forEach(b => { b.className = "py-1.5 rounded-lg text-stone-400 hover:text-white filter-btn"; });
-        document.getElementById(`f-${rarity}`).className = "py-1.5 rounded-lg bg-vip-gold text-black font-bold filter-btn";
+        btns.forEach(b => { b.className = "py-1.5 rounded-xl text-stone-400 hover:text-white filter-btn"; });
+        document.getElementById(`f-${rarity}`).className = "py-1.5 rounded-xl bg-vip-gold text-black font-bold filter-btn";
 
         cards.forEach(c => {
             c.style.display = (rarity === 'all' || c.getAttribute('data-rarity') === rarity) ? 'flex' : 'none';
@@ -214,7 +212,7 @@
         document.getElementById('modal-card-rarity').style.color = colorHex;
         document.getElementById('modal-card-img').src = imgUrl;
         document.getElementById('modal-card-box').style.borderColor = colorHex;
-        document.getElementById('modal-card-box').style.boxShadow = `0 0 20px ${colorHex}`;
+        document.getElementById('modal-card-box').style.boxShadow = `0 0 25px ${colorHex}`;
 
         const sellForm = document.getElementById('sell-form');
         const tradeForm = document.getElementById('trade-form');
