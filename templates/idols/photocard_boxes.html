@@ -1,0 +1,348 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    
+    <!-- ENCABEZADO Y ACCESOS RÁPIDOS -->
+    <div class="flex justify-between items-center px-1">
+        <button type="button" onclick="universalNav('/')" 
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
+            ⬅ Menú
+        </button>
+
+        <div class="flex items-center gap-2">
+            <button type="button" onclick="universalNav('{% url 'idols:my_photocards_album' %}')" 
+                    class="bg-purple-950/80 hover:bg-purple-900 border border-purple-500/60 text-purple-200 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow active:scale-95 transition-all">
+                <span>🎴</span> <span>Mi Álbum ({{ my_cards_count }})</span>
+            </button>
+
+            {% if is_admin %}
+            <button type="button" onclick="universalNav('{% url 'idols:admin_photocards' %}')" 
+                    class="bg-amber-950/80 hover:bg-amber-900 border border-yellow-500/60 text-yellow-300 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow active:scale-95 transition-all">
+                <span>⚙️</span> <span>Gestionar</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- BANNER DE BIENVENIDA -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden border border-vip-gold/40 shadow-2xl">
+        <span class="text-3xl mb-1 block animate-bounce">🎁</span>
+        <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest">
+            Cajas de Photocards
+        </h2>
+        <p class="text-xs text-vip-text/60 mt-1 max-w-[280px] mx-auto">
+            Abre cajas exclusivas con tu oro y consigue cartas raras, épicas y legendarias de tus Musas.
+        </p>
+        <div class="mt-2.5 inline-flex items-center gap-1.5 bg-black/70 border border-vip-gold/40 px-3 py-1 rounded-full text-xs font-mono font-bold text-yellow-400">
+            <span>🪙 Bóveda:</span> <span id="user-gold-balance">{{ wallet.balance }}</span> 🪙
+        </div>
+    </div>
+
+    <!-- LISTA DE CAJAS DISPONIBLES (ESTILO COUNTER STRIKE) -->
+    <div class="flex flex-col gap-3.5">
+        {% for box in boxes %}
+        <div class="vip-panel p-4 flex flex-col gap-3 border border-vip-gold/30 hover:border-yellow-400/60 transition-all rounded-3xl shadow-xl bg-gradient-to-br from-[#1c0d2b] via-black to-[#10061a]">
+            
+            <div class="flex items-center gap-3.5">
+                <!-- Portada de la Caja -->
+                <div class="w-20 h-20 rounded-2xl bg-black border border-vip-gold/40 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-lg relative group">
+                    {% if box.cover_image %}
+                        <img src="{{ box.cover_image.url }}" alt="{{ box.name }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
+                    {% else %}
+                        <span class="text-3xl">📦</span>
+                    {% endif %}
+                    <span class="absolute bottom-1 right-1 bg-black/80 text-[9px] font-mono font-bold text-yellow-400 px-1.5 rounded border border-yellow-500/30">
+                        {{ box.cards.count }} cartas
+                    </span>
+                </div>
+
+                <!-- Info de la Caja -->
+                <div class="flex flex-col min-w-0 flex-1">
+                    <h3 class="font-serif text-sm font-black text-white leading-tight truncate">{{ box.name }}</h3>
+                    <p class="text-[11px] text-vip-text/60 mt-0.5 line-clamp-2 leading-relaxed">{{ box.description }}</p>
+
+                    <!-- Rarezas incluidas -->
+                    <div class="flex items-center gap-1.5 mt-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-gray-400" title="Común"></span>
+                        <span class="w-2.5 h-2.5 rounded-full bg-blue-500" title="Rara"></span>
+                        <span class="w-2.5 h-2.5 rounded-full bg-purple-500" title="Épica"></span>
+                        <span class="w-2.5 h-2.5 rounded-full bg-yellow-400 shadow-[0_0_6px_rgba(250,204,21,0.8)]" title="Legendaria"></span>
+                        <span class="text-[10px] text-vip-text/50 font-mono ml-1">Rarezas CS</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botón de Abrir -->
+            <button type="button" onclick="startCaseOpening({{ box.id }}, '{{ box.name }}', {{ box.price }})" 
+                    class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_15px_rgba(212,175,55,0.3)] flex items-center justify-center gap-2 active:scale-95 transition-all">
+                <span>Desbloquear Caja por</span>
+                <span class="font-mono text-sm font-black">{{ box.price }} 🪙</span>
+            </button>
+        </div>
+        {% empty %}
+        <div class="vip-panel p-8 text-center flex flex-col items-center">
+            <span class="text-4xl my-2">📦</span>
+            <h4 class="font-serif text-sm font-bold text-white">No hay cajas activas</h4>
+            <p class="text-xs text-vip-text/60 mt-1">Vuelve pronto para el próximo lanzamiento de Photocards.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<!-- 🎰 MODAL DE RULETA COUNTER-STRIKE 2 -->
+<div id="cs-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-3 select-none">
+    
+    <div class="w-full max-w-md bg-gradient-to-b from-[#190a2a] via-black to-[#0d0417] border-2 border-vip-gold/60 rounded-3xl p-4 shadow-[0_0_40px_rgba(0,0,0,0.95)] flex flex-col items-center relative overflow-hidden">
+        
+        <!-- Botón cerrar (solo visible cuando no esté rodando) -->
+        <button id="cs-close-btn" onclick="closeCSModal()" class="absolute top-3 right-3 text-stone-400 hover:text-white text-xl z-30">
+            &times;
+        </button>
+
+        <h3 id="cs-box-title" class="font-serif text-sm font-black text-gold-gradient uppercase tracking-widest text-center mb-1">
+            Abriendo Caja
+        </h3>
+        <p class="text-[10px] text-stone-400 mb-3">La aguja central determina tu recompensa</p>
+
+        <!-- CONTENEDOR DE LA RULETA HORIZONTAL -->
+        <div class="w-full h-40 bg-black/90 border-2 border-yellow-500/40 rounded-2xl relative overflow-hidden flex items-center shadow-inner">
+            
+            <!-- Aguja / Puntero Central Rojo de Counter-Strike -->
+            <div class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-rose-500 z-30 shadow-[0_0_12px_rgba(244,63,94,0.9)] pointer-events-none">
+                <div class="absolute -top-1 left-1/2 -translate-x-1/2 text-rose-500 text-xs">▼</div>
+                <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 text-rose-500 text-xs">▲</div>
+            </div>
+
+            <!-- CINTA DE CARTAS (REEL HORIZONTAL) -->
+            <div id="cs-reel" class="flex gap-2 px-4 transition-transform duration-[4500ms] will-change-transform"
+                 style="transform: translateX(0px);">
+                <!-- Las cartas se inyectan dinámicamente con JS -->
+            </div>
+        </div>
+
+        <!-- ZONA DE RESULTADO / CARTA GANADORA -->
+        <div id="cs-winner-display" class="hidden flex flex-col items-center w-full mt-4 animate-bounce">
+            <span class="text-[10px] font-mono uppercase font-black px-2.5 py-0.5 rounded-full border mb-1.5" id="cs-winner-rarity">
+                Rareza
+            </span>
+            <div class="w-28 h-40 rounded-2xl border-2 overflow-hidden shadow-2xl bg-black relative" id="cs-winner-card-box">
+                <img id="cs-winner-img" src="" class="w-full h-full object-cover">
+            </div>
+            <h4 class="font-serif text-sm font-black text-white mt-2" id="cs-winner-name">Nombre</h4>
+            <span class="text-xs text-yellow-400 font-bold" id="cs-winner-idol">Musa</span>
+        </div>
+
+        <!-- BOTONES DE ACCIÓN -->
+        <div class="w-full mt-4 flex gap-2" id="cs-actions">
+            <button type="button" id="cs-confirm-btn" onclick="confirmOpenCase()" 
+                    class="w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all">
+                <span>🗝️</span> <span>Girar Ruleta</span>
+            </button>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- SINTETIZADOR DE AUDIO CASINO/CS (Clac metálico de la cinta de cartas) -->
+<script>
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let csAudioCtx = null;
+
+    function playCSTick() {
+        try {
+            if (!csAudioCtx) csAudioCtx = new AudioCtx();
+            if (csAudioCtx.state === 'suspended') csAudioCtx.resume();
+            const osc = csAudioCtx.createOscillator();
+            const gain = csAudioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(320, csAudioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(80, csAudioCtx.currentTime + 0.04);
+            gain.gain.setValueAtTime(0.3, csAudioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, csAudioCtx.currentTime + 0.04);
+            osc.connect(gain);
+            gain.connect(csAudioCtx.destination);
+            osc.start();
+            osc.stop(csAudioCtx.currentTime + 0.04);
+        } catch(e) {}
+    }
+
+    function playWinFanfare() {
+        try {
+            if (!csAudioCtx) csAudioCtx = new AudioCtx();
+            [523, 659, 783, 1046].forEach((freq, idx) => {
+                const osc = csAudioCtx.createOscillator();
+                const gain = csAudioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, csAudioCtx.currentTime + (idx * 0.09));
+                gain.gain.setValueAtTime(0.4, csAudioCtx.currentTime + (idx * 0.09));
+                gain.gain.exponentialRampToValueAtTime(0.001, csAudioCtx.currentTime + (idx * 0.09) + 0.35);
+                osc.connect(gain);
+                gain.connect(csAudioCtx.destination);
+                osc.start(csAudioCtx.currentTime + (idx * 0.09));
+                osc.stop(csAudioCtx.currentTime + (idx * 0.09) + 0.35);
+            });
+        } catch(e) {}
+    }
+</script>
+
+<script>
+    let activeBoxId = null;
+    let activeBoxPrice = 0;
+    let isOpening = false;
+
+    function startCaseOpening(boxId, boxName, boxPrice) {
+        activeBoxId = boxId;
+        activeBoxPrice = boxPrice;
+
+        document.getElementById('cs-box-title').innerText = boxName;
+        document.getElementById('cs-winner-display').classList.add('hidden');
+        document.getElementById('cs-actions').classList.remove('hidden');
+        document.getElementById('cs-confirm-btn').disabled = false;
+        document.getElementById('cs-confirm-btn').innerHTML = `<span>🗝️</span> <span>Girar Ruleta (${boxPrice} 🪙)</span>`;
+        document.getElementById('cs-close-btn').style.display = 'block';
+
+        // Resetear cinta
+        const reel = document.getElementById('cs-reel');
+        reel.style.transition = 'none';
+        reel.style.transform = 'translateX(0px)';
+        reel.innerHTML = '<span class="text-xs text-stone-500 italic px-8">Pulsa Girar para activar la ruleta...</span>';
+
+        document.getElementById('cs-modal').classList.remove('hidden');
+    }
+
+    function closeCSModal() {
+        if (isOpening) return;
+        document.getElementById('cs-modal').classList.add('hidden');
+    }
+
+    async function confirmOpenCase() {
+        if (isOpening) return;
+
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        const btn = document.getElementById('cs-confirm-btn');
+        const closeBtn = document.getElementById('cs-close-btn');
+        const reel = document.getElementById('cs-reel');
+
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> Abriendo Caja...';
+        closeBtn.style.display = 'none';
+        isOpening = true;
+
+        try {
+            const resp = await fetch(`/idols/photocards/open/${activeBoxId}/`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+
+            if (!data.success) {
+                alert(data.error);
+                btn.disabled = false;
+                btn.innerHTML = `<span>🗝️</span> <span>Girar Ruleta (${activeBoxPrice} 🪙)</span>`;
+                closeBtn.style.display = 'block';
+                isOpening = false;
+                return;
+            }
+
+            // 1. Actualizar Saldo en la vista
+            const balanceElem = document.getElementById('user-gold-balance');
+            if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
+
+            // 2. Renderizar las 35 cartas de la cinta
+            reel.style.transition = 'none';
+            reel.style.transform = 'translateX(0px)';
+            reel.innerHTML = data.reel.map(c => `
+                <div class="cs-item w-24 h-32 rounded-xl flex-shrink-0 bg-neutral-900 border-2 flex flex-col justify-between p-1.5 relative overflow-hidden select-none"
+                     style="border-color: ${c.color};">
+                    <img src="${c.image_url}" class="w-full h-20 object-cover rounded-lg">
+                    <div class="text-center flex flex-col">
+                        <span class="text-[9px] font-black text-white truncate">${c.name}</span>
+                        <span class="text-[8px] font-mono uppercase font-bold" style="color: ${c.color};">${c.rarity_display}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            // Forzar reflujo de renderizado
+            reel.offsetHeight;
+
+            // 3. FÍSICA DE COUNTER STRIKE (cubic-bezier suave de 4.5 segundos)
+            // Cada carta mide 96px + 8px gap = 104px
+            // El centro del viewport es ~180px
+            const cardWidth = 104;
+            const winningIndex = data.winning_index; // 28
+            const containerWidth = reel.parentElement.offsetWidth;
+            const targetX = -((winningIndex * cardWidth) - (containerWidth / 2) + (cardWidth / 2) + (Math.random() * 40 - 20));
+
+            reel.style.transition = 'transform 4.5s cubic-bezier(0.08, 0.8, 0.15, 1)';
+            reel.style.transform = `translateX(${targetX}px)`;
+
+            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
+
+            // Sonidos de ticks mientras la aguja pasa
+            let tickCount = 0;
+            const tickInterval = setInterval(() => {
+                playCSTick();
+                try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+                tickCount++;
+                if (tickCount > 28) clearInterval(tickInterval);
+            }, 140);
+
+            // 4. Clímax al terminar los 4.5 segundos
+            setTimeout(() => {
+                clearInterval(tickInterval);
+                playWinFanfare();
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+
+                // Mostrar revelación de la carta
+                const winnerBox = document.getElementById('cs-winner-display');
+                const winnerImg = document.getElementById('cs-winner-img');
+                const winnerName = document.getElementById('cs-winner-name');
+                const winnerIdol = document.getElementById('cs-winner-idol');
+                const winnerRarity = document.getElementById('cs-winner-rarity');
+                const cardBox = document.getElementById('cs-winner-card-box');
+
+                winnerImg.src = data.winner.image_url;
+                winnerName.innerText = data.winner.name;
+                winnerIdol.innerText = `Musa: ${data.winner.idol_name}`;
+                winnerRarity.innerText = data.winner.rarity_display;
+                winnerRarity.style.borderColor = data.winner.color;
+                winnerRarity.style.color = data.winner.color;
+                cardBox.style.borderColor = data.winner.color;
+                cardBox.style.boxShadow = `0 0 25px ${data.winner.color}`;
+
+                winnerBox.classList.remove('hidden');
+
+                // Botones al finalizar
+                btn.classList.add('hidden');
+                closeBtn.style.display = 'block';
+                isOpening = false;
+
+                document.getElementById('cs-actions').innerHTML = `
+                    <button type="button" onclick="startCaseOpening(${activeBoxId}, '${document.getElementById('cs-box-title').innerText}', ${activeBoxPrice})" 
+                            class="flex-1 btn-gold py-3 rounded-xl text-xs font-black uppercase">
+                        Abrir Otra Caja
+                    </button>
+                    <button type="button" onclick="universalNav('{% url 'idols:my_photocards_album' %}')" 
+                            class="flex-1 bg-purple-950 border border-purple-500 text-purple-200 py-3 rounded-xl text-xs font-bold uppercase">
+                        Ver Mi Álbum
+                    </button>
+                `;
+
+            }, 4500);
+
+        } catch(e) {
+            alert("Error de conexión al abrir la caja.");
+            btn.disabled = false;
+            closeBtn.style.display = 'block';
+            isOpening = false;
+        }
+    }
+</script>
+{% endblock %}

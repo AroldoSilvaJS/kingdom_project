@@ -20,4 +20,9 @@ urlpatterns = [
     path('feed/comment/<int:post_id>/', views.add_comment, name='add_comment'),
     path('feed/edit/<int:post_id>/', views.edit_post, name='edit_post'),      # 👈 AÑADIR
     path('feed/delete/<int:post_id>/', views.delete_post, name='delete_post'),  # 👈 AÑADIR
+    # Rutas del Sistema de Photocards y Cajas CS
+    path('photocards/', views.photocard_boxes_view, name='photocard_boxes'),
+    path('photocards/open/<int:box_id>/', views.open_photocard_box_ajax, name='open_box_ajax'),
+    path('photocards/album/', views.my_photocards_album, name='my_photocards_album'),
+    path('photocards/admin/', views.admin_photocards_manage, name='admin_photocards'),
 ]

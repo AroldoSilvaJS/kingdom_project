@@ -3,7 +3,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count
 from django.http import JsonResponse
 from django.contrib import messages
-
+import random
+from .models import PhotocardBox, Photocard, UserPhotocard
 from .models import IdolProfile, Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
 from economy.models import Wallet
 from core.models import UserProfile, UserRole
@@ -706,3 +707,211 @@ def add_comment(request, post_id):
             messages.success(request, "Comentario publicado (+5 EXP).")
             
         return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+
+
+
+# 1. PANTALLA PRINCIPAL DE CAJAS DISPONIBLES (Para Idols y Nobles)
+def photocard_boxes_view(request):
+    tg_id = resolve_safe_tg(request)
+    if not tg_id:
+        return redirect('/')
+
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    boxes = PhotocardBox.objects.filter(is_active=True).prefetch_related('cards')
+    
+    # Comprobar si el usuario es Admin o Moderador para mostrar el botón de gestión
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
+        telegram_id=tg_id, 
+        role__in=['admin', 'moderador']
+    ).exists()
+
+    my_cards_count = UserPhotocard.objects.filter(telegram_user_id=tg_id).count()
+
+    return render(request, 'idols/photocard_boxes.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'boxes': boxes,
+        'is_admin': is_admin,
+        'my_cards_count': my_cards_count,
+    })
+
+
+# 2. ENDPOINT AJAX PARA ABRIR LA CAJA Y GENERAR LA RULETA CS
+def open_photocard_box_ajax(request, box_id):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+
+    tg_id = resolve_safe_tg(request)
+    if not tg_id:
+        return JsonResponse({'success': False, 'error': 'Sesión no identificada'}, status=400)
+
+    box = get_object_or_404(PhotocardBox, id=box_id, is_active=True)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+
+    # Verificar saldo
+    if wallet.balance < box.price:
+        return JsonResponse({'success': False, 'error': f'No tienes suficiente oro ({box.price} 🪙 necesarios).'}, status=400)
+
+    all_cards = list(box.cards.all().select_related('idol'))
+    if not all_cards:
+        return JsonResponse({'success': False, 'error': 'Esta caja aún no tiene cartas cargadas.'}, status=400)
+
+    # Descontar costo de la caja
+    wallet.remove_funds(box.price)
+
+    # --- ALGORITMO DE PROBABILIDAD ESTILO COUNTER-STRIKE ---
+    # Legendaria: 3%, Épica: 12%, Rara: 25%, Común: 60%
+    roll = random.random() * 100
+    if roll < 3.0:
+        target_rarity = 'legendary'
+    elif roll < 15.0:
+        target_rarity = 'epic'
+    elif roll < 40.0:
+        target_rarity = 'rare'
+    else:
+        target_rarity = 'common'
+
+    pool = [c for c in all_cards if c.rarity == target_rarity]
+    winner = random.choice(pool) if pool else random.choice(all_cards)
+
+    # Guardar la Photocard en la colección del usuario
+    UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=winner)
+
+    # Otorgar EXP
+    xp_map = {'common': 15, 'rare': 30, 'epic': 60, 'legendary': 150}
+    grant_user_xp(request, tg_id, xp_map.get(winner.rarity, 20), reason=f"Photocard {winner.get_rarity_display()}")
+
+    # Generar la cinta de 35 cartas para la animación de ruleta horizontal
+    # La carta ganadora se coloca exactamente en el índice 28
+    reel = []
+    for i in range(35):
+        if i == 28:
+            card_item = winner
+        else:
+            card_item = random.choice(all_cards)
+
+        reel.append({
+            'id': card_item.id,
+            'name': card_item.name,
+            'rarity': card_item.rarity,
+            'rarity_display': card_item.get_rarity_display(),
+            'color': card_item.get_color_hex(),
+            'image_url': card_item.image.url if card_item.image else '',
+            'idol_name': card_item.idol.stage_name if card_item.idol else 'Reino',
+        })
+
+    return JsonResponse({
+        'success': True,
+        'nuevo_saldo': wallet.balance,
+        'winning_index': 28,
+        'winner': {
+            'id': winner.id,
+            'name': winner.name,
+            'rarity': winner.rarity,
+            'rarity_display': winner.get_rarity_display(),
+            'color': winner.get_color_hex(),
+            'image_url': winner.image.url if winner.image else '',
+            'idol_name': winner.idol.stage_name if winner.idol else 'Reino',
+        },
+        'reel': reel
+    })
+
+
+# 3. ÁLBUM PERSONAL DE PHOTOCARDS (Para Idols y Nobles)
+def my_photocards_album(request):
+    tg_id = resolve_safe_tg(request)
+    if not tg_id:
+        return redirect('/')
+
+    user_cards = UserPhotocard.objects.filter(
+        telegram_user_id=tg_id
+    ).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at')
+
+    # Estadísticas de colección
+    total = user_cards.count()
+    legendaries = user_cards.filter(photocard__rarity='legendary').count()
+    epics = user_cards.filter(photocard__rarity='epic').count()
+
+    return render(request, 'idols/photocards_album.html', {
+        'tg_id': tg_id,
+        'user_cards': user_cards,
+        'total': total,
+        'legendaries': legendaries,
+        'epics': epics,
+    })
+
+
+# 4. PANEL DE GESTIÓN PARA ADMINS Y MODERADORES (Subir Canva y Crear Cajas)
+def admin_photocards_manage(request):
+    tg_id = resolve_safe_tg(request)
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
+        telegram_id=tg_id, 
+        role__in=['admin', 'moderador']
+    ).exists()
+
+    if not is_admin:
+        messages.error(request, "Solo los administradores pueden gestionar Photocards.")
+        return redirect('/idols/photocards/')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'create_box':
+            name = request.POST.get('name', '').strip()
+            description = request.POST.get('description', '').strip()
+            price = int(request.POST.get('price', 50))
+            cover_image = request.FILES.get('cover_image')
+
+            if name:
+                PhotocardBox.objects.create(
+                    name=name,
+                    description=description,
+                    price=price,
+                    cover_image=cover_image
+                )
+                messages.success(request, f"✨ Caja «{name}» creada con éxito.")
+            return redirect(f'/idols/photocards/admin/?tg_id={tg_id}')
+
+        elif action == 'upload_card':
+            box_id = request.POST.get('box_id')
+            idol_id = request.POST.get('idol_id')
+            name = request.POST.get('name', '').strip()
+            rarity = request.POST.get('rarity', 'common')
+            image = request.FILES.get('image')
+
+            if not image or not name or not box_id:
+                messages.error(request, "Debes adjuntar el archivo de Canva, asignar un nombre y una caja.")
+            else:
+                box_obj = get_object_or_404(PhotocardBox, id=box_id)
+                idol_obj = IdolProfile.objects.filter(id=idol_id).first() if idol_id else None
+
+                Photocard.objects.create(
+                    box=box_obj,
+                    idol=idol_obj,
+                    name=name,
+                    rarity=rarity,
+                    image=image,
+                    created_by_tg_id=tg_id
+                )
+                messages.success(request, f"🎴 Photocard «{name}» ({rarity.upper()}) agregada a la caja.")
+            return redirect(f'/idols/photocards/admin/?tg_id={tg_id}')
+
+        elif action == 'toggle_box':
+            box_id = request.POST.get('box_id')
+            box_obj = get_object_or_404(PhotocardBox, id=box_id)
+            box_obj.is_active = not box_obj.is_active
+            box_obj.save()
+            estado = "Activada" if box_obj.is_active else "Pausada"
+            messages.info(request, f"Caja {box_obj.name} {estado}.")
+            return redirect(f'/idols/photocards/admin/?tg_id={tg_id}')
+
+    boxes = PhotocardBox.objects.all().prefetch_related('cards')
+    all_idols = IdolProfile.objects.all().order_by('stage_name')
+    recent_cards = Photocard.objects.all().select_related('box', 'idol').order_by('-created_at')[:30]
+
+    return render(request, 'idols/admin_photocards.html', {
+        'tg_id': tg_id,
+        'boxes': boxes,
+        'all_idols': all_idols,
+        'recent_cards': recent_cards,
+    })

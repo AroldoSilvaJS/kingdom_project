@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    
+    <!-- ENCABEZADO Y VOLVER -->
+    <div class="flex justify-between items-center px-1 border-b border-vip-gold/30 pb-3">
+        <div>
+            <h2 class="text-lg font-bold font-serif text-yellow-400 tracking-wide">⚙️ Gestión de Photocards</h2>
+            <p class="text-xs text-vip-text/60">Panel de Administración de Cajas y Diseños</p>
+        </div>
+        <button type="button" onclick="universalNav('{% url 'idols:photocard_boxes' %}')" 
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
+            ⬅ Cajas
+        </button>
+    </div>
+
+    <!-- MENSAJES -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- FORMULARIO 1: SUBIR NUEVA PHOTOCARD DE CANVA -->
+    <div class="vip-panel p-5 border border-purple-500/50 rounded-3xl shadow-xl">
+        <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-500/20 pb-2 mb-3">
+            <span>🎴</span> Subir Diseño de Canva (Photocard)
+        </h3>
+
+        <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="upload_card">
+            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Caja de Destino *</label>
+                <select name="box_id" required class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+                    {% for b in boxes %}
+                        <option value="{{ b.id }}">{{ b.name }} ({{ b.price }} 🪙)</option>
+                    {% empty %}
+                        <option value="">-- Primero crea una caja abajo --</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Musa / Idol (Opcional)</label>
+                <select name="idol_id" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+                    <option value="">-- Photocard General del Reino --</option>
+                    {% for idol in all_idols %}
+                        <option value="{{ idol.id }}">{{ idol.stage_name }} ({{ idol.group|default:"Solista" }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Carta *</label>
+                <input type="text" name="name" required placeholder="Ej: Scarlett - Vestido de Noche"
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Rareza de la Carta *</label>
+                <select name="rarity" required class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+                    <option value="common">⚪ Común (Gris - ~60% probabilidad)</option>
+                    <option value="rare">🔵 Rara (Azul - ~25% probabilidad)</option>
+                    <option value="epic">🟣 Épica (Púrpura - ~12% probabilidad)</option>
+                    <option value="legendary">👑 Legendaria (Dorada - ~3% probabilidad)</option>
+                </select>
+            </div>
+
+            <div class="bg-black/40 p-3 rounded-xl border border-vip-gold/20 flex flex-col gap-1">
+                <label class="block text-[11px] text-yellow-400 uppercase font-bold">Archivo de Canva (Imagen) *</label>
+                <input type="file" name="image" accept="image/*" required
+                       class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+            </div>
+
+            <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
+                Subir Photocard a la Caja
+            </button>
+        </form>
+    </div>
+
+    <!-- FORMULARIO 2: CREAR NUEVA CAJA -->
+    <div class="vip-panel p-5 border border-yellow-500/40 rounded-3xl shadow-xl">
+        <h3 class="font-serif text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-yellow-500/20 pb-2 mb-3">
+            <span>📦</span> Crear Nueva Caja de Criptas
+        </h3>
+
+        <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_box">
+            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Caja *</label>
+                <input type="text" name="name" required placeholder="Ej: Colección Noche de Gala"
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Descripción / Temática</label>
+                <textarea name="description" rows="2" placeholder="Describe qué tipo de cartas contiene..."
+                          class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white resize-none"></textarea>
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Costo de Apertura en Oro (🪙) *</label>
+                <input type="number" name="price" min="10" value="50" required
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white font-mono font-bold">
+            </div>
+
+            <div class="bg-black/40 p-3 rounded-xl border border-vip-gold/20 flex flex-col gap-1">
+                <label class="block text-[11px] text-stone-300 uppercase font-bold">Imagen de la Caja (Opcional)</label>
+                <input type="file" name="cover_image" accept="image/*"
+                       class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-purple-900 file:text-purple-200 cursor-pointer">
+            </div>
+
+            <button type="submit" class="bg-yellow-600 hover:bg-yellow-500 text-black py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
+                Crear Caja
+            </button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}
