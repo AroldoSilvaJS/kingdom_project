@@ -60,13 +60,13 @@
     <!-- LISTA DE CAJAS BLINDADAS (CS2 CASE DESIGN) -->
     <div class="flex flex-col gap-3.5">
         {% for box in boxes %}
-        <div class="vip-panel p-4 flex flex-col gap-3.5 border border-vip-gold/30 hover:border-yellow-400/70 transition-all duration-300 rounded-3xl shadow-xl bg-gradient-to-br from-[#160824] via-[#0d0416] to-black relative overflow-hidden group">
+        <div class="vip-panel p-4 flex flex-col gap-3.5 border border-vip-gold/30 hover:border-yellow-400/70 transition-all duration-300 rounded-3xl shadow-xl bg-gradient-to-br from-[#160824] via-[#0d0416] to-black relative overflow-hidden group max-w-full">
             
-            <div class="flex items-center gap-3.5">
-                <!-- Portada Maletín de la Caja con Efecto Bisel -->
-                <div class="w-22 h-22 rounded-2xl bg-black/90 border-2 border-vip-gold/50 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_18px_rgba(212,175,55,0.25)] relative group-hover:scale-105 transition-transform">
+            <div class="flex items-center gap-3.5 min-w-0">
+                <!-- Portada Maletín de la Caja con Medidas Fijas (Nunca se desborda) -->
+                <div class="w-24 h-24 min-w-[96px] max-w-[96px] h-24 min-h-[96px] max-h-[96px] rounded-2xl bg-black/90 border-2 border-vip-gold/50 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_18px_rgba(212,175,55,0.25)] relative group-hover:scale-105 transition-transform p-1">
                     {% if box.cover_image %}
-                        <img src="{{ box.cover_image.url }}" alt="{{ box.name }}" class="w-full h-full object-cover">
+                        <img src="{{ box.cover_image.url }}" alt="{{ box.name }}" class="w-full h-full object-contain block drop-shadow">
                     {% else %}
                         <span class="text-4xl filter drop-shadow">📦</span>
                     {% endif %}
@@ -76,16 +76,16 @@
                 </div>
 
                 <!-- Info de la Caja -->
-                <div class="flex flex-col min-w-0 flex-1">
+                <div class="flex flex-col min-w-0 flex-1 overflow-hidden">
                     <div class="flex items-center gap-1.5">
                         <h3 class="font-serif text-sm font-black text-white leading-tight truncate group-hover:text-vip-gold transition-colors">
                             {{ box.name }}
                         </h3>
                     </div>
-                    <p class="text-[11px] text-vip-text/60 mt-1 line-clamp-2 leading-relaxed">{{ box.description }}</p>
+                    <p class="text-[11px] text-vip-text/60 mt-1 line-clamp-2 leading-relaxed truncate">{{ box.description }}</p>
 
                     <!-- Rarezas representadas como en CS:GO / CS2 -->
-                    <div class="flex items-center gap-2 mt-2 pt-1 border-t border-white/5">
+                    <div class="flex items-center gap-2 mt-2 pt-1 border-t border-white/5 flex-wrap">
                         <span class="inline-flex items-center gap-1 text-[9px] font-mono text-stone-400 font-bold">
                             <span class="w-2 h-2 rounded-full bg-stone-400"></span> Común
                         </span>

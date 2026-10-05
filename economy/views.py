@@ -427,3 +427,186 @@ def blackjack_game(request):
         'ganancia': ganancia,
         'current_bet': current_bet
     })
+
+# ==========================================
+# JUEGO: LAS MINAS DEL REINO (MINES VIP)
+# ==========================================
+
+def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
+    if revealed_count <= 0:
+        return 1.0
+    gems_count = total_tiles - mines_count
+    prob = 1.0
+    for i in range(revealed_count):
+        prob *= (gems_count - i) / (total_tiles - i)
+    
+    if prob <= 0:
+        return 1.0
+    
+    # Margen de la casa 4% (paga 96% justo)
+    raw_mult = 0.96 / prob
+    return max(1.05, round(raw_mult, 2))
+
+
+def mines_game(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    max_bet = profile.max_bet_allowed
+    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+
+    session_mines = request.session.get('mines_state')
+
+    if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+        action = request.POST.get('action')
+
+        # 1. INICIAR PARTIDA
+        if action == 'start':
+            try:
+                bet = int(request.POST.get('bet_amount', 20))
+                mines_count = int(request.POST.get('mines_count', 3))
+
+                if bet <= 0:
+                    err = "La apuesta debe ser mayor a 0."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                elif bet > max_bet:
+                    err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                elif bet > wallet.balance:
+                    err = "No tienes suficiente oro en tu Bóveda."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                elif mines_count not in [1, 2, 3, 5, 10]:
+                    mines_count = 3
+                else:
+                    wallet.remove_funds(bet)
+
+                    # Generar 25 casilleros y colocar las minas al azar
+                    all_indices = list(range(25))
+                    mines_locations = random.sample(all_indices, mines_count)
+
+                    session_mines = {
+                        'bet': bet,
+                        'mines_count': mines_count,
+                        'mines': mines_locations,
+                        'revealed': [],
+                        'in_game': True
+                    }
+                    request.session['mines_state'] = session_mines
+
+                    if is_ajax:
+                        return JsonResponse({
+                            'success': True,
+                            'in_game': True,
+                            'nuevo_saldo': wallet.balance,
+                            'bet': bet,
+                            'mines_count': mines_count,
+                            'revealed': [],
+                            'multiplier': 1.0,
+                            'current_cashout': bet
+                        })
+            except ValueError:
+                if is_ajax: return JsonResponse({'success': False, 'error': 'Valores no válidos.'}, status=400)
+
+        # 2. DESTAPAR UN COFRE
+        elif action == 'reveal' and session_mines and session_mines.get('in_game'):
+            try:
+                tile_idx = int(request.POST.get('tile_index', -1))
+                if 0 <= tile_idx <= 24 and tile_idx not in session_mines['revealed']:
+                    # ¿TOCÓ MINA?
+                    if tile_idx in session_mines['mines']:
+                        session_mines['in_game'] = False
+                        all_mines = session_mines['mines']
+                        bet_lost = session_mines['bet']
+                        request.session['mines_state'] = None
+
+                        grant_user_xp(request, tg_id, max(2, bet_lost // 5), reason="Minas del Reino")
+
+                        if is_ajax:
+                            return JsonResponse({
+                                'success': True,
+                                'status': 'bust',
+                                'hit_tile': tile_idx,
+                                'all_mines': all_mines,
+                                'nuevo_saldo': wallet.balance
+                            })
+                    else:
+                        # ¡GEMA ENCONTRADA!
+                        session_mines['revealed'].append(tile_idx)
+                        revealed_count = len(session_mines['revealed'])
+                        mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
+                        cashout_val = int(session_mines['bet'] * mult)
+
+                        # ¿Completó todas las gemas posibles?
+                        total_gems = 25 - session_mines['mines_count']
+                        auto_win = (revealed_count == total_gems)
+
+                        if auto_win:
+                            session_mines['in_game'] = False
+                            if pet and pet.species == 'panther':
+                                cashout_val = int(cashout_val * 1.10)
+                            wallet.add_funds(cashout_val)
+                            request.session['mines_state'] = None
+                            grant_user_xp(request, tg_id, max(10, cashout_val // 4), reason="Pleno en Minas")
+
+                        request.session['mines_state'] = session_mines if not auto_win else None
+
+                        if is_ajax:
+                            return JsonResponse({
+                                'success': True,
+                                'status': 'win_full' if auto_win else 'gem',
+                                'hit_tile': tile_idx,
+                                'revealed_count': revealed_count,
+                                'multiplier': mult,
+                                'current_cashout': cashout_val,
+                                'nuevo_saldo': wallet.balance,
+                                'all_mines': session_mines['mines'] if auto_win else []
+                            })
+            except ValueError:
+                pass
+
+        # 3. RETIRARSE Y COBRAR (CASHOUT)
+        elif action == 'cashout' and session_mines and session_mines.get('in_game'):
+            revealed_count = len(session_mines['revealed'])
+            if revealed_count > 0:
+                mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
+                ganancia = int(session_mines['bet'] * mult)
+
+                if pet and pet.species == 'panther':
+                    ganancia = int(ganancia * 1.10)
+
+                wallet.add_funds(ganancia)
+                all_mines = session_mines['mines']
+                request.session['mines_state'] = None
+
+                grant_user_xp(request, tg_id, max(5, ganancia // 4), reason="Retiro de Minas")
+
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'status': 'cashout',
+                        'ganancia': ganancia,
+                        'multiplier': mult,
+                        'all_mines': all_mines,
+                        'nuevo_saldo': wallet.balance
+                    })
+
+    in_game = session_mines is not None and session_mines.get('in_game', False)
+    current_revealed = session_mines.get('revealed', []) if session_mines else []
+    current_bet = session_mines.get('bet', 20) if session_mines else 20
+    current_mines_count = session_mines.get('mines_count', 3) if session_mines else 3
+    current_mult = calculate_mines_multiplier(25, current_mines_count, len(current_revealed)) if in_game else 1.0
+    current_cashout = int(current_bet * current_mult) if in_game else current_bet
+
+    return render(request, 'economy/mines.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'max_bet': max_bet,
+        'in_game': in_game,
+        'current_bet': current_bet,
+        'current_mines_count': current_mines_count,
+        'current_revealed': current_revealed,
+        'current_mult': current_mult,
+        'current_cashout': current_cashout,
+    })

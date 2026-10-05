@@ -9,4 +9,5 @@ urlpatterns = [
     path('claim-bonus/', views.claim_bonus, name='claim_bonus'),
     path('slots/', views.slots_game, name='slots'),
     path('blackjack/', views.blackjack_game, name='blackjack'), # <- AÑADIR AQUÍ
+    path('mines/', views.mines_game, name='mines'),
 ]

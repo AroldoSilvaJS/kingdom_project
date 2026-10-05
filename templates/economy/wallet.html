@@ -80,39 +80,40 @@
         </form>
     </div>
 
-    <!-- SECCIÓN: SALÓN DE JUEGOS Y CASINO IMPERIAL -->
-    <div class="flex flex-col gap-3">
-        <div class="flex justify-between items-center px-1">
-            <h3 class="font-serif text-sm font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
-                <span>🎰</span> Salón de Fortuna y Azar
-            </h3>
-            <span class="text-[10px] text-vip-text/50 uppercase">Tope máx: 100 🪙</span>
-        </div>
-
-        <div class="grid grid-cols-3 gap-2.5">
+    <div class="grid grid-cols-2 gap-2.5">
             <!-- 1. Ruleta Imperial -->
             <button type="button" onclick="universalNav('/economy/casino/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-square cursor-pointer">
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-video cursor-pointer">
                 <span class="text-3xl pointer-events-none">🎡</span>
                 <div class="pointer-events-none">
-                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Ruleta</h4>
-                    <span class="text-[9px] text-yellow-400/80 font-mono">x1.95</span>
+                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Ruleta Real</h4>
+                    <span class="text-[9px] text-yellow-400/80 font-mono">x1.95 / x14</span>
                 </div>
             </button>
 
-            <!-- 2. Tragamonedas / Slots -->
+            <!-- 2. Minas del Reino (NUEVO) -->
+            <button type="button" onclick="universalNav('/economy/mines/')" 
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-video cursor-pointer border-2 border-yellow-500/50 shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+                <span class="text-3xl pointer-events-none">💣</span>
+                <div class="pointer-events-none">
+                    <h4 class="font-bold text-yellow-300 text-[11px] uppercase tracking-wider">Minas VIP</h4>
+                    <span class="text-[9px] text-yellow-400/80 font-mono">x20+ Retiro</span>
+                </div>
+            </button>
+
+            <!-- 3. Tragaperras / Slots -->
             <button type="button" onclick="universalNav('/economy/slots/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-purple-400/60 active:scale-95 transition-all aspect-square cursor-pointer">
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-purple-400/60 active:scale-95 transition-all aspect-video cursor-pointer">
                 <span class="text-3xl pointer-events-none">🍒</span>
                 <div class="pointer-events-none">
                     <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Tragaperras</h4>
-                    <span class="text-[9px] text-purple-300 font-mono">Jackpot</span>
+                    <span class="text-[9px] text-purple-300 font-mono">Jackpot x15</span>
                 </div>
             </button>
 
-            <!-- 3. Blackjack VIP -->
+            <!-- 4. Blackjack VIP -->
             <button type="button" onclick="universalNav('/economy/blackjack/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-vip-gold/60 active:scale-95 transition-all aspect-square cursor-pointer">
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-vip-gold/60 active:scale-95 transition-all aspect-video cursor-pointer">
                 <span class="text-3xl pointer-events-none">🃏</span>
                 <div class="pointer-events-none">
                     <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Blackjack</h4>
@@ -120,7 +121,6 @@
                 </div>
             </button>
         </div>
-    </div>
 
 </div>
 
