@@ -7,7 +7,7 @@
     <div class="flex justify-between items-center px-1 border-b border-vip-gold/30 pb-3">
         <div>
             <h2 class="text-lg font-bold font-serif text-yellow-400 tracking-wide">⚙️ Gestión de Photocards</h2>
-            <p class="text-xs text-vip-text/60">Panel de Administración de Cajas y Diseños</p>
+            <p class="text-xs text-vip-text/60">Crear, editar y eliminar cajas y cartas</p>
         </div>
         <button type="button" onclick="universalNav('{% url 'idols:photocard_boxes' %}')" 
            class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
@@ -24,10 +24,17 @@
         {% endfor %}
     {% endif %}
 
-    <!-- FORMULARIO 1: SUBIR NUEVA PHOTOCARD DE CANVA -->
-    <div class="vip-panel p-5 border border-purple-500/50 rounded-3xl shadow-xl">
-        <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-500/20 pb-2 mb-3">
-            <span>🎴</span> Subir Diseño de Canva (Photocard)
+    <!-- PESTAÑAS DEL PANEL -->
+    <div class="grid grid-cols-3 gap-1.5 p-1 bg-black/60 border border-vip-gold/20 rounded-xl text-[11px] font-bold uppercase text-center">
+        <button type="button" onclick="switchTab('subir')" id="tab-btn-subir" class="py-2 rounded-lg bg-vip-gold text-black">Subir Carta</button>
+        <button type="button" onclick="switchTab('cajas')" id="tab-btn-cajas" class="py-2 rounded-lg text-stone-400 hover:text-white">Cajas ({{ boxes.count }})</button>
+        <button type="button" onclick="switchTab('cartas')" id="tab-btn-cartas" class="py-2 rounded-lg text-stone-400 hover:text-white">Inventario ({{ all_cards.count }})</button>
+    </div>
+
+    <!-- SECCIÓN 1: SUBIR NUEVA PHOTOCARD (CANVA + CUALQUIER IDOL K-POP) -->
+    <div id="tab-subir" class="vip-panel p-5 border border-purple-500/50 rounded-3xl shadow-xl flex flex-col gap-3">
+        <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-500/20 pb-2">
+            <span>🎴</span> Subir Diseño de Canva
         </h3>
 
         <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
@@ -36,34 +43,49 @@
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Caja de Destino *</label>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Caja Destino *</label>
                 <select name="box_id" required class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
                     {% for b in boxes %}
                         <option value="{{ b.id }}">{{ b.name }} ({{ b.price }} 🪙)</option>
                     {% empty %}
-                        <option value="">-- Primero crea una caja abajo --</option>
+                        <option value="">-- Primero crea una caja en la pestaña 'Cajas' --</option>
                     {% endfor %}
                 </select>
             </div>
 
+            <!-- LIBRE PARA CUALQUIER IDOL DEL K-POP CON DATALIST DE SUGERENCIAS -->
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Musa / Idol (Opcional)</label>
-                <select name="idol_id" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
-                    <option value="">-- Photocard General del Reino --</option>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Idol de K-Pop / Artista *</label>
+                <input type="text" name="idol_name" list="kpop-suggestions" required placeholder="Ej: Jennie, Karina, Wonyoung, Sana..."
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+                <datalist id="kpop-suggestions">
+                    <option value="Jennie (BLACKPINK)">
+                    <option value="Lisa (BLACKPINK)">
+                    <option value="Karina (aespa)">
+                    <option value="Winter (aespa)">
+                    <option value="Wonyoung (IVE)">
+                    <option value="Yujin (IVE)">
+                    <option value="Sana (TWICE)">
+                    <option value="Nayeon (TWICE)">
+                    <option value="Hanni (NewJeans)">
+                    <option value="Haerin (NewJeans)">
+                    <option value="Chaewon (LE SSERAFIM)">
+                    <option value="Kazuha (LE SSERAFIM)">
                     {% for idol in all_idols %}
-                        <option value="{{ idol.id }}">{{ idol.stage_name }} ({{ idol.group|default:"Solista" }})</option>
+                        <option value="{{ idol.stage_name }} (Rol)">
                     {% endfor %}
-                </select>
+                </datalist>
+                <span class="text-[10px] text-stone-500 mt-0.5 block">Puedes escribir libremente cualquier nombre de Idol del K-Pop.</span>
             </div>
 
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Carta *</label>
-                <input type="text" name="name" required placeholder="Ej: Scarlett - Vestido de Noche"
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre o Tema de la Carta *</label>
+                <input type="text" name="name" required placeholder="Ej: Traje de Gala, Sesión Roja, Special Holo..."
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
             </div>
 
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Rareza de la Carta *</label>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Rareza *</label>
                 <select name="rarity" required class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
                     <option value="common">⚪ Común (Gris - ~60% probabilidad)</option>
                     <option value="rare">🔵 Rara (Azul - ~25% probabilidad)</option>
@@ -79,51 +101,208 @@
             </div>
 
             <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
-                Subir Photocard a la Caja
+                Subir Photocard
             </button>
         </form>
     </div>
 
-    <!-- FORMULARIO 2: CREAR NUEVA CAJA -->
-    <div class="vip-panel p-5 border border-yellow-500/40 rounded-3xl shadow-xl">
-        <h3 class="font-serif text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-yellow-500/20 pb-2 mb-3">
-            <span>📦</span> Crear Nueva Caja de Criptas
-        </h3>
+    <!-- SECCIÓN 2: GESTIÓN DE CAJAS (CREAR, EDITAR, PAUSAR, ELIMINAR) -->
+    <div id="tab-cajas" class="hidden flex flex-col gap-3.5">
+        <!-- Formulario Crear Caja -->
+        <div class="vip-panel p-5 border border-yellow-500/40 rounded-3xl shadow-xl">
+            <h3 class="font-serif text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-yellow-500/20 pb-2 mb-3">
+                <span>📦</span> Crear Nueva Caja
+            </h3>
+            <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_box">
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
-        <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="create_box">
-            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <div>
+                    <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Caja *</label>
+                    <input type="text" name="name" required placeholder="Ej: Colección K-Pop Queens" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2 text-xs text-white">
+                </div>
+                <div>
+                    <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Descripción</label>
+                    <input type="text" name="description" placeholder="Temática de la caja..." class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2 text-xs text-white">
+                </div>
+                <div>
+                    <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Precio en Oro (🪙) *</label>
+                    <input type="number" name="price" min="10" value="50" required class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2 text-xs text-white font-mono font-bold">
+                </div>
+                <div>
+                    <label class="block text-[11px] text-stone-300 uppercase font-bold mb-1">Portada de Caja (Opcional)</label>
+                    <input type="file" name="cover_image" accept="image/*" class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-2.5 file:rounded file:bg-purple-900 file:text-white cursor-pointer">
+                </div>
+                <button type="submit" class="bg-yellow-600 hover:bg-yellow-500 text-black py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">Crear Caja</button>
+            </form>
+        </div>
 
-            <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Caja *</label>
-                <input type="text" name="name" required placeholder="Ej: Colección Noche de Gala"
-                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+        <!-- Lista de Cajas Existentes con Edición / Borrado -->
+        <div class="flex flex-col gap-2">
+            <h4 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1">Cajas Existentes</h4>
+            {% for b in boxes %}
+            <div class="bg-black/60 border border-vip-gold/30 p-3.5 rounded-2xl flex flex-col gap-2 shadow">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h4 class="text-xs font-black text-white">{{ b.name }}</h4>
+                        <span class="text-[10px] text-yellow-400 font-mono font-bold">{{ b.price }} 🪙 • {{ b.cards.count }} cartas</span>
+                    </div>
+                    <form method="POST" class="m-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="toggle_box">
+                        <input type="hidden" name="box_id" value="{{ b.id }}">
+                        <button type="submit" class="text-[10px] font-bold px-2 py-0.5 rounded-full border {% if b.is_active %}bg-emerald-950 text-emerald-300 border-emerald-500{% else %}bg-stone-900 text-stone-400 border-stone-700{% endif %}">
+                            {% if b.is_active %}Activa{% else %}Pausada{% endif %}
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Formulario de Edición Rápida -->
+                <details class="text-xs bg-black/40 p-2.5 rounded-xl border border-white/10">
+                    <summary class="cursor-pointer text-vip-gold font-bold">✏️ Editar Caja</summary>
+                    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="edit_box">
+                        <input type="hidden" name="box_id" value="{{ b.id }}">
+                        
+                        <input type="text" name="name" value="{{ b.name }}" required class="bg-black border border-white/20 p-1.5 rounded text-xs text-white">
+                        <input type="number" name="price" value="{{ b.price }}" required class="bg-black border border-white/20 p-1.5 rounded text-xs text-yellow-300 font-mono">
+                        <input type="text" name="description" value="{{ b.description }}" class="bg-black border border-white/20 p-1.5 rounded text-xs text-white">
+                        <input type="file" name="cover_image" accept="image/*" class="text-[10px] text-stone-400">
+
+                        <button type="submit" class="btn-gold py-1.5 rounded text-xs font-bold uppercase mt-1">Guardar Cambios</button>
+                    </form>
+                </details>
+
+                <!-- Borrar Caja -->
+                <form method="POST" class="m-0 self-end" onsubmit="return confirm('¿Seguro que deseas eliminar la caja {{ b.name }} y todas sus cartas?')">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_box">
+                    <input type="hidden" name="box_id" value="{{ b.id }}">
+                    <button type="submit" class="text-rose-400 hover:text-rose-300 text-[10px] uppercase font-bold">🗑️ Eliminar Caja</button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- SECCIÓN 3: INVENTARIO DE PHOTOCARDS (EDITAR Y ELIMINAR CARTAS) -->
+    <div id="tab-cartas" class="hidden flex flex-col gap-2.5">
+        <h4 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1">Todas las Photocards Subidas</h4>
+        {% for c in all_cards %}
+        <div class="bg-black/60 border border-vip-gold/30 p-3 rounded-2xl flex items-center justify-between gap-3 shadow">
+            
+            <div class="flex items-center gap-3 min-w-0">
+                <img src="{{ c.image.url }}" class="w-12 h-16 object-cover rounded-xl border flex-shrink-0" style="border-color: {{ c.get_color_hex }};">
+                <div class="flex flex-col min-w-0">
+                    <span class="text-xs font-black text-white truncate">{{ c.name }}</span>
+                    <span class="text-[11px] text-yellow-400 font-bold truncate">Idol: {{ c.display_idol_name }}</span>
+                    <span class="text-[9px] font-mono" style="color: {{ c.get_color_hex }};">{{ c.get_rarity_display }} • {{ c.box.name }}</span>
+                </div>
             </div>
 
-            <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Descripción / Temática</label>
-                <textarea name="description" rows="2" placeholder="Describe qué tipo de cartas contiene..."
-                          class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white resize-none"></textarea>
+            <!-- Botones de Acción -->
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+                <!-- Modal trigger para editar carta -->
+                <button type="button" onclick="openEditCardModal({{ c.id }}, '{{ c.name|escapejs }}', '{{ c.display_idol_name|escapejs }}', '{{ c.rarity }}', {{ c.box.id }})" 
+                        class="text-xs bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 px-2 py-1 rounded-lg font-bold" title="Editar">
+                    ✏️
+                </button>
+
+                <form method="POST" class="m-0" onsubmit="return confirm('¿Eliminar la carta {{ c.name }}?')">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_card">
+                    <input type="hidden" name="card_id" value="{{ c.id }}">
+                    <button type="submit" class="text-xs bg-rose-950 border border-rose-500 text-rose-300 px-2 py-1 rounded-lg font-bold" title="Eliminar">
+                        🗑️
+                    </button>
+                </form>
             </div>
 
-            <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Costo de Apertura en Oro (🪙) *</label>
-                <input type="number" name="price" min="10" value="50" required
-                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white font-mono font-bold">
-            </div>
-
-            <div class="bg-black/40 p-3 rounded-xl border border-vip-gold/20 flex flex-col gap-1">
-                <label class="block text-[11px] text-stone-300 uppercase font-bold">Imagen de la Caja (Opcional)</label>
-                <input type="file" name="cover_image" accept="image/*"
-                       class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-purple-900 file:text-purple-200 cursor-pointer">
-            </div>
-
-            <button type="submit" class="bg-yellow-600 hover:bg-yellow-500 text-black py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
-                Crear Caja
-            </button>
-        </form>
+        </div>
+        {% empty %}
+        <p class="text-center text-xs text-stone-500 py-6">No hay cartas subidas aún.</p>
+        {% endfor %}
     </div>
 
 </div>
+
+<!-- MODAL FLOTANTE PARA EDITAR PHOTOCARD -->
+<div id="edit-card-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="vip-panel p-5 max-w-sm w-full border border-yellow-400/60 rounded-3xl relative">
+        <button onclick="closeEditCardModal()" class="absolute top-3 right-3 text-stone-400 hover:text-white text-xl">&times;</button>
+        <h4 class="font-serif text-sm font-black text-yellow-400 uppercase tracking-wider mb-2">Editar Photocard</h4>
+
+        <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="edit_card">
+            <input type="hidden" name="card_id" id="modal-card-id">
+
+            <div>
+                <label class="block text-[10px] text-vip-gold uppercase font-bold mb-0.5">Caja</label>
+                <select name="box_id" id="modal-box-id" required class="w-full bg-black border border-white/20 p-2 rounded text-xs text-white">
+                    {% for b in boxes %}
+                        <option value="{{ b.id }}">{{ b.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-[10px] text-vip-gold uppercase font-bold mb-0.5">Idol de K-Pop</label>
+                <input type="text" name="idol_name" id="modal-idol-name" required class="w-full bg-black border border-white/20 p-2 rounded text-xs text-white">
+            </div>
+
+            <div>
+                <label class="block text-[10px] text-vip-gold uppercase font-bold mb-0.5">Nombre de Carta</label>
+                <input type="text" name="name" id="modal-card-name" required class="w-full bg-black border border-white/20 p-2 rounded text-xs text-white">
+            </div>
+
+            <div>
+                <label class="block text-[10px] text-vip-gold uppercase font-bold mb-0.5">Rareza</label>
+                <select name="rarity" id="modal-card-rarity" required class="w-full bg-black border border-white/20 p-2 rounded text-xs text-white">
+                    <option value="common">⚪ Común</option>
+                    <option value="rare">🔵 Rara</option>
+                    <option value="epic">🟣 Épica</option>
+                    <option value="legendary">👑 Legendaria</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-[10px] text-stone-400 uppercase mb-0.5">Sustituir Imagen (Opcional)</label>
+                <input type="file" name="image" accept="image/*" class="text-xs text-stone-300">
+            </div>
+
+            <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase mt-1">Guardar Cambios</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function switchTab(tab) {
+        document.getElementById('tab-subir').classList.add('hidden');
+        document.getElementById('tab-cajas').classList.add('hidden');
+        document.getElementById('tab-cartas').classList.add('hidden');
+
+        document.getElementById('tab-btn-subir').className = "py-2 rounded-lg text-stone-400 hover:text-white";
+        document.getElementById('tab-btn-cajas').className = "py-2 rounded-lg text-stone-400 hover:text-white";
+        document.getElementById('tab-btn-cartas').className = "py-2 rounded-lg text-stone-400 hover:text-white";
+
+        document.getElementById(`tab-${tab}`).classList.remove('hidden');
+        document.getElementById(`tab-btn-${tab}`).className = "py-2 rounded-lg bg-vip-gold text-black font-bold";
+    }
+
+    function openEditCardModal(cardId, name, idolName, rarity, boxId) {
+        document.getElementById('modal-card-id').value = cardId;
+        document.getElementById('modal-card-name').value = name;
+        document.getElementById('modal-idol-name').value = idolName;
+        document.getElementById('modal-card-rarity').value = rarity;
+        document.getElementById('modal-box-id').value = boxId;
+        document.getElementById('edit-card-modal').classList.remove('hidden');
+    }
+
+    function closeEditCardModal() {
+        document.getElementById('edit-card-modal').classList.add('hidden');
+    }
+</script>
 {% endblock %}

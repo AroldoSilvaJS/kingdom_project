@@ -253,7 +253,8 @@ class Photocard(models.Model):
     ]
 
     box = models.ForeignKey(PhotocardBox, on_delete=models.CASCADE, related_name='cards', verbose_name="Caja a la que pertenece")
-    idol = models.ForeignKey(IdolProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='photocards', verbose_name="Musa / Idol")
+    idol = models.ForeignKey(IdolProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='photocards', verbose_name="Musa del Rol (Opcional)")
+    idol_name = models.CharField("Idol de K-Pop / Artista", max_length=100, default='', blank=True) # 👈 LIBRE PARA CUALQUIER IDOL
     name = models.CharField("Nombre de la Carta", max_length=100)
     rarity = models.CharField("Rareza", max_length=20, choices=RARITY_CHOICES, default='common')
     image = models.ImageField("Imagen Photocard (Canva)", upload_to='photocards/')
@@ -266,11 +267,19 @@ class Photocard(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"[{self.get_rarity_display()}] {self.name}"
+        return f"[{self.get_rarity_display()}] {self.name} - {self.display_idol_name}"
+
+    @property
+    def display_idol_name(self):
+        if self.idol_name and self.idol_name.strip():
+            return self.idol_name.strip()
+        if self.idol:
+            return self.idol.stage_name
+        return "K-Pop Idol"
 
     def get_color_hex(self):
         mapping = {
-            'common': '#9ca3af',      # Gris/Plata
+            'common': '#9ca3af',      # Gris
             'rare': '#3b82f6',        # Azul CS
             'epic': '#a855f7',        # Púrpura CS
             'legendary': '#eab308',   # Dorado Legendario
