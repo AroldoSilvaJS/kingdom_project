@@ -158,7 +158,7 @@
                 </div>
             </form>
 
-            <!-- 2. Proponer Intercambio Directo -->
+            <!-- 2. Proponer Intercambio Directo con Selector de Miembros -->
             <form id="trade-form" method="POST" action="" class="bg-black/60 p-3 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
@@ -167,10 +167,23 @@
                     <span>🤝</span> Proponer Intercambio
                 </span>
 
-                <input type="text" name="target_user" required placeholder="Escribe el @usuario o Telegram ID del noble..." 
-                       class="w-full bg-black border border-purple-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-500">
+                <!-- SELECTOR DESPLEGABLE INTELIGENTE -->
+                <div>
+                    <label class="block text-[10px] text-stone-400 text-left mb-1">¿A quién se la ofreces?</label>
+                    <select name="target_user" required class="w-full bg-black border border-purple-500/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-purple-400">
+                        <option value="open">📢 Publicar Intercambio Abierto (Cualquiera en el Reino)</option>
+                        
+                        <optgroup label="── Miembros y Musas del Reino ──">
+                            {% for m in members %}
+                                <option value="{{ m.telegram_user_id }}">
+                                    👤 {{ m.username|default:"Noble" }} (Lvl {{ m.level }} • {{ m.title|default:"Clandestino" }})
+                                </option>
+                            {% endfor %}
+                        </optgroup>
+                    </select>
+                </div>
                 
-                <button type="submit" class="bg-purple-900 hover:bg-purple-800 border border-purple-500 text-white py-2 rounded-xl text-xs font-bold uppercase shadow">
+                <button type="submit" class="btn-gold py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow">
                     Enviar Propuesta
                 </button>
             </form>

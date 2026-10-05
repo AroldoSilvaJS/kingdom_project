@@ -818,13 +818,20 @@ def my_photocards_album(request):
     legendaries = user_cards.filter(photocard__rarity='legendary').count()
     epics = user_cards.filter(photocard__rarity='epic').count()
 
+    # 👈 Lista de todos los miembros del Reino para elegir sin saberse su ID
+    members = UserProfile.objects.exclude(
+        telegram_user_id=tg_id
+    ).order_by('-level')[:60]
+
     return render(request, 'idols/photocards_album.html', {
         'tg_id': tg_id,
         'user_cards': user_cards,
         'total': total,
         'legendaries': legendaries,
         'epics': epics,
+        'members': members,
     })
+
 
 
 def admin_photocards_manage(request):
@@ -938,24 +945,21 @@ def photocards_market(request):
 
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-    # Cartas de otros usuarios a la venta
     market_cards = UserPhotocard.objects.filter(
         is_for_sale=True
     ).exclude(telegram_user_id=tg_id).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at')
 
-    # Mis cartas actualmente a la venta
     my_sales = UserPhotocard.objects.filter(
         telegram_user_id=tg_id,
         is_for_sale=True
     ).select_related('photocard')
 
-    # Ofertas de intercambio recibidas pendientes
+    # Muestra ofertas dirigidas a ti O intercambios abiertos para cualquiera en el Reino
     received_trades = PhotocardTrade.objects.filter(
-        receiver_telegram_id=tg_id,
+        Q(receiver_telegram_id=tg_id) | Q(receiver_telegram_id=0),
         status='pending'
-    ).select_related('sender_card__photocard', 'receiver_card__photocard').order_by('-created_at')
+    ).exclude(sender_telegram_id=tg_id).select_related('sender_card__photocard', 'receiver_card__photocard').order_by('-created_at')
 
-    # Ofertas de intercambio enviadas pendientes
     sent_trades = PhotocardTrade.objects.filter(
         sender_telegram_id=tg_id,
         status='pending'
@@ -969,7 +973,6 @@ def photocards_market(request):
         'received_trades': received_trades,
         'sent_trades': sent_trades,
     })
-
 
 # 6. ACCIÓN DE PONER EN VENTA O CANCELAR VENTA
 def photocard_sell_action(request, user_card_id):
@@ -1073,26 +1076,30 @@ def create_trade_offer(request, user_card_id):
         receiver_id = None
         receiver_name = 'Noble'
 
-        # Buscar usuario destinatario por @username o por ID numérico
-        if target_raw.isdigit():
+        # Si eligió la opción "Intercambio Abierto"
+        if target_raw == 'open':
+            receiver_id = 0
+            receiver_name = 'Cualquier Miembro del Reino'
+        elif target_raw.isdigit():
+            # Si eligió un usuario de la lista desplegable por su ID
             receiver_id = int(target_raw)
             p = UserProfile.objects.filter(telegram_user_id=receiver_id).first()
             if p and p.username: receiver_name = p.username
         else:
+            # Búsqueda libre por texto
             clean_at = target_raw if target_raw.startswith('@') else f"@{target_raw}"
             p = UserProfile.objects.filter(username__iexact=clean_at).first()
             if p:
                 receiver_id = p.telegram_user_id
                 receiver_name = p.username
 
-        if not receiver_id or receiver_id == tg_id:
-            messages.error(request, "No se encontró al usuario destinatario o ingresaste tu propio ID.")
+        if receiver_id is None or receiver_id == tg_id:
+            messages.error(request, "Debes seleccionar a un destinatario válido de la lista.")
             return redirect('/idols/photocards/album/')
 
         sender_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
         s_name = sender_profile.username if (sender_profile and sender_profile.username) else f"Noble_{tg_id}"
 
-        # Crear Trade
         trade = PhotocardTrade.objects.create(
             sender_telegram_id=tg_id,
             sender_username=s_name,
@@ -1102,24 +1109,25 @@ def create_trade_offer(request, user_card_id):
             status='pending'
         )
 
-        # Avisar a Telegram al destinatario con botón directo
-        send_telegram_msg(
-            chat_id=receiver_id,
-            text=(
-                f"🤝 <b>¡Nueva Oferta de Intercambio de Photocards!</b>\n\n"
-                f"👤 <b>De:</b> {s_name}\n"
-                f"🎴 <b>Te ofrece:</b> <i>«{sender_card.photocard.name}»</i> ({sender_card.photocard.get_rarity_display()})\n\n"
-                f"Ingresa a tu Mercado para aceptar o rechazar el intercambio."
-            ),
-            button_text="🤝 Revisar Oferta",
-            button_url=f"https://kingdom-pleasure-app.onrender.com/idols/photocards/market/?tg_id={receiver_id}"
-        )
+        if receiver_id != 0:
+            send_telegram_msg(
+                chat_id=receiver_id,
+                text=(
+                    f"🤝 <b>¡Nueva Oferta de Intercambio de Photocards!</b>\n\n"
+                    f"👤 <b>De:</b> {s_name}\n"
+                    f"🎴 <b>Te ofrece:</b> <i>«{sender_card.photocard.name}»</i> ({sender_card.photocard.get_rarity_display()})\n\n"
+                    f"Ingresa a tu Mercado para revisar y aceptar el intercambio."
+                ),
+                button_text="🤝 Revisar Oferta",
+                button_url=f"https://kingdom-pleasure-app.onrender.com/idols/photocards/market/?tg_id={receiver_id}"
+            )
+            messages.success(request, f"🤝 Propuesta enviada directamente a {receiver_name}.")
+        else:
+            messages.success(request, "📢 ¡Tu carta ha sido publicada en el Tablón de Intercambios del Mercado para cualquiera!")
 
-        messages.success(request, f"🤝 Propuesta enviada a {receiver_name}. Se le notificó por Telegram.")
         return redirect('/idols/photocards/market/')
 
     return redirect('/idols/photocards/album/')
-
 
 # 9. ACEPTAR O RECHAZAR INTERCAMBIO
 def handle_trade_offer(request, trade_id, action):
