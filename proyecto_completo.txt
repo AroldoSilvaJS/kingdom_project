@@ -2028,8 +2028,8 @@ urlpatterns = [
     path('admin-panel/', views.admin_panel, name='admin_panel'),
     path('salon-de-la-fama/', views.leaderboard, name='leaderboard'),
     path('profile/', views.my_profile, name='my_profile'),
-    # 👈 RUTA PARA EL BOT DE TELEGRAM:
     path('telegram-webhook/', views.telegram_webhook, name='telegram_webhook'),
+    path('buzon/', views.notifications_inbox, name='inbox'),
 ]
 
 ==================================================
@@ -2539,6 +2539,186 @@ def telegram_webhook(request):
             print(f"⚠️ Error procesando webhook: {e}")
 
     return HttpResponse("OK")
+
+
+def notifications_inbox(request):
+    tg_id = resolve_secure_tg_id(request)
+    role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+    if not role_obj:
+        return redirect(f'/choose-role/?tg_id={tg_id}')
+
+    has_idols_created = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
+    is_idol = (role_obj.role == 'idol') or has_idols_created or (str(tg_id) == ADMIN_TG_ID and has_idols_created)
+    user_profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    
+    from idols.models import Review, PostComment
+    notifications = []
+    
+    # 1. Decreto Imperial global (para ambos roles)
+    broadcast_msg = KingdomSetting.get_val('broadcast_message', '')
+    broadcast_active = KingdomSetting.get_val('broadcast_active', 'false') == 'true'
+    if broadcast_active and broadcast_msg:
+        notifications.append({
+            'type': 'decree',
+            'icon': '📢',
+            'title': 'Decreto de la Corona',
+            'detail': broadcast_msg,
+            'time': timezone.now(),
+            'badge': 'Imperial',
+            'badge_color': 'bg-amber-500/20 text-yellow-300 border-amber-500/40',
+            'cta_url': '/',
+            'cta_text': 'Entendido'
+        })
+
+    if is_idol:
+        # --- BUZÓN DE LA MUSA / IDOL ---
+        # A. Peticiones de antojo
+        antojos = CustomRequest.objects.filter(idol__telegram_user_id=tg_id).select_related('idol').order_by('-created_at')[:20]
+        for ant in antojos:
+            if ant.status == 'pending':
+                title = f"Nuevo antojo de {ant.client_username}"
+                detail = f"Ofrece +{ant.bounty} 🪙 por: «{ant.description}» para tu Musa {ant.idol.stage_name}."
+                badge = 'Pendiente'
+                b_color = 'bg-rose-950 text-rose-300 border-rose-600 animate-pulse'
+                cta_url = '/idols/'
+                cta_text = 'Atender'
+            elif ant.status == 'accepted':
+                title = f"Antojo completado y cobrado"
+                detail = f"Cobraste +{ant.bounty} 🪙 por tu entrega a {ant.client_username}."
+                badge = 'Completado'
+                b_color = 'bg-emerald-950 text-emerald-300 border-emerald-500'
+                cta_url = '/idols/'
+                cta_text = 'Ver Panel'
+            else:
+                title = f"Antojo cancelado / rechazado"
+                detail = f"Rechazaste la petición de {ant.client_username} ({ant.bounty} 🪙 devueltos)."
+                badge = 'Rechazado'
+                b_color = 'bg-stone-900 text-stone-400 border-stone-700'
+                cta_url = '/idols/'
+                cta_text = 'Ver Fichas'
+                
+            notifications.append({
+                'type': 'antojo',
+                'icon': '📬',
+                'title': title,
+                'detail': detail,
+                'time': ant.created_at,
+                'badge': badge,
+                'badge_color': b_color,
+                'cta_url': cta_url,
+                'cta_text': cta_text
+            })
+
+        # B. Ventas de fotos VIP en KingdomFans
+        unlocks = PostUnlock.objects.filter(post__idol__telegram_user_id=tg_id).select_related('post', 'post__idol').order_by('-unlocked_at')[:20]
+        for unl in unlocks:
+            rate = user_profile.idol_commission_rate
+            neto = int(unl.post.price * rate)
+            notifications.append({
+                'type': 'sale',
+                'icon': '💎',
+                'title': f"Venta VIP: {unl.post.idol.stage_name}",
+                'detail': f"Un noble desbloqueó tu foto VIP por {unl.post.price} 🪙. Ganaste +{neto} 🪙 netos.",
+                'time': unl.unlocked_at,
+                'badge': 'Venta Fans',
+                'badge_color': 'bg-purple-950 text-purple-300 border-purple-500/50',
+                'cta_url': '/economy/wallet/',
+                'cta_text': 'Ver Bóveda'
+            })
+
+        # C. Reseñas y Calificaciones recibidas
+        reviews = Review.objects.filter(idol__telegram_user_id=tg_id).select_related('idol').order_by('-created_at')[:10]
+        for rev in reviews:
+            notifications.append({
+                'type': 'review',
+                'icon': '⭐',
+                'title': f"Reseña de {rev.rating}★ para {rev.idol.stage_name}",
+                'detail': f"{rev.client_username}: «{rev.comment}»",
+                'time': rev.created_at,
+                'badge': f'{rev.rating}★',
+                'badge_color': 'bg-yellow-950 text-yellow-300 border-yellow-500/50',
+                'cta_url': f'/idols/{rev.idol.id}/',
+                'cta_text': 'Ver Perfil'
+            })
+
+        # D. Comentarios en el Muro
+        comments = PostComment.objects.filter(post__idol__telegram_user_id=tg_id).exclude(author_telegram_id=tg_id).select_related('post', 'post__idol').order_by('-created_at')[:10]
+        for com in comments:
+            notifications.append({
+                'type': 'comment',
+                'icon': '💬',
+                'title': f"Comentario para {com.post.idol.stage_name}",
+                'detail': f"{com.author_name}: «{com.text}»",
+                'time': com.created_at,
+                'badge': 'Muro',
+                'badge_color': 'bg-blue-950 text-blue-300 border-blue-500/40',
+                'cta_url': f'/idols/feed/#post-{com.post.id}',
+                'cta_text': 'Ver Post'
+            })
+
+    else:
+        # --- BUZÓN DEL NOBLE / CLIENTE ---
+        # A. Estado de sus antojos solicitados
+        mis_antojos = CustomRequest.objects.filter(client_telegram_id=tg_id).select_related('idol').order_by('-created_at')[:20]
+        for ant in mis_antojos:
+            if ant.status == 'accepted':
+                title = f"¡Tu antojo de {ant.idol.stage_name} fue entregado!"
+                detail = f"La foto exclusiva solicitada («{ant.description}») ya está lista para verse."
+                badge = 'Foto Lista'
+                b_color = 'bg-emerald-950 text-emerald-300 border-emerald-500'
+                cta_url = '/idols/collection/'
+                cta_text = 'Abrir Colección'
+            elif ant.status == 'rejected':
+                title = f"Antojo rechazado ({ant.idol.stage_name})"
+                detail = f"La Musa no pudo atenderlo. Se te devolvieron los {ant.bounty} 🪙 a tu Bóveda."
+                badge = 'Reembolsado'
+                b_color = 'bg-amber-950 text-amber-300 border-amber-500'
+                cta_url = '/economy/wallet/'
+                cta_text = 'Ver Saldo'
+            else:
+                title = f"Antojo en preparación ({ant.idol.stage_name})"
+                detail = f"Recompensa de {ant.bounty} 🪙 en custodia. La Idol está atendiendo tu pedido."
+                badge = 'En Espera'
+                b_color = 'bg-purple-950 text-purple-300 border-purple-500'
+                cta_url = f'/idols/{ant.idol.id}/'
+                cta_text = 'Ver Idol'
+
+            notifications.append({
+                'type': 'antojo',
+                'icon': '🔞' if ant.status == 'accepted' else '⏳',
+                'title': title,
+                'detail': detail,
+                'time': ant.created_at,
+                'badge': badge,
+                'badge_color': b_color,
+                'cta_url': cta_url,
+                'cta_text': cta_text
+            })
+
+        # B. Compras VIP desbloqueadas
+        unlocks = PostUnlock.objects.filter(client_telegram_id=tg_id).select_related('post', 'post__idol').order_by('-unlocked_at')[:15]
+        for unl in unlocks:
+            notifications.append({
+                'type': 'unlock',
+                'icon': '💎',
+                'title': f"Contenido VIP de {unl.post.idol.stage_name}",
+                'detail': f"Desbloqueaste esta publicación privada por {unl.post.price} 🪙.",
+                'time': unl.unlocked_at,
+                'badge': 'Desbloqueado',
+                'badge_color': 'bg-purple-950 text-purple-300 border-purple-500/50',
+                'cta_url': '/idols/collection/',
+                'cta_text': 'Ver Foto'
+            })
+
+    # Ordenar cronológicamente (más recientes arriba)
+    notifications.sort(key=lambda x: x['time'], reverse=True)
+
+    return render(request, 'core/inbox.html', {
+        'tg_id': tg_id,
+        'is_idol': is_idol,
+        'notifications': notifications,
+        'total_notif': len(notifications)
+    })
 
 ==================================================
 ARCHIVO: .\core\__init__.py
@@ -3372,6 +3552,73 @@ class PostComment(models.Model):
     def __str__(self):
         return f"Comentario de {self.author_name} en Post #{self.post.id}"
 
+
+    # --- SISTEMA DE PHOTOCARDS Y CAJAS CS ---
+
+class PhotocardBox(models.Model):
+    name = models.CharField("Nombre de la Caja", max_length=100)
+    description = models.TextField("Descripción / Temática", max_length=300)
+    price = models.PositiveIntegerField("Costo de Apertura (🪙)", default=50)
+    cover_image = models.ImageField("Portada de la Caja", upload_to='photocard_boxes/', blank=True, null=True)
+    is_active = models.BooleanField("¿Activa para abrir?", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Caja de Photocards"
+        verbose_name_plural = "Cajas de Photocards"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.price} 🪙)"
+
+
+class Photocard(models.Model):
+    RARITY_CHOICES = [
+        ('common', 'Común ⚪'),
+        ('rare', 'Rara 🔵'),
+        ('epic', 'Épica 🟣'),
+        ('legendary', 'Legendaria 👑'),
+    ]
+
+    box = models.ForeignKey(PhotocardBox, on_delete=models.CASCADE, related_name='cards', verbose_name="Caja a la que pertenece")
+    idol = models.ForeignKey(IdolProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='photocards', verbose_name="Musa / Idol")
+    name = models.CharField("Nombre de la Carta", max_length=100)
+    rarity = models.CharField("Rareza", max_length=20, choices=RARITY_CHOICES, default='common')
+    image = models.ImageField("Imagen Photocard (Canva)", upload_to='photocards/')
+    created_by_tg_id = models.BigIntegerField("ID del Admin Creador")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Photocard"
+        verbose_name_plural = "Photocards"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.get_rarity_display()}] {self.name}"
+
+    def get_color_hex(self):
+        mapping = {
+            'common': '#9ca3af',      # Gris/Plata
+            'rare': '#3b82f6',        # Azul CS
+            'epic': '#a855f7',        # Púrpura CS
+            'legendary': '#eab308',   # Dorado Legendario
+        }
+        return mapping.get(self.rarity, '#9ca3af')
+
+
+class UserPhotocard(models.Model):
+    telegram_user_id = models.BigIntegerField("ID del Dueño (Idol o Noble)", db_index=True)
+    photocard = models.ForeignKey(Photocard, on_delete=models.CASCADE, related_name='owners')
+    obtained_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Photocard de Usuario"
+        verbose_name_plural = "Photocards de Usuarios"
+        ordering = ['-obtained_at']
+
+    def __str__(self):
+        return f"{self.telegram_user_id} tiene {self.photocard.name}"
+
 ==================================================
 ARCHIVO: .\idols\tests.py
 ==================================================
@@ -3422,15 +3669,19 @@ from django.contrib import messages
 
 from .models import IdolProfile, Review, Post, PostUnlock, PostLike, CustomRequest, PostComment
 from economy.models import Wallet
-from core.models import UserProfile
+from core.models import UserProfile, UserRole
 from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
-from core.models import UserRole
 
 
 def resolve_safe_tg(request):
-    raw_id = request.POST.get('tg_id') or request.GET.get('tg_id') or request.session.get('tg_id')
+    raw_id = (
+        request.POST.get('tg_id') or 
+        request.GET.get('tg_id') or 
+        request.COOKIES.get('tg_id') or 
+        request.session.get('tg_id')
+    )
     if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null']:
         try:
             val = int(raw_id)
@@ -3488,11 +3739,16 @@ def idol_list(request):
                 req_obj.status = 'rejected'
                 req_obj.save()
                 
+                # Aviso con botón a la Bóveda del Cliente
                 send_telegram_msg(
-                    req_obj.client_telegram_id,
-                    f"⚠️ <b>Petición de Antojo Rechazada</b>\n"
-                    f"{req_obj.idol.stage_name} no pudo atender tu petición en este momento.\n"
-                    f"Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos a tu Bóveda."
+                    chat_id=req_obj.client_telegram_id,
+                    text=(
+                        f"⚠️ <b>Petición de Antojo Rechazada</b>\n\n"
+                        f"{req_obj.idol.stage_name} no pudo atender tu deseo en este momento.\n"
+                        f"Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos intactos a tu Bóveda."
+                    ),
+                    button_text="🪙 Revisar Mi Bóveda",
+                    button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={req_obj.client_telegram_id}"
                 )
                 messages.info(request, f"Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al cliente.")
                 
@@ -3509,13 +3765,19 @@ def idol_list(request):
                     idol_wallet.add_funds(req_obj.bounty)
                     grant_user_xp(request, tg_id, 40, reason="Entrega de Antojo")
                     
+                    # Notificación al cliente con botón directo a la Colección
                     send_telegram_msg(
-                        req_obj.client_telegram_id,
-                        f"🔥 <b>¡Tu Antojo ha sido entregado!</b>\n"
-                        f"{req_obj.idol.stage_name} ha subido tu foto exclusiva solicitada.\n"
-                        f"Ya puedes verla en tu Colección Privada."
+                        chat_id=req_obj.client_telegram_id,
+                        text=(
+                            f"🔥 <b>¡Tu Antojo ha sido entregado!</b> 🔞\n\n"
+                            f"🌹 <b>Musa:</b> {req_obj.idol.stage_name}\n"
+                            f"📝 <b>Petición:</b> <i>«{req_obj.description}»</i>\n\n"
+                            f"La foto exclusiva ya se encuentra guardada en tu Colección Privada para siempre."
+                        ),
+                        button_text="💎 Ver Mi Colección Privada",
+                        button_url=f"https://kingdom-pleasure-app.onrender.com/idols/collection/?tg_id={req_obj.client_telegram_id}"
                     )
-                    messages.success(request, f"¡Antojo entregado con éxito! Recibiste +{req_obj.bounty} 🪙 en tu Bóveda (+40 EXP).")
+                    messages.success(request, f"¡Antojo entregado con éxito! Recibiste +{req_obj.bounty} 🪙 (+40 EXP).")
                     
             return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
     
@@ -3588,7 +3850,8 @@ def idol_edit(request, idol_id):
     tg_id = resolve_safe_tg(request)
     idol = get_object_or_404(IdolProfile, id=idol_id)
     
-    if tg_id != idol.telegram_user_id and str(tg_id) != '7474444797':
+    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    if tg_id != idol.telegram_user_id and not is_admin:
         messages.error(request, "No tienes permiso para editar esta Idol.")
         return redirect(f'/idols/?tg_id={tg_id}')
         
@@ -3690,11 +3953,17 @@ def idol_detail(request, idol_id):
                     grant_user_xp(request, tg_id, 25, reason="Reseña de Idol")
                     grant_user_xp(None, idol.telegram_user_id, 35 if rating_val == 5 else 20, reason="Calificación Recibida")
                     
+                    # Notificación a la Idol con botón directo
                     send_telegram_msg(
-                        idol.telegram_user_id,
-                        f"⭐ <b>¡Nueva Reseña para {idol.stage_name}!</b>\n"
-                        f"El noble <b>{tg_username}</b> te calificó con <b>{rating_val}★</b>:\n"
-                        f"<i>«{comment_val}»</i>"
+                        chat_id=idol.telegram_user_id,
+                        text=(
+                            f"⭐ <b>¡Nueva Reseña para {idol.stage_name}!</b>\n\n"
+                            f"👤 <b>Noble:</b> {tg_username}\n"
+                            f"✨ <b>Puntuación:</b> {rating_val}★\n"
+                            f"💬 <i>«{comment_val}»</i>"
+                        ),
+                        button_text=f"🌹 Ver Perfil de {idol.stage_name}",
+                        button_url=f"https://kingdom-pleasure-app.onrender.com/idols/{idol.id}/?tg_id={idol.telegram_user_id}"
                     )
                     messages.success(request, "¡Tu reseña fue publicada con éxito (+25 EXP)!")
                     return redirect(f'/idols/{idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
@@ -3740,11 +4009,11 @@ def social_feed(request):
         'is_admin': is_admin,
     })
 
+
 def delete_post(request, post_id):
     tg_id = resolve_safe_tg(request)
     post = get_object_or_404(Post, id=post_id)
     
-    from core.models import UserRole
     is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
     is_owner = (tg_id == post.idol.telegram_user_id)
 
@@ -3763,7 +4032,6 @@ def edit_post(request, post_id):
     tg_id = resolve_safe_tg(request)
     post = get_object_or_404(Post, id=post_id)
     
-    from core.models import UserRole
     is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
     is_owner = (tg_id == post.idol.telegram_user_id)
 
@@ -3835,11 +4103,22 @@ def unlock_post(request, post_id):
                 grant_user_xp(request, tg_id, precio_final, reason="Desbloqueo VIP")
                 grant_user_xp(None, post.idol.telegram_user_id, max(15, precio_final // 2), reason="Venta de Contenido VIP")
 
+                # Notificación detallada de venta VIP con botón a la Bóveda
+                client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+                comprador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
+                
                 send_telegram_msg(
-                    post.idol.telegram_user_id,
-                    f"💎 <b>¡Venta VIP en KingdomFans!</b>\n"
-                    f"Un noble desbloqueó tu foto por <b>{precio_final} 🪙</b>.\n"
-                    f"Has recibido <b>+{ganancia_idol} 🪙</b> netos ({int(tasa_idol*100)}%) y EXP en tu Bóveda."
+                    chat_id=post.idol.telegram_user_id,
+                    text=(
+                        f"💎 <b>¡Venta VIP en KingdomFans!</b> 🔞\n\n"
+                        f"🌹 <b>Musa:</b> {post.idol.stage_name}\n"
+                        f"👤 <b>Comprador:</b> {comprador}\n"
+                        f"🪙 <b>Precio:</b> {precio_final} 🪙\n"
+                        f"💰 <b>Ganancia neta:</b> <b>+{ganancia_idol} 🪙</b> ({int(tasa_idol*100)}%)\n\n"
+                        f"Tu oro ya se encuentra disponible en tu Bóveda."
+                    ),
+                    button_text="🪙 Ver Mi Bóveda",
+                    button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={post.idol.telegram_user_id}"
                 )
                 
                 desc_txt = " (con 15% de descuento por tu Víbora)" if (pet and pet.species == 'viper') else ""
@@ -3923,7 +4202,6 @@ def toggle_like(request, post_id):
     return JsonResponse({'error': 'Invalid method'}, status=405)
 
 
-# ✅ REEMPLAZAR POR:
 def my_collection(request):
     tg_id = resolve_safe_tg(request)
     unlocked_posts = []
@@ -3934,7 +4212,7 @@ def my_collection(request):
             unlocks__client_telegram_id=tg_id
         ).select_related('idol').order_by('-unlocks__unlocked_at')
         
-        # 👈 Ahora sí incluimos las fotos exclusivas de antojos entregados:
+        # Incluye las fotos de antojos entregados
         delivered_antojos = CustomRequest.objects.filter(
             client_telegram_id=tg_id,
             status='accepted'
@@ -3978,11 +4256,20 @@ def send_tip(request, post_id):
             grant_user_xp(request, tg_id, amount, reason="Propina a Musa")
             grant_user_xp(None, post.idol.telegram_user_id, amount // 2, reason="Propina Recibida")
 
+            # Notificación de propina/trago con botón a la Bóveda
+            client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+            invitador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
+            
             send_telegram_msg(
-                post.idol.telegram_user_id,
-                f"🥂 <b>¡Te han invitado un trago!</b>\n"
-                f"Un noble te obsequió <b>{amount} 🪙</b> en el Muro.\n"
-                f"Has recibido <b>+{neto_idol} 🪙</b> directos a tu Bóveda y EXP de artista."
+                chat_id=post.idol.telegram_user_id,
+                text=(
+                    f"🥂 <b>¡Te han invitado un trago Real!</b>\n\n"
+                    f"🌹 <b>Para tu Musa:</b> {post.idol.stage_name}\n"
+                    f"👤 <b>De parte de:</b> {invitador}\n"
+                    f"🪙 <b>Ofrenda:</b> +{neto_idol} 🪙 netos directos a tu Bóveda."
+                ),
+                button_text="🥂 Ver Mi Bóveda",
+                button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={post.idol.telegram_user_id}"
             )
             messages.success(request, f"🥂 ¡Le has invitado un trago de {amount} 🪙 a {post.idol.stage_name}!")
         else:
@@ -4064,7 +4351,22 @@ def add_comment(request, post_id):
                 author_name=nombre_final,
                 text=text
             )
-            messages.success(request, "Comentario publicado.")
+            grant_user_xp(request, tg_id, 5, reason="Comentario en Muro")
+
+            # Notificar a la Idol si otro noble le comenta
+            if tg_id != post.idol.telegram_user_id:
+                send_telegram_msg(
+                    chat_id=post.idol.telegram_user_id,
+                    text=(
+                        f"💬 <b>¡Nuevo comentario para tu Musa {post.idol.stage_name}!</b>\n\n"
+                        f"👤 <b>Noble:</b> {nombre_final}\n"
+                        f"📝 <i>«{text}»</i>"
+                    ),
+                    button_text="📱 Ver Publicación",
+                    button_url=f"https://kingdom-pleasure-app.onrender.com/idols/feed/?tg_id={post.idol.telegram_user_id}"
+                )
+
+            messages.success(request, "Comentario publicado (+5 EXP).")
             
         return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
 
@@ -4489,20 +4791,25 @@ ARCHIVO: .\templates\base.html
 </head>
 <body class="font-sans antialiased flex flex-col items-center min-h-screen relative pb-28">
 
-   <!-- Header Imperial: Logo Grande sin fondo negro -->
-    <header class="w-full max-w-md pt-2 pb-1 px-2 flex flex-col items-center z-20">
+   <!-- Header Imperial con Campanita de Buzón -->
+    <header class="w-full max-w-md pt-2 pb-1 px-3 flex flex-col items-center z-20 relative">
+        
+        <!-- Botón Flotante del Buzón (Arriba a la derecha) -->
+        <button type="button" onclick="universalNav('/buzon/')" 
+                class="absolute right-3 top-3 bg-black/70 hover:bg-black border border-vip-gold/40 text-yellow-300 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-[0_0_12px_rgba(212,175,55,0.3)] active:scale-90 transition-all z-30" 
+                title="Abrir Buzón Real">
+            <span>🔔</span>
+        </button>
+
         <div class="relative w-full flex justify-center items-center py-1">
-            <!-- Halo de resplandor dorado sutil detrás del logo -->
             <div class="absolute w-44 h-24 bg-gradient-to-r from-amber-600/25 via-yellow-500/35 to-amber-600/25 rounded-full blur-2xl pointer-events-none"></div>
 
-            <!-- Logo Grande con eliminación de fondo negro mediante mix-blend-mode -->
             <img src="/media/logo.png" 
                  alt="Kingdom of Pleasure" 
                  class="h-28 sm:h-32 w-auto object-contain relative z-10 transition-transform duration-300 hover:scale-105 filter drop-shadow-[0_0_20px_rgba(212,175,55,0.6)]"
                  style="mix-blend-mode: screen;">
         </div>
         
-        <!-- Línea divisoria imperial -->
         <div class="w-48 h-[1px] bg-gradient-to-r from-transparent via-vip-gold/70 to-transparent mt-0.5"></div>
     </header>
 
@@ -4975,6 +5282,85 @@ ARCHIVO: .\templates\core\admin_panel.html
 
 </body>
 </html>
+
+==================================================
+ARCHIVO: .\templates\core\inbox.html
+==================================================
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    
+    <!-- ENCABEZADO Y RETORNO -->
+    <div class="flex justify-between items-center px-1">
+        <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
+            <span>⬅</span> <span>Menú</span>
+        </button>
+        <span class="text-xs border {% if is_idol %}border-purple-400 text-purple-300 bg-purple-950/70 shadow-[0_0_10px_rgba(168,85,247,0.3)]{% else %}border-vip-gold/40 text-vip-gold bg-black/60{% endif %} px-3.5 py-1 rounded-full uppercase tracking-widest font-bold">
+            {% if is_idol %}📬 Correspondencia de Musa{% else %}📬 Buzón Imperial{% endif %}
+        </span>
+    </div>
+
+    <!-- TARJETA RESUMEN -->
+    <div class="vip-panel p-4 flex items-center justify-between border-vip-gold/30 bg-black/50">
+        <div>
+            <h2 class="text-sm font-serif font-black text-gold-gradient uppercase tracking-wider">
+                Buzón de Notificaciones
+            </h2>
+            <p class="text-[11px] text-vip-text/60">
+                {% if is_idol %}Antojos pedidos, ventas VIP y comentarios{% else %}Entregas, compras y estado de tus antojos{% endif %}
+            </p>
+        </div>
+        <span class="font-mono text-xs font-bold text-yellow-400 bg-black/70 px-2.5 py-1 rounded-xl border border-vip-gold/30">
+            {{ total_notif }} Avisos
+        </span>
+    </div>
+
+    <!-- LISTA DE NOTIFICACIONES -->
+    <div class="flex flex-col gap-2.5">
+        {% for notif in notifications %}
+            <div class="bg-black/60 border border-vip-gold/20 p-3.5 rounded-2xl flex flex-col gap-2 shadow hover:border-vip-gold/50 transition-all">
+                
+                <div class="flex items-start justify-between gap-2">
+                    <div class="flex items-start gap-2.5 min-w-0">
+                        <span class="text-2xl flex-shrink-0 mt-0.5">{{ notif.icon }}</span>
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-xs font-bold text-white leading-tight truncate">{{ notif.title }}</span>
+                            <span class="text-[10px] text-stone-400 mt-0.5 leading-relaxed">{{ notif.detail }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Insignia -->
+                    <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border flex-shrink-0 {{ notif.badge_color }}">
+                        {{ notif.badge }}
+                    </span>
+                </div>
+
+                <!-- Pie de tarjeta: Tiempo transcurrido + Botón de Acción -->
+                <div class="flex items-center justify-between border-t border-white/10 pt-2 mt-0.5">
+                    <span class="text-[10px] text-stone-500 font-mono">{{ notif.time|timesince }} atrás</span>
+                    
+                    <button type="button" onclick="universalNav('{{ notif.cta_url }}')" 
+                            class="btn-gold py-1 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-all shadow">
+                        <span>{{ notif.cta_text }}</span> <span>➔</span>
+                    </button>
+                </div>
+
+            </div>
+        {% empty %}
+            <div class="vip-panel p-10 text-center flex flex-col items-center">
+                <span class="text-5xl my-2">📭</span>
+                <h4 class="font-serif text-sm font-bold text-white">Buzón en Calma</h4>
+                <p class="text-xs text-vip-text/60 mt-1 max-w-xs">
+                    No tienes notificaciones pendientes en este momento.
+                </p>
+            </div>
+        {% endfor %}
+    </div>
+
+</div>
+{% endblock %}
 
 ==================================================
 ARCHIVO: .\templates\core\leaderboard.html
@@ -7047,10 +7433,10 @@ ARCHIVO: .\templates\idols\detail.html
             <!-- BOTONES DE CONTACTO Y ANTOJOS -->
             {% if idol.owner_username %}
             <div class="flex flex-col gap-2 mt-3">
-                <button type="button" onclick="contactIdol('{{ idol.owner_username }}')" 
-                        class="w-full bg-gradient-to-r from-purple-900 to-fuchsia-900 border border-purple-400 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)] text-xs uppercase tracking-wider active:scale-95 transition-all">
-                    <span>💬</span> <span>Contactar en Telegram a {{ idol.stage_name }}</span>
-                </button>
+                <button type="button" onclick="contactIdol('{{ idol.owner_username }}', '{{ idol.telegram_user_id }}')" 
+                    class="w-full bg-gradient-to-r from-purple-900 to-fuchsia-900 border border-purple-400 text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(168,85,247,0.3)] text-xs uppercase tracking-wider active:scale-95 transition-all">
+                 <span>💬</span> <span>Contactar en Telegram a {{ idol.stage_name }}</span>
+                 </button>
                 
                 <button type="button" onclick="toggleCustomRequestModal()" 
                         class="w-full btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow active:scale-95 transition-all">
@@ -7205,25 +7591,27 @@ ARCHIVO: .\templates\idols\detail.html
         }
     });
 
-    function contactIdol(rawUsername) {
-        if (!rawUsername || rawUsername.trim() === '') {
-            alert("Esta Musa no tiene un usuario de Telegram configurado.");
+    function contactIdol(rawUsername, fallbackId) {
+        let cleanUser = String(rawUsername || '').replace('@', '').trim();
+
+        // 1. Si no tiene @username público, abrir chat directo por su ID de Telegram
+        if (!cleanUser || cleanUser === 'None' || cleanUser === 'undefined' || cleanUser === 'MusaReal') {
+            if (fallbackId) {
+                window.location.href = `tg://user?id=${fallbackId}`;
+                return;
+            }
+            alert("Esta Musa no tiene un enlace de contacto activo.");
             return;
         }
 
-        // Limpiar @ y espacios
-        let cleanUser = String(rawUsername).replace('@', '').trim();
-
-        // 1. Si es un ID numérico puro
+        // 2. Si es numérico
         if (/^\d+$/.test(cleanUser)) {
             window.location.href = `tg://user?id=${cleanUser}`;
             return;
         }
 
-        // 2. Esquema universal nativo de Telegram (funciona en iOS y Android)
-        const tgAppUrl = `tg://resolve?domain=${cleanUser}`;
+        // 3. Si tiene @username real
         const tgWebUrl = `https://t.me/${cleanUser}`;
-
         if (window.Telegram?.WebApp?.openTelegramLink) {
             try {
                 window.Telegram.WebApp.openTelegramLink(tgWebUrl);
@@ -7231,11 +7619,8 @@ ARCHIVO: .\templates\idols\detail.html
             } catch(e) {}
         }
 
-        // Fallback inmediato
-        window.location.href = tgAppUrl;
-        setTimeout(() => {
-            window.open(tgWebUrl, '_blank');
-        }, 500);
+        window.location.href = `tg://resolve?domain=${cleanUser}`;
+        setTimeout(() => { window.open(tgWebUrl, '_blank'); }, 500);
     }
 
     function toggleCustomRequestModal() {

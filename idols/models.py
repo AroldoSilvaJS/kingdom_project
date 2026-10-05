@@ -223,3 +223,70 @@ class PostComment(models.Model):
 
     def __str__(self):
         return f"Comentario de {self.author_name} en Post #{self.post.id}"
+
+
+    # --- SISTEMA DE PHOTOCARDS Y CAJAS CS ---
+
+class PhotocardBox(models.Model):
+    name = models.CharField("Nombre de la Caja", max_length=100)
+    description = models.TextField("Descripción / Temática", max_length=300)
+    price = models.PositiveIntegerField("Costo de Apertura (🪙)", default=50)
+    cover_image = models.ImageField("Portada de la Caja", upload_to='photocard_boxes/', blank=True, null=True)
+    is_active = models.BooleanField("¿Activa para abrir?", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Caja de Photocards"
+        verbose_name_plural = "Cajas de Photocards"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.price} 🪙)"
+
+
+class Photocard(models.Model):
+    RARITY_CHOICES = [
+        ('common', 'Común ⚪'),
+        ('rare', 'Rara 🔵'),
+        ('epic', 'Épica 🟣'),
+        ('legendary', 'Legendaria 👑'),
+    ]
+
+    box = models.ForeignKey(PhotocardBox, on_delete=models.CASCADE, related_name='cards', verbose_name="Caja a la que pertenece")
+    idol = models.ForeignKey(IdolProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='photocards', verbose_name="Musa / Idol")
+    name = models.CharField("Nombre de la Carta", max_length=100)
+    rarity = models.CharField("Rareza", max_length=20, choices=RARITY_CHOICES, default='common')
+    image = models.ImageField("Imagen Photocard (Canva)", upload_to='photocards/')
+    created_by_tg_id = models.BigIntegerField("ID del Admin Creador")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Photocard"
+        verbose_name_plural = "Photocards"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.get_rarity_display()}] {self.name}"
+
+    def get_color_hex(self):
+        mapping = {
+            'common': '#9ca3af',      # Gris/Plata
+            'rare': '#3b82f6',        # Azul CS
+            'epic': '#a855f7',        # Púrpura CS
+            'legendary': '#eab308',   # Dorado Legendario
+        }
+        return mapping.get(self.rarity, '#9ca3af')
+
+
+class UserPhotocard(models.Model):
+    telegram_user_id = models.BigIntegerField("ID del Dueño (Idol o Noble)", db_index=True)
+    photocard = models.ForeignKey(Photocard, on_delete=models.CASCADE, related_name='owners')
+    obtained_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Photocard de Usuario"
+        verbose_name_plural = "Photocards de Usuarios"
+        ordering = ['-obtained_at']
+
+    def __str__(self):
+        return f"{self.telegram_user_id} tiene {self.photocard.name}"
