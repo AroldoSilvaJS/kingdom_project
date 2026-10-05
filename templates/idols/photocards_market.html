@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    
+    <!-- ENCABEZADO Y VOLVER -->
+    <div class="flex justify-between items-center px-1 border-b border-vip-gold/30 pb-3">
+        <div>
+            <h2 class="text-xl font-bold font-serif text-gold-gradient tracking-wide">🛒 Mercado Clandestino</h2>
+            <p class="text-xs text-vip-text/60">Compra, vende e intercambia Photocards</p>
+        </div>
+        <button type="button" onclick="universalNav('{% url 'idols:my_photocards_album' %}')" 
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
+            🎴 Mi Álbum
+        </button>
+    </div>
+
+    <!-- SALDO EN ORO -->
+    <div class="vip-panel p-3 flex items-center justify-between px-4">
+        <span class="text-xs text-vip-text/70 uppercase tracking-wider font-bold">Oro Disponible</span>
+        <span class="text-xs font-bold text-yellow-400 font-mono bg-black/60 px-2.5 py-1 rounded-lg border border-vip-gold/30">
+            {{ wallet.balance }} 🪙
+        </span>
+    </div>
+
+    <!-- MENSAJES -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- PESTAÑAS: MERCADO vs INTERCAMBIOS -->
+    <div class="grid grid-cols-3 gap-1.5 p-1 bg-black/60 border border-vip-gold/20 rounded-xl text-[10px] font-bold uppercase text-center">
+        <button type="button" onclick="switchMarketTab('market')" id="m-btn-market" class="py-2 rounded-lg bg-vip-gold text-black">A la Venta ({{ market_cards.count }})</button>
+        <button type="button" onclick="switchMarketTab('trades')" id="m-btn-trades" class="py-2 rounded-lg text-stone-400 hover:text-white">Intercambios ({{ received_trades.count }})</button>
+        <button type="button" onclick="switchMarketTab('my-sales')" id="m-btn-my-sales" class="py-2 rounded-lg text-stone-400 hover:text-white">Mis Ventas ({{ my_sales.count }})</button>
+    </div>
+
+    <!-- SECCIÓN 1: CARTAS A LA VENTA EN EL MERCADO -->
+    <div id="m-tab-market" class="flex flex-col gap-3">
+        {% if market_cards %}
+        <div class="grid grid-cols-2 gap-3">
+            {% for card in market_cards %}
+            <div class="relative rounded-2xl overflow-hidden aspect-[3/4] bg-black border-2 flex flex-col justify-between p-2.5 shadow-xl select-none group"
+                 style="border-color: {{ card.photocard.get_color_hex }};">
+                
+                <img src="{{ card.photocard.image.url }}" alt="{{ card.photocard.name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
+
+                <!-- Rareza y Precio superior -->
+                <div class="relative z-10 flex justify-between items-start">
+                    <span class="text-[8px] font-mono font-bold uppercase px-1.5 py-0.2 rounded border bg-black/80"
+                          style="color: {{ card.photocard.get_color_hex }}; border-color: {{ card.photocard.get_color_hex }};">
+                        {{ card.photocard.get_rarity_display }}
+                    </span>
+                    <span class="bg-yellow-950/90 text-yellow-300 border border-yellow-500/50 text-[10px] font-mono font-black px-2 py-0.5 rounded-full shadow">
+                        {{ card.sale_price }} 🪙
+                    </span>
+                </div>
+
+                <!-- Datos y Botón Comprar -->
+                <div class="relative z-10 flex flex-col gap-1.5">
+                    <div>
+                        <h4 class="text-xs font-black text-white leading-tight truncate">{{ card.photocard.name }}</h4>
+                        <span class="text-[10px] text-yellow-300 block truncate">{{ card.photocard.display_idol_name }}</span>
+                    </div>
+
+                    <form action="{% url 'idols:photocard_buy_action' card.id %}" method="POST" class="m-0"
+                          onsubmit="return confirm('¿Confirmas comprar «{{ card.photocard.name|escapejs }}» por {{ card.sale_price }} 🪙?')">
+                        {% csrf_token %}
+                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                        <button type="submit" class="w-full btn-gold py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider shadow">
+                            Comprar
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="vip-panel p-8 text-center flex flex-col items-center">
+            <span class="text-4xl my-2">🛒</span>
+            <h4 class="font-serif text-sm font-bold text-white">Mercado en calma</h4>
+            <p class="text-xs text-vip-text/60 mt-1">No hay cartas puestas a la venta en este momento. ¡Sé el primero en poner una carta a la venta desde tu Álbum!</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- SECCIÓN 2: OFERTAS DE INTERCAMBIO (TRADES) -->
+    <div id="m-tab-trades" class="hidden flex flex-col gap-3">
+        <h4 class="text-xs font-bold text-yellow-400 uppercase tracking-wider px-1">Propuestas Recibidas</h4>
+        {% for trade in received_trades %}
+        <div class="vip-panel p-3.5 border border-purple-500/50 rounded-2xl flex flex-col gap-2.5 shadow">
+            <div class="flex justify-between items-center text-xs">
+                <span class="font-bold text-white">De: <strong class="text-purple-300">{{ trade.sender_username }}</strong></span>
+                <span class="text-[9px] text-stone-500 font-mono">{{ trade.created_at|timesince }} atrás</span>
+            </div>
+
+            <div class="flex items-center gap-3 bg-black/60 p-2.5 rounded-xl border border-white/10">
+                <img src="{{ trade.sender_card.photocard.image.url }}" class="w-12 h-16 object-cover rounded-lg border" style="border-color: {{ trade.sender_card.photocard.get_color_hex }};">
+                <div class="flex flex-col min-w-0">
+                    <span class="text-[9px] text-stone-400 uppercase font-bold">Te ofrece:</span>
+                    <h5 class="text-xs font-black text-white truncate">{{ trade.sender_card.photocard.name }}</h5>
+                    <span class="text-[10px] text-yellow-300 font-mono">{{ trade.sender_card.photocard.display_idol_name }} • {{ trade.sender_card.photocard.get_rarity_display }}</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-1">
+                <form action="{% url 'idols:handle_trade_offer' trade.id 'accept' %}" method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <button type="submit" class="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-1.5 rounded-xl text-xs uppercase tracking-wider shadow">
+                        ✅ Aceptar Carta
+                    </button>
+                </form>
+                <form action="{% url 'idols:handle_trade_offer' trade.id 'reject' %}" method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <button type="submit" class="w-full bg-rose-950 border border-rose-600 text-rose-300 font-bold py-1.5 rounded-xl text-xs uppercase tracking-wider">
+                        ❌ Rechazar
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% empty %}
+        <p class="text-center text-xs text-stone-500 py-6">No tienes propuestas de intercambio pendientes.</p>
+        {% endfor %}
+
+        <!-- Trades que tú enviaste -->
+        {% if sent_trades %}
+        <h4 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1 mt-2">Propuestas Enviadas por Ti</h4>
+        {% for trade in sent_trades %}
+        <div class="bg-black/60 border border-white/10 p-3 rounded-xl flex items-center justify-between text-xs">
+            <div>
+                <span class="text-stone-300">Ofreciste <strong>{{ trade.sender_card.photocard.name }}</strong> a <strong>{{ trade.receiver_username }}</strong></span>
+            </div>
+            <form action="{% url 'idols:handle_trade_offer' trade.id 'cancel' %}" method="POST" class="m-0">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <button type="submit" class="text-rose-400 hover:text-rose-300 text-[10px] uppercase font-bold">Cancelar</button>
+            </form>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+
+    <!-- SECCIÓN 3: MIS VENTAS ACTIVAS -->
+    <div id="m-tab-my-sales" class="hidden flex flex-col gap-2.5">
+        {% for card in my_sales %}
+        <div class="bg-black/60 border border-vip-gold/30 p-3 rounded-2xl flex items-center justify-between gap-3 shadow">
+            <div class="flex items-center gap-3 min-w-0">
+                <img src="{{ card.photocard.image.url }}" class="w-10 h-14 object-cover rounded-lg border" style="border-color: {{ card.photocard.get_color_hex }};">
+                <div class="flex flex-col min-w-0">
+                    <h5 class="text-xs font-black text-white truncate">{{ card.photocard.name }}</h5>
+                    <span class="text-[10px] text-yellow-400 font-mono font-bold">{{ card.sale_price }} 🪙</span>
+                </div>
+            </div>
+            <form action="{% url 'idols:photocard_sell_action' card.id %}" method="POST" class="m-0">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <input type="hidden" name="mode" value="cancel">
+                <button type="submit" class="text-xs bg-rose-950 border border-rose-600 text-rose-300 px-3 py-1.5 rounded-xl font-bold uppercase">
+                    Cancelar Venta
+                </button>
+            </form>
+        </div>
+        {% empty %}
+        <p class="text-center text-xs text-stone-500 py-6">No tienes cartas puestas a la venta en este momento.</p>
+        {% endfor %}
+    </div>
+
+</div>
+
+<script>
+    function switchMarketTab(tab) {
+        document.getElementById('m-tab-market').classList.add('hidden');
+        document.getElementById('m-tab-trades').classList.add('hidden');
+        document.getElementById('m-tab-my-sales').classList.add('hidden');
+
+        document.getElementById('m-btn-market').className = "py-2 rounded-lg text-stone-400 hover:text-white";
+        document.getElementById('m-btn-trades').className = "py-2 rounded-lg text-stone-400 hover:text-white";
+        document.getElementById('m-btn-my-sales').className = "py-2 rounded-lg text-stone-400 hover:text-white";
+
+        document.getElementById(`m-tab-${tab}`).classList.remove('hidden');
+        document.getElementById(`m-btn-${tab}`).className = "py-2 rounded-lg bg-vip-gold text-black font-bold";
+    }
+</script>
+{% endblock %}

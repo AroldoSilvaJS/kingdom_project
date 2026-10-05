@@ -25,4 +25,10 @@ urlpatterns = [
     path('photocards/open/<int:box_id>/', views.open_photocard_box_ajax, name='open_box_ajax'),
     path('photocards/album/', views.my_photocards_album, name='my_photocards_album'),
     path('photocards/admin/', views.admin_photocards_manage, name='admin_photocards'),
+    # Mercado e Intercambios de Photocards
+    path('photocards/market/', views.photocards_market, name='photocards_market'),
+    path('photocards/sell/<int:user_card_id>/', views.photocard_sell_action, name='photocard_sell_action'),
+    path('photocards/buy/<int:user_card_id>/', views.photocard_buy_action, name='photocard_buy_action'),
+    path('photocards/trade/create/<int:user_card_id>/', views.create_trade_offer, name='create_trade_offer'),
+    path('photocards/trade/<int:trade_id>/<str:action>/', views.handle_trade_offer, name='handle_trade_offer'),
 ]

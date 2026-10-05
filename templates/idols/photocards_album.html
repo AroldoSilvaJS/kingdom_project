@@ -3,17 +3,32 @@
 {% block content %}
 <div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
-    <!-- ENCABEZADO Y VOLVER -->
+    <!-- ENCABEZADO Y ACCESOS -->
     <div class="flex justify-between items-center px-1 border-b border-vip-gold/30 pb-3">
         <div>
             <h2 class="text-xl font-bold font-serif text-vip-gold tracking-wide">🎴 Álbum de Photocards</h2>
-            <p class="text-xs text-vip-text/60">Tu colección de cartas oficiales del Reino</p>
+            <p class="text-xs text-vip-text/60">Toca cualquier carta para venderla o intercambiarla</p>
         </div>
-        <button type="button" onclick="universalNav('{% url 'idols:photocard_boxes' %}')" 
-           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
-            ⬅ Cajas
-        </button>
+        <div class="flex items-center gap-1.5">
+            <button type="button" onclick="universalNav('{% url 'idols:photocards_market' %}')" 
+               class="text-xs text-yellow-300 bg-yellow-950/80 border border-yellow-500/50 hover:bg-yellow-900 px-3 py-1.5 rounded-full font-bold flex items-center gap-1 shadow">
+                <span>🛒</span> <span>Mercado</span>
+            </button>
+            <button type="button" onclick="universalNav('{% url 'idols:photocard_boxes' %}')" 
+               class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
+                ⬅ Cajas
+            </button>
+        </div>
     </div>
+
+    <!-- MENSAJES -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
 
     <!-- ESTADÍSTICAS DEL COLECCIONISTA -->
     <div class="grid grid-cols-3 gap-2 text-center">
@@ -40,28 +55,35 @@
         <button onclick="filterAlbum('legendary')" class="py-1.5 rounded-lg text-yellow-400 hover:text-white filter-btn" id="f-legendary">👑</button>
     </div>
 
-    <!-- CUADRÍCULA DE CARTAS OBTENIDAS -->
+    <!-- CUADRÍCULA DE CARTAS -->
     {% if user_cards %}
     <div class="grid grid-cols-2 gap-3 mt-1" id="album-grid">
         {% for uc in user_cards %}
-        <div class="album-card relative rounded-2xl overflow-hidden aspect-[3/4] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl select-none"
+        <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.photocard.image.url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }})"
+             class="album-card relative rounded-2xl overflow-hidden aspect-[3/4] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl select-none cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
              data-rarity="{{ uc.photocard.rarity }}"
-             style="border-color: {{ uc.photocard.get_color_hex }}; {% if uc.photocard.rarity == 'legendary' %}box-shadow: 0 0 15px rgba(234,179,8,0.4);{% endif %}">
+             style="border-color: {{ uc.photocard.get_color_hex }};">
             
-            <!-- Imagen de la Photocard -->
             <img src="{{ uc.photocard.image.url }}" alt="{{ uc.photocard.name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
             <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
+
+            <!-- Si está puesta a la venta -->
+            {% if uc.is_for_sale %}
+            <span class="absolute top-2 right-2 bg-yellow-950/90 text-yellow-300 border border-yellow-500 text-[9px] font-mono font-black px-2 py-0.5 rounded-full shadow">
+                🏷️ Venta: {{ uc.sale_price }} 🪙
+            </span>
+            {% endif %}
 
             <!-- Datos de la Carta -->
             <div class="relative z-10 flex flex-col">
                 <span class="text-[8px] font-mono font-bold uppercase px-1.5 py-0.2 rounded w-fit mb-0.5 border"
-                      style="color: {{ uc.photocard.get_color_hex }}; border-color: {{ uc.photocard.get_color_hex }}; background: rgba(0,0,0,0.7);">
+                      style="color: {{ uc.photocard.get_color_hex }}; border-color: {{ uc.photocard.get_color_hex }}; background: rgba(0,0,0,0.8);">
                     {{ uc.photocard.get_rarity_display }}
                 </span>
                 <h4 class="text-xs font-black text-white leading-tight truncate">{{ uc.photocard.name }}</h4>
-                <div class="flex justify-between items-center text-[9px] text-stone-400 mt-0.5 font-mono">
-                    <span class="truncate text-yellow-400 font-bold">{{ uc.photocard.idol.stage_name|default:"Reino" }}</span>
-                    <span>{{ uc.obtained_at|date:"d/m" }}</span>
+                <div class="flex justify-between items-center text-[9px] text-stone-300 mt-0.5 font-mono">
+                    <span class="truncate text-yellow-400 font-bold">{{ uc.photocard.display_idol_name }}</span>
+                    <span class="text-stone-400">{{ uc.obtained_at|date:"d/m" }}</span>
                 </div>
             </div>
 
@@ -73,7 +95,7 @@
         <span class="text-5xl my-2">🎴</span>
         <h4 class="font-serif text-sm font-bold text-white">Álbum Vacío</h4>
         <p class="text-xs text-vip-text/60 mt-1 max-w-xs">
-            Aún no tienes Photocards en tu colección. ¡Abre tu primera caja y prueba tu suerte!
+            Aún no tienes Photocards. ¡Abre cajas o visita el Mercado de nobles!
         </p>
         <button type="button" onclick="universalNav('{% url 'idols:photocard_boxes' %}')" 
                 class="mt-4 btn-gold py-2.5 px-6 rounded-xl text-xs font-bold uppercase">
@@ -84,23 +106,125 @@
 
 </div>
 
+<!-- 🔍 MODAL DE ACCIÓN DE CARTA (VENDER O INTERCAMBIAR) -->
+<div id="card-action-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="vip-panel p-5 max-w-sm w-full border-2 rounded-3xl relative flex flex-col items-center text-center shadow-2xl" id="modal-card-container">
+        
+        <button onclick="closeCardActionModal()" class="absolute top-3 right-3 text-stone-400 hover:text-white text-2xl">&times;</button>
+
+        <span class="text-[10px] font-mono uppercase font-black px-2.5 py-0.5 rounded-full border mb-2" id="modal-card-rarity"></span>
+        
+        <div class="w-32 h-44 rounded-2xl border-2 overflow-hidden shadow-2xl bg-black relative mb-2" id="modal-card-box">
+            <img id="modal-card-img" src="" class="w-full h-full object-cover">
+        </div>
+
+        <h3 class="font-serif text-sm font-black text-white" id="modal-card-title"></h3>
+        <span class="text-xs text-yellow-400 font-bold mb-3" id="modal-card-idol"></span>
+
+        <!-- Si la carta YA ESTÁ A LA VENTA -->
+        <div id="modal-is-for-sale-box" class="hidden w-full flex flex-col gap-2">
+            <p class="text-xs text-yellow-300 font-mono bg-yellow-950/60 p-2 rounded-xl border border-yellow-500/40">
+                Esta carta está publicada en el Mercado por <span id="modal-sale-price-label"></span> 🪙.
+            </p>
+            <form id="cancel-sale-form" method="POST" action="">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <input type="hidden" name="mode" value="cancel">
+                <button type="submit" class="w-full bg-rose-950 border border-rose-600 text-rose-200 py-2.5 rounded-xl text-xs font-bold uppercase">
+                    Cancelar Venta y Retirar del Mercado
+                </button>
+            </form>
+        </div>
+
+        <!-- Si la carta NO está a la venta: Opciones Vender o Intercambiar -->
+        <div id="modal-actions-box" class="w-full flex flex-col gap-3">
+            
+            <!-- 1. Vender en el Mercado -->
+            <form id="sell-form" method="POST" action="" class="bg-black/60 p-3 rounded-2xl border border-white/10 flex flex-col gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <input type="hidden" name="mode" value="list">
+                
+                <span class="text-xs font-bold text-yellow-300 text-left flex items-center gap-1">
+                    <span>🏷️</span> Poner a la Venta en Oro
+                </span>
+                
+                <div class="flex gap-2">
+                    <input type="number" name="price" min="5" value="50" required placeholder="Precio..." 
+                           class="flex-1 bg-black border border-vip-gold/40 rounded-xl px-3 py-2 text-xs font-mono font-bold text-white text-center">
+                    <button type="submit" class="btn-gold px-4 py-2 rounded-xl text-xs font-black uppercase shadow">
+                        Vender
+                    </button>
+                </div>
+            </form>
+
+            <!-- 2. Proponer Intercambio Directo -->
+            <form id="trade-form" method="POST" action="" class="bg-black/60 p-3 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                
+                <span class="text-xs font-bold text-purple-300 text-left flex items-center gap-1">
+                    <span>🤝</span> Proponer Intercambio
+                </span>
+
+                <input type="text" name="target_user" required placeholder="Escribe el @usuario o Telegram ID del noble..." 
+                       class="w-full bg-black border border-purple-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-500">
+                
+                <button type="submit" class="bg-purple-900 hover:bg-purple-800 border border-purple-500 text-white py-2 rounded-xl text-xs font-bold uppercase shadow">
+                    Enviar Propuesta
+                </button>
+            </form>
+
+        </div>
+
+    </div>
+</div>
+
 <script>
     function filterAlbum(rarity) {
         const cards = document.querySelectorAll('.album-card');
         const btns = document.querySelectorAll('.filter-btn');
 
-        btns.forEach(b => {
-            b.className = "py-1.5 rounded-lg text-stone-400 hover:text-white filter-btn";
-        });
+        btns.forEach(b => { b.className = "py-1.5 rounded-lg text-stone-400 hover:text-white filter-btn"; });
         document.getElementById(`f-${rarity}`).className = "py-1.5 rounded-lg bg-vip-gold text-black font-bold filter-btn";
 
         cards.forEach(c => {
-            if (rarity === 'all' || c.getAttribute('data-rarity') === rarity) {
-                c.style.display = 'flex';
-            } else {
-                c.style.display = 'none';
-            }
+            c.style.display = (rarity === 'all' || c.getAttribute('data-rarity') === rarity) ? 'flex' : 'none';
         });
+    }
+
+    function openCardActionModal(cardId, name, idolName, rarityDisplay, colorHex, imgUrl, isForSale, salePrice) {
+        document.getElementById('modal-card-title').innerText = name;
+        document.getElementById('modal-card-idol').innerText = `Idol: ${idolName}`;
+        document.getElementById('modal-card-rarity').innerText = rarityDisplay;
+        document.getElementById('modal-card-rarity').style.borderColor = colorHex;
+        document.getElementById('modal-card-rarity').style.color = colorHex;
+        document.getElementById('modal-card-img').src = imgUrl;
+        document.getElementById('modal-card-box').style.borderColor = colorHex;
+        document.getElementById('modal-card-box').style.boxShadow = `0 0 20px ${colorHex}`;
+
+        const sellForm = document.getElementById('sell-form');
+        const tradeForm = document.getElementById('trade-form');
+        const cancelForm = document.getElementById('cancel-sale-form');
+
+        sellForm.action = `/idols/photocards/sell/${cardId}/`;
+        tradeForm.action = `/idols/photocards/trade/create/${cardId}/`;
+        cancelForm.action = `/idols/photocards/sell/${cardId}/`;
+
+        if (isForSale) {
+            document.getElementById('modal-is-for-sale-box').classList.remove('hidden');
+            document.getElementById('modal-actions-box').classList.add('hidden');
+            document.getElementById('modal-sale-price-label').innerText = salePrice;
+        } else {
+            document.getElementById('modal-is-for-sale-box').classList.add('hidden');
+            document.getElementById('modal-actions-box').classList.remove('hidden');
+        }
+
+        document.getElementById('card-action-modal').classList.remove('hidden');
+    }
+
+    function closeCardActionModal() {
+        document.getElementById('card-action-modal').classList.add('hidden');
     }
 </script>
 {% endblock %}

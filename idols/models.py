@@ -292,6 +292,10 @@ class UserPhotocard(models.Model):
     photocard = models.ForeignKey(Photocard, on_delete=models.CASCADE, related_name='owners')
     obtained_at = models.DateTimeField(auto_now_add=True)
 
+    # 👈 Campos para Mercado de Venta
+    is_for_sale = models.BooleanField("¿Puesta a la venta?", default=False)
+    sale_price = models.PositiveIntegerField("Precio de Venta (🪙)", default=0, blank=True, null=True)
+
     class Meta:
         verbose_name = "Photocard de Usuario"
         verbose_name_plural = "Photocards de Usuarios"
@@ -299,3 +303,31 @@ class UserPhotocard(models.Model):
 
     def __str__(self):
         return f"{self.telegram_user_id} tiene {self.photocard.name}"
+
+
+class PhotocardTrade(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente ⏳'),
+        ('accepted', 'Aceptado ✅'),
+        ('rejected', 'Rechazado ❌'),
+        ('cancelled', 'Cancelado 🚫'),
+    ]
+
+    sender_telegram_id = models.BigIntegerField("Emisor", db_index=True)
+    sender_username = models.CharField("Usuario Emisor", max_length=100, default='Noble')
+    sender_card = models.ForeignKey(UserPhotocard, on_delete=models.CASCADE, related_name='trades_sent')
+
+    receiver_telegram_id = models.BigIntegerField("Receptor", db_index=True)
+    receiver_username = models.CharField("Usuario Receptor", max_length=100, default='Noble')
+    receiver_card = models.ForeignKey(UserPhotocard, on_delete=models.SET_NULL, null=True, blank=True, related_name='trades_received')
+
+    status = models.CharField("Estado", max_length=15, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Intercambio de Photocard"
+        verbose_name_plural = "Intercambios de Photocards"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Trade #{self.id}: {self.sender_username} -> {self.receiver_username} ({self.get_status_display()})"
