@@ -90,20 +90,25 @@
 </head>
 <body class="font-sans antialiased flex flex-col items-center min-h-screen relative pb-28">
 
-   <!-- Header Imperial: Logo Grande sin fondo negro -->
-    <header class="w-full max-w-md pt-2 pb-1 px-2 flex flex-col items-center z-20">
+   <!-- Header Imperial con Campanita de Buzón -->
+    <header class="w-full max-w-md pt-2 pb-1 px-3 flex flex-col items-center z-20 relative">
+        
+        <!-- Botón Flotante del Buzón (Arriba a la derecha) -->
+        <button type="button" onclick="universalNav('/buzon/')" 
+                class="absolute right-3 top-3 bg-black/70 hover:bg-black border border-vip-gold/40 text-yellow-300 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-[0_0_12px_rgba(212,175,55,0.3)] active:scale-90 transition-all z-30" 
+                title="Abrir Buzón Real">
+            <span>🔔</span>
+        </button>
+
         <div class="relative w-full flex justify-center items-center py-1">
-            <!-- Halo de resplandor dorado sutil detrás del logo -->
             <div class="absolute w-44 h-24 bg-gradient-to-r from-amber-600/25 via-yellow-500/35 to-amber-600/25 rounded-full blur-2xl pointer-events-none"></div>
 
-            <!-- Logo Grande con eliminación de fondo negro mediante mix-blend-mode -->
             <img src="/media/logo.png" 
                  alt="Kingdom of Pleasure" 
                  class="h-28 sm:h-32 w-auto object-contain relative z-10 transition-transform duration-300 hover:scale-105 filter drop-shadow-[0_0_20px_rgba(212,175,55,0.6)]"
                  style="mix-blend-mode: screen;">
         </div>
         
-        <!-- Línea divisoria imperial -->
         <div class="w-48 h-[1px] bg-gradient-to-r from-transparent via-vip-gold/70 to-transparent mt-0.5"></div>
     </header>
 

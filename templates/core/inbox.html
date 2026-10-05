@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    
+    <!-- ENCABEZADO Y RETORNO -->
+    <div class="flex justify-between items-center px-1">
+        <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
+            <span>⬅</span> <span>Menú</span>
+        </button>
+        <span class="text-xs border {% if is_idol %}border-purple-400 text-purple-300 bg-purple-950/70 shadow-[0_0_10px_rgba(168,85,247,0.3)]{% else %}border-vip-gold/40 text-vip-gold bg-black/60{% endif %} px-3.5 py-1 rounded-full uppercase tracking-widest font-bold">
+            {% if is_idol %}📬 Correspondencia de Musa{% else %}📬 Buzón Imperial{% endif %}
+        </span>
+    </div>
+
+    <!-- TARJETA RESUMEN -->
+    <div class="vip-panel p-4 flex items-center justify-between border-vip-gold/30 bg-black/50">
+        <div>
+            <h2 class="text-sm font-serif font-black text-gold-gradient uppercase tracking-wider">
+                Buzón de Notificaciones
+            </h2>
+            <p class="text-[11px] text-vip-text/60">
+                {% if is_idol %}Antojos pedidos, ventas VIP y comentarios{% else %}Entregas, compras y estado de tus antojos{% endif %}
+            </p>
+        </div>
+        <span class="font-mono text-xs font-bold text-yellow-400 bg-black/70 px-2.5 py-1 rounded-xl border border-vip-gold/30">
+            {{ total_notif }} Avisos
+        </span>
+    </div>
+
+    <!-- LISTA DE NOTIFICACIONES -->
+    <div class="flex flex-col gap-2.5">
+        {% for notif in notifications %}
+            <div class="bg-black/60 border border-vip-gold/20 p-3.5 rounded-2xl flex flex-col gap-2 shadow hover:border-vip-gold/50 transition-all">
+                
+                <div class="flex items-start justify-between gap-2">
+                    <div class="flex items-start gap-2.5 min-w-0">
+                        <span class="text-2xl flex-shrink-0 mt-0.5">{{ notif.icon }}</span>
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-xs font-bold text-white leading-tight truncate">{{ notif.title }}</span>
+                            <span class="text-[10px] text-stone-400 mt-0.5 leading-relaxed">{{ notif.detail }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Insignia -->
+                    <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border flex-shrink-0 {{ notif.badge_color }}">
+                        {{ notif.badge }}
+                    </span>
+                </div>
+
+                <!-- Pie de tarjeta: Tiempo transcurrido + Botón de Acción -->
+                <div class="flex items-center justify-between border-t border-white/10 pt-2 mt-0.5">
+                    <span class="text-[10px] text-stone-500 font-mono">{{ notif.time|timesince }} atrás</span>
+                    
+                    <button type="button" onclick="universalNav('{{ notif.cta_url }}')" 
+                            class="btn-gold py-1 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 active:scale-95 transition-all shadow">
+                        <span>{{ notif.cta_text }}</span> <span>➔</span>
+                    </button>
+                </div>
+
+            </div>
+        {% empty %}
+            <div class="vip-panel p-10 text-center flex flex-col items-center">
+                <span class="text-5xl my-2">📭</span>
+                <h4 class="font-serif text-sm font-bold text-white">Buzón en Calma</h4>
+                <p class="text-xs text-vip-text/60 mt-1 max-w-xs">
+                    No tienes notificaciones pendientes en este momento.
+                </p>
+            </div>
+        {% endfor %}
+    </div>
+
+</div>
+{% endblock %}

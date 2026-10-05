@@ -456,3 +456,183 @@ def telegram_webhook(request):
             print(f"⚠️ Error procesando webhook: {e}")
 
     return HttpResponse("OK")
+
+
+def notifications_inbox(request):
+    tg_id = resolve_secure_tg_id(request)
+    role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+    if not role_obj:
+        return redirect(f'/choose-role/?tg_id={tg_id}')
+
+    has_idols_created = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
+    is_idol = (role_obj.role == 'idol') or has_idols_created or (str(tg_id) == ADMIN_TG_ID and has_idols_created)
+    user_profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    
+    from idols.models import Review, PostComment
+    notifications = []
+    
+    # 1. Decreto Imperial global (para ambos roles)
+    broadcast_msg = KingdomSetting.get_val('broadcast_message', '')
+    broadcast_active = KingdomSetting.get_val('broadcast_active', 'false') == 'true'
+    if broadcast_active and broadcast_msg:
+        notifications.append({
+            'type': 'decree',
+            'icon': '📢',
+            'title': 'Decreto de la Corona',
+            'detail': broadcast_msg,
+            'time': timezone.now(),
+            'badge': 'Imperial',
+            'badge_color': 'bg-amber-500/20 text-yellow-300 border-amber-500/40',
+            'cta_url': '/',
+            'cta_text': 'Entendido'
+        })
+
+    if is_idol:
+        # --- BUZÓN DE LA MUSA / IDOL ---
+        # A. Peticiones de antojo
+        antojos = CustomRequest.objects.filter(idol__telegram_user_id=tg_id).select_related('idol').order_by('-created_at')[:20]
+        for ant in antojos:
+            if ant.status == 'pending':
+                title = f"Nuevo antojo de {ant.client_username}"
+                detail = f"Ofrece +{ant.bounty} 🪙 por: «{ant.description}» para tu Musa {ant.idol.stage_name}."
+                badge = 'Pendiente'
+                b_color = 'bg-rose-950 text-rose-300 border-rose-600 animate-pulse'
+                cta_url = '/idols/'
+                cta_text = 'Atender'
+            elif ant.status == 'accepted':
+                title = f"Antojo completado y cobrado"
+                detail = f"Cobraste +{ant.bounty} 🪙 por tu entrega a {ant.client_username}."
+                badge = 'Completado'
+                b_color = 'bg-emerald-950 text-emerald-300 border-emerald-500'
+                cta_url = '/idols/'
+                cta_text = 'Ver Panel'
+            else:
+                title = f"Antojo cancelado / rechazado"
+                detail = f"Rechazaste la petición de {ant.client_username} ({ant.bounty} 🪙 devueltos)."
+                badge = 'Rechazado'
+                b_color = 'bg-stone-900 text-stone-400 border-stone-700'
+                cta_url = '/idols/'
+                cta_text = 'Ver Fichas'
+                
+            notifications.append({
+                'type': 'antojo',
+                'icon': '📬',
+                'title': title,
+                'detail': detail,
+                'time': ant.created_at,
+                'badge': badge,
+                'badge_color': b_color,
+                'cta_url': cta_url,
+                'cta_text': cta_text
+            })
+
+        # B. Ventas de fotos VIP en KingdomFans
+        unlocks = PostUnlock.objects.filter(post__idol__telegram_user_id=tg_id).select_related('post', 'post__idol').order_by('-unlocked_at')[:20]
+        for unl in unlocks:
+            rate = user_profile.idol_commission_rate
+            neto = int(unl.post.price * rate)
+            notifications.append({
+                'type': 'sale',
+                'icon': '💎',
+                'title': f"Venta VIP: {unl.post.idol.stage_name}",
+                'detail': f"Un noble desbloqueó tu foto VIP por {unl.post.price} 🪙. Ganaste +{neto} 🪙 netos.",
+                'time': unl.unlocked_at,
+                'badge': 'Venta Fans',
+                'badge_color': 'bg-purple-950 text-purple-300 border-purple-500/50',
+                'cta_url': '/economy/wallet/',
+                'cta_text': 'Ver Bóveda'
+            })
+
+        # C. Reseñas y Calificaciones recibidas
+        reviews = Review.objects.filter(idol__telegram_user_id=tg_id).select_related('idol').order_by('-created_at')[:10]
+        for rev in reviews:
+            notifications.append({
+                'type': 'review',
+                'icon': '⭐',
+                'title': f"Reseña de {rev.rating}★ para {rev.idol.stage_name}",
+                'detail': f"{rev.client_username}: «{rev.comment}»",
+                'time': rev.created_at,
+                'badge': f'{rev.rating}★',
+                'badge_color': 'bg-yellow-950 text-yellow-300 border-yellow-500/50',
+                'cta_url': f'/idols/{rev.idol.id}/',
+                'cta_text': 'Ver Perfil'
+            })
+
+        # D. Comentarios en el Muro
+        comments = PostComment.objects.filter(post__idol__telegram_user_id=tg_id).exclude(author_telegram_id=tg_id).select_related('post', 'post__idol').order_by('-created_at')[:10]
+        for com in comments:
+            notifications.append({
+                'type': 'comment',
+                'icon': '💬',
+                'title': f"Comentario para {com.post.idol.stage_name}",
+                'detail': f"{com.author_name}: «{com.text}»",
+                'time': com.created_at,
+                'badge': 'Muro',
+                'badge_color': 'bg-blue-950 text-blue-300 border-blue-500/40',
+                'cta_url': f'/idols/feed/#post-{com.post.id}',
+                'cta_text': 'Ver Post'
+            })
+
+    else:
+        # --- BUZÓN DEL NOBLE / CLIENTE ---
+        # A. Estado de sus antojos solicitados
+        mis_antojos = CustomRequest.objects.filter(client_telegram_id=tg_id).select_related('idol').order_by('-created_at')[:20]
+        for ant in mis_antojos:
+            if ant.status == 'accepted':
+                title = f"¡Tu antojo de {ant.idol.stage_name} fue entregado!"
+                detail = f"La foto exclusiva solicitada («{ant.description}») ya está lista para verse."
+                badge = 'Foto Lista'
+                b_color = 'bg-emerald-950 text-emerald-300 border-emerald-500'
+                cta_url = '/idols/collection/'
+                cta_text = 'Abrir Colección'
+            elif ant.status == 'rejected':
+                title = f"Antojo rechazado ({ant.idol.stage_name})"
+                detail = f"La Musa no pudo atenderlo. Se te devolvieron los {ant.bounty} 🪙 a tu Bóveda."
+                badge = 'Reembolsado'
+                b_color = 'bg-amber-950 text-amber-300 border-amber-500'
+                cta_url = '/economy/wallet/'
+                cta_text = 'Ver Saldo'
+            else:
+                title = f"Antojo en preparación ({ant.idol.stage_name})"
+                detail = f"Recompensa de {ant.bounty} 🪙 en custodia. La Idol está atendiendo tu pedido."
+                badge = 'En Espera'
+                b_color = 'bg-purple-950 text-purple-300 border-purple-500'
+                cta_url = f'/idols/{ant.idol.id}/'
+                cta_text = 'Ver Idol'
+
+            notifications.append({
+                'type': 'antojo',
+                'icon': '🔞' if ant.status == 'accepted' else '⏳',
+                'title': title,
+                'detail': detail,
+                'time': ant.created_at,
+                'badge': badge,
+                'badge_color': b_color,
+                'cta_url': cta_url,
+                'cta_text': cta_text
+            })
+
+        # B. Compras VIP desbloqueadas
+        unlocks = PostUnlock.objects.filter(client_telegram_id=tg_id).select_related('post', 'post__idol').order_by('-unlocked_at')[:15]
+        for unl in unlocks:
+            notifications.append({
+                'type': 'unlock',
+                'icon': '💎',
+                'title': f"Contenido VIP de {unl.post.idol.stage_name}",
+                'detail': f"Desbloqueaste esta publicación privada por {unl.post.price} 🪙.",
+                'time': unl.unlocked_at,
+                'badge': 'Desbloqueado',
+                'badge_color': 'bg-purple-950 text-purple-300 border-purple-500/50',
+                'cta_url': '/idols/collection/',
+                'cta_text': 'Ver Foto'
+            })
+
+    # Ordenar cronológicamente (más recientes arriba)
+    notifications.sort(key=lambda x: x['time'], reverse=True)
+
+    return render(request, 'core/inbox.html', {
+        'tg_id': tg_id,
+        'is_idol': is_idol,
+        'notifications': notifications,
+        'total_notif': len(notifications)
+    })
