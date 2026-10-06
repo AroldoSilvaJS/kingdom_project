@@ -2,252 +2,382 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-44 max-w-md mx-auto">
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
-    <!-- ENCABEZADO -->
+    <!-- ENCABEZADO Y BALANCE DEL REINO -->
     <div class="flex justify-between items-center px-1">
         <button type="button" onclick="universalNav('/')" 
-           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
             <span>⬅</span> <span>Menú</span>
         </button>
-        <span class="text-xs bg-purple-950/80 border border-purple-500/50 text-purple-300 px-3.5 py-1 rounded-full uppercase tracking-wider font-bold">
-            Altar Sagrado
-        </span>
+
+        <div class="flex items-center gap-1.5">
+            <span class="text-[10px] font-mono uppercase tracking-widest text-vip-gold font-bold bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full shadow-inner">
+                🐾 Santuario
+            </span>
+        </div>
     </div>
 
-    <!-- MENSAJES FLASH DINÁMICOS -->
+    <!-- NOTIFICACIONES Y TOASTS EN VIVO -->
     <div id="pet-toast-box" class="w-full"></div>
 
     {% if pet %}
-    <!-- ALTAR MÍSTICO DE LA MASCOTA -->
-    <div class="vip-panel p-6 flex flex-col items-center text-center relative overflow-hidden border border-vip-gold/40 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1a082c] via-[#0b0314] to-black">
+    <!-- 👑 ALTAR ARISTOCRÁTICO DE LA CRIATURA ESPIRITUAL -->
+    <div class="vip-panel p-5 flex flex-col items-center text-center relative overflow-hidden border border-vip-gold/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1c0c2e] via-[#0d0417] to-black">
         
-        <!-- Insignia de Fase Evolutiva -->
-        <div class="flex items-center gap-2 mb-1">
-            <span id="pet-stage-badge" class="text-[9.5px] font-mono font-bold uppercase tracking-widest bg-amber-950/80 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 rounded-full shadow">
-                Fase {{ pet.evolution_stage_number }}/3: {{ pet.stage_info.title }}
-            </span>
+        <!-- Orbe elemental místico de fondo -->
+        <div class="absolute -top-14 left-1/2 -translate-x-1/2 w-56 h-56 bg-purple-600/25 rounded-full blur-3xl pointer-events-none"></div>
+
+        <!-- Barra Superior de la Ficha: Especie y Escudo de Nivel -->
+        <div class="w-full flex items-center justify-between relative z-10 mb-1">
+            <div class="flex flex-col text-left">
+                <span class="text-[9px] font-mono uppercase tracking-widest text-vip-gold font-bold">
+                    {{ pet.stage_info.title }}
+                </span>
+                <span class="text-[11px] text-stone-300 font-bold truncate">
+                    {{ pet.stage_info.name }}
+                </span>
+            </div>
+
+            <!-- Escudo Imperial de Nivel -->
+            <div class="flex items-center gap-1.5 bg-black/80 border border-vip-gold/50 px-3 py-1 rounded-full shadow-[0_0_12px_rgba(212,175,55,0.25)]">
+                <span class="text-xs text-yellow-400">👑</span>
+                <span class="text-xs font-mono font-black text-white">LVL <span id="pet-level-badge">{{ pet.level }}</span></span>
+            </div>
         </div>
 
-        <!-- Pedestal & Avatar Táctil con Partículas -->
+        <!-- Pedestal Rúnico & Avatar Interactivo -->
         <div onclick="triggerPetTouch(event)" 
-             class="relative w-44 h-44 my-1 flex items-center justify-center group cursor-pointer select-none active:scale-95 transition-transform"
-             title="Toca para acariciar a tu compañero">
-            <div class="absolute inset-0 bg-gradient-to-t from-purple-600/30 via-fuchsia-500/20 to-transparent rounded-full blur-2xl pointer-events-none animate-pulse"></div>
+             class="relative w-44 h-44 my-2 flex items-center justify-center group cursor-pointer select-none active:scale-95 transition-transform"
+             title="Toca para acariciar a tu criatura">
+            
+            <!-- Anillo rúnico giratorio -->
+            <div class="absolute w-40 h-40 border border-vip-gold/25 rounded-full animate-[spin_24s_linear_infinite] pointer-events-none"></div>
+            <div class="absolute w-32 h-32 bg-gradient-to-t from-purple-600/35 via-fuchsia-500/20 to-transparent rounded-full blur-2xl pointer-events-none"></div>
 
             <img src="{{ pet.get_image_url }}" 
                  alt="{{ pet.evolved_name }}" 
                  id="pet-avatar-img"
-                 class="relative z-10 w-40 h-40 object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)] filter group-hover:scale-105 transition-transform duration-500">
+                 class="relative z-10 w-38 h-38 max-w-[150px] max-h-[150px] object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.9)] filter group-hover:scale-105 transition-transform duration-500">
 
-            <span class="absolute -bottom-1 z-20 bg-gradient-to-r from-vip-gold via-yellow-300 to-amber-500 text-black text-[11px] font-black px-3.5 py-0.5 rounded-full shadow-[0_0_12px_rgba(212,175,55,0.7)] font-mono">
-                LVL <span id="pet-level-badge">{{ pet.level }}</span>
+            <!-- Insignia de Fase flotante inferior -->
+            <span id="pet-stage-badge" 
+                  class="absolute -bottom-1.5 z-20 bg-gradient-to-r from-vip-gold via-yellow-300 to-amber-500 text-black text-[9.5px] font-black uppercase px-3 py-0.5 rounded-full shadow-[0_0_12px_rgba(212,175,55,0.7)] font-mono tracking-tight">
+                Fase {{ pet.evolution_stage_number }}/3: {{ pet.evolved_name }}
             </span>
         </div>
 
-        <h3 class="font-serif text-xl font-black text-white mt-1">
-            <span id="pet-custom-name">{{ pet.name }}</span>
-            <span id="pet-evolved-name" class="text-xs text-amber-400/80 font-normal ml-1">({{ pet.evolved_name }})</span>
-        </h3>
-        <span class="text-xs text-purple-300 uppercase tracking-widest font-semibold">{{ pet.stage_info.title }}</span>
-        
-        <!-- Buff Activo Dinámico -->
-        <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 border border-vip-gold/30 text-[10px] text-yellow-300 font-bold shadow-inner">
-            <span>✨</span> <span id="pet-buff-text">{{ pet.get_buff_description }}</span>
+        <!-- Título e Identidad -->
+        <div class="relative z-10 mt-2">
+            <h3 class="font-serif text-xl font-black text-white leading-tight">
+                <span id="pet-custom-name">{{ pet.name }}</span>
+            </h3>
+            <span id="pet-evolved-name" class="text-xs font-mono text-purple-300 font-bold block mt-0.5">
+                {{ pet.evolved_name }} • {{ pet.get_species_display }}
+            </span>
         </div>
 
-        <!-- Indicador de Próxima Evolución -->
-        <div id="next-evolution-hint" class="mt-2 text-[10px] text-stone-400 bg-black/50 px-3 py-0.5 rounded-full border border-white/10 font-mono">
-            {% if pet.level < 10 %}
-                Siguiente Evolución a <strong class="text-amber-400">Nivel 10</strong>
-            {% elif pet.level < 25 %}
-                Siguiente Evolución a <strong class="text-amber-400">Nivel 25</strong>
-            {% else %}
-                <span class="text-yellow-400 font-bold">👑 Forma Apex Soberana Alcanzada</span>
-            {% endif %}
+        <!-- Cinta de Bendición Activa (Buff VIP) -->
+        <div class="w-full mt-3 p-2.5 rounded-2xl bg-black/70 border border-vip-gold/30 flex items-center justify-center gap-2 shadow-inner relative z-10">
+            <span class="text-sm flex-shrink-0 animate-pulse">✨</span>
+            <p id="pet-buff-text" class="text-[10.5px] text-yellow-300 font-bold text-center leading-tight">
+                {{ pet.get_buff_description }}
+            </p>
         </div>
 
-        <!-- 3 BARRAS DE ESTADO: VITALIDAD, VÍNCULO Y PROGRESIÓN -->
-        <div class="w-full flex flex-col gap-2.5 my-3 bg-black/50 p-3.5 rounded-2xl border border-vip-gold/20">
-            <!-- 1. Energía / Saciedad -->
+        <!-- Línea Temporal de Evolución (Progreso visual a Nivel 10 y 25) -->
+        <div class="w-full mt-2.5 px-2 py-1.5 bg-black/40 rounded-xl border border-white/5 flex items-center justify-between text-[9px] font-mono text-stone-400 relative z-10">
+            <div class="flex items-center gap-1 {% if pet.evolution_stage_number >= 1 %}text-yellow-400 font-bold{% endif %}">
+                <span>●</span> <span>Fase 1 (Nv 1)</span>
+            </div>
+            <span class="text-stone-600">──</span>
+            <div class="flex items-center gap-1 {% if pet.evolution_stage_number >= 2 %}text-yellow-400 font-bold{% else %}opacity-60{% endif %}">
+                <span>●</span> <span>Fase 2 (Nv 10)</span>
+            </div>
+            <span class="text-stone-600">──</span>
+            <div class="flex items-center gap-1 {% if pet.evolution_stage_number >= 3 %}text-yellow-400 font-bold{% else %}opacity-60{% endif %}">
+                <span>●</span> <span>Fase 3 (Nv 25)</span>
+            </div>
+        </div>
+
+        <!-- 📊 PANEL TELEMÉTRICO DE ESTADO (3 MÉTRICAS ORGANIZADAS) -->
+        <div class="w-full flex flex-col gap-2.5 my-3.5 bg-black/60 p-3.5 rounded-2xl border border-vip-gold/25 relative z-10 shadow-inner">
+            
+            <!-- 1. Vitalidad / Energía -->
             <div class="flex flex-col gap-1 text-left">
                 <div class="flex justify-between text-[10px] font-bold">
-                    <span class="text-yellow-400 flex items-center gap-1">⚡ Vitalidad / Energía</span>
-                    <span class="font-mono text-white" id="pet-energy-text">{{ pet.energy }}%</span>
+                    <span class="text-yellow-400 flex items-center gap-1">
+                        <span>⚡</span> <span>Energía & Vitalidad</span>
+                    </span>
+                    <span class="font-mono text-white text-[11px]" id="pet-energy-text">{{ pet.energy }}%</span>
                 </div>
-                <div class="w-full bg-black h-2 rounded-full overflow-hidden border border-yellow-500/20 p-0.5">
-                    <div id="pet-energy-bar" class="bg-gradient-to-r from-yellow-600 to-yellow-300 h-full rounded-full transition-all duration-500" style="width: {{ pet.energy }}%;"></div>
+                <div class="w-full bg-black/80 h-2 rounded-full overflow-hidden border border-yellow-500/30 p-0.5 shadow-inner">
+                    <div id="pet-energy-bar" class="bg-gradient-to-r from-amber-600 via-yellow-500 to-yellow-300 h-full rounded-full transition-all duration-500" style="width: {{ pet.energy }}%;"></div>
                 </div>
             </div>
 
             <!-- 2. Vínculo / Felicidad -->
             <div class="flex flex-col gap-1 text-left">
                 <div class="flex justify-between text-[10px] font-bold">
-                    <span class="text-pink-400 flex items-center gap-1">
-                        💖 Vínculo: <span id="pet-mood-badge" class="text-pink-200 font-normal">
+                    <span class="text-rose-400 flex items-center gap-1">
+                        <span>💖</span> <span>Vínculo:</span>
+                        <span id="pet-mood-badge" class="text-rose-200 font-normal">
                             {% if pet.happiness >= 80 %}🥰 Devoto & Radiante{% elif pet.happiness >= 50 %}😊 Alegre{% elif pet.happiness >= 25 %}🥱 Cansado{% else %}🥺 Solitario{% endif %}
                         </span>
                     </span>
-                    <span class="font-mono text-white" id="pet-happiness-text">{{ pet.happiness }}%</span>
+                    <span class="font-mono text-white text-[11px]" id="pet-happiness-text">{{ pet.happiness }}%</span>
                 </div>
-                <div class="w-full bg-black h-2 rounded-full overflow-hidden border border-pink-500/20 p-0.5">
-                    <div id="pet-happiness-bar" class="bg-gradient-to-r from-pink-600 via-rose-400 to-fuchsia-300 h-full rounded-full transition-all duration-500" style="width: {{ pet.happiness }}%;"></div>
+                <div class="w-full bg-black/80 h-2 rounded-full overflow-hidden border border-rose-500/30 p-0.5 shadow-inner">
+                    <div id="pet-happiness-bar" class="bg-gradient-to-r from-rose-600 via-pink-400 to-fuchsia-300 h-full rounded-full transition-all duration-500" style="width: {{ pet.happiness }}%;"></div>
                 </div>
             </div>
 
-            <!-- 3. Experiencia XP -->
+            <!-- 3. Experiencia Espiritual -->
             <div class="flex flex-col gap-1 text-left">
                 <div class="flex justify-between text-[10px] font-bold">
-                    <span class="text-purple-400 flex items-center gap-1">✨ Progresión Espiritual</span>
-                    <span class="font-mono text-white" id="pet-xp-text">{{ pet.xp }} / {{ pet.xp_to_next_level }} XP</span>
+                    <span class="text-purple-400 flex items-center gap-1">
+                        <span>✨</span> <span>Experiencia Espiritual</span>
+                    </span>
+                    <span class="font-mono text-purple-200 text-[10px]" id="pet-xp-text">{{ pet.xp }} / {{ pet.xp_to_next_level }} XP</span>
                 </div>
-                <div class="w-full bg-black h-2 rounded-full overflow-hidden border border-purple-500/20 p-0.5">
-                    <div id="pet-xp-bar" class="bg-gradient-to-r from-purple-800 to-fuchsia-400 h-full rounded-full transition-all duration-500" style="width: {{ pet.xp_percentage }}%;"></div>
+                <div class="w-full bg-black/80 h-2 rounded-full overflow-hidden border border-purple-500/30 p-0.5 shadow-inner">
+                    <div id="pet-xp-bar" class="bg-gradient-to-r from-purple-700 via-purple-500 to-fuchsia-400 h-full rounded-full transition-all duration-500" style="width: {{ pet.xp_percentage }}%;"></div>
                 </div>
             </div>
+
         </div>
 
-        <!-- BOTONES RÁPIDOS 100% AJAX -->
-        <div class="grid grid-cols-2 gap-2.5 w-full">
+        <!-- ⚡ DOCK DE ACCIÓN INMEDIATA (BOTONES PRINCIPALES) -->
+        <div class="grid grid-cols-2 gap-2.5 w-full relative z-10">
             <button type="button" onclick="ajaxInteractPet('feed')" id="btn-feed-pet"
-                    class="btn-gold py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                    class="btn-gold py-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all">
                 <span>🍖</span> <span>Alimentar (-15🪙)</span>
             </button>
 
             <button type="button" onclick="ajaxInteractPet('pet')" id="btn-pet-action"
-                    class="bg-purple-950/80 border border-purple-500/70 text-purple-200 hover:bg-purple-900 py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                    class="bg-purple-950/90 border border-purple-500 text-purple-200 hover:bg-purple-900 py-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all">
                 <span>💖</span> <span id="pet-action-label">{% if pet.can_be_petted %}Acariciar (+15XP){% else %}Descanso ({{ pet.minutes_until_next_pet }}m){% endif %}</span>
             </button>
         </div>
 
     </div>
 
-    <!-- TERRITORIOS DE EXPEDICIÓN -->
-    <div class="flex flex-col gap-3">
-        <div class="flex justify-between items-center px-1">
-            <h3 class="font-serif text-sm font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
-                <span>🗺️</span> Territorios de Exploración
-            </h3>
-            <span class="text-[10px] text-stone-400">Botín de oro y Photocards</span>
-        </div>
-
-        <!-- Bosque de Jade -->
-        <div class="vip-panel p-3.5 rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-black to-[#0c0416] flex items-center justify-between gap-3 shadow hover:border-emerald-400 transition-all">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-12 h-12 rounded-xl bg-emerald-950 border border-emerald-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">🌲</div>
-                <div class="flex flex-col min-w-0">
-                    <div class="flex items-center gap-1.5">
-                        <h4 class="text-xs font-black text-white truncate">Bosque de Jade</h4>
-                        <span class="text-[9px] bg-emerald-900/60 text-emerald-300 font-bold px-1.5 py-0.2 rounded border border-emerald-700">Lvl 1+</span>
-                    </div>
-                    <span class="text-[10px] text-stone-300 mt-0.5">Oro garantizado + Probabilidad de Comida</span>
-                    <span class="text-[9px] text-stone-500 font-mono">-15% Energía • Cooldown 15m</span>
-                </div>
-            </div>
-            <button type="button" onclick="launchExpedition('forest', 'Bosque de Jade')" 
-                    class="bg-emerald-600 hover:bg-emerald-500 text-black font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex-shrink-0 shadow active:scale-95 transition-all">
-                Explorar
-            </button>
-        </div>
-
-        <!-- Criptas Olvidadas -->
-        <div class="vip-panel p-3.5 rounded-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/40 via-black to-[#0c0416] flex items-center justify-between gap-3 shadow hover:border-purple-400 transition-all">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-12 h-12 rounded-xl bg-purple-950 border border-purple-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">🏛️</div>
-                <div class="flex flex-col min-w-0">
-                    <div class="flex items-center gap-1.5">
-                        <h4 class="text-xs font-black text-white truncate">Criptas Olvidadas</h4>
-                        <span class="text-[9px] bg-purple-900/60 text-purple-300 font-bold px-1.5 py-0.2 rounded border border-purple-700">Lvl 2+</span>
-                    </div>
-                    <span class="text-[10px] text-yellow-300 font-bold mt-0.5">¡Puede desenterrar Photocards! 🎴</span>
-                    <span class="text-[9px] text-stone-500 font-mono">-25% Energía • Cooldown 45m</span>
-                </div>
-            </div>
-            <button type="button" onclick="launchExpedition('crypts', 'Criptas Olvidadas')" 
-                    class="btn-gold text-[10px] font-black uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex-shrink-0 shadow active:scale-95 transition-all">
-                Explorar
-            </button>
-        </div>
-
-        <!-- Caverna de Cristal -->
-        <div class="vip-panel p-3.5 rounded-2xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-black to-[#0c0416] flex items-center justify-between gap-3 shadow hover:border-yellow-400 transition-all">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-12 h-12 rounded-xl bg-amber-950 border border-amber-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">💎</div>
-                <div class="flex flex-col min-w-0">
-                    <div class="flex items-center gap-1.5">
-                        <h4 class="text-xs font-black text-white truncate">Caverna de Cristal</h4>
-                        <span class="text-[9px] bg-amber-900/60 text-amber-300 font-bold px-1.5 py-0.2 rounded border border-amber-700">Lvl 4+</span>
-                    </div>
-                    <span class="text-[10px] text-amber-300 font-bold mt-0.5">Cartas Épicas & Legendarias 👑</span>
-                    <span class="text-[9px] text-stone-500 font-mono">-40% Energía • Cooldown 90m</span>
-                </div>
-            </div>
-            <button type="button" onclick="launchExpedition('cavern', 'Caverna de Cristal')" 
-                    class="bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-black font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex-shrink-0 shadow active:scale-95 transition-all">
-                Explorar
-            </button>
-        </div>
-    </div>
-
-    <!-- TRANSMUTACIÓN (CATÁLOGO DE LAS 10 ESPECIES) -->
-    <div class="text-center pt-2">
-        <button type="button" onclick="toggleTransmuteModal()" 
-                class="text-[11px] text-stone-400 hover:text-vip-gold uppercase tracking-wider underline">
-            🔮 Ritual de Transmutación entre las 10 Especies (300 🪙)
+    <!-- 🧭 SUB-NAV PRO DEL SANTUARIO: [EXPEDICIONES] | [ESPECIES & RITUAL] -->
+    <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/60 border border-vip-gold/30 rounded-2xl text-xs font-bold uppercase text-center shadow-lg">
+        <button type="button" onclick="switchSanctuaryTab('expeditions')" id="tab-btn-expeditions" 
+                class="py-2.5 rounded-xl bg-vip-gold text-black font-black flex items-center justify-center gap-1.5 shadow">
+            <span>🗺️</span> <span>Expediciones</span>
+        </button>
+        <button type="button" onclick="switchSanctuaryTab('species')" id="tab-btn-species" 
+                class="py-2.5 rounded-xl text-stone-400 hover:text-white flex items-center justify-center gap-1.5 transition-all">
+            <span>🔮</span> <span>Especies & Ritual</span>
         </button>
     </div>
 
-    <!-- MODAL DE TRANSMUTACIÓN CON LAS 10 ESPECIES -->
-    <div id="transmute-modal" class="hidden w-full bg-black/90 border border-purple-500/50 p-4 rounded-2xl text-left">
-        <h4 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider text-center mb-1">
-            Transmutar Esencia (300 🪙)
-        </h4>
-        <form action="{% url 'pets:change_pet' %}" method="POST" class="flex flex-col gap-2.5 mt-2">
-            {% csrf_token %}
-            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+    <!-- 🌲 PESTAÑA 1: TERRITORIOS DE EXPEDICIÓN Y BOTÍN -->
+    <div id="tab-expeditions" class="flex flex-col gap-3">
+        <div class="flex justify-between items-center px-1">
+            <h4 class="text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1">
+                <span>🗺️</span> Territorios de Exploración
+            </h4>
+            <span class="text-[10px] text-stone-400 font-mono">Consumen energía</span>
+        </div>
+
+        <!-- 1. Bosque de Jade -->
+        <div class="vip-panel p-4 rounded-3xl border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-black to-[#0a0314] flex flex-col gap-2.5 shadow-lg">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-emerald-950 border border-emerald-500/60 flex items-center justify-center text-2xl flex-shrink-0 shadow">
+                        🌲
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h5 class="text-xs font-black text-white">Bosque de Jade</h5>
+                            <span class="text-[9px] bg-emerald-900/80 text-emerald-300 font-bold px-2 py-0.2 rounded-full border border-emerald-700">Lvl 1+</span>
+                        </div>
+                        <p class="text-[10px] text-stone-300 mt-0.5">Recolección veloz • Oro & Comida silvestre</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center justify-between border-t border-white/5 pt-2">
+                <span class="text-[9px] font-mono text-stone-400 flex items-center gap-1">
+                    <span>⚡ -15% Energía</span> • <span>⏳ Cooldown 15m</span>
+                </span>
+                <button type="button" onclick="launchExpedition('forest', 'Bosque de Jade')" 
+                        class="bg-emerald-600 hover:bg-emerald-500 text-black font-black text-[10px] uppercase tracking-wider px-4 py-2 rounded-xl shadow active:scale-95 transition-all">
+                    Explorar
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. Criptas Olvidadas -->
+        <div class="vip-panel p-4 rounded-3xl border border-purple-500/40 bg-gradient-to-r from-purple-950/40 via-black to-[#0a0314] flex flex-col gap-2.5 shadow-lg">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-purple-950 border border-purple-500/60 flex items-center justify-center text-2xl flex-shrink-0 shadow">
+                        🏛️
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h5 class="text-xs font-black text-white">Criptas Olvidadas</h5>
+                            <span class="text-[9px] bg-purple-900/80 text-purple-300 font-bold px-2 py-0.2 rounded-full border border-purple-700">Lvl 2+</span>
+                        </div>
+                        <p class="text-[10px] text-yellow-300 font-bold mt-0.5">Desentierra Photocards Comunes / Raras 🎴</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center justify-between border-t border-white/5 pt-2">
+                <span class="text-[9px] font-mono text-stone-400 flex items-center gap-1">
+                    <span>⚡ -25% Energía</span> • <span>⏳ Cooldown 45m</span>
+                </span>
+                <button type="button" onclick="launchExpedition('crypts', 'Criptas Olvidadas')" 
+                        class="btn-gold text-[10px] font-black uppercase tracking-wider px-4 py-2 rounded-xl shadow active:scale-95 transition-all">
+                    Explorar
+                </button>
+            </div>
+        </div>
+
+        <!-- 3. Caverna de Cristal -->
+        <div class="vip-panel p-4 rounded-3xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-black to-[#0a0314] flex flex-col gap-2.5 shadow-lg">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-amber-950 border border-amber-500/60 flex items-center justify-center text-2xl flex-shrink-0 shadow">
+                        💎
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h5 class="text-xs font-black text-white">Caverna de Cristal</h5>
+                            <span class="text-[9px] bg-amber-900/80 text-amber-300 font-bold px-2 py-0.2 rounded-full border border-amber-700">Lvl 4+</span>
+                        </div>
+                        <p class="text-[10px] text-amber-300 font-bold mt-0.5">Alto Oro & Photocards Épicas / Legendarias 👑</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center justify-between border-t border-white/5 pt-2">
+                <span class="text-[9px] font-mono text-stone-400 flex items-center gap-1">
+                    <span>⚡ -40% Energía</span> • <span>⏳ Cooldown 90m</span>
+                </span>
+                <button type="button" onclick="launchExpedition('cavern', 'Caverna de Cristal')" 
+                        class="bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-black font-black text-[10px] uppercase tracking-wider px-4 py-2 rounded-xl shadow active:scale-95 transition-all">
+                    Explorar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔮 PESTAÑA 2: BESTIARIO DE LAS 10 ESPECIES Y RITUAL DE TRANSMUTACIÓN -->
+    <div id="tab-species" class="hidden flex flex-col gap-4">
+        
+        <!-- Ritual de Transmutación -->
+        <div class="vip-panel p-5 border border-purple-500/50 rounded-3xl shadow-xl bg-gradient-to-br from-[#1d0830] to-black">
+            <div class="flex items-center justify-between border-b border-purple-500/30 pb-2 mb-3">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">🔮</span>
+                    <h4 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider">
+                        Ritual de Transmutación
+                    </h4>
+                </div>
+                <span class="text-[10px] font-mono font-bold text-yellow-400 bg-black/60 px-2 py-0.5 rounded-full border border-yellow-500/30">
+                    Costo: 300 🪙
+                </span>
+            </div>
             
-            <select name="species" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+            <p class="text-[11px] text-stone-300 leading-relaxed mb-3">
+                Transmuta la esencia de tu compañero hacia cualquiera de las 10 bestias míticas del Reino conservando la afinidad espiritual.
+            </p>
+
+            <form action="{% url 'pets:change_pet' %}" method="POST" class="flex flex-col gap-3">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                
+                <div>
+                    <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1">Nueva Especie Deseada</label>
+                    <select name="species" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
+                        {% for key, val in all_species.items %}
+                            <option value="{{ key }}" {% if pet.species == key %}selected{% endif %}>
+                                {{ val.family_name }} • {{ val.element }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1">Nombre Nuevo</label>
+                    <input type="text" name="new_name" required placeholder="Ingresa el nuevo nombre..." value="{{ pet.name }}"
+                           class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
+                </div>
+
+                <button type="submit" onclick="return confirm('¿Confirmas transmutar a tu mascota por 300 🪙?')"
+                        class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
+                    Consagrar Transmutación (300 🪙)
+                </button>
+            </form>
+        </div>
+
+        <!-- Catálogo de las 10 Criaturas -->
+        <div class="flex flex-col gap-2">
+            <h5 class="text-xs font-bold text-stone-300 uppercase tracking-wider px-1">Bestiario de las 10 Criaturas</h5>
+            <div class="grid grid-cols-1 gap-2">
                 {% for key, val in all_species.items %}
-                    <option value="{{ key }}">{{ val.family_name }} ({{ val.element }})</option>
+                <div class="p-3 rounded-2xl border bg-black/60 flex items-center justify-between {% if pet.species == key %}border-vip-gold bg-yellow-950/20 shadow-[0_0_12px_rgba(212,175,55,0.2)]{% else %}border-white/10{% endif %}">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-xl flex-shrink-0">
+                            {% if key == 'fox' %}🦊{% elif key == 'panther' %}🐆{% elif key == 'viper' %}🐍{% elif key == 'raven' %}🦅{% elif key == 'wolf' %}🐺{% elif key == 'dragon' %}🐉{% elif key == 'owl' %}🦉{% elif key == 'deer' %}🦌{% elif key == 'scorpion' %}🦂{% else %}🐇{% endif %}
+                        </div>
+                        <div class="flex flex-col">
+                            <span class="text-xs font-bold text-white">{{ val.family_name }}</span>
+                            <span class="text-[9.5px] text-purple-300 font-mono">{{ val.element }}</span>
+                            <span class="text-[10px] text-yellow-300/90 mt-0.5">{{ val.stages.0.buff_desc }}</span>
+                        </div>
+                    </div>
+                    {% if pet.species == key %}
+                        <span class="text-[9px] bg-yellow-500 text-black font-black uppercase px-2 py-0.5 rounded-full shadow">Activa</span>
+                    {% endif %}
+                </div>
                 {% endfor %}
-            </select>
+            </div>
+        </div>
 
-            <input type="text" name="new_name" required placeholder="Nuevo nombre de tu mascota..." 
-                   class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
-
-            <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase">
-                Completar Ritual
-            </button>
-        </form>
     </div>
 
     {% else %}
-    <!-- PANTALLA DE ADOPCIÓN CON LAS 10 ESPECIES -->
-    <div class="vip-panel p-6 text-center flex flex-col items-center rounded-3xl">
-        <span class="text-5xl my-2 animate-bounce">🥚</span>
-        <h3 class="font-serif text-xl font-black text-white mt-1">Invoca a tu Compañero</h3>
-        <p class="text-xs text-vip-text/60 mt-1 max-w-xs">
-            Cada noble del Reino tiene derecho a adoptar una de las 10 criaturas místicas para explorar el mundo y evolucionar.
+    <!-- 🥚 ALTAR DE DESPERTAR Y ADOPCIÓN (CUANDO NO TIENE MASCOTA) -->
+    <div class="vip-panel p-6 text-center flex flex-col items-center rounded-3xl border border-vip-gold/50 shadow-2xl bg-gradient-to-br from-[#1d0b2e] via-[#0b0314] to-black">
+        <div class="relative w-24 h-24 my-2 flex items-center justify-center">
+            <div class="absolute inset-0 bg-yellow-400/20 rounded-full blur-2xl animate-pulse"></div>
+            <span class="text-6xl animate-bounce filter drop-shadow">🥚</span>
+        </div>
+
+        <h3 class="font-serif text-xl font-black text-gold-gradient uppercase tracking-wider mt-1">
+            Despertar Espiritual
+        </h3>
+        <p class="text-xs text-vip-text/70 mt-1 max-w-xs leading-relaxed">
+            Las 10 criaturas místicas esperan tu llamado. Elige a tu guardián y acompáñalo en su ascenso hacia la forma Apex.
         </p>
 
-        <form action="{% url 'pets:adopt' %}" method="POST" class="w-full flex flex-col gap-3 mt-5">
+        <form action="{% url 'pets:adopt' %}" method="POST" class="w-full flex flex-col gap-3.5 mt-5">
             {% csrf_token %}
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
-            <div>
-                <label class="block text-xs text-vip-gold font-bold uppercase mb-1">Especie Deseada (10 Disponibles)</label>
-                <select name="species" class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+            
+            <div class="text-left">
+                <label class="block text-[11px] text-vip-gold font-bold uppercase mb-1">Especie Base (10 Especies Sagradas)</label>
+                <select name="species" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-vip-gold">
                     {% for key, val in all_species.items %}
-                        <option value="{{ key }}">{{ val.family_name }} — {{ val.stages.0.title }}</option>
+                        <option value="{{ key }}">
+                            {{ val.family_name }} ({{ val.element }})
+                        </option>
                     {% endfor %}
                 </select>
             </div>
-            <div>
-                <label class="block text-xs text-vip-gold font-bold uppercase mb-1">Nombre</label>
-                <input type="text" name="name" required placeholder="Ej: Luna, Kitsu, Nero..." 
-                       class="w-full bg-black/70 border border-vip-gold/40 rounded-xl p-3 text-xs text-white text-center">
+
+            <div class="text-left">
+                <label class="block text-[11px] text-vip-gold font-bold uppercase mb-1">Nombre Sagrado de la Criatura</label>
+                <input type="text" name="name" required placeholder="Ej: Nyx, Kitsuray, Drakon, Fenris..." 
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-vip-gold">
             </div>
-            <button type="submit" class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider mt-2">
-                ✨ Despertar Mascota
+
+            <button type="submit" class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider mt-2 shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
+                ✨ Despertar Guardián Sagrado
             </button>
         </form>
     </div>
@@ -255,7 +385,7 @@
 
 </div>
 
-<!-- 🌟 MODAL CINEMATOGRÁFICO DE EVOLUCIÓN (¡EVOLUCIÓN CONSUMADA!) -->
+<!-- 🌟 MODAL CINEMATOGRÁFICO DE EVOLUCIÓN APEX -->
 <div id="evolution-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 select-none">
     <div class="w-full max-w-sm bg-gradient-to-b from-[#2a0e4a] via-[#10041f] to-black border-2 border-yellow-400 rounded-3xl p-6 shadow-[0_0_60px_rgba(234,179,8,0.5)] flex flex-col items-center text-center relative overflow-hidden">
         
@@ -288,14 +418,19 @@
     </div>
 </div>
 
-<!-- MODAL DEL COFRE DEL TESORO (EXPEDICIÓN) -->
+<!-- 📦 MODAL DEL COFRE DEL TESORO (EXPEDICIONES CON FOTOCARTAS) -->
 <div id="expedition-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-4 select-none">
     <div class="w-full max-w-sm bg-gradient-to-b from-[#1c0c2e] via-[#0d0417] to-black border-2 border-vip-gold/60 rounded-3xl p-6 shadow-[0_0_50px_rgba(0,0,0,0.95)] flex flex-col items-center text-center relative overflow-hidden">
-        <h3 id="exp-modal-title" class="font-serif text-base font-black text-gold-gradient uppercase tracking-widest mb-1">Explorando Territorio</h3>
-        <p class="text-xs text-stone-400 mb-4" id="exp-modal-subtitle">Tu mascota se adentra en las sombras...</p>
+        
+        <h3 id="exp-modal-title" class="font-serif text-base font-black text-gold-gradient uppercase tracking-widest mb-1">
+            Explorando Territorio
+        </h3>
+        <p class="text-xs text-stone-400 mb-4" id="exp-modal-subtitle">Tu mascota regresa con un cofre antiguo:</p>
 
         <div id="chest-box" class="relative my-3 cursor-pointer group" onclick="openFoundChest()">
-            <div class="w-24 h-24 rounded-3xl bg-amber-950/60 border-2 border-yellow-400/80 flex items-center justify-center text-5xl shadow-[0_0_30px_rgba(234,179,8,0.5)] animate-bounce">📦</div>
+            <div class="w-24 h-24 rounded-3xl bg-amber-950/60 border-2 border-yellow-400/80 flex items-center justify-center text-5xl shadow-[0_0_30px_rgba(234,179,8,0.5)] animate-bounce">
+                📦
+            </div>
             <span class="text-[11px] text-yellow-300 font-bold uppercase tracking-wider block mt-2 animate-pulse">¡Toca el Cofre para Abrir!</span>
         </div>
 
@@ -331,6 +466,7 @@
     </div>
 </div>
 
+<!-- SINTETIZADOR DE AUDIO CASINO/RPG WEB AUDIO API -->
 <script>
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     let sanctuaryAudioCtx = null;
@@ -385,6 +521,25 @@
                 });
             }
         } catch(e) {}
+    }
+
+    function switchSanctuaryTab(tabName) {
+        const tabExpeditions = document.getElementById('tab-expeditions');
+        const tabSpecies = document.getElementById('tab-species');
+        const btnExp = document.getElementById('tab-btn-expeditions');
+        const btnSpec = document.getElementById('tab-btn-species');
+
+        if (tabName === 'expeditions') {
+            tabExpeditions.classList.remove('hidden');
+            tabSpecies.classList.add('hidden');
+            btnExp.className = "py-2.5 rounded-xl bg-vip-gold text-black font-black flex items-center justify-center gap-1.5 shadow";
+            btnSpec.className = "py-2.5 rounded-xl text-stone-400 hover:text-white flex items-center justify-center gap-1.5 transition-all";
+        } else {
+            tabExpeditions.classList.add('hidden');
+            tabSpecies.classList.remove('hidden');
+            btnSpec.className = "py-2.5 rounded-xl bg-vip-gold text-black font-black flex items-center justify-center gap-1.5 shadow";
+            btnExp.className = "py-2.5 rounded-xl text-stone-400 hover:text-white flex items-center justify-center gap-1.5 transition-all";
+        }
     }
 
     function triggerPetTouch(e) {
@@ -487,9 +642,9 @@
         document.getElementById('evo-modal-img').src = data.new_sprite;
 
         document.getElementById('pet-avatar-img').src = data.new_sprite;
-        document.getElementById('pet-evolved-name').innerText = `(${data.new_name})`;
+        document.getElementById('pet-evolved-name').innerText = `${data.new_name}`;
         document.getElementById('pet-buff-text').innerText = data.new_buff;
-        document.getElementById('pet-stage-badge').innerText = `Fase ${data.new_stage}/3: ${data.new_title}`;
+        document.getElementById('pet-stage-badge').innerText = `Fase ${data.new_stage}/3: ${data.new_name}`;
 
         document.getElementById('evolution-modal').classList.remove('hidden');
     }
@@ -517,7 +672,13 @@
             const data = await resp.json();
 
             if (!data.success) {
-                alert(data.error);
+                const toastBox = document.getElementById('pet-toast-box');
+                toastBox.innerHTML = `
+                    <div class="p-3 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-bold text-center shadow-lg">
+                        ${data.error}
+                    </div>
+                `;
+                setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
                 return;
             }
 
@@ -577,10 +738,6 @@
 
     function closeExpeditionModal() {
         document.getElementById('expedition-modal').classList.add('hidden');
-    }
-
-    function toggleTransmuteModal() {
-        document.getElementById('transmute-modal').classList.toggle('hidden');
     }
 </script>
 {% endblock %}

@@ -118,52 +118,54 @@
         {% endblock %}
     </main>
 
-    <!-- 📱 BARRA DE NAVEGACIÓN INFERIOR BLINDADA (6 BOTONES PROPORCIONADOS) -->
-    <div class="fixed bottom-0 inset-x-0 z-[99999] pointer-events-none pb-[max(0.75rem,env(safe-area-inset-bottom))] px-2.5 pt-2">
-        <nav class="max-w-md mx-auto pointer-events-auto bg-[#0a0514]/95 border border-vip-gold/40 backdrop-blur-xl rounded-2xl p-1.5 px-2 flex justify-between items-center shadow-[0_10px_35px_rgba(0,0,0,0.95),0_0_15px_rgba(212,175,55,0.25)]">
-            
-            <!-- 1. Inicio -->
-            <button type="button" onclick="universalNav('/')" 
-                    class="flex-1 flex flex-col items-center justify-center py-1 px-0.5 text-stone-300 hover:text-vip-gold active:scale-90 transition-all select-none">
-                <span class="text-lg leading-none">🏛️</span>
-                <span class="text-[8.5px] font-bold uppercase tracking-wider mt-1 text-stone-300">Inicio</span>
-            </button>
+    <!-- 📱 BARRA DE NAVEGACIÓN INFERIOR 100% SIMÉTRICA (6 MÓDULOS EQUILIBRADOS) -->
+    <div class="fixed bottom-0 inset-x-0 z-[99999] pointer-events-none pb-[max(0.6rem,env(safe-area-inset-bottom))] px-2.5 pt-1.5">
+        <nav class="max-w-md mx-auto pointer-events-auto bg-[#0a0514]/95 border border-vip-gold/40 backdrop-blur-xl rounded-2xl p-1.5 px-1 shadow-[0_10px_35px_rgba(0,0,0,0.95),0_0_18px_rgba(212,175,55,0.22)]">
+            <div class="grid grid-cols-6 gap-0.5 items-center justify-items-stretch">
+                
+                <!-- 1. Inicio -->
+                <button type="button" onclick="universalNav('/')" 
+                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-300 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl hover:bg-white/5">
+                    <span class="text-base sm:text-lg leading-none">🏛️</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1 text-stone-300">Inicio</span>
+                </button>
 
-            <!-- 2. Feed VIP -->
-            <button type="button" onclick="universalNav('/idols/feed/')" 
-                    class="flex-1 flex flex-col items-center justify-center py-1 px-0.5 text-stone-300 hover:text-purple-300 active:scale-90 transition-all select-none">
-                <span class="text-lg leading-none">📱</span>
-                <span class="text-[8.5px] font-bold uppercase tracking-wider mt-1 text-stone-300">Muro</span>
-            </button>
+                <!-- 2. Feed VIP -->
+                <button type="button" onclick="universalNav('/idols/feed/')" 
+                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-300 hover:text-purple-300 active:scale-90 transition-all select-none rounded-xl hover:bg-white/5">
+                    <span class="text-base sm:text-lg leading-none">📱</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1 text-stone-300">Muro</span>
+                </button>
 
-            <!-- 3. Cajas CS (NUEVO) -->
-            <button type="button" onclick="universalNav('/idols/photocards/')" 
-                    class="flex-1 flex flex-col items-center justify-center py-1 px-0.5 text-stone-300 hover:text-yellow-400 active:scale-90 transition-all select-none">
-                <span class="text-lg leading-none">🎁</span>
-                <span class="text-[8.5px] font-bold uppercase tracking-wider mt-1 text-stone-300">Cajas</span>
-            </button>
+                <!-- 3. Cajas CS -->
+                <button type="button" onclick="universalNav('/idols/photocards/')" 
+                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-300 hover:text-yellow-400 active:scale-90 transition-all select-none rounded-xl hover:bg-white/5">
+                    <span class="text-base sm:text-lg leading-none">🎁</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1 text-stone-300">Cajas</span>
+                </button>
 
-            <!-- 4. Botón Central Destacado: ELENCO DE IDOLS -->
-            <button type="button" onclick="universalNav('/idols/gallery/')" 
-                    class="-mt-5 bg-gradient-to-tr from-amber-500 via-yellow-300 to-amber-600 text-stone-950 w-13 h-13 rounded-full border-2 border-yellow-100 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(212,175,55,0.85)] active:scale-90 transition-all select-none mx-0.5 hover:brightness-110">
-                <span class="text-xl leading-none">🎭</span>
-                <span class="text-[7.5px] font-black uppercase tracking-tighter text-stone-950 leading-tight mt-0.5">Elenco</span>
-            </button>
+                <!-- 4. Elenco de Musas (Nivelado y con acento dorado) -->
+                <button type="button" onclick="universalNav('/idols/gallery/')" 
+                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-vip-gold hover:text-yellow-300 active:scale-90 transition-all select-none rounded-xl bg-gradient-to-b from-yellow-500/15 to-transparent border border-vip-gold/30 shadow-[0_0_10px_rgba(212,175,55,0.2)]">
+                    <span class="text-base sm:text-lg leading-none filter drop-shadow">🎭</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-black uppercase tracking-tight mt-1 text-vip-gold">Elenco</span>
+                </button>
 
-            <!-- 5. Mascotas -->
-            <button type="button" onclick="universalNav('/pets/')" 
-                    class="flex-1 flex flex-col items-center justify-center py-1 px-0.5 text-stone-300 hover:text-purple-300 active:scale-90 transition-all select-none">
-                <span class="text-lg leading-none">🐾</span>
-                <span class="text-[8.5px] font-bold uppercase tracking-wider mt-1 text-stone-300">Santuario</span>
-            </button>
+                <!-- 5. Santuario -->
+                <button type="button" onclick="universalNav('/pets/')" 
+                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-300 hover:text-purple-300 active:scale-90 transition-all select-none rounded-xl hover:bg-white/5">
+                    <span class="text-base sm:text-lg leading-none">🐾</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1 text-stone-300">Santuario</span>
+                </button>
 
-            <!-- 6. Bóveda -->
-            <button type="button" onclick="universalNav('/economy/wallet/')" 
-                    class="flex-1 flex flex-col items-center justify-center py-1 px-0.5 text-stone-300 hover:text-vip-gold active:scale-90 transition-all select-none">
-                <span class="text-lg leading-none">🪙</span>
-                <span class="text-[8.5px] font-bold uppercase tracking-wider mt-1 text-stone-300">Bóveda</span>
-            </button>
+                <!-- 6. Bóveda -->
+                <button type="button" onclick="universalNav('/economy/wallet/')" 
+                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-300 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl hover:bg-white/5">
+                    <span class="text-base sm:text-lg leading-none">🪙</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1 text-stone-300">Bóveda</span>
+                </button>
 
+            </div>
         </nav>
     </div>
 
