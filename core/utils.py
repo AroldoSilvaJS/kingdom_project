@@ -5,11 +5,6 @@ from django.contrib import messages
 from django.db import transaction
 
 def grant_user_xp(request, tg_id, xp_amount, reason=""):
-    """
-    Otorga EXP garantizada al noble o a la musa,
-    aplica el buff multiplicador del Búho Cronos,
-    controla la subida de nivel y entrega oro real a su Bóveda.
-    """
     if not tg_id or str(tg_id).strip() in ['', 'None', 'undefined', 'null']:
         return
         
@@ -24,7 +19,7 @@ def grant_user_xp(request, tg_id, xp_amount, reason=""):
             pet = Pet.objects.filter(telegram_user_id=clean_id).first()
             if pet and pet.species == 'owl':
                 owl_rates = {1: 1.15, 2: 1.30, 3: 1.50}
-                xp_amount = int(xp_amount * owl_rates.get(pet.evolution_stage_number, 1.15))
+                xp_amount = int(round(xp_amount * owl_rates.get(pet.evolution_stage_number, 1.15)))
         except Exception:
             pass
 

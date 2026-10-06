@@ -53,9 +53,20 @@ INSTALLED_APPS = [
     'corsheaders',
 ]
 
+# En config/settings.py
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # 👈 ¡AÑADIR ESTA LÍNEA!
+]
+
+# Carga WhiteNoise solo si está instalado (en Render); si no, no bloquea las pruebas locales
+try:
+    import whitenoise
+    MIDDLEWARE.append('whitenoise.middleware.WhiteNoiseMiddleware')
+except ImportError:
+    pass
+
+MIDDLEWARE += [
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'core.middleware.TelegramSessionMiddleware',
