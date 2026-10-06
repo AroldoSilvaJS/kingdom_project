@@ -70,3 +70,49 @@ class Wallet(models.Model):
         proximo_reclamo = self.last_bonus_claim + timedelta(hours=hours)
         restante = (proximo_reclamo - timezone.now()).total_seconds()
         return max(0, int(restante))
+
+    # economy/models.py
+
+class UserInventoryItem(models.Model):
+    telegram_user_id = models.BigIntegerField("ID del Usuario", db_index=True)
+    item_code = models.CharField("Código de Ítem", max_length=50, db_index=True)
+    quantity = models.PositiveIntegerField("Cantidad", default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Ítem de Inventario"
+        verbose_name_plural = "Ítems de Inventario"
+        unique_together = ('telegram_user_id', 'item_code')
+
+    def __str__(self):
+        return f"{self.telegram_user_id} - {self.item_code} (x{self.quantity})"
+
+    @classmethod
+    def add_item(cls, tg_id, item_code, qty=1):
+        obj, created = cls.objects.get_or_create(
+            telegram_user_id=tg_id, 
+            item_code=item_code,
+            defaults={'quantity': qty}
+        )
+        if not created:
+            obj.quantity += qty
+            obj.save(update_fields=['quantity', 'updated_at'])
+        return obj
+
+    @classmethod
+    def consume_item(cls, tg_id, item_code, qty=1):
+        obj = cls.objects.filter(telegram_user_id=tg_id, item_code=item_code).first()
+        if obj and obj.quantity >= qty:
+            obj.quantity -= qty
+            if obj.quantity <= 0:
+                obj.delete()
+            else:
+                obj.save(update_fields=['quantity', 'updated_at'])
+            return True
+        return False
+
+    @classmethod
+    def get_count(cls, tg_id, item_code):
+        obj = cls.objects.filter(telegram_user_id=tg_id, item_code=item_code).first()
+        return obj.quantity if obj else 0

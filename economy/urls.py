@@ -10,4 +10,6 @@ urlpatterns = [
     path('slots/', views.slots_game, name='slots'),
     path('blackjack/', views.blackjack_game, name='blackjack'), # <- AÑADIR AQUÍ
     path('mines/', views.mines_game, name='mines'),
+    path('bazar/', views.bazar_shop, name='bazar'),
+    path('bazar/buy/', views.bazar_buy_action, name='bazar_buy'),
 ]

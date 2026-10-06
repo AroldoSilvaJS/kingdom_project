@@ -189,6 +189,25 @@ class UserProfile(models.Model):
         self.save()
         return (leveled_up, self.level, gold_reward)
 
+    # --- SALVAGUARDAS Y ESTATUS DE TIENDA (EL BAZAR) ---
+    inactivity_shield_until = models.DateTimeField(null=True, blank=True, verbose_name="Inmunidad por Inactividad hasta")
+    custom_title_text = models.CharField(max_length=60, null=True, blank=True, verbose_name="Título Personalizado de Rol")
+    has_vip_badge = models.BooleanField(default=False, verbose_name="Insignia de Linaje VIP")
+    has_custom_avatar_frame = models.BooleanField(default=False, verbose_name="Acceso a Marcos Imperiales")
+
+    @property
+    def is_shield_active(self):
+        from django.utils import timezone
+        return bool(self.inactivity_shield_until and timezone.now() < self.inactivity_shield_until)
+
+    @property
+    def days_of_shield_remaining(self):
+        from django.utils import timezone
+        if not self.is_shield_active:
+            return 0
+        diff = self.inactivity_shield_until - timezone.now()
+        return max(0, diff.days + 1)
+
 
 class UserRole(models.Model):
     ROLES = [

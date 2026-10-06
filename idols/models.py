@@ -38,10 +38,18 @@ class IdolProfile(models.Model):
         default='purple',
         verbose_name="Aura de la Idol"
     )
+
     specialty = models.CharField(max_length=100, blank=True, null=True, verbose_name="Especialidad")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    is_featured_until = models.DateTimeField(null=True, blank=True, verbose_name="Destacada en Galería hasta")
+
+    @property
+    def is_featured(self):
+        from django.utils import timezone
+        return bool(self.is_featured_until and timezone.now() < self.is_featured_until)
 
     class Meta:
         verbose_name = "Perfil de Idol"
@@ -331,3 +339,20 @@ class PhotocardTrade(models.Model):
 
     def __str__(self):
         return f"Trade #{self.id}: {self.sender_username} -> {self.receiver_username} ({self.get_status_display()})"
+
+
+class IdolTribute(models.Model):
+    idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='tributes', verbose_name="Musa Agasajada")
+    client_telegram_id = models.BigIntegerField("ID del Noble Emisor", db_index=True)
+    client_username = models.CharField("Noble Emisor", max_length=100)
+    gift_name = models.CharField("Obsequio de Corte", max_length=100)
+    gold_value = models.PositiveIntegerField("Valor en Oro", default=150)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Tributo de Musa"
+        verbose_name_plural = "Tributos de Musas"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.gift_name} para {self.idol.stage_name} de {self.client_username}"

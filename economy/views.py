@@ -1,12 +1,14 @@
 import random
-from django.shortcuts import render, redirect
+from datetime import timedelta
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.utils import timezone
 from django.http import JsonResponse
-from .models import Wallet
-from core.models import UserProfile
-from core.utils import grant_user_xp
+from django.utils import timezone
+from .models import Wallet, UserInventoryItem
+from core.models import UserRole, UserProfile
+from idols.models import IdolProfile, IdolTribute
 from pets.models import Pet
+from core.utils import grant_user_xp
 from core.telegram_notify import send_telegram_msg
 
 def get_safe_tg_id(request):
@@ -633,4 +635,197 @@ def mines_game(request):
         'current_revealed': current_revealed,
         'current_mult': current_mult,
         'current_cashout': current_cashout,
+    })
+
+def bazar_shop(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+    
+    # Identificar si es idol
+    user_role = UserRole.objects.filter(telegram_id=tg_id).first()
+    mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id)
+    is_idol = (user_role and user_role.role == 'idol') or mis_idols.exists()
+    
+    # Lista de todas las idols para enviarles tributos
+    todas_idols = IdolProfile.objects.all().order_by('stage_name')
+
+    # Inventario del usuario
+    inv_lucky = UserInventoryItem.get_count(tg_id, 'lucky_charm')
+    inv_market = UserInventoryItem.get_count(tg_id, 'free_market')
+    inv_priority = UserInventoryItem.get_count(tg_id, 'priority_antojo')
+
+    return render(request, 'economy/bazar.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'pet': pet,
+        'is_idol': is_idol,
+        'mis_idols': mis_idols,
+        'todas_idols': todas_idols,
+        'inv_lucky': inv_lucky,
+        'inv_market': inv_market,
+        'inv_priority': inv_priority,
+    })
+
+
+def bazar_buy_action(request):
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+
+    tg_id = get_safe_tg_id(request)
+    item_key = request.POST.get('item_key')
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+
+    # Catálogo de precios y validaciones
+    PRICES = {
+        'shield_15': 150,
+        'shield_30': 250,
+        'dungeon_bail': 300,
+        'custom_title': 200,
+        'imperial_frame': 180,
+        'vip_badge': 120,
+        'tribute_gift': 150,
+        'priority_antojo': 100,
+        'featured_idol': 200,
+        'lucky_charm': 120,
+        'free_market': 80,
+        'energy_potion': 75,
+    }
+
+    price = PRICES.get(item_key)
+    if not price:
+        return JsonResponse({'success': False, 'error': 'Artículo no reconocido.'}, status=400)
+
+    if wallet.balance < price:
+        return JsonResponse({'success': False, 'error': f'No tienes suficiente oro ({price} 🪙 necesarios).'}, status=400)
+
+    msg = ""
+
+    # 1. SALVAGUARDAS
+    if item_key == 'shield_15':
+        current_end = profile.inactivity_shield_until if profile.is_shield_active else timezone.now()
+        profile.inactivity_shield_until = current_end + timedelta(days=15)
+        profile.save()
+        wallet.remove_funds(price)
+        msg = "🛡️ ¡Salvoconducto Real activado! Inmunidad extendida por 15 días."
+
+    elif item_key == 'shield_30':
+        current_end = profile.inactivity_shield_until if profile.is_shield_active else timezone.now()
+        profile.inactivity_shield_until = current_end + timedelta(days=30)
+        profile.save()
+        wallet.remove_funds(price)
+        msg = "🛡️ ¡Salvoconducto Real extendido por 30 días de cobertura total!"
+
+    elif item_key == 'dungeon_bail':
+        u_role = UserRole.objects.filter(telegram_id=tg_id).first()
+        if not u_role or not u_role.is_banned:
+            return JsonResponse({'success': False, 'error': 'No estás en mazmorra actualmente.'}, status=400)
+        u_role.is_banned = False
+        u_role.ban_reason = None
+        u_role.save()
+        wallet.remove_funds(price)
+        msg = "⚖️ Fianza pagada. Has sido liberado de la mazmorra con honor restaurado."
+
+    # 2. ESTATUS
+    elif item_key == 'custom_title':
+        title_text = request.POST.get('custom_title_text', '').strip()
+        if not title_text:
+            return JsonResponse({'success': False, 'error': 'Debes ingresar el título deseado.'}, status=400)
+        profile.custom_title_text = title_text[:50]
+        profile.save()
+        wallet.remove_funds(price)
+        msg = f"👑 ¡Edicto Consagrado! Tu nuevo título de rol es «{profile.custom_title_text}»."
+
+    elif item_key == 'imperial_frame':
+        profile.has_custom_avatar_frame = True
+        profile.avatar_frame = 'flame'
+        profile.save()
+        wallet.remove_funds(price)
+        msg = "🔥 ¡Marco Imperial Llama Carmesí desbloqueado en tu perfil!"
+
+    elif item_key == 'vip_badge':
+        profile.has_vip_badge = True
+        profile.save()
+        wallet.remove_funds(price)
+        msg = "✨ ¡Distintivo de Linaje VIP activado para tus comentarios!"
+
+    # 3. MUSAS
+    elif item_key == 'tribute_gift':
+        idol_id = request.POST.get('target_idol_id')
+        idol = IdolProfile.objects.filter(id=idol_id).first()
+        if not idol:
+            return JsonResponse({'success': False, 'error': 'Selecciona una Musa válida.'}, status=400)
+        
+        wallet.remove_funds(price)
+        # La idol recibe el 80% neto (120 🪙)
+        idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=idol.telegram_user_id)
+        net_gold = int(price * 0.8)
+        idol_wallet.add_funds(net_gold)
+
+        c_name = profile.username if profile.username else f"Noble_{tg_id}"
+        IdolTribute.objects.create(
+            idol=idol,
+            client_telegram_id=tg_id,
+            client_username=c_name,
+            gift_name="Gargantilla de Rubíes Imperial",
+            gold_value=price
+        )
+
+        send_telegram_msg(
+            chat_id=idol.telegram_user_id,
+            text=(
+                f"💎 <b>¡Tributo de Corte Recibido!</b>\n\n"
+                f"🌹 <b>Para tu Musa:</b> {idol.stage_name}\n"
+                f"👤 <b>De parte de:</b> {c_name}\n"
+                f"🎁 <b>Obsequio:</b> Gargantilla de Rubíes Imperial\n"
+                f"🪙 <b>Oro neto recibido:</b> <b>+{net_gold} 🪙</b> a tu Bóveda."
+            ),
+            button_text="🪙 Ver Mi Bóveda",
+            button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={idol.telegram_user_id}"
+        )
+        msg = f"🌹 ¡Tributo enviado con éxito a {idol.stage_name}! Recibió +{net_gold} 🪙."
+
+    elif item_key == 'priority_antojo':
+        UserInventoryItem.add_item(tg_id, 'priority_antojo', 1)
+        wallet.remove_funds(price)
+        msg = "📜 Sello de Antojo Prioritario adquirido. Úsalo al pedir una foto."
+
+    elif item_key == 'featured_idol':
+        idol_id = request.POST.get('target_idol_id')
+        idol = IdolProfile.objects.filter(id=idol_id, telegram_user_id=tg_id).first()
+        if not idol:
+            return JsonResponse({'success': False, 'error': 'Debes ser la dueña de la Musa para destacarla.'}, status=400)
+        idol.is_featured_until = timezone.now() + timedelta(days=3)
+        idol.save()
+        wallet.remove_funds(price)
+        msg = f"✨ ¡{idol.stage_name} fijada en la cima de la Galería por 3 días!"
+
+    # 4. RELICARIOS Y SANTUARIO
+    elif item_key == 'lucky_charm':
+        UserInventoryItem.add_item(tg_id, 'lucky_charm', 1)
+        wallet.remove_funds(price)
+        msg = "🗝️ Llave Dorada guardada en tu inventario para tu próximo Relicario."
+
+    elif item_key == 'free_market':
+        UserInventoryItem.add_item(tg_id, 'free_market', 1)
+        wallet.remove_funds(price)
+        msg = "📜 Patente de Comercio Libre lista: tu siguiente venta pagará 0% impuesto."
+
+    elif item_key == 'energy_potion':
+        pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+        if not pet:
+            return JsonResponse({'success': False, 'error': 'No tienes una mascota en tu Santuario.'}, status=400)
+        pet.energy = 100
+        pet.save()
+        wallet.remove_funds(price)
+        msg = f"🍖 ¡Elixir consumido! La energía de {pet.name} está al 100%."
+
+    return JsonResponse({
+        'success': True,
+        'message': msg,
+        'nuevo_saldo': wallet.balance,
+        'shield_days': profile.days_of_shield_remaining
     })

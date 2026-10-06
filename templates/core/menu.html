@@ -101,7 +101,7 @@
             </div>
         </button>
 
-        <!-- 2. Cajas de Photocards (Counter-Strike 2) -->
+        <!-- 2. Relicarios de la Corte -->
         <button type="button" onclick="universalNav('{% url 'idols:photocard_boxes' %}')" 
                 class="relative rounded-3xl overflow-hidden p-0.5 bg-gradient-to-r from-purple-600 via-fuchsia-400 to-yellow-400 shadow-[0_4px_22px_rgba(168,85,247,0.3)] group active:scale-[0.98] transition-all">
             <div class="bg-gradient-to-r from-[#170626] to-[#0a0212] p-4 rounded-[22px] flex items-center justify-between">
@@ -114,9 +114,6 @@
                             <h3 class="font-serif font-black text-white text-sm tracking-wider uppercase group-hover:text-purple-300 transition-colors">
                                 Cajas de Photocards
                             </h3>
-                            <span class="bg-purple-950 text-purple-300 border border-purple-500/50 text-[9px] font-black px-1.5 py-0.2 rounded uppercase font-mono">
-                                CS2
-                            </span>
                         </div>
                         <p class="text-[11px] text-vip-text/60 mt-0.5">Ruleta horizontal, rarezas y Álbum de colección</p>
                     </div>
@@ -177,6 +174,14 @@
                 <p class="text-[10px] text-stone-400 mt-0.5">Top Musas y Magnates</p>
             </div>
         </button>
+
+    </div>
+
+    <!-- 🏛️ BOTÓN DESTACADO DEL BAZAR (Simétrico y de ancho completo) -->
+    <button type="button" onclick="universalNav('/economy/bazar/')" 
+            class="w-full btn-gold py-3.5 px-4 rounded-2xl text-xs font-black uppercase flex items-center justify-center gap-2 shadow-[0_0_18px_rgba(212,175,55,0.35)] active:scale-98 transition-all">
+        <span>🏛️</span> <span>El Bazar de la Corona</span>
+    </button>
 
     </div>
 
