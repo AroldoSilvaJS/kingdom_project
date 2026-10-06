@@ -1,20 +1,24 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="vip-panel p-8 mt-12 text-center flex flex-col items-center border border-red-500/40 bg-black/85 shadow-2xl">
+<div class="vip-panel p-8 mt-12 text-center flex flex-col items-center border border-red-500/40 bg-black/85 shadow-2xl rounded-3xl">
     <span class="text-6xl my-2 filter drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]">⛔</span>
     <h2 class="font-serif text-xl font-black text-red-400 uppercase tracking-widest mt-2">
         Acceso Restringido
     </h2>
     <p class="text-xs text-vip-text/70 mt-2 max-w-xs leading-relaxed">
         El <strong>Kingdom of Pleasure</strong> es un círculo privado y exclusivo. 
-        Solo los súbditos y nobles miembros de nuestro grupo de rol pueden cruzar estas puertas.
+        Para cruzar estas puertas debes ser miembro activo de nuestro grupo principal.
     </p>
 
-    <!-- Botón directo para solicitar entrada al grupo -->
-    <a href="https://t.me/+dmASjFCI2N01NDc5" target="_blank"
-       class="mt-6 w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg">
-        <span>🏰</span> Unirme al Grupo Oficial
+    <div class="my-3 p-3 bg-red-950/40 border border-red-500/30 rounded-2xl text-[11px] text-red-200">
+        ¿Aún no eres parte de la Corte? Preséntate en nuestro grupo de admisiones para solicitar tu pase de entrada.
+    </div>
+
+    <!-- Botón directo al Grupo de Entrevistas -->
+    <a href="{{ interview_url|default:'https://t.me/' }}" target="_blank"
+       class="mt-3 w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
+        <span>🏰</span> Solicitar Entrada en Entrevistas
     </a>
 </div>
 {% endblock %}

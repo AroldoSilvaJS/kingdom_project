@@ -54,8 +54,13 @@ def admin_required(view_func):
 def main_menu(request):
     tg_id = resolve_secure_tg_id(request)
 
+    interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/')
+
     if str(tg_id) != ADMIN_TG_ID and not is_user_in_group(tg_id):
-        return render(request, 'core/access_denied.html', {'tg_id': tg_id})
+        return render(request, 'core/access_denied.html', {
+            'tg_id': tg_id,
+            'interview_url': interview_link
+        })
 
     role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
     if not role_obj:
@@ -90,8 +95,13 @@ def main_menu(request):
 def choose_role(request):
     tg_id = resolve_secure_tg_id(request)
 
+    interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/')
+
     if str(tg_id) != ADMIN_TG_ID and not is_user_in_group(tg_id):
-        return render(request, 'core/access_denied.html', {'tg_id': tg_id})
+        return render(request, 'core/access_denied.html', {
+            'tg_id': tg_id,
+            'interview_url': interview_link
+    })    
     
     existing_role = UserRole.objects.filter(telegram_id=tg_id).first()
     if existing_role and request.method != 'POST':
@@ -457,7 +467,7 @@ def admin_panel(request, admin_tg_id):
 
 
 def _process_telegram_update(data):
-    """Procesamiento desacoplado para responder a Telegram a velocidad ultra rápida"""
+    """Procesamiento desacoplado con filtro de grupo y filtro de entrevistas"""
     try:
         msg = data.get('message') or data.get('channel_post') or data.get('edited_message')
         if not msg:
@@ -482,6 +492,24 @@ def _process_telegram_update(data):
 
         if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
             is_group = int(chat_id) < 0
+            interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/')
+
+            # Si es por privado y NO es admin ni miembro del grupo principal
+            if not is_group and str(user_id) != ADMIN_TG_ID and not is_user_in_group(user_id):
+                texto_bloqueo = (
+                    f"⛔ <b>Acceso Restringido al Reino</b>\n\n"
+                    f"Saludos, {first_name}. <b>Kingdom of Pleasure</b> es un círculo nobiliario privado y exclusivo.\n\n"
+                    f"Para obtener tu pasaporte, debes ingresar primero a nuestra <b>Corte de Entrevistas</b> para ser evaluado por la administración."
+                )
+                send_telegram_msg(
+                    chat_id=chat_id,
+                    text=texto_bloqueo,
+                    button_text="🏰 Ir al Grupo de Entrevistas",
+                    button_url=interview_link
+                )
+                return
+
+            # Usuario autorizado o mensaje dentro del grupo oficial
             if is_group:
                 app_link = "https://t.me/KingdomPleasure_bot?start=entrar"
             else:

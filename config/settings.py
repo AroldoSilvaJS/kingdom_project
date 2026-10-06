@@ -177,10 +177,14 @@ MAILERS = {
 }
 
 # Configuraciones de Telegram
-TELEGRAM_BOT_TOKEN = '8966798192:AAHTaCsfbW9Mlzrkoa8PiZJT-DrlryD4dP8'
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8966798192:AAHTaCsfbW9Mlzrkoa8PiZJT-DrlryD4dP8')
 
 # ID de tu grupo privado de rol en Telegram
-TELEGRAM_GROUP_ID = -1004393120413
+TELEGRAM_GROUP_ID = int(os.environ.get('TELEGRAM_GROUP_ID', -1004393120413))
+
+TELEGRAM_INTERVIEW_GROUP_URL = os.environ.get(
+    'TELEGRAM_INTERVIEW_GROUP_URL', 
+    'https://t.me/+dmASjFCI2N01NDc5')
 
 # Permitir que Telegram WebApp cargue el sitio en su iframe
 X_FRAME_OPTIONS = 'ALLOWALL'
