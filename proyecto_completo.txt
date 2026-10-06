@@ -6014,6 +6014,7 @@ ARCHIVO: .\templates\core\menu.html
 ARCHIVO: .\templates\core\profile.html
 ==================================================
 
+<!-- templates/core/profile.html -->
 {% extends 'base.html' %}
 
 {% block content %}
@@ -6021,7 +6022,7 @@ ARCHIVO: .\templates\core\profile.html
     
     <!-- ENCABEZADO Y RETORNO -->
     <div class="flex justify-between items-center px-1">
-        <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
+        <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
             <span>⬅</span> <span>Menú</span>
         </button>
         <span class="text-xs border {% if is_idol %}border-purple-400 text-purple-300 bg-purple-950/70 shadow-[0_0_10px_rgba(168,85,247,0.3)]{% else %}border-vip-gold/40 text-vip-gold bg-black/60{% endif %} px-3.5 py-1 rounded-full uppercase tracking-widest font-bold">
@@ -6029,7 +6030,7 @@ ARCHIVO: .\templates\core\profile.html
         </span>
     </div>
 
-    <!-- TARJETA DINÁMICA: CAMERINO IDOL vs PASAPORTE NOBLE -->
+    <!-- TARJETA DINÁMICA DE IDENTIDAD (HERO CARD) -->
     <div class="relative overflow-hidden rounded-3xl p-5 border-2 shadow-[0_12px_35px_rgba(0,0,0,0.9)] transition-all duration-500
         {% if is_idol %}
             border-purple-500/70 bg-gradient-to-br from-[#240838] via-[#12041e] to-black shadow-[0_0_25px_rgba(168,85,247,0.25)]
@@ -6041,37 +6042,30 @@ ARCHIVO: .\templates\core\profile.html
             border-vip-gold/60 bg-gradient-to-br from-[#1b0e2b] via-[#0c0517] to-black
         {% endif %}">
         
-        <!-- Orbe luminoso de ambiente -->
-        <div class="absolute -top-12 -right-12 w-44 h-44 rounded-full blur-3xl pointer-events-none opacity-30
-            {% if is_idol %}bg-fuchsia-500
-            {% elif profile.profile_theme == 'obsidian' %}bg-cyan-500
-            {% else %}bg-purple-600{% endif %}">
-        </div>
-
         <div class="flex items-start justify-between relative z-10">
-            <!-- AVATAR CON MARCO -->
+            <!-- AVATAR CON MARCO COSMÉTICO ACTIVO -->
             <div class="flex items-center gap-3.5">
                 <div class="relative w-16 h-16 rounded-2xl flex items-center justify-center text-3xl shadow-xl flex-shrink-0
-                    {% if is_idol %}border-2 border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.7)] bg-purple-950/70
-                    {% elif profile.avatar_frame == 'neon' %}border-2 border-purple-400 bg-purple-950/60
-                    {% elif profile.avatar_frame == 'diamond' %}border-2 border-cyan-300 bg-cyan-950/60
-                    {% else %}border-2 border-yellow-400 bg-yellow-950/60{% endif %}">
+                    {% if profile.avatar_frame == 'neon' %}border-2 border-purple-400 bg-purple-950/80 shadow-[0_0_15px_rgba(168,85,247,0.6)]
+                    {% elif profile.avatar_frame == 'diamond' %}border-2 border-cyan-300 bg-cyan-950/80 shadow-[0_0_15px_rgba(103,232,249,0.6)]
+                    {% elif profile.avatar_frame == 'flame' %}border-2 border-rose-500 bg-rose-950/80 shadow-[0_0_15px_rgba(244,63,94,0.6)]
+                    {% else %}border-2 border-yellow-400 bg-yellow-950/80 shadow-[0_0_15px_rgba(234,179,8,0.6)]{% endif %}">
                     <span>{% if is_idol %}🌹{% else %}🥂{% endif %}</span>
                 </div>
 
-                <div class="flex flex-col">
+                <div class="flex flex-col min-w-0">
                     <span class="text-[9px] font-mono tracking-widest text-vip-gold uppercase">ID: {{ profile.telegram_user_id }}</span>
-                    <h2 class="font-serif text-lg font-black text-white leading-tight">
+                    <h2 class="font-serif text-lg font-black text-white leading-tight truncate">
                         {{ profile.username|default:"Noble Anónimo" }}
                     </h2>
-                    <span class="text-[11px] font-bold {% if is_idol %}text-purple-300{% else %}text-yellow-300{% endif %} uppercase tracking-wider mt-0.5">
-                        {{ user_rank }}
+                    <span class="text-[10px] font-bold {% if is_idol %}text-purple-300{% else %}text-yellow-300{% endif %} uppercase tracking-wider mt-0.5 truncate">
+                        {% if profile.custom_title_text %}«{{ profile.custom_title_text }}»{% else %}{{ user_rank }}{% endif %}
                     </span>
                 </div>
             </div>
 
             <!-- ESCUDO DE NIVEL -->
-            <div class="flex flex-col items-center bg-black/60 border {% if is_idol %}border-purple-500/50{% else %}border-vip-gold/40{% endif %} px-3 py-1.5 rounded-xl shadow-lg">
+            <div class="flex flex-col items-center bg-black/60 border border-vip-gold/40 px-3 py-1.5 rounded-2xl shadow-lg">
                 <span class="text-[9px] uppercase tracking-widest text-vip-gold font-bold">Nivel</span>
                 <span class="font-mono text-base font-black text-white leading-none mt-0.5">{{ profile.level }}</span>
             </div>
@@ -6079,13 +6073,13 @@ ARCHIVO: .\templates\core\profile.html
 
         <!-- LEMA O FRASE INSIGNIA -->
         {% if profile.motto %}
-            <p class="text-xs text-vip-text/80 italic mt-3 bg-black/40 p-2.5 rounded-xl border border-vip-gold/15 relative z-10">
+            <p class="text-xs text-stone-300 italic mt-3 bg-black/50 p-2.5 rounded-xl border border-white/10 relative z-10 leading-relaxed">
                 «{{ profile.motto }}»
             </p>
         {% endif %}
 
-        <!-- BARRA DE EXP -->
-        <div class="mt-3.5 bg-black/50 p-2.5 rounded-xl border border-vip-gold/20 flex flex-col gap-1 relative z-10">
+        <!-- BARRA DE EXPERIENCIA -->
+        <div class="mt-3.5 bg-black/50 p-2.5 rounded-2xl border border-vip-gold/20 flex flex-col gap-1 relative z-10">
             <div class="flex justify-between text-[10px] font-bold">
                 <span class="text-vip-gold">{% if is_idol %}Reputación Artística{% else %}Experiencia Nobiliaria{% endif %}</span>
                 <span class="font-mono text-purple-200">{{ profile.current_xp }} / {{ profile.xp_needed_for_next_level }} EXP</span>
@@ -6096,8 +6090,8 @@ ARCHIVO: .\templates\core\profile.html
             </div>
         </div>
 
-        <!-- CUADRÍCULA DE PILARES ADAPTADA -->
-        <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-vip-gold/20 text-center relative z-10">
+        <!-- CUADRÍCULA DE PILARES -->
+        <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-white/10 text-center relative z-10">
             {% if is_idol %}
                 <div class="bg-black/50 p-2 rounded-xl border border-purple-500/30">
                     <span class="text-[9px] text-purple-300 uppercase block font-bold">Bóveda</span>
@@ -6113,17 +6107,17 @@ ARCHIVO: .\templates\core\profile.html
                 </div>
             {% else %}
                 <div class="bg-black/40 p-2 rounded-xl border border-vip-gold/15">
-                    <span class="text-[9px] text-vip-text/50 uppercase block">Fortuna</span>
+                    <span class="text-[9px] text-stone-400 uppercase block font-bold">Fortuna</span>
                     <span class="font-mono text-xs font-bold text-vip-gold">{{ wallet.balance }} 🪙</span>
                 </div>
                 <div class="bg-black/40 p-2 rounded-xl border border-vip-gold/15">
-                    <span class="text-[9px] text-vip-text/50 uppercase block">Compañero</span>
+                    <span class="text-[9px] text-stone-400 uppercase block font-bold">Compañero</span>
                     <span class="text-xs font-bold text-purple-300 truncate block">
                         {% if pet %}{{ pet.name }} (L{{ pet.level }}){% else %}Ninguno{% endif %}
                     </span>
                 </div>
                 <div class="bg-black/40 p-2 rounded-xl border border-vip-gold/15">
-                    <span class="text-[9px] text-vip-text/50 uppercase block">Musa Leal</span>
+                    <span class="text-[9px] text-stone-400 uppercase block font-bold">Musa Leal</span>
                     <span class="text-xs font-bold text-yellow-400 truncate block">
                         {% if profile.favorite_idol %}{{ profile.favorite_idol.stage_name }}{% else %}Soltero{% endif %}
                     </span>
@@ -6133,139 +6127,139 @@ ARCHIVO: .\templates\core\profile.html
 
     </div>
 
-    <!-- SI ES IDOL: ACCESO DIRECTO A GESTIÓN DE SUS PERSONAJES -->
-    {% if is_idol %}
-    <div class="vip-panel p-4 flex items-center justify-between border-purple-500/40 bg-gradient-to-r from-purple-950/40 to-black">
-        <div class="flex items-center gap-3">
-            <span class="text-2xl">🌹</span>
-            <div>
-                <h4 class="font-bold text-purple-200 text-xs uppercase tracking-wider">Mis Fichas de Musa ({{ mis_idols.count }}/2)</h4>
-                <p class="text-[10px] text-vip-text/60">Edita tus auras, lemas y sube fotos exclusivas</p>
-            </div>
-        </div>
-        <button type="button" onclick="universalNav('/idols/')" class="btn-gold py-1.5 px-3 rounded-lg text-[10px] font-black uppercase">
-            Administrar
+    <!-- PESTAÑAS: LOGROS vs PERSONALIZACIÓN -->
+    <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/70 border border-vip-gold/30 rounded-2xl text-xs font-bold uppercase text-center shadow-lg">
+        <button type="button" onclick="switchProfileTab('logros')" id="p-tab-btn-logros" 
+                class="py-2.5 rounded-xl bg-vip-gold text-black font-black">
+            🏆 Condecoraciones
+        </button>
+        <button type="button" onclick="switchProfileTab('ajustes')" id="p-tab-btn-ajustes" 
+                class="py-2.5 rounded-xl text-stone-400 hover:text-white">
+            ⚙️ Personalizar
         </button>
     </div>
-    {% endif %}
 
-    <!-- MENSAJES -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="p-3.5 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-
-    <!-- SECCIÓN: SALÓN DE CONDECORACIONES Y LOGROS -->
-    <div class="vip-panel p-4 flex flex-col gap-3">
-        <div class="flex justify-between items-center border-b border-vip-gold/20 pb-2">
-            <h3 class="font-serif text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
-                <span>🏆</span> Condecoraciones del Reino
-            </h3>
-            <span class="text-[10px] text-vip-text/60">{% if is_idol %}Logros Escénicos{% else %}Logros Nobiliarios{% endif %}</span>
-        </div>
-
-        <div class="grid grid-cols-1 gap-2">
-            {% for ach in achievements %}
-            <div class="p-3 rounded-2xl border flex items-center justify-between transition-all
-                {% if ach.unlocked %}
-                    bg-gradient-to-r from-[#1c0c2e] to-[#0e0618] border-vip-gold/50 shadow-[0_0_12px_rgba(212,175,55,0.2)]
-                {% else %}
-                    bg-black/50 border-stone-800/80 opacity-60
-                {% endif %}">
-                
-                <div class="flex items-center gap-3">
-                    <span class="text-2xl filter {% if not ach.unlocked %}grayscale opacity-30{% endif %}">
-                        {{ ach.icon }}
-                    </span>
-                    <div class="flex flex-col">
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-xs font-bold {% if ach.unlocked %}text-vip-gold{% else %}text-stone-300{% endif %}">
-                                {{ ach.name }}
+    <!-- SECCIÓN A: SALÓN DE CONDECORACIONES Y LOGROS -->
+    <div id="p-tab-logros" class="flex flex-col gap-2">
+        {% for ach in achievements %}
+        <div class="p-3 rounded-2xl border flex items-center justify-between transition-all
+            {% if ach.unlocked %}
+                bg-gradient-to-r from-[#1c0c2e] to-[#0e0618] border-vip-gold/50 shadow-[0_0_12px_rgba(212,175,55,0.2)]
+            {% else %}
+                bg-black/50 border-stone-800/80 opacity-60
+            {% endif %}">
+            
+            <div class="flex items-center gap-3">
+                <span class="text-2xl filter {% if not ach.unlocked %}grayscale opacity-30{% endif %}">
+                    {{ ach.icon }}
+                </span>
+                <div class="flex flex-col">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-bold {% if ach.unlocked %}text-vip-gold{% else %}text-stone-300{% endif %}">
+                            {{ ach.name }}
+                        </span>
+                        {% if not ach.unlocked %}
+                            <span class="text-[9px] font-mono text-purple-300/80 bg-purple-950/60 px-1.5 py-0.2 rounded border border-purple-800/40">
+                                {{ ach.progress }}
                             </span>
-                            {% if not ach.unlocked %}
-                                <span class="text-[9px] font-mono text-purple-300/80 bg-purple-950/60 px-1.5 py-0.2 rounded border border-purple-800/40">
-                                    {{ ach.progress }}
-                                </span>
-                            {% endif %}
-                        </div>
-                        <span class="text-[10px] text-vip-text/60 leading-tight mt-0.5">{{ ach.desc }}</span>
+                        {% endif %}
                     </div>
-                </div>
-
-                <div class="flex-shrink-0 ml-2">
-                    {% if ach.unlocked %}
-                        <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-gradient-to-r from-yellow-600 to-yellow-400 text-black shadow">
-                            👑 Obtenido
-                        </span>
-                    {% else %}
-                        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-stone-900 text-stone-500 border border-stone-800">
-                            🔒 Bloqueado
-                        </span>
-                    {% endif %}
+                    <span class="text-[10px] text-stone-400 leading-tight mt-0.5">{{ ach.desc }}</span>
                 </div>
             </div>
-            {% endfor %}
+
+            <div class="flex-shrink-0 ml-2">
+                {% if ach.unlocked %}
+                    <span class="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-gradient-to-r from-yellow-600 to-yellow-400 text-black shadow">
+                        👑 Obtenido
+                    </span>
+                {% else %}
+                    <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-stone-900 text-stone-500 border border-stone-800">
+                        🔒 Bloqueado
+                    </span>
+                {% endif %}
+            </div>
         </div>
+        {% endfor %}
     </div>
 
-    <!-- FORMULARIO DE PERSONALIZACIÓN -->
-    <div class="vip-panel p-5 flex flex-col gap-4 border border-vip-gold/30">
-        <h3 class="font-serif text-xs font-black text-vip-gold uppercase tracking-wider border-b border-vip-gold/20 pb-2">
-            ⚙️ Personalizar Identidad {% if is_idol %}Artística{% else %}Noble{% endif %}
+    <!-- SECCIÓN B: FORMULARIO VISUAL DE PERSONALIZACIÓN -->
+    <div id="p-tab-ajustes" class="hidden vip-panel p-5 rounded-3xl border border-vip-gold/30 flex flex-col gap-4 shadow-xl">
+        <h3 class="font-serif text-xs font-black text-vip-gold uppercase tracking-wider border-b border-white/10 pb-2">
+            Configuración Visual del Pasaporte
         </h3>
 
-        <form method="POST" class="flex flex-col gap-3.5">
+        <form method="POST" class="flex flex-col gap-4">
             {% csrf_token %}
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">
-                    {% if is_idol %}Nombre de Creadora / Artista{% else %}Nombre o Alias Noble{% endif %}
-                </label>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre o Alias Público</label>
                 <input type="text" name="username" value="{{ profile.username|default:'' }}" required
-                       class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
 
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Frase Insignia o Lema</label>
-                <input type="text" name="motto" value="{{ profile.motto|default:'' }}" placeholder="Ej: «El arte de la seducción en su máxima expresión»"
-                       class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Lema o Frase Insignia</label>
+                <input type="text" name="motto" value="{{ profile.motto|default:'' }}" placeholder="Ej: «El placer pertenece a los audaces»"
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
 
-            <!-- Tema de Fondo -->
+            <!-- SELECTOR VISUAL DE MARCOS DE AVATAR -->
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Atmósfera Visual</label>
-                <select name="profile_theme" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
-                    <option value="velvet" {% if profile.profile_theme == 'velvet' %}selected{% endif %}>🟣 Terciopelo Imperial (Púrpura & Oro)</option>
-                    <option value="obsidian" {% if profile.profile_theme == 'obsidian' %}selected{% endif %}>🔵 Obsidiana & Neón (Cian Abisal)</option>
-                    <option value="crimson" {% if profile.profile_theme == 'crimson' %}selected{% endif %}>🔴 Carmesí Clandestino (Rojo Pasión)</option>
-                    <option value="champagne" {% if profile.profile_theme == 'champagne' %}selected{% endif %}>🟡 Champagne Real (Oro Líquido)</option>
-                </select>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5">Marco Cosmético de Avatar</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center gap-2 p-2 rounded-xl bg-black/60 border border-yellow-500/40 cursor-pointer hover:border-yellow-300">
+                        <input type="radio" name="avatar_frame" value="gold" {% if profile.avatar_frame == 'gold' %}checked{% endif %}>
+                        <span class="text-xs font-bold text-yellow-300">👑 Oro Pulido</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-xl bg-black/60 border border-purple-500/40 cursor-pointer hover:border-purple-300">
+                        <input type="radio" name="avatar_frame" value="neon" {% if profile.avatar_frame == 'neon' %}checked{% endif %}>
+                        <span class="text-xs font-bold text-purple-300">🟣 Neón Púrpura</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-xl bg-black/60 border border-cyan-500/40 cursor-pointer hover:border-cyan-300">
+                        <input type="radio" name="avatar_frame" value="diamond" {% if profile.avatar_frame == 'diamond' %}checked{% endif %}>
+                        <span class="text-xs font-bold text-cyan-300">💎 Diamante</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-xl bg-black/60 border border-rose-500/40 cursor-pointer hover:border-rose-300">
+                        <input type="radio" name="avatar_frame" value="flame" {% if profile.avatar_frame == 'flame' %}checked{% endif %}>
+                        <span class="text-xs font-bold text-rose-300">🔥 Carmesí</span>
+                    </label>
+                </div>
             </div>
 
-            <!-- Marco de Avatar -->
+            <!-- SELECTOR VISUAL DE ATMÓSFERAS -->
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Marco Cosmético de Avatar</label>
-                <select name="avatar_frame" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
-                    <option value="gold" {% if profile.avatar_frame == 'gold' %}selected{% endif %}>👑 Borde Oro Pulido</option>
-                    <option value="neon" {% if profile.avatar_frame == 'neon' %}selected{% endif %}>🟣 Borde Neón Púrpura</option>
-                    <option value="diamond" {% if profile.avatar_frame == 'diamond' %}selected{% endif %}>💎 Borde Diamante Glacial</option>
-                    <option value="flame" {% if profile.avatar_frame == 'flame' %}selected{% endif %}>🔥 Borde Llama Carmesí</option>
-                </select>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5">Atmósfera de Fondo</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center gap-2 p-2 rounded-xl bg-black/60 border border-purple-800 cursor-pointer">
+                        <input type="radio" name="profile_theme" value="velvet" {% if profile.profile_theme == 'velvet' %}checked{% endif %}>
+                        <span class="text-xs text-purple-200">Terciopelo Imperial</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-xl bg-black/60 border border-cyan-800 cursor-pointer">
+                        <input type="radio" name="profile_theme" value="obsidian" {% if profile.profile_theme == 'obsidian' %}checked{% endif %}>
+                        <span class="text-xs text-cyan-200">Obsidiana & Neón</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-xl bg-black/60 border border-rose-800 cursor-pointer">
+                        <input type="radio" name="profile_theme" value="crimson" {% if profile.profile_theme == 'crimson' %}checked{% endif %}>
+                        <span class="text-xs text-rose-200">Carmesí Prohibido</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2 rounded-xl bg-black/60 border border-yellow-800 cursor-pointer">
+                        <input type="radio" name="profile_theme" value="champagne" {% if profile.profile_theme == 'champagne' %}checked{% endif %}>
+                        <span class="text-xs text-yellow-200">Champagne Real</span>
+                    </label>
+                </div>
             </div>
 
-            <!-- Solo para Clientes: Musa favorita -->
+            <!-- Solo clientes: Musa favorita -->
             {% if not is_idol %}
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Musa / Idol Favorita</label>
-                <select name="favorite_idol" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
-                    <option value="">-- Ninguna (Corazón Libre) --</option>
+                <select name="favorite_idol" class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                    <option value="">-- Corazón Libre (Sin Devoción) --</option>
                     {% for idol in all_idols %}
                         <option value="{{ idol.id }}" {% if profile.favorite_idol and profile.favorite_idol.id == idol.id %}selected{% endif %}>
-                            {{ idol.stage_name }} ({{ idol.group|default:"Solista" }})
+                            🌹 {{ idol.stage_name }} ({{ idol.group|default:"Solista" }})
                         </option>
                     {% endfor %}
                 </select>
@@ -6274,17 +6268,38 @@ ARCHIVO: .\templates\core\profile.html
 
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Biografía / Presentación</label>
-                <input type="text" name="bio" value="{{ profile.bio|default:'' }}" placeholder="Cuéntale al reino sobre ti..."
-                       class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                <textarea name="bio" rows="3" placeholder="Cuéntale a la corte sobre tus gustos..."
+                          class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white resize-none focus:outline-none focus:border-yellow-400">{{ profile.bio|default:'' }}</textarea>
             </div>
 
-            <button type="submit" class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider mt-1 shadow-lg">
-                Guardar Cambios
+            <button type="submit" class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all mt-1">
+                💾 Guardar Identidad
             </button>
         </form>
     </div>
 
 </div>
+
+<script>
+    function switchProfileTab(tab) {
+        const logros = document.getElementById('p-tab-logros');
+        const ajustes = document.getElementById('p-tab-ajustes');
+        const btnLogros = document.getElementById('p-tab-btn-logros');
+        const btnAjustes = document.getElementById('p-tab-btn-ajustes');
+
+        if (tab === 'logros') {
+            logros.classList.remove('hidden');
+            ajustes.classList.add('hidden');
+            btnLogros.className = "py-2.5 rounded-xl bg-vip-gold text-black font-black";
+            btnAjustes.className = "py-2.5 rounded-xl text-stone-400 hover:text-white";
+        } else {
+            logros.classList.add('hidden');
+            ajustes.classList.remove('hidden');
+            btnAjustes.className = "py-2.5 rounded-xl bg-vip-gold text-black font-black";
+            btnLogros.className = "py-2.5 rounded-xl text-stone-400 hover:text-white";
+        }
+    }
+</script>
 {% endblock %}
 
 ==================================================
@@ -8036,129 +8051,149 @@ ARCHIVO: .\templates\economy\slots.html
 ARCHIVO: .\templates\economy\wallet.html
 ==================================================
 
+<!-- templates/economy/wallet.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-44">
+<div class="flex flex-col gap-4 mt-2 pb-44 max-w-md mx-auto">
     
-    <!-- TARJETA BLACK VIP: SALDO DE ORO -->
-    <div class="relative overflow-hidden rounded-3xl p-6 border border-vip-gold/50 shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(212,175,55,0.18)] bg-gradient-to-br from-[#1c102c] via-[#0d0617] to-black">
-        <div class="absolute -top-12 -right-12 w-40 h-40 bg-vip-gold/15 rounded-full blur-3xl pointer-events-none"></div>
+    <!-- TARJETA BLACK VIP: BÓVEDA IMPERIAL -->
+    <div class="relative overflow-hidden rounded-3xl p-6 border-2 border-vip-gold/50 shadow-[0_12px_35px_rgba(0,0,0,0.9),0_0_25px_rgba(212,175,55,0.2)] bg-gradient-to-br from-[#1f1033] via-[#0d0517] to-black">
+        <div class="absolute -top-12 -right-12 w-44 h-44 bg-vip-gold/20 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div class="flex justify-between items-start">
+        <div class="flex justify-between items-start relative z-10">
             <div>
-                <span class="text-[10px] uppercase tracking-[0.2em] text-vip-gold/70 font-bold">Bóveda Imperial</span>
-                <p class="text-xs text-vip-text/50 font-mono mt-0.5">ID: <span>{{ wallet.telegram_user_id }}</span></p>
+                <span class="text-[9.5px] uppercase tracking-[0.25em] text-vip-gold font-bold">Bóveda Imperial VIP</span>
+                <p class="text-[11px] text-stone-400 font-mono mt-0.5">Titular: <span>{{ wallet.telegram_user_id }}</span></p>
             </div>
-            <span class="text-2xl filter drop-shadow-[0_0_8px_rgba(212,175,55,0.6)]">🪙</span>
+            <!-- Chip metálico aristocrático -->
+            <div class="w-10 h-7 rounded-lg bg-gradient-to-br from-yellow-300 via-amber-500 to-yellow-600 border border-yellow-200/60 shadow flex items-center justify-center text-xs">
+                🪙
+            </div>
         </div>
 
-        <div class="my-4">
-            <span class="text-[11px] text-vip-text/60 uppercase tracking-wider">Saldo Disponible</span>
+        <div class="my-4 relative z-10">
+            <span class="text-[11px] text-stone-400 uppercase tracking-wider font-semibold">Fortuna Disponible</span>
             <div class="flex items-baseline gap-2 mt-1">
-                <span class="font-serif text-4xl font-black text-gold-gradient tracking-tight">
+                <span class="font-serif text-4xl sm:text-5xl font-black text-gold-gradient tracking-tight">
                     {{ wallet.balance }}
                 </span>
-                <span class="text-xs font-bold text-vip-gold tracking-widest uppercase">Monedas de Oro</span>
+                <span class="text-xs font-bold text-yellow-400 tracking-widest uppercase font-mono">Monedas de Oro</span>
             </div>
         </div>
 
         {% if pet and pet.species == 'fox' %}
-            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-950/60 border border-amber-500/40 text-[10px] text-amber-300 font-bold">
-                <span>🦊</span> Bendición Kitsune Activa: Recarga de bono cada 22h
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/70 border border-amber-500/50 text-[10px] text-amber-300 font-bold relative z-10">
+                <span>🦊</span> Bendición Kitsune Activa: Recarga de bono cada {{ wallet.get_cooldown_hours }}h
             </div>
         {% endif %}
     </div>
 
-    <!-- MENSAJES DEL SISTEMA -->
+    <!-- MENSAJES -->
     {% if messages %}
         {% for message in messages %}
-            <div class="p-3.5 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
+            <div class="p-3 rounded-2xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/80 border-green-500 text-green-200{% else %}bg-rose-950/80 border-rose-500 text-rose-200{% endif %}">
                 {{ message }}
             </div>
         {% endfor %}
     {% endif %}
 
-    <!-- 🎡 SECCIÓN: RULETA DIARIA DE LA FORTUNA -->
-    <div class="vip-panel p-5 flex flex-col items-center text-center relative overflow-hidden border border-vip-gold/40 shadow-xl">
+    <!-- 🎡 RULETA DIARIA DE LA FORTUNA -->
+    <div class="vip-panel p-5 flex flex-col items-center text-center relative overflow-hidden border border-vip-gold/40 shadow-xl rounded-3xl bg-gradient-to-br from-[#1a0a28] via-[#090212] to-black">
         <div class="flex justify-between items-center w-full mb-1">
             <h3 class="font-serif text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
                 <span>🎡</span> Ruleta de la Fortuna
             </h3>
-            <span class="text-[10px] text-purple-300 font-bold uppercase">Premio Diario</span>
+            <span class="text-[10px] text-purple-300 font-bold uppercase font-mono">Ofrenda Diaria</span>
         </div>
-        <p class="text-[11px] text-vip-text/60 mb-3">Gira cada día y reclama tu ofrenda imperial</p>
+        <p class="text-[11px] text-stone-400 mb-2">Gira el disco sagrado para recibir oro y EXP gratis</p>
 
-        <!-- RUEDA VISUAL -->
+        <!-- Disco Giratorio -->
         <div class="relative my-2 flex items-center justify-center">
-            <div class="absolute -top-3.5 z-30 text-yellow-400 text-lg filter drop-shadow animate-bounce">▼</div>
+            <div class="absolute -top-3 z-30 text-yellow-400 text-base filter drop-shadow animate-bounce">▼</div>
             <div id="daily-wheel" class="w-36 h-36 rounded-full border-4 border-vip-gold shadow-[0_0_25px_rgba(212,175,55,0.35)] flex items-center justify-center relative overflow-hidden transition-transform duration-[3000ms] cubic-bezier(0.15,0.9,0.25,1)"
                  style="background: conic-gradient(#7e22ce 0deg 45deg, #171717 45deg 90deg, #d97706 90deg 135deg, #171717 135deg 180deg, #9333ea 180deg 225deg, #171717 225deg 270deg, #eab308 270deg 315deg, #171717 315deg 360deg);">
-                <div class="w-14 h-14 rounded-full bg-black border border-vip-gold flex flex-col items-center justify-center z-10">
-                    <span class="text-sm font-black">👑</span>
+                <div class="w-14 h-14 rounded-full bg-black border border-vip-gold flex items-center justify-center z-10 shadow-inner">
+                    <span class="text-sm">👑</span>
                 </div>
             </div>
         </div>
 
-        <form action="{% url 'economy:claim_bonus' %}" method="POST" id="daily-wheel-form" class="w-full mt-3 m-0">
+        <form action="{% url 'economy:claim_bonus' %}" method="POST" id="daily-wheel-form" class="w-full mt-2.5 m-0">
             {% csrf_token %}
             <input type="hidden" name="tg_id" id="bonus-tg-id" value="{{ wallet.telegram_user_id }}">
 
             {% if wallet.can_claim_bonus %}
                 <button type="button" id="btn-spin-daily" onclick="spinDailyWheel()"
-                        class="w-full btn-gold py-3.5 rounded-xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                        class="w-full btn-gold py-3.5 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all">
                     <span>✨</span> Girar Ruleta Diaria (Gratis)
                 </button>
             {% else %}
-                <div class="w-full bg-black/70 border border-vip-gold/30 py-3 px-4 rounded-xl flex items-center justify-between text-xs">
-                    <span class="text-vip-text/60 font-medium">⏳ Próximo giro en:</span>
+                <div class="w-full bg-black/80 border border-vip-gold/30 py-3 px-4 rounded-2xl flex items-center justify-between text-xs shadow-inner">
+                    <span class="text-stone-400 font-medium">⏳ Próximo giro en:</span>
                     <span id="countdown-timer" class="font-mono font-bold text-yellow-400 text-sm">Calculando...</span>
                 </div>
             {% endif %}
         </form>
     </div>
 
-    <div class="grid grid-cols-2 gap-2.5">
-            <!-- 1. Ruleta Imperial -->
+    <!-- 🎰 SALÓN DE CASINO (4 JUEGOS SIMÉTRICOS) -->
+    <div class="flex flex-col gap-2.5">
+        <div class="flex justify-between items-center px-1">
+            <h3 class="text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
+                <span>🎲</span> Juegos de Azar Clandestinos
+            </h3>
+            <span class="text-[10px] text-stone-400 font-mono">100% Interactivos</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5">
+            <!-- 1. Ruleta Real -->
             <button type="button" onclick="universalNav('/economy/casino/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-video cursor-pointer">
-                <span class="text-3xl pointer-events-none">🎡</span>
-                <div class="pointer-events-none">
-                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Ruleta Real</h4>
-                    <span class="text-[9px] text-yellow-400/80 font-mono">x1.95 / x14</span>
+               class="vip-panel p-3.5 rounded-2xl border border-vip-gold/30 flex flex-col items-center justify-between text-center hover:border-yellow-400 active:scale-95 transition-all aspect-video">
+                <span class="text-3xl">🎡</span>
+                <div>
+                    <h4 class="font-bold text-white text-xs uppercase tracking-wider">Ruleta Real</h4>
+                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">x2.0 / x14</span>
                 </div>
             </button>
 
-            <!-- 2. Minas del Reino (NUEVO) -->
+            <!-- 2. Minas VIP -->
             <button type="button" onclick="universalNav('/economy/mines/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-video cursor-pointer border-2 border-yellow-500/50 shadow-[0_0_15px_rgba(212,175,55,0.2)]">
-                <span class="text-3xl pointer-events-none">💣</span>
-                <div class="pointer-events-none">
-                    <h4 class="font-bold text-yellow-300 text-[11px] uppercase tracking-wider">Minas VIP</h4>
-                    <span class="text-[9px] text-yellow-400/80 font-mono">x20+ Retiro</span>
+               class="vip-panel p-3.5 rounded-2xl border border-yellow-500/50 flex flex-col items-center justify-between text-center hover:border-yellow-400 active:scale-95 transition-all aspect-video shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+                <span class="text-3xl">💣</span>
+                <div>
+                    <h4 class="font-bold text-yellow-300 text-xs uppercase tracking-wider">Minas VIP</h4>
+                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">Multiplicador</span>
                 </div>
             </button>
 
-            <!-- 3. Tragaperras / Slots -->
+            <!-- 3. Tragaperras -->
             <button type="button" onclick="universalNav('/economy/slots/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-purple-400/60 active:scale-95 transition-all aspect-video cursor-pointer">
-                <span class="text-3xl pointer-events-none">🍒</span>
-                <div class="pointer-events-none">
-                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Tragaperras</h4>
-                    <span class="text-[9px] text-purple-300 font-mono">Jackpot x15</span>
+               class="vip-panel p-3.5 rounded-2xl border border-purple-500/40 flex flex-col items-center justify-between text-center hover:border-purple-300 active:scale-95 transition-all aspect-video">
+                <span class="text-3xl">🍒</span>
+                <div>
+                    <h4 class="font-bold text-white text-xs uppercase tracking-wider">Tragaperras</h4>
+                    <span class="text-[9.5px] text-purple-300 font-mono font-bold">Jackpot x15</span>
                 </div>
             </button>
 
-            <!-- 4. Blackjack VIP -->
+            <!-- 4. Blackjack Imperial -->
             <button type="button" onclick="universalNav('/economy/blackjack/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-vip-gold/60 active:scale-95 transition-all aspect-video cursor-pointer">
-                <span class="text-3xl pointer-events-none">🃏</span>
-                <div class="pointer-events-none">
-                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Blackjack</h4>
-                    <span class="text-[9px] text-vip-gold/80 font-mono">21 Real</span>
+               class="vip-panel p-3.5 rounded-2xl border border-vip-gold/40 flex flex-col items-center justify-between text-center hover:border-yellow-400 active:scale-95 transition-all aspect-video">
+                <span class="text-3xl">🃏</span>
+                <div>
+                    <h4 class="font-bold text-white text-xs uppercase tracking-wider">Blackjack</h4>
+                    <span class="text-[9.5px] text-yellow-400 font-mono font-bold">21 Real</span>
                 </div>
             </button>
         </div>
+    </div>
+
+    <!-- 🏛️ BOTÓN DIRECTO AL BAZAR DE LA CORONA -->
+    <button type="button" onclick="universalNav('/economy/bazar/')" 
+            class="w-full btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.35)] flex items-center justify-center gap-2 active:scale-95 transition-all">
+        <span>🏛️</span> <span>Ir al Bazar de la Corona (Gastar Oro)</span>
+    </button>
 
 </div>
 
@@ -9225,44 +9260,45 @@ ARCHIVO: .\templates\idols\edit_post.html
 ARCHIVO: .\templates\idols\feed.html
 ==================================================
 
+<!-- templates/idols/feed.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-36">
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
     <!-- ENCABEZADO Y FILTROS METÁLICOS -->
     <div class="flex flex-col gap-3">
         <div class="flex justify-between items-center px-1">
             <div>
-                <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
+                <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
                     Muro Clandestino
-                </h2>
-                <p class="text-[11px] text-vip-text/60">Contenido oficial y exclusivo de Idols</p>
+                </h1>
+                <p class="text-[11px] text-stone-400">Contenido oficial y exclusivo de Musas</p>
             </div>
             
             <a href="{% url 'idols:create_post' %}?tg_id={{ tg_id }}" 
-               class="bg-gradient-to-r from-purple-900 to-fuchsia-800 border border-purple-400/60 text-white text-[11px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1 shadow-[0_0_12px_rgba(168,85,247,0.3)] hover:brightness-110 active:scale-95 transition-all">
-                <span>➕</span> Publicar
+               class="bg-gradient-to-r from-purple-900 to-fuchsia-800 border border-purple-400/60 text-white text-[11px] font-bold px-3.5 py-1.5 rounded-full flex items-center gap-1 shadow-[0_0_12px_rgba(168,85,247,0.3)] hover:brightness-110 active:scale-95 transition-all">
+                <span>➕</span> <span>Publicar</span>
             </a>
         </div>
 
         <!-- Pestañas de Filtro (Todo / Solo VIP) -->
-        <div class="grid grid-cols-2 gap-2 p-1 bg-black/60 border border-vip-gold/20 rounded-xl">
+        <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/70 border border-vip-gold/30 rounded-2xl shadow-inner">
             <button type="button" onclick="filterFeed('all')" id="btn-filter-all"
-                    class="py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-vip-gold text-black shadow-md">
+                    class="py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-vip-gold text-black shadow">
                 🌐 Todo el Muro
             </button>
             <button type="button" onclick="filterFeed('vip')" id="btn-filter-vip"
-                    class="py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all">
+                    class="py-2 rounded-xl text-xs font-black uppercase tracking-wider text-stone-400 hover:text-white transition-all">
                 🔒 Solo Antojos VIP
             </button>
         </div>
     </div>
 
-    <!-- MENSAJES DEL SISTEMA -->
+    <!-- MENSAJES -->
     {% if messages %}
         {% for message in messages %}
-            <div class="p-3.5 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
+            <div class="p-3 rounded-2xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/80 border-green-500 text-green-200{% else %}bg-rose-950/80 border-rose-500 text-rose-200{% endif %}">
                 {{ message }}
             </div>
         {% endfor %}
@@ -9273,53 +9309,52 @@ ARCHIVO: .\templates\idols\feed.html
         {% for post in posts %}
         <article class="vip-panel overflow-hidden border border-vip-gold/30 rounded-3xl feed-item shadow-2xl {% if post.network == 'fans' %}is-vip{% else %}is-public{% endif %}" data-network="{{ post.network }}">
             
-            <!-- Cabecera del Post: Idol Info y Botones de Gestión -->
-            <div class="p-3.5 flex items-center justify-between border-b border-vip-gold/15 bg-black/40">
-                <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" class="flex items-center gap-2.5 group">
-                    <div class="w-10 h-10 rounded-full overflow-hidden border border-vip-gold/50 group-hover:scale-105 transition-transform bg-black flex-shrink-0">
+            <!-- Cabecera del Post -->
+            <div class="p-3.5 flex items-center justify-between border-b border-white/10 bg-black/50">
+                <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" class="flex items-center gap-3 group min-w-0">
+                    <div class="w-10 h-10 rounded-2xl overflow-hidden border border-vip-gold/50 group-hover:scale-105 transition-transform bg-black flex-shrink-0 shadow">
                         {% if post.idol.photo %}
                             <img src="{{ post.idol.photo.url }}" alt="{{ post.idol.stage_name }}" class="w-full h-full object-cover">
                         {% else %}
                             <div class="w-full h-full flex items-center justify-center text-sm">🎭</div>
                         {% endif %}
                     </div>
-                    <div>
+                    <div class="min-w-0">
                         <div class="flex items-center gap-1.5">
-                            <h4 class="font-bold text-white text-xs group-hover:text-vip-gold transition-colors leading-tight">
+                            <h4 class="font-bold text-white text-xs group-hover:text-vip-gold transition-colors truncate">
                                 {{ post.idol.stage_name }}
                             </h4>
                             {% if post.idol.rating >= 4.8 %}
                                 <span class="text-[10px] text-yellow-400">⭐</span>
                             {% endif %}
                         </div>
-                        <span class="text-[10px] text-vip-text/50 font-mono">{{ post.created_at|timesince }} atrás</span>
+                        <span class="text-[9.5px] text-stone-400 font-mono">{{ post.created_at|timesince }} atrás</span>
                     </div>
                 </a>
 
-                <!-- Insignia de Red + Botones de Edición / Borrado -->
-                <div class="flex items-center gap-2">
+                <!-- Insignia y Botones de Autor -->
+                <div class="flex items-center gap-1.5 flex-shrink-0">
                     {% if post.network == 'fans' %}
-                        <span class="bg-gradient-to-r from-purple-950 to-fuchsia-950 border border-purple-500/60 text-purple-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-[0_0_10px_rgba(168,85,247,0.25)] flex items-center gap-1">
-                            <span>🔒</span> Antojo VIP
+                        <span class="bg-purple-950/90 border border-purple-500 text-purple-300 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow flex items-center gap-1">
+                            <span>🔒</span> VIP
                         </span>
                     {% else %}
-                        <span class="bg-black/60 border border-vip-gold/30 text-vip-gold text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full">
-                            📸 Público
+                        <span class="bg-black/60 border border-vip-gold/30 text-yellow-300 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full">
+                            📸 Libre
                         </span>
                     {% endif %}
 
-                    <!-- Botones para la dueña o admin -->
                     {% if is_admin or post.idol.telegram_user_id == tg_id %}
                         <button type="button" onclick="universalNav('{% url 'idols:edit_post' post.id %}')" 
-                                class="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-0.5 rounded-lg bg-black/70 border border-yellow-500/40" title="Editar">
+                                class="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-1 rounded-lg bg-black/70 border border-yellow-500/40" title="Editar">
                             ✏️
                         </button>
                         <form action="{% url 'idols:delete_post' post.id %}" method="POST" class="m-0" 
-                              onsubmit="return confirm('¿Confirmas que deseas eliminar esta publicación del Muro?')">
+                              onsubmit="return confirm('¿Confirmas eliminar esta foto del Muro?')">
                             {% csrf_token %}
                             <input type="hidden" name="tg_id" value="{{ tg_id }}">
                             <button type="submit" 
-                                    class="text-rose-400 hover:text-rose-300 text-xs px-2 py-0.5 rounded-lg bg-rose-950/70 border border-rose-500/50" title="Eliminar">
+                                    class="text-rose-400 hover:text-rose-300 text-xs px-2 py-1 rounded-lg bg-rose-950/70 border border-rose-500/50" title="Eliminar">
                                 🗑️
                             </button>
                         </form>
@@ -9327,71 +9362,68 @@ ARCHIVO: .\templates\idols\feed.html
                 </div>
             </div>
 
-            <!-- IMAGEN PRINCIPAL (MÁS GRANDE, COMPLETA Y SIN CORTES) -->
-            <div class="relative w-full bg-black min-h-[340px] max-h-[560px] flex items-center justify-center overflow-hidden">
+            <!-- FOTOGRAFÍA PRINCIPAL (DESBLOQUEADA O VIP) -->
+            <div class="relative w-full bg-black min-h-[350px] max-h-[550px] flex items-center justify-center overflow-hidden">
                 {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
-                    <!-- IMAGEN PÚBLICA O DESBLOQUEADA -->
+                    <!-- Foto Visible -->
                     {% if post.image %}
                         <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
-                             class="w-full max-h-[560px] object-contain sm:object-cover">
-                    {% else %}
-                        <div class="w-full h-80 flex items-center justify-center text-4xl">📸</div>
+                             class="w-full max-h-[550px] object-contain sm:object-cover">
                     {% endif %}
 
                     {% if post.network == 'fans' and post.id in unlocked_ids %}
-                        <span class="absolute top-3 right-3 bg-green-950/90 border border-green-500 text-green-300 text-[10px] font-black uppercase px-2.5 py-1 rounded-full shadow backdrop-blur-md">
+                        <span class="absolute top-3 right-3 bg-emerald-950/90 border border-emerald-500 text-emerald-300 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow backdrop-blur-md">
                             ✓ Desbloqueada
                         </span>
                     {% endif %}
                 {% else %}
-                    <!-- CONTENIDO VIP BLOQUEADO / CENSURA ELEGANTE -->
+                    <!-- Contenido VIP Bloqueado con Censura Glamour -->
                     {% if post.image %}
-                        <img src="{{ post.image.url }}" alt="VIP" class="w-full max-h-[560px] object-cover filter blur-2xl brightness-[0.25] scale-110">
+                        <img src="{{ post.image.url }}" alt="VIP" class="w-full max-h-[550px] object-cover filter blur-2xl brightness-[0.22] scale-110">
                     {% endif %}
                     
                     <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
-                        <div class="w-16 h-16 rounded-2xl bg-black/75 border border-purple-500/60 flex items-center justify-center text-3xl shadow-[0_0_25px_rgba(168,85,247,0.5)] mb-3 animate-pulse">
+                        <div class="w-16 h-16 rounded-3xl bg-black/80 border border-purple-500/70 flex items-center justify-center text-3xl shadow-[0_0_30px_rgba(168,85,247,0.5)] mb-3 animate-pulse">
                             🔒
                         </div>
                         <h4 class="font-serif text-sm font-black text-purple-200 uppercase tracking-wider mb-1">
-                            Foto Exclusiva VIP
+                            Contenido Exclusivo VIP
                         </h4>
-                        <p class="text-[11px] text-vip-text/70 mb-3 max-w-[220px]">
-                            Desbloquea el contenido privado de {{ post.idol.stage_name }}.
+                        <p class="text-[11px] text-stone-300 mb-4 max-w-[220px]">
+                            Desbloquea esta sesión privada de {{ post.idol.stage_name }}.
                         </p>
 
-                        <!-- Botón Desbloquear -->
                         <form action="{% url 'idols:unlock_post' post.id %}" method="POST" class="m-0">
                             {% csrf_token %}
                             <input type="hidden" name="tg_id" value="{{ tg_id }}">
                             <button type="submit" 
-                                    class="btn-gold py-2.5 px-6 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_15px_rgba(212,175,55,0.4)]">
-                                <span>Ver por</span>
-                                <span class="font-mono text-sm">{{ post.price }} 🪙</span>
+                                    class="btn-gold py-2.5 px-6 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
+                                <span>Desbloquear por</span>
+                                <span class="font-mono text-sm font-black">{{ post.price }} 🪙</span>
                             </button>
                         </form>
                     </div>
                 {% endif %}
             </div>
 
-            <!-- BARRA DE ACCIONES: LIKE, COMENTARIOS E INVITAR TRAGO -->
-            <div class="px-4 pt-3 pb-2 flex items-center justify-between border-b border-vip-gold/10 bg-black/30">
+            <!-- BARRA DE ACCIONES: LIKE, COMENTARIO & BRINDIS -->
+            <div class="px-4 py-3 flex items-center justify-between border-b border-white/5 bg-black/40">
                 <div class="flex items-center gap-4">
-                    <!-- BOTÓN DE LIKE INTERACTIVO (AJAX) -->
+                    <!-- Like interactivo -->
                     <button type="button" onclick="handleLike({{ post.id }})" id="like-btn-{{ post.id }}"
                             class="flex items-center gap-1.5 text-sm font-bold transition-all active:scale-125 select-none {% if post.id in liked_ids %}text-rose-500{% else %}text-stone-400 hover:text-rose-400{% endif %}">
                         <span id="like-icon-{{ post.id }}">{% if post.id in liked_ids %}❤️{% else %}🤍{% endif %}</span>
                         <span id="like-count-{{ post.id }}" class="text-xs font-mono font-bold">{{ post.likes }}</span>
                     </button>
 
-                    <!-- BOTÓN DE COMENTARIOS -->
+                    <!-- Comentarios -->
                     <button type="button" onclick="toggleComments({{ post.id }})" 
                             class="flex items-center gap-1.5 text-stone-400 hover:text-purple-300 text-sm font-bold active:scale-95 transition-all select-none">
                         <span>💬</span>
                         <span class="text-xs font-mono font-bold" id="comment-count-{{ post.id }}">{{ post.comments.count }}</span>
                     </button>
 
-                    <!-- INVITAR UN TRAGO -->
+                    <!-- Invitar Trago -->
                     <button type="button" onclick="openTipModal('{{ post.id }}', '{{ post.idol.stage_name }}')" 
                             class="flex items-center gap-1 text-purple-300 hover:text-yellow-300 text-xs font-bold bg-purple-950/60 border border-purple-500/40 px-2.5 py-1 rounded-full active:scale-95 transition-all">
                         <span>🥂</span> <span>Invitar Trago</span>
@@ -9399,47 +9431,44 @@ ARCHIVO: .\templates\idols\feed.html
                 </div>
 
                 <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" 
-                   class="text-[11px] text-vip-gold/80 hover:text-vip-gold font-semibold uppercase tracking-wider">
+                   class="text-[10px] text-yellow-400 font-bold uppercase tracking-wider hover:underline">
                     Ver Perfil ➔
                 </a>
             </div>
 
-            <!-- PIE DEL POST: DESCRIPCIÓN Y COMENTARIOS -->
-            <div class="p-4 flex flex-col gap-2.5 bg-gradient-to-t from-black/60 to-transparent">
-                <!-- Leyenda / Caption -->
+            <!-- DESCRIPCIÓN Y COMENTARIOS -->
+            <div class="p-4 flex flex-col gap-2 bg-gradient-to-t from-black/80 to-transparent">
                 {% if post.caption %}
-                    <p class="text-xs text-vip-text/90 leading-relaxed">
-                        <strong class="text-vip-gold font-bold mr-1">{{ post.idol.stage_name }}</strong>{{ post.caption }}
+                    <p class="text-xs text-stone-200 leading-relaxed">
+                        <strong class="text-yellow-400 font-bold mr-1">{{ post.idol.stage_name }}</strong>{{ post.caption }}
                     </p>
                 {% endif %}
 
-                <!-- SECCIÓN DESPLEGABLE DE COMENTARIOS -->
-                <div id="comments-section-{{ post.id }}" class="hidden mt-2 pt-2 border-t border-vip-gold/15 flex flex-col gap-2.5">
-                    
-                    <!-- Lista de Comentarios Existentes -->
+                <!-- Comentarios Desplegables -->
+                <div id="comments-section-{{ post.id }}" class="hidden mt-2 pt-2 border-t border-white/10 flex flex-col gap-2.5">
                     <div class="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
                         {% for c in post.comments.all %}
-                            <div class="bg-black/60 border border-vip-gold/15 p-2 rounded-xl text-xs flex flex-col gap-0.5">
+                            <div class="bg-black/60 border border-white/10 p-2.5 rounded-2xl text-xs flex flex-col gap-0.5">
                                 <div class="flex justify-between items-center text-[10px]">
                                     <span class="font-bold text-yellow-300">{{ c.author_name }}</span>
                                     <span class="text-stone-500 font-mono">{{ c.created_at|timesince }} atrás</span>
                                 </div>
-                                <p class="text-stone-300">{{ c.text }}</p>
+                                <p class="text-stone-300 leading-relaxed">{{ c.text }}</p>
                             </div>
                         {% empty %}
-                            <p class="text-center text-[11px] text-stone-500 py-1 italic" id="empty-comment-{{ post.id }}">
-                                Sé el primero en dejar un comentario o halago...
+                            <p class="text-center text-[11px] text-stone-500 py-1 italic">
+                                Sé el primero en dejar un elogio para la Musa...
                             </p>
                         {% endfor %}
                     </div>
 
-                    <!-- Formulario de Nuevo Comentario -->
-                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 m-0">
+                    <!-- Input Comentar -->
+                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 m-0 mt-1">
                         {% csrf_token %}
                         <input type="hidden" name="tg_id" value="{{ tg_id }}">
                         <input type="hidden" name="tg_username" value="{{ tg_username }}">
                         
-                        <input type="text" name="text" required placeholder="Escribe un comentario..." 
+                        <input type="text" name="text" required placeholder="Escribe un halago..." 
                                class="flex-1 bg-black/80 border border-vip-gold/30 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
                         
                         <button type="submit" 
@@ -9452,29 +9481,27 @@ ARCHIVO: .\templates\idols\feed.html
 
         </article>
         {% empty %}
-        <div class="vip-panel p-8 text-center flex flex-col items-center">
+        <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
             <span class="text-4xl my-2">📭</span>
-            <h4 class="font-serif text-sm font-bold text-white">Muro en calma</h4>
-            <p class="text-xs text-vip-text/60 mt-1">Aún no hay publicaciones en el Kingdom. ¡Sé el primero en compartir un momento!</p>
+            <h4 class="font-serif text-sm font-bold text-white">Muro en Calma</h4>
+            <p class="text-xs text-stone-400 mt-1">Aún no hay publicaciones en el Kingdom. ¡Sé el primero en compartir un momento!</p>
         </div>
         {% endfor %}
     </div>
 
 </div>
 
-<!-- MODAL PARA INVITAR UN TRAGO / PROPINA -->
-<div id="tip-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="vip-panel max-w-sm w-full p-6 relative border-purple-500/60 shadow-2xl">
-        <button onclick="closeTipModal()" class="absolute top-4 right-4 text-vip-text/50 hover:text-white text-lg">&times;</button>
+<!-- MODAL PARA INVITAR UN TRAGO -->
+<div id="tip-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="vip-panel max-w-sm w-full p-6 relative border-purple-500/60 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1d0830] to-black">
+        <button onclick="closeTipModal()" class="absolute top-4 right-4 text-stone-400 hover:text-white text-xl">&times;</button>
         
         <div class="text-center flex flex-col items-center">
             <span class="text-4xl my-1">🥂</span>
             <h3 class="font-serif text-base font-black text-gold-gradient uppercase tracking-wider mt-1">
                 Invitar un Trago Real
             </h3>
-            <p class="text-xs text-vip-text/70 mt-1" id="tip-idol-target">
-                Envía una ofrenda de oro a la Idol.
-            </p>
+            <p class="text-xs text-stone-300 mt-1" id="tip-idol-target">Ofrenda de oro directo al camerino.</p>
         </div>
 
         <form id="tip-form" action="" method="POST" class="mt-4 flex flex-col gap-3">
@@ -9482,40 +9509,34 @@ ARCHIVO: .\templates\idols\feed.html
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Monto de la ofrenda (🪙)</label>
+                <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1.5 text-center">Selecciona el Brindis (🪙)</label>
                 <div class="grid grid-cols-3 gap-2">
                     <button type="button" onclick="setTipAmount(20)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">20 🪙</button>
                     <button type="button" onclick="setTipAmount(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">50 🪙</button>
                     <button type="button" onclick="setTipAmount(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">100 🪙</button>
                 </div>
                 <input type="number" id="tip-amount-input" name="tip_amount" min="10" value="20" required
-                       class="mt-2 w-full bg-black/70 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-bold text-white text-sm focus:outline-none focus:border-yellow-400">
+                       class="mt-2.5 w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-black text-white text-base focus:outline-none focus:border-yellow-400">
             </div>
 
-            <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider mt-1">
-                Enviar Brindis
+            <button type="submit" class="btn-gold py-3 rounded-2xl text-xs font-black uppercase tracking-wider mt-1 shadow">
+                Brindar con la Musa
             </button>
         </form>
     </div>
 </div>
 
 <script>
-    // Like AJAX interactivo
     async function handleLike(postId) {
         try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
-        
         const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
         const formData = new FormData();
         formData.append('tg_id', tgId);
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
         try {
-            const resp = await fetch(`/idols/feed/like/${postId}/`, {
-                method: 'POST',
-                body: formData
-            });
+            const resp = await fetch(`/idols/feed/like/${postId}/`, { method: 'POST', body: formData });
             const data = await resp.json();
-
             const btn = document.getElementById(`like-btn-${postId}`);
             const icon = document.getElementById(`like-icon-${postId}`);
             const count = document.getElementById(`like-count-${postId}`);
@@ -9531,50 +9552,35 @@ ARCHIVO: .\templates\idols\feed.html
         } catch(e) {}
     }
 
-    // Desplegar u ocultar comentarios
     function toggleComments(postId) {
-        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
         const section = document.getElementById(`comments-section-${postId}`);
         if (section) section.classList.toggle('hidden');
     }
 
-    // Filtros de Muro
     function filterFeed(type) {
         const items = document.querySelectorAll('.feed-item');
         const btnAll = document.getElementById('btn-filter-all');
         const btnVip = document.getElementById('btn-filter-vip');
 
         if (type === 'vip') {
-            if (btnVip) btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-gradient-to-r from-purple-800 to-fuchsia-700 text-white shadow-md";
-            if (btnAll) btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
-            items.forEach(el => {
-                el.style.display = (el.dataset.network === 'fans') ? 'block' : 'none';
-            });
+            btnVip.className = "py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-gradient-to-r from-purple-800 to-fuchsia-700 text-white shadow";
+            btnAll.className = "py-2 rounded-xl text-xs font-black uppercase tracking-wider text-stone-400 hover:text-white transition-all";
+            items.forEach(el => { el.style.display = (el.dataset.network === 'fans') ? 'block' : 'none'; });
         } else {
-            if (btnAll) btnAll.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-vip-gold text-black shadow-md";
-            if (btnVip) btnVip.className = "py-2 rounded-lg text-xs font-bold uppercase tracking-wider text-vip-text/60 hover:text-white transition-all";
+            btnAll.className = "py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-vip-gold text-black shadow";
+            btnVip.className = "py-2 rounded-xl text-xs font-black uppercase tracking-wider text-stone-400 hover:text-white transition-all";
             items.forEach(el => el.style.display = 'block');
         }
     }
 
     function openTipModal(postId, idolName) {
-        const form = document.getElementById('tip-form');
-        if (form) form.action = `/idols/feed/tip/${postId}/`;
-        const target = document.getElementById('tip-idol-target');
-        if (target) target.innerText = `Brinda con ${idolName} (90% neto para la Idol).`;
-        const modal = document.getElementById('tip-modal');
-        if (modal) modal.classList.remove('hidden');
+        document.getElementById('tip-form').action = `/idols/feed/tip/${postId}/`;
+        document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (80% neto para su Bóveda).`;
+        document.getElementById('tip-modal').classList.remove('hidden');
     }
 
-    function closeTipModal() {
-        const modal = document.getElementById('tip-modal');
-        if (modal) modal.classList.add('hidden');
-    }
-
-    function setTipAmount(val) {
-        const input = document.getElementById('tip-amount-input');
-        if (input) input.value = val;
-    }
+    function closeTipModal() { document.getElementById('tip-modal').classList.add('hidden'); }
+    function setTipAmount(val) { document.getElementById('tip-amount-input').value = val; }
 </script>
 {% endblock %}
 
@@ -9582,110 +9588,141 @@ ARCHIVO: .\templates\idols\feed.html
 ARCHIVO: .\templates\idols\form.html
 ==================================================
 
+<!-- templates/idols/form.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="vip-panel p-6 mt-2 mb-36 flex flex-col gap-4 mx-auto w-full max-w-md border border-vip-gold/40 shadow-2xl">
+<div class="vip-panel p-5 mt-2 mb-36 flex flex-col gap-4 mx-auto w-full max-w-md border border-vip-gold/40 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1c0c2e] via-[#090212] to-black">
     
     <!-- Encabezado con navegación segura -->
-    <div class="flex justify-between items-center border-b border-vip-gold/20 pb-3">
+    <div class="flex justify-between items-center border-b border-white/10 pb-3">
         <div>
             <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
                 {% if idol %}Editar a {{ idol.stage_name }}{% else %}Nueva Musa VIP{% endif %}
             </h2>
-            <p class="text-[11px] text-vip-text/60">Configura tu presencia estelar en el Reino</p>
+            <p class="text-[11px] text-stone-400">Consagración de identidad artística en el Reino</p>
         </div>
-        <button type="button" onclick="universalNav('/idols/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
+        <button type="button" onclick="universalNav('/idols/')" class="text-xs text-stone-400 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 active:scale-95 transition-all">
             ⬅ Volver
         </button>
     </div>
+
+    <!-- MENSAJES -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-2xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/80 border-green-500 text-green-200{% else %}bg-rose-950/80 border-rose-500 text-rose-200{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
 
     <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3.5">
         {% csrf_token %}
         <input type="hidden" name="tg_id" id="hidden_tg_id" value="{{ tg_id }}">
         <input type="hidden" name="tg_username" id="hidden_tg_username" value="{{ tg_username|default:'' }}">
 
-        <!-- Nombre Artístico -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre Artístico *</label>
-            <input type="text" name="stage_name" value="{{ idol.stage_name|default:'' }}" required placeholder="Ej: Scarlett, Luna, Mia..."
-                   class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
+        <!-- 1. IDENTIDAD ARTÍSTICA -->
+        <div class="bg-black/60 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">1. Identidad de Rol</span>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Nombre Artístico *</label>
+                <input type="text" name="stage_name" value="{{ idol.stage_name|default:'' }}" required placeholder="Ej: Scarlett, Luna, Mia, Karina..."
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Grupo o Solista</label>
+                <input type="text" name="group" value="{{ idol.group|default:'' }}" placeholder="Ej: Solista, K-Pop Queens, o grupo de rol..."
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Lema o Frase de Seducción</label>
+                <input type="text" name="tagline" value="{{ idol.tagline|default:'' }}" placeholder="Ej: «La musa prohibida de la noche clandestina»"
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
         </div>
 
-        <!-- Grupo o Solista -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Grupo o Solista</label>
-            <input type="text" name="group" value="{{ idol.group|default:'' }}" placeholder="Ej: Solista, BLACKPINK, o grupo rol..."
-                   class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
+        <!-- 2. SELECTOR VISUAL DE AURA MÍSTICA -->
+        <div class="bg-black/60 p-3.5 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-purple-300">2. Aura Mística de la Musa</span>
+            <div class="grid grid-cols-2 gap-2">
+                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/50 cursor-pointer hover:border-purple-300">
+                    <input type="radio" name="aura_color" value="purple" {% if not idol or idol.aura_color == 'purple' %}checked{% endif %}>
+                    <span class="text-xs font-bold text-purple-300">💜 Púrpura Mística</span>
+                </label>
+                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/50 cursor-pointer hover:border-yellow-300">
+                    <input type="radio" name="aura_color" value="gold" {% if idol.aura_color == 'gold' %}checked{% endif %}>
+                    <span class="text-xs font-bold text-yellow-300">💛 Oro Celestial</span>
+                </label>
+                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/50 cursor-pointer hover:border-rose-300">
+                    <input type="radio" name="aura_color" value="ruby" {% if idol.aura_color == 'ruby' %}checked{% endif %}>
+                    <span class="text-xs font-bold text-rose-300">❤️ Pasión Rubí</span>
+                </label>
+                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 cursor-pointer hover:border-emerald-300">
+                    <input type="radio" name="aura_color" value="emerald" {% if idol.aura_color == 'emerald' %}checked{% endif %}>
+                    <span class="text-xs font-bold text-emerald-300">💚 Seducción Verde</span>
+                </label>
+            </div>
         </div>
 
-        <!-- Lema / Tagline -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Lema o Frase de Seducción</label>
-            <input type="text" name="tagline" value="{{ idol.tagline|default:'' }}" placeholder="Ej: «La musa prohibida de la noche»"
-                   class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
+        <!-- 3. ROL Y ATENCIÓN -->
+        <div class="bg-black/60 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">3. Estilo de Atención</span>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Especialidad de Rol</label>
+                <input type="text" name="specialty" value="{{ idol.specialty|default:'' }}" placeholder="Ej: Rol dulce, sesiones atrevidas, petición de antojos..."
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Saludo de Bienvenida al Chat</label>
+                <input type="text" name="welcome_message" value="{{ idol.welcome_message|default:'' }}" placeholder="Ej: Bienvenido a mis aposentos, cuéntame tus secretos..."
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Presentación / Biografía *</label>
+                <textarea name="bio" rows="3" required placeholder="Describe la personalidad de tu personaje, gustos y estilo de rol..."
+                          class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 resize-none">{{ idol.bio|default:'' }}</textarea>
+            </div>
         </div>
 
-        <!-- Aura Mística -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Aura Mística de la Musa</label>
-            <select name="aura_color" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
-                <option value="purple" {% if idol.aura_color == 'purple' %}selected{% endif %}>💜 Aura Mística Púrpura</option>
-                <option value="gold" {% if idol.aura_color == 'gold' %}selected{% endif %}>💛 Aura Celestial Dorada</option>
-                <option value="ruby" {% if idol.aura_color == 'ruby' %}selected{% endif %}>❤️ Aura Pasión Rubí</option>
-                <option value="emerald" {% if idol.aura_color == 'emerald' %}selected{% endif %}>💚 Aura Seducción Esmeralda</option>
-            </select>
+        <!-- 4. FOTOGRAFÍAS (RETRATO & BANNER) -->
+        <div class="bg-black/60 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">4. Retrato & Portada</span>
+
+            <!-- Foto de Perfil -->
+            <div class="bg-black/40 p-2.5 rounded-xl border border-white/5 flex flex-col gap-1.5">
+                <label class="block text-[11px] text-yellow-300 font-bold uppercase">Foto de Perfil (Retrato) *</label>
+                {% if idol and idol.photo %}
+                    <div class="flex items-center gap-3 my-1">
+                        <img src="{{ idol.photo.url }}" class="w-12 h-12 rounded-xl object-cover border border-vip-gold/40">
+                        <span class="text-[10px] text-stone-400">Retrato actual activo. Elige otro solo si deseas reemplazarlo.</span>
+                    </div>
+                {% endif %}
+                <input type="file" name="photo" accept="image/*" {% if not idol %}required{% endif %}
+                       class="w-full text-xs text-stone-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+            </div>
+
+            <!-- Banner de Portada -->
+            <div class="bg-black/40 p-2.5 rounded-xl border border-white/5 flex flex-col gap-1.5">
+                <label class="block text-[11px] text-purple-300 font-bold uppercase">Foto de Portada / Banner (Opcional)</label>
+                {% if idol and idol.banner %}
+                    <div class="flex items-center gap-3 my-1">
+                        <img src="{{ idol.banner.url }}" class="w-20 h-9 rounded-lg object-cover border border-purple-500/40">
+                        <span class="text-[10px] text-stone-400">Banner actual cargado.</span>
+                    </div>
+                {% endif %}
+                <input type="file" name="banner" accept="image/*"
+                       class="w-full text-xs text-stone-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-purple-900 file:text-purple-200 hover:file:bg-purple-800 cursor-pointer">
+            </div>
         </div>
 
-        <!-- Especialidad de Rol -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Especialidad de Rol</label>
-            <input type="text" name="specialty" value="{{ idol.specialty|default:'' }}" placeholder="Ej: Rol romántico dulce, sesiones atrevidas, antojos..."
-                   class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
-        </div>
-
-        <!-- Saludo de bienvenida -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Saludo de Bienvenida al Chat</label>
-            <input type="text" name="welcome_message" value="{{ idol.welcome_message|default:'' }}" placeholder="Ej: Hola noble caballero, dime tus deseos..."
-                   class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
-        </div>
-
-        <!-- Biografía / Presentación -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Presentación / Biografía *</label>
-            <textarea name="bio" rows="3" required placeholder="Describe la personalidad de tu personaje, gustos y estilo de rol..."
-                      class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold resize-none">{{ idol.bio|default:'' }}</textarea>
-        </div>
-
-        <!-- Foto de Perfil (Retrato) -->
-        <div class="bg-black/40 p-3 rounded-xl border border-vip-gold/20 flex flex-col gap-1.5">
-            <label class="block text-[11px] text-vip-gold uppercase font-bold">Foto de Perfil (Retrato)</label>
-            {% if idol and idol.photo %}
-                <div class="flex items-center gap-3 my-1">
-                    <img src="{{ idol.photo.url }}" class="w-12 h-12 rounded-lg object-cover border border-vip-gold/40">
-                    <span class="text-[10px] text-vip-text/60">Foto actual cargada. Sube otra solo si deseas cambiarla.</span>
-                </div>
-            {% endif %}
-            <input type="file" name="photo" accept="image/*" {% if not idol %}required{% endif %}
-                   class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
-        </div>
-
-        <!-- Foto de Portada / Banner -->
-        <div class="bg-black/40 p-3 rounded-xl border border-vip-gold/20 flex flex-col gap-1.5">
-            <label class="block text-[11px] text-vip-gold uppercase font-bold">Foto de Portada / Banner (Opcional)</label>
-            {% if idol and idol.banner %}
-                <div class="flex items-center gap-3 my-1">
-                    <img src="{{ idol.banner.url }}" class="w-16 h-8 rounded-lg object-cover border border-vip-gold/40">
-                    <span class="text-[10px] text-vip-text/60">Banner cargado.</span>
-                </div>
-            {% endif %}
-            <input type="file" name="banner" accept="image/*"
-                   class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-purple-900 file:text-purple-200 hover:file:bg-purple-800 cursor-pointer">
-        </div>
-
-        <button type="submit" class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider mt-2 shadow-[0_0_15px_rgba(212,175,55,0.3)] active:scale-95 transition-all">
-            {% if idol %}💾 Guardar Cambios de la Idol{% else %}✨ Consagrar Nueva Idol{% endif %}
+        <button type="submit" class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all mt-1">
+            {% if idol %}💾 Guardar Cambios de la Musa{% else %}✨ Consagrar Musa en el Reino{% endif %}
         </button>
     </form>
 </div>
@@ -9714,104 +9751,129 @@ ARCHIVO: .\templates\idols\form.html
 ARCHIVO: .\templates\idols\gallery.html
 ==================================================
 
+<!-- templates/idols/gallery.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-36">
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
     <!-- ENCABEZADO -->
     <div class="flex justify-between items-center px-1">
         <div>
-            <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
+            <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
                 Elenco Imperial
-            </h2>
-            <p class="text-[11px] text-vip-text/60">Idols consagradas en el Reino</p>
+            </h1>
+            <p class="text-[11px] text-stone-400">Musas consagradas en la Corte</p>
         </div>
-        <span class="text-xs bg-vip-gold/15 border border-vip-gold/40 text-vip-gold px-3 py-1 rounded-full uppercase tracking-wider font-bold">
-            Total: {{ all_idols.count }}
+        <span class="text-xs bg-black/70 border border-vip-gold/40 text-vip-gold px-3 py-1 rounded-full uppercase tracking-wider font-mono font-bold shadow-inner">
+            {{ all_idols.count }} Idols
         </span>
     </div>
 
-    <!-- CUADRÍCULA DE TARJETAS RETRATO (2 COLUMNAS) -->
-    <div class="grid grid-cols-2 gap-3">
+    <!-- FILTROS EN VIVO RÁPIDOS -->
+    <div class="grid grid-cols-4 gap-1 p-1 bg-black/70 border border-vip-gold/30 rounded-2xl text-[9.5px] font-bold uppercase text-center shadow-inner">
+        <button type="button" onclick="filterGallery('all')" id="g-filter-all" class="py-1.5 rounded-xl bg-vip-gold text-black font-black">Todas</button>
+        <button type="button" onclick="filterGallery('online')" id="g-filter-online" class="py-1.5 rounded-xl text-stone-400 hover:text-white">🟢 Online</button>
+        <button type="button" onclick="filterGallery('top')" id="g-filter-top" class="py-1.5 rounded-xl text-purple-400 hover:text-white">⭐ Top</button>
+        <button type="button" onclick="filterGallery('trending')" id="g-filter-trending" class="py-1.5 rounded-xl text-yellow-400 hover:text-white">🔥 Favoritas</button>
+    </div>
+
+    <!-- CUADRÍCULA DE RETRATOS GLAMOUR (2 COLUMNAS) -->
+    <div class="grid grid-cols-2 gap-3" id="gallery-grid">
         {% for idol in all_idols %}
-            <div onclick="goToDetail('{{ idol.id }}')" 
-                 class="relative rounded-2xl overflow-hidden border {% if idol.is_trending %}border-yellow-400 shadow-[0_0_20px_rgba(234,179,8,0.35)]{% elif idol.is_top_rated %}border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.25)]{% else %}border-vip-gold/30 shadow-md{% endif %} aspect-[3/4] group cursor-pointer hover:scale-[1.02] active:scale-95 transition-all duration-300 bg-black">
-                
-                <!-- Imagen de la Idol con recorte inteligente -->
-                {% if idol.photo %}
-                    <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500">
+        <div onclick="universalNav('/idols/{{ idol.id }}/')" 
+             class="idol-card relative rounded-3xl overflow-hidden border-2 aspect-[3/4] group cursor-pointer hover:scale-[1.02] active:scale-95 transition-all duration-300 bg-black shadow-xl"
+             data-status="{{ idol.status }}"
+             data-top="{% if idol.is_top_rated %}1{% else %}0{% endif %}"
+             data-trending="{% if idol.is_trending %}1{% else %}0{% endif %}"
+             style="border-color: {% if idol.aura_color == 'gold' %}#f59e0b{% elif idol.aura_color == 'ruby' %}#e11d48{% elif idol.aura_color == 'emerald' %}#10b981{% else %}#a855f7{% endif %};">
+            
+            <!-- Foto de Portada con Zoom Suave -->
+            {% if idol.photo %}
+                <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500">
+            {% else %}
+                <div class="w-full h-full bg-gradient-to-b from-[#1c0b2b] to-black flex items-center justify-center">
+                    <span class="text-vip-gold/40 text-4xl">🎭</span>
+                </div>
+            {% endif %}
+
+            <!-- Badges Flotantes Superiores -->
+            <div class="absolute top-2.5 inset-x-2.5 flex justify-between items-start z-10 pointer-events-none">
+                {% if idol.is_trending %}
+                    <span class="bg-gradient-to-r from-yellow-600 via-amber-400 to-yellow-600 text-black text-[8.5px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg animate-pulse">
+                        🔥 Favorita
+                    </span>
+                {% elif idol.is_top_rated %}
+                    <span class="bg-purple-950/90 border border-purple-400 text-purple-200 text-[8.5px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg">
+                        ⭐ Top Rating
+                    </span>
                 {% else %}
-                    <div class="w-full h-full bg-gradient-to-b from-[#180b29] to-black flex items-center justify-center">
-                        <span class="text-vip-gold/50 text-4xl">🎭</span>
-                    </div>
+                    <span></span>
                 {% endif %}
 
-                <!-- INSIGNIAS FLOTANTES SUPERIORES -->
-                <div class="absolute top-2 left-2 right-2 flex justify-between items-start z-10 pointer-events-none">
-                    {% if idol.is_trending %}
-                        <span class="bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-600 text-black text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1 animate-pulse">
-                            🔥 Favorita
-                        </span>
-                    {% elif idol.is_top_rated %}
-                        <span class="bg-gradient-to-r from-purple-900 to-fuchsia-700 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg border border-purple-400 flex items-center gap-1">
-                            ⭐ Top
-                        </span>
-                    {% else %}
-                        <span></span>
-                    {% endif %}
+                <span class="bg-black/80 backdrop-blur-md text-yellow-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-yellow-500/40 font-mono shadow">
+                    ⭐ {{ idol.rating }}
+                </span>
+            </div>
 
-                    <!-- Rating badge -->
-                    <span class="bg-black/75 backdrop-blur-md text-yellow-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-vip-gold/30 font-mono shadow">
-                        ⭐ {{ idol.rating }}
+            <!-- Degradado Sombra Inferior -->
+            <div class="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent pointer-events-none"></div>
+
+            <!-- Ficha de la Musa en el Pie -->
+            <div class="absolute bottom-0 inset-x-0 p-3 flex flex-col z-10">
+                <!-- Estado de Atención -->
+                {% if idol.status == 'online' %}
+                    <span class="inline-flex items-center gap-1 text-[8.5px] font-black text-emerald-400 uppercase tracking-wider mb-0.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Chateando
                     </span>
-                </div>
+                {% elif idol.status == 'antojos' %}
+                    <span class="inline-flex items-center gap-1 text-[8.5px] font-black text-purple-300 uppercase tracking-wider mb-0.5">
+                        🔥 Sesión Antojos
+                    </span>
+                {% else %}
+                    <span class="inline-flex items-center gap-1 text-[8.5px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">
+                        🌙 En Descanso
+                    </span>
+                {% endif %}
 
-                <!-- Degradado inferior cinematográfico -->
-                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+                <h3 class="font-serif font-black text-white text-sm leading-tight truncate group-hover:text-vip-gold transition-colors">
+                    {{ idol.stage_name }}
+                </h3>
+                <p class="text-[10px] text-stone-300 truncate font-medium">{{ idol.group|default:"Musa Solista" }}</p>
 
-                <!-- DATOS DE LA IDOL EN EL PIE -->
-                <div class="absolute bottom-0 left-0 w-full p-3 flex flex-col z-10">
-                    <!-- Estado de actividad -->
-                    {% if idol.status == 'online' %}
-                        <span class="inline-flex items-center gap-1 text-[9px] font-bold text-green-400 uppercase tracking-wider mb-0.5">
-                            <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Chateando
-                        </span>
-                    {% elif idol.status == 'antojos' %}
-                        <span class="inline-flex items-center gap-1 text-[9px] font-bold text-purple-300 uppercase tracking-wider mb-0.5">
-                            🔥 Antojos
-                        </span>
-                    {% else %}
-                        <span class="inline-flex items-center gap-1 text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
-                            🌙 Descanso
-                        </span>
-                    {% endif %}
-                    
-                    <h3 class="font-serif font-black text-white text-sm leading-tight truncate group-hover:text-vip-gold transition-colors">
-                        {{ idol.stage_name }}
-                    </h3>
-                    <p class="text-[10px] text-vip-text/70 truncate">{{ idol.group|default:"Solista" }}</p>
-                    
-                    <!-- Roller oficial con su @ o nombre real (NUNCA el ID numérico) -->
-                    <div class="mt-1 flex justify-between items-center text-[9px] text-vip-text/60 border-t border-vip-gold/15 pt-1">
-                        <span>{{ idol.services_done }} roles</span>
-                        <span class="truncate max-w-[90px] text-vip-gold font-bold font-mono">{{ idol.get_display_owner }}</span>
-                    </div>
+                <!-- Dueña oficial (@) y Roles dados -->
+                <div class="mt-1.5 flex justify-between items-center text-[9px] text-stone-400 border-t border-white/10 pt-1 font-mono">
+                    <span>{{ idol.services_done }} roles</span>
+                    <span class="truncate max-w-[85px] text-yellow-400 font-bold">{{ idol.get_display_owner }}</span>
                 </div>
             </div>
+
+        </div>
         {% empty %}
-            <div class="col-span-2 vip-panel p-8 text-center flex flex-col items-center">
-                <span class="text-4xl my-2">🎭</span>
-                <p class="text-xs text-vip-text/60">Aún no hay Idols registradas en el Reino.</p>
-            </div>
+        <div class="col-span-2 vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
+            <span class="text-4xl my-2">🎭</span>
+            <p class="text-xs text-stone-400">Aún no hay Musas registradas en la corte.</p>
+        </div>
         {% endfor %}
     </div>
 
 </div>
 
 <script>
-    function goToDetail(idolId) {
-        universalNav(`/idols/${idolId}/`);
+    function filterGallery(type) {
+        const cards = document.querySelectorAll('.idol-card');
+        ['all', 'online', 'top', 'trending'].forEach(t => {
+            const btn = document.getElementById(`g-filter-${t}`);
+            if (btn) btn.className = "py-1.5 rounded-xl text-stone-400 hover:text-white";
+        });
+        document.getElementById(`g-filter-${type}`).className = "py-1.5 rounded-xl bg-vip-gold text-black font-black";
+
+        cards.forEach(c => {
+            if (type === 'all') c.style.display = 'block';
+            else if (type === 'online') c.style.display = (c.dataset.status === 'online' || c.dataset.status === 'antojos') ? 'block' : 'none';
+            else if (type === 'top') c.style.display = (c.dataset.top === '1') ? 'block' : 'none';
+            else if (type === 'trending') c.style.display = (c.dataset.trending === '1') ? 'block' : 'none';
+        });
     }
 </script>
 {% endblock %}
@@ -9820,148 +9882,203 @@ ARCHIVO: .\templates\idols\gallery.html
 ARCHIVO: .\templates\idols\list.html
 ==================================================
 
+<!-- templates/idols/list.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%]">
-    <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-2">
-        <h2 class="text-xl font-semibold text-vip-gold">Mis Idols</h2>
-        <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/60 hover:text-vip-gold bg-black/60 px-3 py-1 rounded-full border border-vip-gold/30">⬅ Volver</button>
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    
+    <!-- ENCABEZADO -->
+    <div class="flex justify-between items-center px-1">
+        <button type="button" onclick="universalNav('/')" 
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
+            <span>⬅</span> <span>Menú</span>
+        </button>
+
+        <div class="flex items-center gap-1.5">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-widest text-purple-300 bg-purple-950/80 border border-purple-500/50 px-3 py-1 rounded-full shadow-inner">
+                🎭 Camerino ({{ idols|length }}/2)
+            </span>
+        </div>
     </div>
 
-     <!-- BANDEJA DE PETICIONES DE ANTOJOS PENDIENTES -->
-    {% if pending_requests %}
-        <div class="mt-4 pt-4 border-t border-vip-gold/30 flex flex-col gap-3">
-            <h3 class="text-sm font-bold text-yellow-400 flex items-center gap-2">
-                <span>📬</span> Peticiones de Antojos Pendientes ({{ pending_requests|length }})
-            </h3>
+    <!-- BANNER HERO DEL CAMERINO -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden border border-purple-500/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#200938] via-[#0e031a] to-black">
+        <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-fuchsia-600/20 rounded-full blur-3xl pointer-events-none"></div>
 
-            {% for req in pending_requests %}
-                <div class="bg-black/60 border border-vip-gold/40 p-4 rounded-xl flex flex-col gap-2.5 shadow-md">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <span class="text-xs font-bold text-vip-gold">Para: {{ req.idol.stage_name }}</span>
-                            <p class="text-[11px] text-vip-text/60">De: {{ req.client_username }}</p>
-                        </div>
-                        <span class="bg-yellow-950/60 border border-vip-gold text-vip-gold px-2.5 py-0.5 rounded-full text-xs font-mono font-bold">
-                            +{{ req.bounty }} 🪙
-                        </span>
-                    </div>
-
-                    <p class="text-xs text-white/90 bg-vip-base/70 p-2.5 rounded-lg border border-vip-gold/20 italic">
-                        "{{ req.description }}"
-                    </p>
-
-                    <!-- Formulario de Entrega / Rechazo con tg_id blindado -->
-                    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-1">
-                        {% csrf_token %}
-                        <input type="hidden" name="request_id" value="{{ req.id }}">
-                        <input type="hidden" name="tg_id" value="{{ tg_id }}"> <!-- 👈 ESTA LÍNEA ES VITAL -->
-
-                        <label class="block text-[10px] text-yellow-400 uppercase font-bold">Subir foto para entregar el antojo:</label>
-                        <input type="file" name="delivered_photo" accept="image/*" required
-                               class="w-full bg-black/60 border border-vip-gold/30 rounded p-1.5 text-[11px] text-white file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-vip-gold file:text-black hover:file:bg-yellow-500 cursor-pointer">
-
-                        <div class="grid grid-cols-2 gap-2 mt-1">
-                            <button type="submit" name="action" value="accept_request"
-                                    class="bg-emerald-700 hover:bg-emerald-600 text-white font-black py-2 rounded-xl text-xs uppercase tracking-wider shadow">
-                                ✅ Entregar Foto (+{{ req.bounty }} 🪙)
-                            </button>
-                            <button type="submit" name="action" value="reject_request"
-                                    class="bg-rose-950 border border-rose-600 hover:bg-rose-900 text-rose-200 font-bold py-2 rounded-xl text-xs uppercase tracking-wider">
-                                ❌ Rechazar (Devolver Oro)
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            {% endfor %}
+        <div class="relative z-10 flex flex-col items-center">
+            <span class="text-3xl mb-1 filter drop-shadow">💄</span>
+            <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
+                Mis Fichas de Musa
+            </h1>
+            <p class="text-[11px] text-stone-300 mt-0.5 max-w-[280px]">
+                Administra tus personajes, modula tu estado de atención y responde a los deseos de tus admiradores.
+            </p>
         </div>
+    </div>
+
+    <!-- MENSAJES -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-2xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/80 border-green-500 text-green-200{% else %}bg-rose-950/80 border-rose-500 text-rose-200{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
     {% endif %}
 
-    {% if idols %}
-        <div class="flex flex-col gap-3">
-            {% for idol in idols %}
-            <div class="bg-vip-base border border-vip-gold/20 p-4 rounded-lg flex justify-between items-center">
-                
-                <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-full border-2 border-vip-gold overflow-hidden bg-vip-panel flex-shrink-0">
+    <!-- 📬 BANDEJA DE ANTOJOS PENDIENTES (Si hay solicitudes con oro en custodia) -->
+    {% if pending_requests %}
+    <div class="flex flex-col gap-2.5">
+        <div class="flex items-center justify-between px-1">
+            <h3 class="text-xs font-black text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span class="animate-bounce">📬</span> Antojos Pendientes de Entrega ({{ pending_requests|length }})
+            </h3>
+            <span class="text-[9.5px] font-mono text-yellow-400 font-bold">Oro en Custodia</span>
+        </div>
+
+        {% for req in pending_requests %}
+        <div class="vip-panel p-4 rounded-3xl border-2 border-rose-500/70 bg-gradient-to-br from-[#240815] via-[#10030a] to-black shadow-xl flex flex-col gap-3">
+            <div class="flex justify-between items-start">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-rose-950 border border-rose-500/50 flex items-center justify-center text-lg">
+                        🌹
+                    </div>
+                    <div>
+                        <span class="text-xs font-black text-white">Para: {{ req.idol.stage_name }}</span>
+                        <p class="text-[10px] text-stone-400">Noble: <strong class="text-yellow-300">{{ req.client_username }}</strong></p>
+                    </div>
+                </div>
+                <span class="bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 px-2.5 py-0.5 rounded-full text-xs font-mono font-black">
+                    +{{ req.bounty }} 🪙
+                </span>
+            </div>
+
+            <!-- Detalle del deseo -->
+            <p class="text-xs text-stone-200 bg-black/60 p-3 rounded-2xl border border-white/10 italic leading-relaxed">
+                «{{ req.description }}»
+            </p>
+
+            <!-- Formulario de Entrega -->
+            <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5 mt-0.5">
+                {% csrf_token %}
+                <input type="hidden" name="request_id" value="{{ req.id }}">
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+                <div class="bg-black/50 p-2.5 rounded-2xl border border-dashed border-rose-500/40">
+                    <label class="block text-[10px] text-rose-300 uppercase font-black mb-1">Adjuntar Foto Exclusiva:</label>
+                    <input type="file" name="delivered_photo" accept="image/*" required
+                           class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-rose-600 file:text-white cursor-pointer">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-1">
+                    <button type="submit" name="action" value="accept_request"
+                            class="bg-emerald-600 hover:bg-emerald-500 text-black font-black py-2.5 rounded-xl text-xs uppercase tracking-wider shadow active:scale-95 transition-all">
+                        ✅ Entregar & Cobrar
+                    </button>
+                    <button type="submit" name="action" value="reject_request" onclick="return confirm('¿Rechazar antojo y devolver el oro al cliente?')"
+                            class="bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-rose-200 font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all">
+                        ❌ Rechazar
+                    </button>
+                </div>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- LISTA DE FICHAS ARTÍSTICAS -->
+    <div class="flex flex-col gap-3.5">
+        {% for idol in idols %}
+        <div class="vip-panel p-4 rounded-3xl border border-purple-500/40 bg-gradient-to-br from-[#160824] via-[#090212] to-black shadow-xl flex flex-col gap-3">
+            
+            <div class="flex items-center justify-between">
+                <!-- Avatar y Datos -->
+                <div class="flex items-center gap-3.5 min-w-0">
+                    <div class="w-14 h-14 rounded-2xl border-2 border-vip-gold/60 overflow-hidden bg-black flex-shrink-0 shadow-lg relative">
                         {% if idol.photo %}
-                            <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover">
+                            <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover object-top">
                         {% else %}
-                            <span class="w-full h-full flex items-center justify-center text-vip-gold text-[10px] text-center leading-tight">Sin<br>Foto</span>
+                            <div class="w-full h-full flex items-center justify-center text-xl">🎭</div>
                         {% endif %}
                     </div>
-                    <div>
-                        <h3 class="font-semibold text-vip-gold">{{ idol.stage_name }}</h3>
-                        <p class="text-xs text-vip-text/70 mb-2">{{ idol.group|default:"Solista" }}</p>
 
-                        <!-- Selector rápido de estado en vivo -->
-                        <form method="POST" class="flex gap-1">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="update_status">
-                            <input type="hidden" name="idol_id" value="{{ idol.id }}">
-                            
-                            <button type="submit" name="status" value="online" title="🟢 Chateando"
-                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'online' %}bg-green-950/80 border-green-500 text-green-300 font-bold shadow-[0_0_8px_rgba(74,222,128,0.3)]{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
-                                🟢 Chat
-                            </button>
-                            <button type="submit" name="status" value="antojos" title="🔥 Subiendo Antojos"
-                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'antojos' %}bg-purple-950/80 border-purple-400 text-purple-300 font-bold shadow-[0_0_8px_rgba(168,85,247,0.3)]{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
-                                🔥 Antojos
-                            </button>
-                            <button type="submit" name="status" value="offline" title="🌙 Descansando"
-                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'offline' %}bg-gray-900 border-gray-500 text-gray-300 font-bold{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
-                                🌙 Off
-                            </button>
-                        </form>
+                    <div class="flex flex-col min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <h3 class="font-serif text-sm font-black text-white truncate">{{ idol.stage_name }}</h3>
+                            <span class="text-xs text-yellow-400 font-mono font-bold bg-black/60 px-1.5 rounded">⭐ {{ idol.rating }}</span>
+                        </div>
+                        <span class="text-[10px] text-purple-300 font-semibold truncate">{{ idol.group|default:"Musa Solista" }}</span>
+                        <span class="text-[9px] text-stone-400 mt-0.5">{{ idol.services_done }} roles • {{ idol.posts.count }} publicaciones</span>
                     </div>
                 </div>
 
-                <!-- Modificado: Añadimos botones de acción -->
-                <div class="text-right text-xs flex flex-col items-end gap-2">
-                    <div>
-                        <p>⭐ {{ idol.rating }}</p>
-                        <p class="text-vip-text/50">Servicios: {{ idol.services_done }}</p>
-                    </div>
-                    <div class="flex gap-3 mt-1">
-                        <!-- Botones Editar y Eliminar -->
-                        <button onclick="goToEdit({{ idol.id }})" class="text-vip-gold hover:text-yellow-400 text-base" title="Editar">✏️</button>
-                        <button onclick="goToDelete({{ idol.id }})" class="text-red-500 hover:text-red-400 text-base" title="Eliminar">🗑️</button>
-                    </div>
+                <!-- Botones Editar y Borrar -->
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    <button type="button" onclick="goToEdit({{ idol.id }})" 
+                            class="w-8 h-8 rounded-xl bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 flex items-center justify-center text-xs shadow active:scale-90 transition-all" title="Editar">
+                        ✏️
+                    </button>
+                    <button type="button" onclick="goToDelete({{ idol.id }})" 
+                            class="w-8 h-8 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-300 flex items-center justify-center text-xs shadow active:scale-90 transition-all" title="Eliminar">
+                        🗑️
+                    </button>
                 </div>
-
             </div>
-            {% endfor %}
+
+            <!-- Modulador de Estado Rápido en Vivo -->
+            <div class="border-t border-white/5 pt-2 flex items-center justify-between gap-1">
+                <span class="text-[9.5px] font-mono text-stone-400 uppercase font-bold">Estado:</span>
+                
+                <form method="POST" class="flex gap-1.5 m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_status">
+                    <input type="hidden" name="idol_id" value="{{ idol.id }}">
+
+                    <button type="submit" name="status" value="online" 
+                            class="text-[9.5px] px-2.5 py-1 rounded-xl border font-bold transition-all {% if idol.status == 'online' %}bg-emerald-950 text-emerald-300 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]{% else %}bg-black/60 text-stone-500 border-white/10 hover:text-white{% endif %}">
+                        🟢 Chat
+                    </button>
+                    <button type="submit" name="status" value="antojos" 
+                            class="text-[9.5px] px-2.5 py-1 rounded-xl border font-bold transition-all {% if idol.status == 'antojos' %}bg-purple-950 text-purple-300 border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.4)]{% else %}bg-black/60 text-stone-500 border-white/10 hover:text-white{% endif %}">
+                        🔥 Antojos
+                    </button>
+                    <button type="submit" name="status" value="offline" 
+                            class="text-[9.5px] px-2.5 py-1 rounded-xl border font-bold transition-all {% if idol.status == 'offline' %}bg-stone-900 text-stone-300 border-stone-600{% else %}bg-black/60 text-stone-500 border-white/10 hover:text-white{% endif %}">
+                        🌙 Off
+                    </button>
+                </form>
+            </div>
+
         </div>
-    {% else %}
-        <p class="text-center text-sm text-vip-text/60 py-4">Aún no tienes Idols registradas.</p>
-    {% endif %}
+        {% empty %}
+        <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
+            <span class="text-4xl my-2">🎭</span>
+            <h4 class="font-serif text-sm font-bold text-white">Sin Fichas Artísticas</h4>
+            <p class="text-xs text-stone-400 mt-1 max-w-xs leading-relaxed">
+                Aún no has registrado a tu primera Musa en el Reino. Da el primer paso para ofrecer contenido y ganar oro.
+            </p>
+        </div>
+        {% endfor %}
+    </div>
 
-   
-
+    <!-- BOTÓN DE NUEVA FICHA -->
     {% if can_add_more %}
-        <button type="button" onclick="goToCreate()" class="mt-4 w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-            + Registrar Nueva Idol ({{ idols.count }}/2)
+        <button type="button" onclick="goToCreate()" 
+                class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_18px_rgba(212,175,55,0.35)] flex items-center justify-center gap-2 active:scale-95 transition-all mt-1">
+            <span>✨</span> <span>Consagrar Nueva Idol ({{ idols|length }}/2)</span>
         </button>
     {% else %}
-        <p class="text-center text-xs text-purple-300/80 mt-4 bg-purple-950/40 p-2.5 rounded-xl border border-purple-800/40 font-bold">
-            👑 Has alcanzado el límite máximo de 2 Idols consagradas.
-        </p>
+        <div class="text-center py-3 px-4 bg-purple-950/40 border border-purple-500/40 rounded-2xl text-xs font-bold text-purple-300">
+            👑 Has alcanzado el cupo máximo de 2 Musas consagradas.
+        </div>
     {% endif %}
+
 </div>
 
 <script>
-    function goToCreate() {
-        universalNav('/idols/create/');
-    }
-
-    function goToEdit(idolId) {
-        universalNav(`/idols/edit/${idolId}/`);
-    }
-
-    function goToDelete(idolId) {
-        universalNav(`/idols/delete/${idolId}/`);
-    }
+    function goToCreate() { universalNav('/idols/create/'); }
+    function goToEdit(id) { universalNav(`/idols/edit/${id}/`); }
+    function goToDelete(id) { universalNav(`/idols/delete/${id}/`); }
 </script>
 {% endblock %}
 

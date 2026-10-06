@@ -772,9 +772,17 @@ def open_photocard_box_ajax(request, box_id):
 
     wallet.remove_funds(box.price)
 
-    # BUFF CONEJO LUNAR: Aumenta probabilidad de cartas Épicas y Legendarias
+   # idols/views.py -> dentro de open_photocard_box_ajax
+
+    # 1. BUFF CONEJO LUNAR
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
     extra_legendary = {1: 5.0, 2: 12.0, 3: 20.0}.get(pet.evolution_stage_number, 5.0) if (pet and pet.species == 'rabbit') else 0.0
+
+    # 2. CONSUMO DE LLAVE DORADA DEL BAZAR (Si la tiene comprada)
+    from economy.models import UserInventoryItem
+    has_lucky_key = UserInventoryItem.consume_item(tg_id, 'lucky_charm')
+    if has_lucky_key:
+        extra_legendary += 15.0  # +15% extra de probabilidad dorada/épica
 
     roll = random.random() * 100
     if roll < (3.0 + extra_legendary):
@@ -1040,13 +1048,21 @@ def photocard_buy_action(request, user_card_id):
             messages.error(request, f"No tienes suficiente oro ({price} 🪙 necesarios).")
             return redirect('/idols/photocards/market/')
 
+       
+
         with transaction.atomic():
             buyer_wallet.remove_funds(price)
 
-            fee = int(price * 0.10)
+            vendedor_id = user_card.telegram_user_id
+            
+            # Verificar si el vendedor tiene la Patente 0% Impuesto del Bazar
+            from economy.models import UserInventoryItem
+            used_free_tax = UserInventoryItem.consume_item(vendedor_id, 'free_market')
+            
+            fee = 0 if used_free_tax else int(price * 0.10)
             neto_vendedor = price - fee
 
-            seller_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=user_card.telegram_user_id)
+            seller_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=vendedor_id)
             seller_wallet.add_funds(neto_vendedor)
 
             vendedor_id = user_card.telegram_user_id

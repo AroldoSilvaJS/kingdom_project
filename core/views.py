@@ -259,11 +259,14 @@ def leaderboard(request):
     })
 
 
+# core/views.py -> función admin_panel
+
 @admin_required
 def admin_panel(request, admin_tg_id):
     if request.method == "POST":
         accion = request.POST.get('accion')
 
+        # 1. AJUSTAR ORO
         if accion == 'adjust_gold':
             target_id = int(request.POST.get('target_id'))
             mode = request.POST.get('mode', 'add')
@@ -285,6 +288,87 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
+        # 2. CAMBIO DE RANGO
+        elif accion == 'change_role':
+            target_id = int(request.POST.get('target_id'))
+            new_role = request.POST.get('new_role')
+            UserRole.objects.filter(telegram_id=target_id).update(role=new_role)
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='role_change', target_tg_id=target_id, details=f"Rango cambiado a {new_role}")
+            messages.success(request, f"👑 Rango de {target_id} actualizado a {new_role.upper()}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 3. MAZMORRA (BAN / DESBAN)
+        elif accion == 'toggle_ban':
+            target_id = int(request.POST.get('target_id'))
+            user = get_object_or_404(UserRole, telegram_id=target_id)
+            user.is_banned = not user.is_banned
+            user.ban_reason = request.POST.get('ban_reason', 'Sanción de la Corona') if user.is_banned else None
+            user.save()
+            
+            estado_txt = "BANEADO (Mazmorra)" if user.is_banned else "LIBERADO"
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='ban_toggle', target_tg_id=target_id, details=estado_txt)
+            messages.warning(request, f"⚖️ Usuario {target_id}: {estado_txt}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 4. CONCEDER SALVOCONDUCTO MANUAL (INMUNIDAD)
+        elif accion == 'grant_shield':
+            target_id = int(request.POST.get('target_id'))
+            days = int(request.POST.get('shield_days', 15))
+            prof, _ = UserProfile.objects.get_or_create(telegram_user_id=target_id)
+            curr = prof.inactivity_shield_until if prof.is_shield_active else timezone.now()
+            prof.inactivity_shield_until = curr + timedelta(days=days)
+            prof.save()
+            msg = f"🛡️ Salvoconducto concedido a {target_id} por +{days} días."
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='grant_shield', target_tg_id=target_id, details=msg)
+            messages.success(request, msg)
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 5. LLUVIA DE ORO MASIVA
+        elif accion == 'mass_gold':
+            amount = int(request.POST.get('amount', 0))
+            if amount > 0:
+                banned_ids = list(UserRole.objects.filter(is_banned=True).values_list('telegram_id', flat=True))
+                count = Wallet.objects.exclude(telegram_user_id__in=banned_ids).update(balance=F('balance') + amount)
+                msg = f"✨ ¡Lluvia Real! +{amount} 🪙 a {count} súbditos."
+                AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='mass_gold', details=msg)
+                messages.success(request, msg)
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 6. RESETEAR COOLDOWN DE RULETA
+        elif accion == 'reset_bonus':
+            target_id = int(request.POST.get('target_id'))
+            Wallet.objects.filter(telegram_user_id=target_id).update(last_bonus_claim=None)
+            messages.success(request, f"⏱️ Cooldown de ruleta reseteado para {target_id}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        elif accion == 'reset_all_bonuses':
+            Wallet.objects.all().update(last_bonus_claim=None)
+            messages.success(request, "🎉 Cooldown de bono reseteado para todo el reino.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 7. ENVIAR MENSAJE AL GRUPO DE TELEGRAM
+        elif accion == 'telegram_broadcast':
+            text = request.POST.get('tg_message_text', '').strip()
+            if text:
+                send_telegram_msg(
+                    chat_id=settings.TELEGRAM_GROUP_ID,
+                    text=f"👑 <b>DECRETO DE LA CORONA IMPERIAL</b>\n\n{text}",
+                    button_text="✨ Abrir el Reino",
+                    button_url="https://t.me/KingdomPleasure_bot?start=entrar"
+                )
+                AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='telegram_broadcast', details=f"Broadcast: {text[:50]}")
+                messages.success(request, "📢 Mensaje enviado exitosamente al grupo oficial de Telegram.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 8. MARQUESINA DE LA APP
+        elif accion == 'broadcast_message':
+            txt = request.POST.get('broadcast_text', '').strip()
+            KingdomSetting.set_val('broadcast_message', txt)
+            KingdomSetting.set_val('broadcast_active', 'true' if request.POST.get('is_active') == '1' else 'false')
+            messages.success(request, "📢 Decreto público de la app actualizado.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 9. PURGA DE DATOS DE PRUEBA
         elif accion == 'purge_test_data':
             from idols.models import Review, Post, PostUnlock, PostLike, CustomRequest, PostComment, Photocard, PhotocardBox, UserPhotocard
             UserPhotocard.objects.all().delete()
@@ -308,54 +392,10 @@ def admin_panel(request, admin_tg_id):
             w.balance = 1000
             w.save()
 
-            messages.success(request, "🧹 ¡Purga completada! Todos los datos viejos fueron eliminados. Solo queda la Corona.")
+            messages.success(request, "🧹 Purga completada. Solo queda la cuenta de la Corona.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        elif accion == 'mass_gold':
-            amount = int(request.POST.get('amount', 0))
-            if amount > 0:
-                banned_ids = list(UserRole.objects.filter(is_banned=True).values_list('telegram_id', flat=True))
-                count = Wallet.objects.exclude(telegram_user_id__in=banned_ids).update(balance=F('balance') + amount)
-                messages.success(request, f"✨ ¡Lluvia consumada! +{amount} 🪙 entregados a {count} súbditos.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-        elif accion == 'change_role':
-            target_id = int(request.POST.get('target_id'))
-            new_role = request.POST.get('new_role')
-            UserRole.objects.filter(telegram_id=target_id).update(role=new_role)
-            messages.success(request, f"👑 Rango de {target_id} actualizado a {new_role.upper()}.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-        elif accion == 'toggle_ban':
-            target_id = int(request.POST.get('target_id'))
-            user = get_object_or_404(UserRole, telegram_id=target_id)
-            user.is_banned = not user.is_banned
-            user.ban_reason = request.POST.get('ban_reason', 'Sanción de la Corona') if user.is_banned else None
-            user.save()
-            messages.warning(request, f"⚖️ Usuario {target_id} {'BANEADO' if user.is_banned else 'DESBANEADO'}.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-        elif accion == 'reset_bonus':
-            target_id = int(request.POST.get('target_id'))
-            wallet = Wallet.objects.filter(telegram_user_id=target_id).first()
-            if wallet:
-                wallet.last_bonus_claim = None
-                wallet.save()
-                messages.success(request, f"⏱️ Cooldown de bono restablecido para {target_id}.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-        elif accion == 'reset_all_bonuses':
-            Wallet.objects.all().update(last_bonus_claim=None)
-            messages.success(request, "🎉 Cooldown de bono reseteado para todo el reino.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-        elif accion == 'broadcast_message':
-            txt = request.POST.get('broadcast_text', '').strip()
-            KingdomSetting.set_val('broadcast_message', txt)
-            KingdomSetting.set_val('broadcast_active', 'true' if request.POST.get('is_active') == '1' else 'false')
-            messages.success(request, "📢 Decreto global actualizado.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
+    # Consultas optimizadas para el Dashboard
     usuarios_roles = list(UserRole.objects.all().order_by('-id'))
     user_ids = [u.telegram_id for u in usuarios_roles]
 
@@ -367,6 +407,8 @@ def admin_panel(request, admin_tg_id):
 
     total_oro = 0
     total_bans = 0
+    total_inmunes = 0
+
     for u in usuarios_roles:
         w = wallets_map.get(u.telegram_id)
         prof = profiles_map.get(u.telegram_id)
@@ -377,11 +419,16 @@ def admin_panel(request, admin_tg_id):
         u.display_username = f"@{prof.username.replace('@','')}" if (prof and prof.username and not str(prof.username).isdigit()) else "Sin @"
         u.user_level = prof.level if prof else 1
         u.user_rank = prof.get_rank_name(is_idol=(u.role == 'idol' or len(idols_map.get(u.telegram_id, [])) > 0)) if prof else "Curioso"
-        u.has_bonus_cooldown = not w.can_claim_bonus() if w else False
         u.idol_names = idols_map.get(u.telegram_id, [])
         u.is_user_admin = (str(u.telegram_id) == ADMIN_TG_ID) or (u.role == 'admin')
         u.is_user_idol = (u.role == 'idol') or (len(u.idol_names) > 0)
         
+        # Salvoconducto
+        u.is_shield_active = prof.is_shield_active if prof else False
+        u.shield_days = prof.days_of_shield_remaining if prof else 0
+        if u.is_shield_active:
+            total_inmunes += 1
+
         total_oro += u.balance
         if u.is_banned:
             total_bans += 1
@@ -389,6 +436,8 @@ def admin_panel(request, admin_tg_id):
     idols = IdolProfile.objects.all()
     broadcast_msg = KingdomSetting.get_val('broadcast_message', '')
     broadcast_active = KingdomSetting.get_val('broadcast_active', 'false') == 'true'
+    audit_logs = AdminAuditLog.objects.all().order_by('-created_at')[:20]
+    total_cards = UserPhotocard.objects.count()
 
     return render(request, 'core/admin_panel.html', {
         'admin_tg_id': admin_tg_id,
@@ -397,8 +446,11 @@ def admin_panel(request, admin_tg_id):
         'total_usuarios': len(usuarios_roles),
         'total_oro': total_oro,
         'total_baneados': total_bans,
+        'total_inmunes': total_inmunes,
+        'total_cards': total_cards,
         'broadcast_msg': broadcast_msg,
         'broadcast_active': broadcast_active,
+        'audit_logs': audit_logs,
     })
 
 
