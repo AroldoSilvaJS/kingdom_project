@@ -1,10 +1,13 @@
 import random
 from django.utils import timezone
+from datetime import timedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
+from django.http import JsonResponse
 from .models import Pet
 from economy.models import Wallet
 from core.utils import grant_user_xp
+from idols.models import Photocard, UserPhotocard
 
 
 def resolve_tg_id(request):
@@ -82,43 +85,139 @@ def interact_pet(request):
 
 
 def expedition_pet(request):
-    """Envía a la mascota a explorar en busca de oro (gasta energía y tiene cooldown)"""
+    """Envía a la mascota a explorar una de las 3 zonas con probabilidad de Photocards reales"""
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
-        
-        if pet.energy < 25:
-            messages.error(request, f"⚠️ {pet.name} no tiene suficiente energía ({pet.energy}%). Necesita al menos 25% para explorar.")
+        zone = request.POST.get('zone', 'forest')
+
+        # Configuración por zona
+        ZONES = {
+            'forest': {'name': 'Bosque de Jade', 'min_lvl': 1, 'energy': 15, 'cooldown': 15, 'icon': '🌲'},
+            'crypts': {'name': 'Criptas Olvidadas', 'min_lvl': 2, 'energy': 25, 'cooldown': 45, 'icon': '🏛️'},
+            'cavern': {'name': 'Caverna de Cristal', 'min_lvl': 4, 'energy': 40, 'cooldown': 90, 'icon': '💎'},
+        }
+
+        z_data = ZONES.get(zone, ZONES['forest'])
+
+        # Validar nivel
+        if pet.level < z_data['min_lvl']:
+            err = f"⚠️ {pet.name} necesita ser Nivel {z_data['min_lvl']} para entrar a {z_data['name']}."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
             return redirect(f'/pets/?tg_id={tg_id}')
 
-        if not pet.can_go_expedition():
-            minutos = pet.minutes_until_next_expedition()
-            messages.info(request, f"⏳ {pet.name} aún está exhausto de su último viaje. Podrá salir de expedición en {minutos} minutos.")
+        # Validar energía
+        if pet.energy < z_data['energy']:
+            err = f"⚠️ {pet.name} no tiene suficiente energía ({pet.energy}%). Necesita al menos {z_data['energy']}%."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
             return redirect(f'/pets/?tg_id={tg_id}')
 
-        # Gastar energía
-        pet.energy = max(0, pet.energy - 25)
+        # Validar cooldown (si es zorro, 20% más rápido)
+        cooldown_min = z_data['cooldown']
+        if pet.species == 'fox':
+            cooldown_min = int(cooldown_min * 0.8)
+
+        if pet.last_expedition:
+            tiempo_pasado = timezone.now() - pet.last_expedition
+            if tiempo_pasado < timedelta(minutes=cooldown_min):
+                restante = int((timedelta(minutes=cooldown_min) - tiempo_pasado).total_seconds() // 60)
+                err = f"⏳ {pet.name} aún está descansando. Podrá explorar en {max(1, restante)} minutos."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.info(request, err)
+                return redirect(f'/pets/?tg_id={tg_id}')
+
+        # Consumo de energía y registro
+        pet.energy = max(0, pet.energy - z_data['energy'])
         pet.last_expedition = timezone.now()
 
-        # Botín de oro controlado y balanceado (10 a 20 🪙 + nivel de mascota):
-        gold_found = random.randint(10, 20) + (pet.level)
-        xp_mascota = 25
-        
+        # Cálculo de Botín
+        food_found = False
+        card_dropped = None
+
+        if zone == 'forest':
+            gold_found = random.randint(15, 35) + pet.level
+            xp_mascota = 25
+            if random.random() < 0.30:
+                food_found = True
+                pet.energy = min(100, pet.energy + 20)
+
+        elif zone == 'crypts':
+            gold_found = random.randint(45, 85) + (pet.level * 2)
+            xp_mascota = 50
+            if random.random() < 0.20:
+                food_found = True
+                pet.energy = min(100, pet.energy + 20)
+
+            # 15% de probabilidad de hallar Photocard Común o Rara
+            if random.random() < 0.15:
+                pool = Photocard.objects.filter(rarity__in=['common', 'rare'])
+                if pool.exists():
+                    c = random.choice(pool)
+                    UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=c)
+                    card_dropped = {
+                        'name': c.name,
+                        'idol_name': c.display_idol_name,
+                        'rarity_display': c.get_rarity_display(),
+                        'color': c.get_color_hex(),
+                        'image_url': c.image.url if c.image else ''
+                    }
+
+        else: # cavern
+            gold_found = random.randint(100, 200) + (pet.level * 3)
+            xp_mascota = 85
+
+            # 25% de probabilidad de hallar Photocard Épica o Legendaria
+            if random.random() < 0.25:
+                pool = Photocard.objects.filter(rarity__in=['epic', 'legendary'])
+                if not pool.exists():
+                    pool = Photocard.objects.all()
+                if pool.exists():
+                    c = random.choice(pool)
+                    UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=c)
+                    card_dropped = {
+                        'name': c.name,
+                        'idol_name': c.display_idol_name,
+                        'rarity_display': c.get_rarity_display(),
+                        'color': c.get_color_hex(),
+                        'image_url': c.image.url if c.image else ''
+                    }
+
+        # Subida de nivel de mascota
+        leveled_up = False
         pet.xp += xp_mascota
         if pet.xp >= pet.xp_to_next_level:
             pet.xp -= pet.xp_to_next_level
             pet.level += 1
-            messages.success(request, f"🎉 ¡{pet.name} subió al Nivel {pet.level}!")
+            leveled_up = True
 
         pet.save()
 
-        # Entregar botín al jugador con EXP moderada
+        # Entrega de oro y EXP al jugador
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         wallet.add_funds(gold_found)
-        grant_user_xp(request, tg_id, 10, reason="Expedición de Mascota")
+        grant_user_xp(request, tg_id, max(10, gold_found // 4), reason=f"Expedición {z_data['name']}")
 
-        messages.success(request, f"🌲 ¡{pet.name} regresó de los bosques con +{gold_found} 🪙 y +{xp_mascota} XP! (-25% Energía)")
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'zone_name': z_data['name'],
+                'gold': gold_found,
+                'xp': xp_mascota,
+                'food_found': food_found,
+                'card_dropped': card_dropped,
+                'leveled_up': leveled_up,
+                'pet_level': pet.level,
+                'pet_energy': pet.energy,
+                'nuevo_saldo': wallet.balance
+            })
+
+        messages.success(request, f"¡{pet.name} exploró {z_data['name']} y volvió con +{gold_found} 🪙 y +{xp_mascota} XP!")
         return redirect(f'/pets/?tg_id={tg_id}')
+
+    return redirect('/pets/')
 
 
 def change_pet(request):
