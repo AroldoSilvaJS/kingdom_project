@@ -1,144 +1,199 @@
+<!-- templates/idols/list.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="vip-panel p-6 mt-8 flex flex-col gap-4 mx-auto w-[90%]">
-    <div class="flex justify-between items-center mb-4 border-b border-vip-gold/30 pb-2">
-        <h2 class="text-xl font-semibold text-vip-gold">Mis Idols</h2>
-        <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/60 hover:text-vip-gold bg-black/60 px-3 py-1 rounded-full border border-vip-gold/30">⬅ Volver</button>
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    
+    <!-- ENCABEZADO -->
+    <div class="flex justify-between items-center px-1">
+        <button type="button" onclick="universalNav('/')" 
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
+            <span>⬅</span> <span>Menú</span>
+        </button>
+
+        <div class="flex items-center gap-1.5">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-widest text-purple-300 bg-purple-950/80 border border-purple-500/50 px-3 py-1 rounded-full shadow-inner">
+                🎭 Camerino ({{ idols|length }}/2)
+            </span>
+        </div>
     </div>
 
-     <!-- BANDEJA DE PETICIONES DE ANTOJOS PENDIENTES -->
-    {% if pending_requests %}
-        <div class="mt-4 pt-4 border-t border-vip-gold/30 flex flex-col gap-3">
-            <h3 class="text-sm font-bold text-yellow-400 flex items-center gap-2">
-                <span>📬</span> Peticiones de Antojos Pendientes ({{ pending_requests|length }})
-            </h3>
+    <!-- BANNER HERO DEL CAMERINO -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden border border-purple-500/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#200938] via-[#0e031a] to-black">
+        <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-fuchsia-600/20 rounded-full blur-3xl pointer-events-none"></div>
 
-            {% for req in pending_requests %}
-                <div class="bg-black/60 border border-vip-gold/40 p-4 rounded-xl flex flex-col gap-2.5 shadow-md">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <span class="text-xs font-bold text-vip-gold">Para: {{ req.idol.stage_name }}</span>
-                            <p class="text-[11px] text-vip-text/60">De: {{ req.client_username }}</p>
-                        </div>
-                        <span class="bg-yellow-950/60 border border-vip-gold text-vip-gold px-2.5 py-0.5 rounded-full text-xs font-mono font-bold">
-                            +{{ req.bounty }} 🪙
-                        </span>
-                    </div>
-
-                    <p class="text-xs text-white/90 bg-vip-base/70 p-2.5 rounded-lg border border-vip-gold/20 italic">
-                        "{{ req.description }}"
-                    </p>
-
-                    <!-- Formulario de Entrega / Rechazo con tg_id blindado -->
-                    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-1">
-                        {% csrf_token %}
-                        <input type="hidden" name="request_id" value="{{ req.id }}">
-                        <input type="hidden" name="tg_id" value="{{ tg_id }}"> <!-- 👈 ESTA LÍNEA ES VITAL -->
-
-                        <label class="block text-[10px] text-yellow-400 uppercase font-bold">Subir foto para entregar el antojo:</label>
-                        <input type="file" name="delivered_photo" accept="image/*" required
-                               class="w-full bg-black/60 border border-vip-gold/30 rounded p-1.5 text-[11px] text-white file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:bg-vip-gold file:text-black hover:file:bg-yellow-500 cursor-pointer">
-
-                        <div class="grid grid-cols-2 gap-2 mt-1">
-                            <button type="submit" name="action" value="accept_request"
-                                    class="bg-emerald-700 hover:bg-emerald-600 text-white font-black py-2 rounded-xl text-xs uppercase tracking-wider shadow">
-                                ✅ Entregar Foto (+{{ req.bounty }} 🪙)
-                            </button>
-                            <button type="submit" name="action" value="reject_request"
-                                    class="bg-rose-950 border border-rose-600 hover:bg-rose-900 text-rose-200 font-bold py-2 rounded-xl text-xs uppercase tracking-wider">
-                                ❌ Rechazar (Devolver Oro)
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            {% endfor %}
+        <div class="relative z-10 flex flex-col items-center">
+            <span class="text-3xl mb-1 filter drop-shadow">💄</span>
+            <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
+                Mis Fichas de Musa
+            </h1>
+            <p class="text-[11px] text-stone-300 mt-0.5 max-w-[280px]">
+                Administra tus personajes, modula tu estado de atención y responde a los deseos de tus admiradores.
+            </p>
         </div>
+    </div>
+
+    <!-- MENSAJES -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-2xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/80 border-green-500 text-green-200{% else %}bg-rose-950/80 border-rose-500 text-rose-200{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
     {% endif %}
 
-    {% if idols %}
-        <div class="flex flex-col gap-3">
-            {% for idol in idols %}
-            <div class="bg-vip-base border border-vip-gold/20 p-4 rounded-lg flex justify-between items-center">
-                
-                <div class="flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-full border-2 border-vip-gold overflow-hidden bg-vip-panel flex-shrink-0">
+    <!-- 📬 BANDEJA DE ANTOJOS PENDIENTES (Si hay solicitudes con oro en custodia) -->
+    {% if pending_requests %}
+    <div class="flex flex-col gap-2.5">
+        <div class="flex items-center justify-between px-1">
+            <h3 class="text-xs font-black text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span class="animate-bounce">📬</span> Antojos Pendientes de Entrega ({{ pending_requests|length }})
+            </h3>
+            <span class="text-[9.5px] font-mono text-yellow-400 font-bold">Oro en Custodia</span>
+        </div>
+
+        {% for req in pending_requests %}
+        <div class="vip-panel p-4 rounded-3xl border-2 border-rose-500/70 bg-gradient-to-br from-[#240815] via-[#10030a] to-black shadow-xl flex flex-col gap-3">
+            <div class="flex justify-between items-start">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-rose-950 border border-rose-500/50 flex items-center justify-center text-lg">
+                        🌹
+                    </div>
+                    <div>
+                        <span class="text-xs font-black text-white">Para: {{ req.idol.stage_name }}</span>
+                        <p class="text-[10px] text-stone-400">Noble: <strong class="text-yellow-300">{{ req.client_username }}</strong></p>
+                    </div>
+                </div>
+                <span class="bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 px-2.5 py-0.5 rounded-full text-xs font-mono font-black">
+                    +{{ req.bounty }} 🪙
+                </span>
+            </div>
+
+            <!-- Detalle del deseo -->
+            <p class="text-xs text-stone-200 bg-black/60 p-3 rounded-2xl border border-white/10 italic leading-relaxed">
+                «{{ req.description }}»
+            </p>
+
+            <!-- Formulario de Entrega -->
+            <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5 mt-0.5">
+                {% csrf_token %}
+                <input type="hidden" name="request_id" value="{{ req.id }}">
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+                <div class="bg-black/50 p-2.5 rounded-2xl border border-dashed border-rose-500/40">
+                    <label class="block text-[10px] text-rose-300 uppercase font-black mb-1">Adjuntar Foto Exclusiva:</label>
+                    <input type="file" name="delivered_photo" accept="image/*" required
+                           class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-rose-600 file:text-white cursor-pointer">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 mt-1">
+                    <button type="submit" name="action" value="accept_request"
+                            class="bg-emerald-600 hover:bg-emerald-500 text-black font-black py-2.5 rounded-xl text-xs uppercase tracking-wider shadow active:scale-95 transition-all">
+                        ✅ Entregar & Cobrar
+                    </button>
+                    <button type="submit" name="action" value="reject_request" onclick="return confirm('¿Rechazar antojo y devolver el oro al cliente?')"
+                            class="bg-rose-950/80 hover:bg-rose-900 border border-rose-600 text-rose-200 font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all">
+                        ❌ Rechazar
+                    </button>
+                </div>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- LISTA DE FICHAS ARTÍSTICAS -->
+    <div class="flex flex-col gap-3.5">
+        {% for idol in idols %}
+        <div class="vip-panel p-4 rounded-3xl border border-purple-500/40 bg-gradient-to-br from-[#160824] via-[#090212] to-black shadow-xl flex flex-col gap-3">
+            
+            <div class="flex items-center justify-between">
+                <!-- Avatar y Datos -->
+                <div class="flex items-center gap-3.5 min-w-0">
+                    <div class="w-14 h-14 rounded-2xl border-2 border-vip-gold/60 overflow-hidden bg-black flex-shrink-0 shadow-lg relative">
                         {% if idol.photo %}
-                            <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover">
+                            <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover object-top">
                         {% else %}
-                            <span class="w-full h-full flex items-center justify-center text-vip-gold text-[10px] text-center leading-tight">Sin<br>Foto</span>
+                            <div class="w-full h-full flex items-center justify-center text-xl">🎭</div>
                         {% endif %}
                     </div>
-                    <div>
-                        <h3 class="font-semibold text-vip-gold">{{ idol.stage_name }}</h3>
-                        <p class="text-xs text-vip-text/70 mb-2">{{ idol.group|default:"Solista" }}</p>
 
-                        <!-- Selector rápido de estado en vivo -->
-                        <form method="POST" class="flex gap-1">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="update_status">
-                            <input type="hidden" name="idol_id" value="{{ idol.id }}">
-                            
-                            <button type="submit" name="status" value="online" title="🟢 Chateando"
-                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'online' %}bg-green-950/80 border-green-500 text-green-300 font-bold shadow-[0_0_8px_rgba(74,222,128,0.3)]{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
-                                🟢 Chat
-                            </button>
-                            <button type="submit" name="status" value="antojos" title="🔥 Subiendo Antojos"
-                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'antojos' %}bg-purple-950/80 border-purple-400 text-purple-300 font-bold shadow-[0_0_8px_rgba(168,85,247,0.3)]{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
-                                🔥 Antojos
-                            </button>
-                            <button type="submit" name="status" value="offline" title="🌙 Descansando"
-                                    class="text-[10px] px-2 py-0.5 rounded-full border transition-all {% if idol.status == 'offline' %}bg-gray-900 border-gray-500 text-gray-300 font-bold{% else %}border-gray-700 text-gray-400 opacity-60 hover:opacity-100{% endif %}">
-                                🌙 Off
-                            </button>
-                        </form>
+                    <div class="flex flex-col min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <h3 class="font-serif text-sm font-black text-white truncate">{{ idol.stage_name }}</h3>
+                            <span class="text-xs text-yellow-400 font-mono font-bold bg-black/60 px-1.5 rounded">⭐ {{ idol.rating }}</span>
+                        </div>
+                        <span class="text-[10px] text-purple-300 font-semibold truncate">{{ idol.group|default:"Musa Solista" }}</span>
+                        <span class="text-[9px] text-stone-400 mt-0.5">{{ idol.services_done }} roles • {{ idol.posts.count }} publicaciones</span>
                     </div>
                 </div>
 
-                <!-- Modificado: Añadimos botones de acción -->
-                <div class="text-right text-xs flex flex-col items-end gap-2">
-                    <div>
-                        <p>⭐ {{ idol.rating }}</p>
-                        <p class="text-vip-text/50">Servicios: {{ idol.services_done }}</p>
-                    </div>
-                    <div class="flex gap-3 mt-1">
-                        <!-- Botones Editar y Eliminar -->
-                        <button onclick="goToEdit({{ idol.id }})" class="text-vip-gold hover:text-yellow-400 text-base" title="Editar">✏️</button>
-                        <button onclick="goToDelete({{ idol.id }})" class="text-red-500 hover:text-red-400 text-base" title="Eliminar">🗑️</button>
-                    </div>
+                <!-- Botones Editar y Borrar -->
+                <div class="flex items-center gap-1 flex-shrink-0">
+                    <button type="button" onclick="goToEdit({{ idol.id }})" 
+                            class="w-8 h-8 rounded-xl bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 flex items-center justify-center text-xs shadow active:scale-90 transition-all" title="Editar">
+                        ✏️
+                    </button>
+                    <button type="button" onclick="goToDelete({{ idol.id }})" 
+                            class="w-8 h-8 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-300 flex items-center justify-center text-xs shadow active:scale-90 transition-all" title="Eliminar">
+                        🗑️
+                    </button>
                 </div>
-
             </div>
-            {% endfor %}
+
+            <!-- Modulador de Estado Rápido en Vivo -->
+            <div class="border-t border-white/5 pt-2 flex items-center justify-between gap-1">
+                <span class="text-[9.5px] font-mono text-stone-400 uppercase font-bold">Estado:</span>
+                
+                <form method="POST" class="flex gap-1.5 m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_status">
+                    <input type="hidden" name="idol_id" value="{{ idol.id }}">
+
+                    <button type="submit" name="status" value="online" 
+                            class="text-[9.5px] px-2.5 py-1 rounded-xl border font-bold transition-all {% if idol.status == 'online' %}bg-emerald-950 text-emerald-300 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]{% else %}bg-black/60 text-stone-500 border-white/10 hover:text-white{% endif %}">
+                        🟢 Chat
+                    </button>
+                    <button type="submit" name="status" value="antojos" 
+                            class="text-[9.5px] px-2.5 py-1 rounded-xl border font-bold transition-all {% if idol.status == 'antojos' %}bg-purple-950 text-purple-300 border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.4)]{% else %}bg-black/60 text-stone-500 border-white/10 hover:text-white{% endif %}">
+                        🔥 Antojos
+                    </button>
+                    <button type="submit" name="status" value="offline" 
+                            class="text-[9.5px] px-2.5 py-1 rounded-xl border font-bold transition-all {% if idol.status == 'offline' %}bg-stone-900 text-stone-300 border-stone-600{% else %}bg-black/60 text-stone-500 border-white/10 hover:text-white{% endif %}">
+                        🌙 Off
+                    </button>
+                </form>
+            </div>
+
         </div>
-    {% else %}
-        <p class="text-center text-sm text-vip-text/60 py-4">Aún no tienes Idols registradas.</p>
-    {% endif %}
+        {% empty %}
+        <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
+            <span class="text-4xl my-2">🎭</span>
+            <h4 class="font-serif text-sm font-bold text-white">Sin Fichas Artísticas</h4>
+            <p class="text-xs text-stone-400 mt-1 max-w-xs leading-relaxed">
+                Aún no has registrado a tu primera Musa en el Reino. Da el primer paso para ofrecer contenido y ganar oro.
+            </p>
+        </div>
+        {% endfor %}
+    </div>
 
-   
-
+    <!-- BOTÓN DE NUEVA FICHA -->
     {% if can_add_more %}
-        <button type="button" onclick="goToCreate()" class="mt-4 w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-            + Registrar Nueva Idol ({{ idols.count }}/2)
+        <button type="button" onclick="goToCreate()" 
+                class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_18px_rgba(212,175,55,0.35)] flex items-center justify-center gap-2 active:scale-95 transition-all mt-1">
+            <span>✨</span> <span>Consagrar Nueva Idol ({{ idols|length }}/2)</span>
         </button>
     {% else %}
-        <p class="text-center text-xs text-purple-300/80 mt-4 bg-purple-950/40 p-2.5 rounded-xl border border-purple-800/40 font-bold">
-            👑 Has alcanzado el límite máximo de 2 Idols consagradas.
-        </p>
+        <div class="text-center py-3 px-4 bg-purple-950/40 border border-purple-500/40 rounded-2xl text-xs font-bold text-purple-300">
+            👑 Has alcanzado el cupo máximo de 2 Musas consagradas.
+        </div>
     {% endif %}
+
 </div>
 
 <script>
-    function goToCreate() {
-        universalNav('/idols/create/');
-    }
-
-    function goToEdit(idolId) {
-        universalNav(`/idols/edit/${idolId}/`);
-    }
-
-    function goToDelete(idolId) {
-        universalNav(`/idols/delete/${idolId}/`);
-    }
+    function goToCreate() { universalNav('/idols/create/'); }
+    function goToEdit(id) { universalNav(`/idols/edit/${id}/`); }
+    function goToDelete(id) { universalNav(`/idols/delete/${id}/`); }
 </script>
 {% endblock %}

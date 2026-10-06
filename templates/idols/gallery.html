@@ -1,101 +1,126 @@
+<!-- templates/idols/gallery.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-36">
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
     <!-- ENCABEZADO -->
     <div class="flex justify-between items-center px-1">
         <div>
-            <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
+            <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
                 Elenco Imperial
-            </h2>
-            <p class="text-[11px] text-vip-text/60">Idols consagradas en el Reino</p>
+            </h1>
+            <p class="text-[11px] text-stone-400">Musas consagradas en la Corte</p>
         </div>
-        <span class="text-xs bg-vip-gold/15 border border-vip-gold/40 text-vip-gold px-3 py-1 rounded-full uppercase tracking-wider font-bold">
-            Total: {{ all_idols.count }}
+        <span class="text-xs bg-black/70 border border-vip-gold/40 text-vip-gold px-3 py-1 rounded-full uppercase tracking-wider font-mono font-bold shadow-inner">
+            {{ all_idols.count }} Idols
         </span>
     </div>
 
-    <!-- CUADRÍCULA DE TARJETAS RETRATO (2 COLUMNAS) -->
-    <div class="grid grid-cols-2 gap-3">
+    <!-- FILTROS EN VIVO RÁPIDOS -->
+    <div class="grid grid-cols-4 gap-1 p-1 bg-black/70 border border-vip-gold/30 rounded-2xl text-[9.5px] font-bold uppercase text-center shadow-inner">
+        <button type="button" onclick="filterGallery('all')" id="g-filter-all" class="py-1.5 rounded-xl bg-vip-gold text-black font-black">Todas</button>
+        <button type="button" onclick="filterGallery('online')" id="g-filter-online" class="py-1.5 rounded-xl text-stone-400 hover:text-white">🟢 Online</button>
+        <button type="button" onclick="filterGallery('top')" id="g-filter-top" class="py-1.5 rounded-xl text-purple-400 hover:text-white">⭐ Top</button>
+        <button type="button" onclick="filterGallery('trending')" id="g-filter-trending" class="py-1.5 rounded-xl text-yellow-400 hover:text-white">🔥 Favoritas</button>
+    </div>
+
+    <!-- CUADRÍCULA DE RETRATOS GLAMOUR (2 COLUMNAS) -->
+    <div class="grid grid-cols-2 gap-3" id="gallery-grid">
         {% for idol in all_idols %}
-            <div onclick="goToDetail('{{ idol.id }}')" 
-                 class="relative rounded-2xl overflow-hidden border {% if idol.is_trending %}border-yellow-400 shadow-[0_0_20px_rgba(234,179,8,0.35)]{% elif idol.is_top_rated %}border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.25)]{% else %}border-vip-gold/30 shadow-md{% endif %} aspect-[3/4] group cursor-pointer hover:scale-[1.02] active:scale-95 transition-all duration-300 bg-black">
-                
-                <!-- Imagen de la Idol con recorte inteligente -->
-                {% if idol.photo %}
-                    <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500">
+        <div onclick="universalNav('/idols/{{ idol.id }}/')" 
+             class="idol-card relative rounded-3xl overflow-hidden border-2 aspect-[3/4] group cursor-pointer hover:scale-[1.02] active:scale-95 transition-all duration-300 bg-black shadow-xl"
+             data-status="{{ idol.status }}"
+             data-top="{% if idol.is_top_rated %}1{% else %}0{% endif %}"
+             data-trending="{% if idol.is_trending %}1{% else %}0{% endif %}"
+             style="border-color: {% if idol.aura_color == 'gold' %}#f59e0b{% elif idol.aura_color == 'ruby' %}#e11d48{% elif idol.aura_color == 'emerald' %}#10b981{% else %}#a855f7{% endif %};">
+            
+            <!-- Foto de Portada con Zoom Suave -->
+            {% if idol.photo %}
+                <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" class="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500">
+            {% else %}
+                <div class="w-full h-full bg-gradient-to-b from-[#1c0b2b] to-black flex items-center justify-center">
+                    <span class="text-vip-gold/40 text-4xl">🎭</span>
+                </div>
+            {% endif %}
+
+            <!-- Badges Flotantes Superiores -->
+            <div class="absolute top-2.5 inset-x-2.5 flex justify-between items-start z-10 pointer-events-none">
+                {% if idol.is_trending %}
+                    <span class="bg-gradient-to-r from-yellow-600 via-amber-400 to-yellow-600 text-black text-[8.5px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg animate-pulse">
+                        🔥 Favorita
+                    </span>
+                {% elif idol.is_top_rated %}
+                    <span class="bg-purple-950/90 border border-purple-400 text-purple-200 text-[8.5px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg">
+                        ⭐ Top Rating
+                    </span>
                 {% else %}
-                    <div class="w-full h-full bg-gradient-to-b from-[#180b29] to-black flex items-center justify-center">
-                        <span class="text-vip-gold/50 text-4xl">🎭</span>
-                    </div>
+                    <span></span>
                 {% endif %}
 
-                <!-- INSIGNIAS FLOTANTES SUPERIORES -->
-                <div class="absolute top-2 left-2 right-2 flex justify-between items-start z-10 pointer-events-none">
-                    {% if idol.is_trending %}
-                        <span class="bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-600 text-black text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1 animate-pulse">
-                            🔥 Favorita
-                        </span>
-                    {% elif idol.is_top_rated %}
-                        <span class="bg-gradient-to-r from-purple-900 to-fuchsia-700 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg border border-purple-400 flex items-center gap-1">
-                            ⭐ Top
-                        </span>
-                    {% else %}
-                        <span></span>
-                    {% endif %}
+                <span class="bg-black/80 backdrop-blur-md text-yellow-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-yellow-500/40 font-mono shadow">
+                    ⭐ {{ idol.rating }}
+                </span>
+            </div>
 
-                    <!-- Rating badge -->
-                    <span class="bg-black/75 backdrop-blur-md text-yellow-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-vip-gold/30 font-mono shadow">
-                        ⭐ {{ idol.rating }}
+            <!-- Degradado Sombra Inferior -->
+            <div class="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent pointer-events-none"></div>
+
+            <!-- Ficha de la Musa en el Pie -->
+            <div class="absolute bottom-0 inset-x-0 p-3 flex flex-col z-10">
+                <!-- Estado de Atención -->
+                {% if idol.status == 'online' %}
+                    <span class="inline-flex items-center gap-1 text-[8.5px] font-black text-emerald-400 uppercase tracking-wider mb-0.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Chateando
                     </span>
-                </div>
+                {% elif idol.status == 'antojos' %}
+                    <span class="inline-flex items-center gap-1 text-[8.5px] font-black text-purple-300 uppercase tracking-wider mb-0.5">
+                        🔥 Sesión Antojos
+                    </span>
+                {% else %}
+                    <span class="inline-flex items-center gap-1 text-[8.5px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">
+                        🌙 En Descanso
+                    </span>
+                {% endif %}
 
-                <!-- Degradado inferior cinematográfico -->
-                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+                <h3 class="font-serif font-black text-white text-sm leading-tight truncate group-hover:text-vip-gold transition-colors">
+                    {{ idol.stage_name }}
+                </h3>
+                <p class="text-[10px] text-stone-300 truncate font-medium">{{ idol.group|default:"Musa Solista" }}</p>
 
-                <!-- DATOS DE LA IDOL EN EL PIE -->
-                <div class="absolute bottom-0 left-0 w-full p-3 flex flex-col z-10">
-                    <!-- Estado de actividad -->
-                    {% if idol.status == 'online' %}
-                        <span class="inline-flex items-center gap-1 text-[9px] font-bold text-green-400 uppercase tracking-wider mb-0.5">
-                            <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Chateando
-                        </span>
-                    {% elif idol.status == 'antojos' %}
-                        <span class="inline-flex items-center gap-1 text-[9px] font-bold text-purple-300 uppercase tracking-wider mb-0.5">
-                            🔥 Antojos
-                        </span>
-                    {% else %}
-                        <span class="inline-flex items-center gap-1 text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
-                            🌙 Descanso
-                        </span>
-                    {% endif %}
-                    
-                    <h3 class="font-serif font-black text-white text-sm leading-tight truncate group-hover:text-vip-gold transition-colors">
-                        {{ idol.stage_name }}
-                    </h3>
-                    <p class="text-[10px] text-vip-text/70 truncate">{{ idol.group|default:"Solista" }}</p>
-                    
-                    <!-- Roller oficial con su @ o nombre real (NUNCA el ID numérico) -->
-                    <div class="mt-1 flex justify-between items-center text-[9px] text-vip-text/60 border-t border-vip-gold/15 pt-1">
-                        <span>{{ idol.services_done }} roles</span>
-                        <span class="truncate max-w-[90px] text-vip-gold font-bold font-mono">{{ idol.get_display_owner }}</span>
-                    </div>
+                <!-- Dueña oficial (@) y Roles dados -->
+                <div class="mt-1.5 flex justify-between items-center text-[9px] text-stone-400 border-t border-white/10 pt-1 font-mono">
+                    <span>{{ idol.services_done }} roles</span>
+                    <span class="truncate max-w-[85px] text-yellow-400 font-bold">{{ idol.get_display_owner }}</span>
                 </div>
             </div>
+
+        </div>
         {% empty %}
-            <div class="col-span-2 vip-panel p-8 text-center flex flex-col items-center">
-                <span class="text-4xl my-2">🎭</span>
-                <p class="text-xs text-vip-text/60">Aún no hay Idols registradas en el Reino.</p>
-            </div>
+        <div class="col-span-2 vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
+            <span class="text-4xl my-2">🎭</span>
+            <p class="text-xs text-stone-400">Aún no hay Musas registradas en la corte.</p>
+        </div>
         {% endfor %}
     </div>
 
 </div>
 
 <script>
-    function goToDetail(idolId) {
-        universalNav(`/idols/${idolId}/`);
+    function filterGallery(type) {
+        const cards = document.querySelectorAll('.idol-card');
+        ['all', 'online', 'top', 'trending'].forEach(t => {
+            const btn = document.getElementById(`g-filter-${t}`);
+            if (btn) btn.className = "py-1.5 rounded-xl text-stone-400 hover:text-white";
+        });
+        document.getElementById(`g-filter-${type}`).className = "py-1.5 rounded-xl bg-vip-gold text-black font-black";
+
+        cards.forEach(c => {
+            if (type === 'all') c.style.display = 'block';
+            else if (type === 'online') c.style.display = (c.dataset.status === 'online' || c.dataset.status === 'antojos') ? 'block' : 'none';
+            else if (type === 'top') c.style.display = (c.dataset.top === '1') ? 'block' : 'none';
+            else if (type === 'trending') c.style.display = (c.dataset.trending === '1') ? 'block' : 'none';
+        });
     }
 </script>
 {% endblock %}
