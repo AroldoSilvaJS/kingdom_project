@@ -46,23 +46,27 @@
             </div>
         </div>
 
-        <!-- Pedestal Rúnico & Avatar Interactivo -->
+        <!-- Medallón Imperial & Avatar Táctil (Recorte Circular Hermético) -->
         <div onclick="triggerPetTouch(event)" 
-             class="relative w-44 h-44 my-2 flex items-center justify-center group cursor-pointer select-none active:scale-95 transition-transform"
+             class="relative my-3 flex items-center justify-center cursor-pointer select-none active:scale-95 transition-transform group"
              title="Toca para acariciar a tu criatura">
             
-            <!-- Anillo rúnico giratorio -->
-            <div class="absolute w-40 h-40 border border-vip-gold/25 rounded-full animate-[spin_24s_linear_infinite] pointer-events-none"></div>
-            <div class="absolute w-32 h-32 bg-gradient-to-t from-purple-600/35 via-fuchsia-500/20 to-transparent rounded-full blur-2xl pointer-events-none"></div>
+            <!-- Aura brillante de fondo -->
+            <div class="absolute w-40 h-40 bg-purple-600/30 rounded-full blur-2xl pointer-events-none group-hover:bg-purple-500/40 transition-colors"></div>
 
-            <img src="{{ pet.get_image_url }}" 
-                 alt="{{ pet.evolved_name }}" 
-                 id="pet-avatar-img"
-                 class="relative z-10 w-38 h-38 max-w-[150px] max-h-[150px] object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.9)] filter group-hover:scale-105 transition-transform duration-500">
+            <!-- Marco Circular de Oro Pulido con Recorte Total (Elimina bordes cuadrados) -->
+            <div class="relative z-10 w-36 h-36 sm:w-40 sm:h-40 rounded-full p-[3px] bg-gradient-to-b from-yellow-300 via-vip-gold to-amber-700 shadow-[0_0_25px_rgba(212,175,55,0.45)] flex items-center justify-center">
+                <div class="w-full h-full rounded-full overflow-hidden bg-black flex items-center justify-center relative">
+                    <img src="{{ pet.get_image_url }}" 
+                         alt="{{ pet.evolved_name }}" 
+                         id="pet-avatar-img"
+                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                </div>
+            </div>
 
             <!-- Insignia de Fase flotante inferior -->
             <span id="pet-stage-badge" 
-                  class="absolute -bottom-1.5 z-20 bg-gradient-to-r from-vip-gold via-yellow-300 to-amber-500 text-black text-[9.5px] font-black uppercase px-3 py-0.5 rounded-full shadow-[0_0_12px_rgba(212,175,55,0.7)] font-mono tracking-tight">
+                  class="absolute -bottom-2 z-20 bg-gradient-to-r from-vip-gold via-yellow-300 to-amber-500 text-black text-[9.5px] font-black uppercase px-3 py-0.5 rounded-full shadow-[0_0_12px_rgba(212,175,55,0.8)] font-mono tracking-tight">
                 Fase {{ pet.evolution_stage_number }}/3: {{ pet.evolved_name }}
             </span>
         </div>
