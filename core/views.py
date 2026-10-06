@@ -16,6 +16,7 @@ from pets.models import Pet
 from core.telegram_auth import is_user_in_group
 from core.telegram_notify import send_telegram_msg
 
+
 ADMIN_TG_ID = '7474444797'
 
 
@@ -370,7 +371,7 @@ def admin_panel(request, admin_tg_id):
 
         # 9. PURGA DE DATOS DE PRUEBA
         elif accion == 'purge_test_data':
-            from idols.models import Review, Post, PostUnlock, PostLike, CustomRequest, PostComment, Photocard, PhotocardBox, UserPhotocard
+            from idols.models import PhotocardBox, Photocard
             UserPhotocard.objects.all().delete()
             Photocard.objects.all().delete()
             PhotocardBox.objects.all().delete()

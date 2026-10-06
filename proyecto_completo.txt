@@ -1360,11 +1360,14 @@ def leaderboard(request):
     })
 
 
+# core/views.py -> función admin_panel
+
 @admin_required
 def admin_panel(request, admin_tg_id):
     if request.method == "POST":
         accion = request.POST.get('accion')
 
+        # 1. AJUSTAR ORO
         if accion == 'adjust_gold':
             target_id = int(request.POST.get('target_id'))
             mode = request.POST.get('mode', 'add')
@@ -1386,6 +1389,87 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
+        # 2. CAMBIO DE RANGO
+        elif accion == 'change_role':
+            target_id = int(request.POST.get('target_id'))
+            new_role = request.POST.get('new_role')
+            UserRole.objects.filter(telegram_id=target_id).update(role=new_role)
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='role_change', target_tg_id=target_id, details=f"Rango cambiado a {new_role}")
+            messages.success(request, f"👑 Rango de {target_id} actualizado a {new_role.upper()}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 3. MAZMORRA (BAN / DESBAN)
+        elif accion == 'toggle_ban':
+            target_id = int(request.POST.get('target_id'))
+            user = get_object_or_404(UserRole, telegram_id=target_id)
+            user.is_banned = not user.is_banned
+            user.ban_reason = request.POST.get('ban_reason', 'Sanción de la Corona') if user.is_banned else None
+            user.save()
+            
+            estado_txt = "BANEADO (Mazmorra)" if user.is_banned else "LIBERADO"
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='ban_toggle', target_tg_id=target_id, details=estado_txt)
+            messages.warning(request, f"⚖️ Usuario {target_id}: {estado_txt}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 4. CONCEDER SALVOCONDUCTO MANUAL (INMUNIDAD)
+        elif accion == 'grant_shield':
+            target_id = int(request.POST.get('target_id'))
+            days = int(request.POST.get('shield_days', 15))
+            prof, _ = UserProfile.objects.get_or_create(telegram_user_id=target_id)
+            curr = prof.inactivity_shield_until if prof.is_shield_active else timezone.now()
+            prof.inactivity_shield_until = curr + timedelta(days=days)
+            prof.save()
+            msg = f"🛡️ Salvoconducto concedido a {target_id} por +{days} días."
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='grant_shield', target_tg_id=target_id, details=msg)
+            messages.success(request, msg)
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 5. LLUVIA DE ORO MASIVA
+        elif accion == 'mass_gold':
+            amount = int(request.POST.get('amount', 0))
+            if amount > 0:
+                banned_ids = list(UserRole.objects.filter(is_banned=True).values_list('telegram_id', flat=True))
+                count = Wallet.objects.exclude(telegram_user_id__in=banned_ids).update(balance=F('balance') + amount)
+                msg = f"✨ ¡Lluvia Real! +{amount} 🪙 a {count} súbditos."
+                AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='mass_gold', details=msg)
+                messages.success(request, msg)
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 6. RESETEAR COOLDOWN DE RULETA
+        elif accion == 'reset_bonus':
+            target_id = int(request.POST.get('target_id'))
+            Wallet.objects.filter(telegram_user_id=target_id).update(last_bonus_claim=None)
+            messages.success(request, f"⏱️ Cooldown de ruleta reseteado para {target_id}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        elif accion == 'reset_all_bonuses':
+            Wallet.objects.all().update(last_bonus_claim=None)
+            messages.success(request, "🎉 Cooldown de bono reseteado para todo el reino.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 7. ENVIAR MENSAJE AL GRUPO DE TELEGRAM
+        elif accion == 'telegram_broadcast':
+            text = request.POST.get('tg_message_text', '').strip()
+            if text:
+                send_telegram_msg(
+                    chat_id=settings.TELEGRAM_GROUP_ID,
+                    text=f"👑 <b>DECRETO DE LA CORONA IMPERIAL</b>\n\n{text}",
+                    button_text="✨ Abrir el Reino",
+                    button_url="https://t.me/KingdomPleasure_bot?start=entrar"
+                )
+                AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='telegram_broadcast', details=f"Broadcast: {text[:50]}")
+                messages.success(request, "📢 Mensaje enviado exitosamente al grupo oficial de Telegram.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 8. MARQUESINA DE LA APP
+        elif accion == 'broadcast_message':
+            txt = request.POST.get('broadcast_text', '').strip()
+            KingdomSetting.set_val('broadcast_message', txt)
+            KingdomSetting.set_val('broadcast_active', 'true' if request.POST.get('is_active') == '1' else 'false')
+            messages.success(request, "📢 Decreto público de la app actualizado.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 9. PURGA DE DATOS DE PRUEBA
         elif accion == 'purge_test_data':
             from idols.models import Review, Post, PostUnlock, PostLike, CustomRequest, PostComment, Photocard, PhotocardBox, UserPhotocard
             UserPhotocard.objects.all().delete()
@@ -1409,54 +1493,10 @@ def admin_panel(request, admin_tg_id):
             w.balance = 1000
             w.save()
 
-            messages.success(request, "🧹 ¡Purga completada! Todos los datos viejos fueron eliminados. Solo queda la Corona.")
+            messages.success(request, "🧹 Purga completada. Solo queda la cuenta de la Corona.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        elif accion == 'mass_gold':
-            amount = int(request.POST.get('amount', 0))
-            if amount > 0:
-                banned_ids = list(UserRole.objects.filter(is_banned=True).values_list('telegram_id', flat=True))
-                count = Wallet.objects.exclude(telegram_user_id__in=banned_ids).update(balance=F('balance') + amount)
-                messages.success(request, f"✨ ¡Lluvia consumada! +{amount} 🪙 entregados a {count} súbditos.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-        elif accion == 'change_role':
-            target_id = int(request.POST.get('target_id'))
-            new_role = request.POST.get('new_role')
-            UserRole.objects.filter(telegram_id=target_id).update(role=new_role)
-            messages.success(request, f"👑 Rango de {target_id} actualizado a {new_role.upper()}.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-        elif accion == 'toggle_ban':
-            target_id = int(request.POST.get('target_id'))
-            user = get_object_or_404(UserRole, telegram_id=target_id)
-            user.is_banned = not user.is_banned
-            user.ban_reason = request.POST.get('ban_reason', 'Sanción de la Corona') if user.is_banned else None
-            user.save()
-            messages.warning(request, f"⚖️ Usuario {target_id} {'BANEADO' if user.is_banned else 'DESBANEADO'}.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-        elif accion == 'reset_bonus':
-            target_id = int(request.POST.get('target_id'))
-            wallet = Wallet.objects.filter(telegram_user_id=target_id).first()
-            if wallet:
-                wallet.last_bonus_claim = None
-                wallet.save()
-                messages.success(request, f"⏱️ Cooldown de bono restablecido para {target_id}.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-        elif accion == 'reset_all_bonuses':
-            Wallet.objects.all().update(last_bonus_claim=None)
-            messages.success(request, "🎉 Cooldown de bono reseteado para todo el reino.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
-        elif accion == 'broadcast_message':
-            txt = request.POST.get('broadcast_text', '').strip()
-            KingdomSetting.set_val('broadcast_message', txt)
-            KingdomSetting.set_val('broadcast_active', 'true' if request.POST.get('is_active') == '1' else 'false')
-            messages.success(request, "📢 Decreto global actualizado.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
-
+    # Consultas optimizadas para el Dashboard
     usuarios_roles = list(UserRole.objects.all().order_by('-id'))
     user_ids = [u.telegram_id for u in usuarios_roles]
 
@@ -1468,6 +1508,8 @@ def admin_panel(request, admin_tg_id):
 
     total_oro = 0
     total_bans = 0
+    total_inmunes = 0
+
     for u in usuarios_roles:
         w = wallets_map.get(u.telegram_id)
         prof = profiles_map.get(u.telegram_id)
@@ -1478,11 +1520,16 @@ def admin_panel(request, admin_tg_id):
         u.display_username = f"@{prof.username.replace('@','')}" if (prof and prof.username and not str(prof.username).isdigit()) else "Sin @"
         u.user_level = prof.level if prof else 1
         u.user_rank = prof.get_rank_name(is_idol=(u.role == 'idol' or len(idols_map.get(u.telegram_id, [])) > 0)) if prof else "Curioso"
-        u.has_bonus_cooldown = not w.can_claim_bonus() if w else False
         u.idol_names = idols_map.get(u.telegram_id, [])
         u.is_user_admin = (str(u.telegram_id) == ADMIN_TG_ID) or (u.role == 'admin')
         u.is_user_idol = (u.role == 'idol') or (len(u.idol_names) > 0)
         
+        # Salvoconducto
+        u.is_shield_active = prof.is_shield_active if prof else False
+        u.shield_days = prof.days_of_shield_remaining if prof else 0
+        if u.is_shield_active:
+            total_inmunes += 1
+
         total_oro += u.balance
         if u.is_banned:
             total_bans += 1
@@ -1490,6 +1537,8 @@ def admin_panel(request, admin_tg_id):
     idols = IdolProfile.objects.all()
     broadcast_msg = KingdomSetting.get_val('broadcast_message', '')
     broadcast_active = KingdomSetting.get_val('broadcast_active', 'false') == 'true'
+    audit_logs = AdminAuditLog.objects.all().order_by('-created_at')[:20]
+    total_cards = UserPhotocard.objects.count()
 
     return render(request, 'core/admin_panel.html', {
         'admin_tg_id': admin_tg_id,
@@ -1498,8 +1547,11 @@ def admin_panel(request, admin_tg_id):
         'total_usuarios': len(usuarios_roles),
         'total_oro': total_oro,
         'total_baneados': total_bans,
+        'total_inmunes': total_inmunes,
+        'total_cards': total_cards,
         'broadcast_msg': broadcast_msg,
         'broadcast_active': broadcast_active,
+        'audit_logs': audit_logs,
     })
 
 
@@ -3982,9 +4034,17 @@ def open_photocard_box_ajax(request, box_id):
 
     wallet.remove_funds(box.price)
 
-    # BUFF CONEJO LUNAR: Aumenta probabilidad de cartas Épicas y Legendarias
+   # idols/views.py -> dentro de open_photocard_box_ajax
+
+    # 1. BUFF CONEJO LUNAR
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
     extra_legendary = {1: 5.0, 2: 12.0, 3: 20.0}.get(pet.evolution_stage_number, 5.0) if (pet and pet.species == 'rabbit') else 0.0
+
+    # 2. CONSUMO DE LLAVE DORADA DEL BAZAR (Si la tiene comprada)
+    from economy.models import UserInventoryItem
+    has_lucky_key = UserInventoryItem.consume_item(tg_id, 'lucky_charm')
+    if has_lucky_key:
+        extra_legendary += 15.0  # +15% extra de probabilidad dorada/épica
 
     roll = random.random() * 100
     if roll < (3.0 + extra_legendary):
@@ -4250,13 +4310,21 @@ def photocard_buy_action(request, user_card_id):
             messages.error(request, f"No tienes suficiente oro ({price} 🪙 necesarios).")
             return redirect('/idols/photocards/market/')
 
+       
+
         with transaction.atomic():
             buyer_wallet.remove_funds(price)
 
-            fee = int(price * 0.10)
+            vendedor_id = user_card.telegram_user_id
+            
+            # Verificar si el vendedor tiene la Patente 0% Impuesto del Bazar
+            from economy.models import UserInventoryItem
+            used_free_tax = UserInventoryItem.consume_item(vendedor_id, 'free_market')
+            
+            fee = 0 if used_free_tax else int(price * 0.10)
             neto_vendedor = price - fee
 
-            seller_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=user_card.telegram_user_id)
+            seller_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=vendedor_id)
             seller_wallet.add_funds(neto_vendedor)
 
             vendedor_id = user_card.telegram_user_id
@@ -5299,28 +5367,28 @@ ARCHIVO: .\templates\core\admin_panel.html
 
   <style>
     body {
-      background: radial-gradient(circle at 50% -10%, #1f0b38 0%, #07030e 50%, #020106 100%);
+      background: radial-gradient(circle at 50% -10%, #220b3d 0%, #080310 50%, #020106 100%);
       color: #eae6f0;
       -webkit-tap-highlight-color: transparent;
       min-height: 100vh;
     }
     .admin-card {
-      background: linear-gradient(135deg, rgba(20, 10, 35, 0.9) 0%, rgba(10, 5, 18, 0.95) 100%);
+      background: linear-gradient(135deg, rgba(21, 10, 36, 0.9) 0%, rgba(10, 5, 18, 0.95) 100%);
       border: 1px solid rgba(212, 175, 55, 0.3);
       backdrop-filter: blur(12px);
     }
   </style>
 </head>
-<body class="font-sans antialiased p-3 sm:p-5 max-w-2xl mx-auto pb-24">
+<body class="font-sans antialiased p-3 sm:p-5 max-w-2xl mx-auto pb-28">
 
   <!-- NOTIFICACIONES FLASH -->
   {% if messages %}
     <div class="fixed top-3 inset-x-3 z-50 space-y-2 max-w-md mx-auto">
       {% for message in messages %}
-        <div class="p-3 rounded-2xl border backdrop-blur-md text-xs font-bold shadow-2xl flex justify-between items-center
-          {% if message.tags == 'success' %}bg-emerald-950/90 border-emerald-500 text-emerald-200
-          {% elif message.tags == 'warning' %}bg-amber-950/90 border-amber-500 text-amber-200
-          {% else %}bg-rose-950/90 border-rose-500 text-rose-200{% endif %}">
+        <div class="p-3.5 rounded-2xl border backdrop-blur-md text-xs font-bold shadow-2xl flex justify-between items-center
+          {% if message.tags == 'success' %}bg-emerald-950/95 border-emerald-500 text-emerald-200
+          {% elif message.tags == 'warning' %}bg-amber-950/95 border-amber-500 text-amber-200
+          {% else %}bg-rose-950/95 border-rose-500 text-rose-200{% endif %}">
           <span>{{ message }}</span>
           <button onclick="this.parentElement.remove()" class="ml-2 text-stone-400 hover:text-white text-base">&times;</button>
         </div>
@@ -5331,123 +5399,71 @@ ARCHIVO: .\templates\core\admin_panel.html
   <!-- BARRA SUPERIOR -->
   <div class="flex justify-between items-center mb-4">
     <button type="button" onclick="universalNav('/')" 
-       class="inline-flex items-center gap-1.5 text-xs text-yellow-400 bg-black/70 hover:bg-black px-3.5 py-1.5 rounded-full border border-yellow-500/40 shadow-sm active:scale-95 transition-all">
-      <span>⬅</span>
-      <span class="font-bold">Volver al Menú</span>
+       class="inline-flex items-center gap-1.5 text-xs text-yellow-400 bg-black/80 hover:bg-black px-4 py-2 rounded-full border border-yellow-500/40 shadow-sm active:scale-95 transition-all font-bold">
+      <span>⬅</span> <span>Volver al Menú</span>
     </button>
 
-    <div class="flex items-center gap-1.5 bg-black/70 border border-yellow-500/40 px-3 py-1 rounded-full text-xs">
-      <span class="text-yellow-400">👑 Corona:</span>
-      <span class="font-mono font-bold text-white">{{ admin_tg_id }}</span>
+    <div class="flex items-center gap-2 bg-black/80 border border-yellow-500/50 px-3.5 py-1.5 rounded-full text-xs shadow-inner">
+      <span class="text-yellow-400 font-bold">👑 Corona:</span>
+      <span class="font-mono font-black text-white">{{ admin_tg_id }}</span>
     </div>
   </div>
 
-  <!-- MÉTRICAS EN TIEMPO REAL -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5">
-    <div class="admin-card p-3 rounded-2xl border border-purple-500/30 text-center">
-      <span class="text-[10px] text-purple-300 uppercase font-bold tracking-wider">Súbditos</span>
+  <!-- 📊 CUADRO DE MANDO IMPERIAL (MÉTRICAS CLAVE) -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
+    <div class="admin-card p-3 rounded-2xl border border-purple-500/40 text-center shadow">
+      <span class="text-[9.5px] text-purple-300 uppercase font-bold tracking-wider">Población</span>
       <p class="text-2xl font-black text-white mt-0.5">{{ total_usuarios }}</p>
+      <span class="text-[8.5px] text-stone-400 font-mono">Súbditos Registrados</span>
     </div>
-    <div class="admin-card p-3 rounded-2xl border border-yellow-500/30 text-center">
-      <span class="text-[10px] text-yellow-400 uppercase font-bold tracking-wider">Oro Total</span>
+    <div class="admin-card p-3 rounded-2xl border border-yellow-500/40 text-center shadow">
+      <span class="text-[9.5px] text-yellow-400 uppercase font-bold tracking-wider">Tesoro Real</span>
       <p class="text-xl font-black text-yellow-300 mt-0.5">{{ total_oro }} 🪙</p>
+      <span class="text-[8.5px] text-stone-400 font-mono">En Bóvedas</span>
     </div>
-    <div class="admin-card p-3 rounded-2xl border border-rose-500/30 text-center">
-      <span class="text-[10px] text-rose-400 uppercase font-bold tracking-wider">Musas Creadas</span>
-      <p class="text-2xl font-black text-rose-300 mt-0.5">{{ idols.count }} 🌹</p>
+    <div class="admin-card p-3 rounded-2xl border border-emerald-500/40 text-center shadow">
+      <span class="text-[9.5px] text-emerald-400 uppercase font-bold tracking-wider">Salvoconductos</span>
+      <p class="text-2xl font-black text-emerald-300 mt-0.5">{{ total_inmunes }} 🛡️</p>
+      <span class="text-[8.5px] text-emerald-400/70 font-mono">Inmunes a Purga</span>
     </div>
-    <div class="admin-card p-3 rounded-2xl border border-neutral-700 text-center">
-      <span class="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Mazmorras</span>
+    <div class="admin-card p-3 rounded-2xl border border-rose-500/40 text-center shadow">
+      <span class="text-[9.5px] text-rose-400 uppercase font-bold tracking-wider">Mazmorras</span>
       <p class="text-2xl font-black text-rose-400 mt-0.5">{{ total_baneados }} ⛓️</p>
+      <span class="text-[8.5px] text-rose-400/70 font-mono">Sancionados</span>
     </div>
   </div>
 
-  <!-- DECRETOS IMPERIALES MASIVOS -->
-  <div class="admin-card p-4 rounded-3xl mb-5 space-y-3">
-    <h3 class="text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-yellow-500/20 pb-2">
-      <span>⚡</span> Decretos Imperiales Inmediatos
-    </h3>
-
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-      <!-- 1. Lluvia de oro masiva -->
-      <form method="POST" class="bg-black/60 p-3 rounded-2xl border border-yellow-500/20 flex flex-col justify-between gap-2">
-        {% csrf_token %}
-        <input type="hidden" name="accion" value="mass_gold">
-        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-        <div>
-          <span class="text-xs font-bold text-yellow-300 flex items-center gap-1"><span>🌧️</span> Lluvia de Oro</span>
-          <p class="text-[10px] text-stone-400 mt-0.5">A todos los súbditos no baneados.</p>
-        </div>
-        <div class="flex gap-1.5">
-          <input type="number" name="amount" value="50" min="1" class="w-20 bg-black border border-yellow-500/40 rounded-lg px-2 py-1 text-xs text-yellow-300 font-mono font-bold text-center">
-          <button type="submit" onclick="return confirm('¿Confirmas dar oro a TODOS los súbditos activos?')" 
-                  class="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs py-1.5 rounded-lg uppercase tracking-wider">
-            Lanzar
-          </button>
-        </div>
-      </form>
-
-      <!-- 2. Perdón de Cooldown -->
-      <form method="POST" class="bg-black/60 p-3 rounded-2xl border border-purple-500/20 flex flex-col justify-between gap-2">
-        {% csrf_token %}
-        <input type="hidden" name="accion" value="reset_all_bonuses">
-        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-        <div>
-          <span class="text-xs font-bold text-purple-300 flex items-center gap-1"><span>⏱️</span> Perdón de Cooldown</span>
-          <p class="text-[10px] text-stone-400 mt-0.5">Permite a todos girar la ruleta diaria ahora.</p>
-        </div>
-        <button type="submit" onclick="return confirm('¿Resetear cooldown de ruleta para todos?')" 
-                class="w-full bg-purple-950 border border-purple-500 text-purple-200 font-bold text-xs py-1.5 rounded-lg hover:bg-purple-900 uppercase tracking-wider">
-          Perdonar
-        </button>
-      </form>
-
-      <!-- 3. Marquesina Global -->
-      <form method="POST" class="bg-black/60 p-3 rounded-2xl border border-yellow-500/20 flex flex-col justify-between gap-2">
-        {% csrf_token %}
-        <input type="hidden" name="accion" value="broadcast_message">
-        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-        <div class="flex justify-between items-center">
-          <span class="text-xs font-bold text-yellow-300">📢 Decreto Público</span>
-          <label class="text-[10px] text-stone-300 flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" name="is_active" value="1" {% if broadcast_active %}checked{% endif %}> Visible
-          </label>
-        </div>
-        <input type="text" name="broadcast_text" value="{{ broadcast_msg }}" placeholder="Escribe el anuncio..." class="w-full bg-black border border-purple-800 rounded-lg px-2.5 py-1 text-xs text-stone-200">
-        <button type="submit" class="w-full bg-yellow-600 hover:bg-yellow-500 text-black font-black text-xs py-1 rounded-lg uppercase tracking-wider">
-          Publicar
-        </button>
-      </form>
-
-<!-- 4. Purgar Datos de Prueba -->
-      <form method="POST" class="bg-black/60 p-3 rounded-2xl border border-rose-500/40 flex flex-col justify-between gap-2">
-        {% csrf_token %}
-        <input type="hidden" name="accion" value="purge_test_data">
-        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-        <div>
-          <span class="text-xs font-bold text-rose-400 flex items-center gap-1"><span>🧹</span> Purga de Pruebas</span>
-          <p class="text-[10px] text-stone-400 mt-0.5">Elimina usuarios viejos, perfiles e Idols anteriores.</p>
-        </div>
-        <button type="submit" onclick="return confirm('⚠️ ¿Estás seguro de que deseas ELIMINAR TODOS los usuarios, idols y datos de prueba? Solo quedará tu cuenta de Corona.')" 
-                class="w-full bg-rose-950 border border-rose-500 text-rose-200 hover:bg-rose-900 font-black text-xs py-1.5 rounded-lg uppercase tracking-wider">
-          Limpiar Todo
-        </button>
-      </form>
-
-    </div>
+  <!-- PESTAÑAS DEL PANEL DE CONTROL -->
+  <div class="grid grid-cols-4 gap-1 p-1 bg-black/70 border border-yellow-500/30 rounded-2xl text-[10px] font-bold uppercase text-center mb-4 shadow-inner">
+    <button type="button" onclick="switchAdminTab('censo')" id="adm-tab-censo" 
+            class="py-2.5 rounded-xl bg-yellow-500 text-black font-black">
+      👥 Censo
+    </button>
+    <button type="button" onclick="switchAdminTab('decretos')" id="adm-tab-decretos" 
+            class="py-2.5 rounded-xl text-stone-400 hover:text-white">
+      ⚡ Decretos
+    </button>
+    <button type="button" onclick="switchAdminTab('purgas')" id="adm-tab-purgas" 
+            class="py-2.5 rounded-xl text-stone-400 hover:text-white">
+      🛡️ Purgas
+    </button>
+    <button type="button" onclick="switchAdminTab('auditoria')" id="adm-tab-auditoria" 
+            class="py-2.5 rounded-xl text-stone-400 hover:text-white">
+      📜 Auditoría
+    </button>
   </div>
 
-  <!-- CENSO DE SÚBDITOS CON BUSCADOR EN TIEMPO REAL -->
-  <div class="admin-card p-4 rounded-3xl space-y-3">
-    <div class="flex flex-col sm:flex-row justify-between items-center gap-2 border-b border-yellow-500/20 pb-3">
+  <!-- 👥 PESTAÑA 1: CENSO DE SÚBDITOS CON GESTOR DIRECTO -->
+  <div id="adm-panel-censo" class="admin-card p-4 rounded-3xl space-y-3 shadow-xl">
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-2 border-b border-white/10 pb-3">
       <div>
         <h2 class="text-sm font-black text-yellow-400 uppercase tracking-wider">
-          Censo de la Corte ({{ total_usuarios }})
+          Censo de Nobles & Musas ({{ total_usuarios }})
         </h2>
-        <p class="text-[10px] text-stone-400">Administra identidades, administradoras e idols</p>
+        <p class="text-[10px] text-stone-400">Modifica rangos, ajusta oro o gestiona sanciones</p>
       </div>
 
-      <!-- Buscador en tiempo real por Nombre, @ o ID -->
+      <!-- Buscador en tiempo real -->
       <div class="relative w-full sm:w-64">
         <span class="absolute inset-y-0 left-2.5 flex items-center text-xs opacity-50">🔍</span>
         <input type="text" id="searchInput" onkeyup="filtrarUsuarios()" 
@@ -5456,16 +5472,16 @@ ARCHIVO: .\templates\core\admin_panel.html
       </div>
     </div>
 
-    <!-- LISTA DE USUARIOS (TARJETAS INDIVIDUALES MODERNAS) -->
+    <!-- Lista de Usuarios -->
     <div class="flex flex-col gap-2.5" id="userListContainer">
       {% for u in usuarios %}
-      <div class="user-item bg-black/55 border border-purple-500/30 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow hover:border-yellow-400/50 transition-all"
+      <div class="user-item bg-black/60 border border-white/10 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow hover:border-yellow-500/50 transition-all"
            data-search="{{ u.display_name|lower }} {{ u.display_username|lower }} {{ u.telegram_id }} {{ u.role }}">
         
-        <!-- DATOS DEL USUARIO: AVATAR, NOMBRE, @ Y TÍTULOS DOBLES (ADMIN + IDOL) -->
+        <!-- Info Usuario -->
         <div class="flex items-center gap-3">
-          <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl shadow flex-shrink-0
-            {% if u.is_user_admin and u.is_user_idol %}bg-gradient-to-br from-amber-900 to-purple-900 border-2 border-yellow-400 text-yellow-300 shadow-[0_0_12px_rgba(234,179,8,0.5)]
+          <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow flex-shrink-0
+            {% if u.is_user_admin and u.is_user_idol %}bg-gradient-to-br from-amber-900 to-purple-900 border-2 border-yellow-400 text-yellow-300
             {% elif u.is_user_admin %}bg-amber-950/80 border border-amber-400 text-yellow-300
             {% elif u.is_user_idol %}bg-purple-950/80 border border-purple-400 text-purple-300
             {% else %}bg-neutral-900 border border-neutral-700 text-stone-300{% endif %}">
@@ -5475,26 +5491,20 @@ ARCHIVO: .\templates\core\admin_panel.html
           <div class="flex flex-col min-w-0">
             <div class="flex items-center gap-1.5 flex-wrap">
               <span class="text-xs font-black text-white truncate max-w-[130px]">{{ u.display_name }}</span>
-              
-              <!-- Insignia de @Telegram -->
               <span class="text-[10px] font-mono text-purple-300 font-bold bg-purple-950/70 px-1.5 py-0.2 rounded border border-purple-800/40">
                 {{ u.display_username }}
               </span>
 
-              <!-- Badge Admin (Si tiene poder de Corona) -->
+              <!-- Distintivos -->
               {% if u.is_user_admin %}
-                <span class="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/50 px-1.5 py-0.2 rounded font-black uppercase">
-                  Corona Admin
-                </span>
+                <span class="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/50 px-1.5 py-0.2 rounded font-black uppercase">Corona</span>
               {% endif %}
-
-              <!-- Badge Idol (Si es Musa) -->
               {% if u.is_user_idol %}
-                <span class="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/50 px-1.5 py-0.2 rounded font-black uppercase">
-                  Musa VIP
-                </span>
+                <span class="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/50 px-1.5 py-0.2 rounded font-black uppercase">Musa</span>
               {% endif %}
-
+              {% if u.is_shield_active %}
+                <span class="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-500 px-1.5 py-0.2 rounded font-black">🛡️ Inmune ({{ u.shield_days }}d)</span>
+              {% endif %}
               {% if u.is_banned %}
                 <span class="text-[9px] bg-rose-950 text-rose-300 border border-rose-700 px-1.5 py-0.2 rounded font-black">BANEADO</span>
               {% endif %}
@@ -5508,36 +5518,35 @@ ARCHIVO: .\templates\core\admin_panel.html
               <span class="font-mono text-stone-500 text-[9px]">ID: {{ u.telegram_id }}</span>
             </div>
 
-            <!-- Si tiene personajes de Idol a su cargo -->
             {% if u.idol_names %}
-              <div class="flex items-center gap-1 text-[9px] text-rose-300/90 mt-1">
-                <span class="font-bold">🎭 Fichas Artísticas ({{ u.idol_names|length }}/2):</span>
-                <span class="font-mono truncate text-white">{{ u.idol_names|join:", " }}</span>
+              <div class="flex items-center gap-1 text-[9px] text-rose-300 mt-0.5">
+                <span class="font-bold">Musas:</span>
+                <span class="font-mono text-white truncate">{{ u.idol_names|join:", " }}</span>
               </div>
             {% endif %}
           </div>
         </div>
 
-        <!-- PANEL DE ACCIONES RÁPIDAS -->
+        <!-- Acciones en Vivo -->
         <div class="flex items-center justify-between sm:justify-end gap-1.5 border-t sm:border-t-0 border-white/10 pt-2 sm:pt-0">
           
-          <!-- Selector de Rol en vivo -->
+          <!-- Rol -->
           <form method="POST" class="m-0">
             {% csrf_token %}
             <input type="hidden" name="accion" value="change_role">
             <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
             <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
             <select name="new_role" onchange="this.form.submit()"
-                    class="bg-black border border-purple-700 rounded-lg px-2 py-1 text-[10px] font-bold text-yellow-300 focus:outline-none focus:border-yellow-400 cursor-pointer">
-              <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>👑 Admin (Corona)</option>
-              <option value="idol" {% if u.role == 'idol' %}selected{% endif %}>🌹 Idol / Musa</option>
-              <option value="moderador" {% if u.role == 'moderador' %}selected{% endif %}>🛡️ Moderadora</option>
-              <option value="vip" {% if u.role == 'vip' %}selected{% endif %}>🥂 Noble VIP</option>
+                    class="bg-black border border-purple-700 rounded-lg px-2 py-1 text-[10px] font-bold text-yellow-300 cursor-pointer">
+              <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>👑 Admin</option>
+              <option value="idol" {% if u.role == 'idol' %}selected{% endif %}>🌹 Idol</option>
+              <option value="moderador" {% if u.role == 'moderador' %}selected{% endif %}>🛡️ Mod</option>
+              <option value="vip" {% if u.role == 'vip' %}selected{% endif %}>🥂 VIP</option>
               <option value="cliente" {% if u.role == 'cliente' %}selected{% endif %}>🍷 Súbdito</option>
             </select>
           </form>
 
-          <!-- Dar +100 Oro -->
+          <!-- Dar Oro -->
           <form method="POST" class="m-0">
             {% csrf_token %}
             <input type="hidden" name="accion" value="adjust_gold">
@@ -5545,21 +5554,21 @@ ARCHIVO: .\templates\core\admin_panel.html
             <input type="hidden" name="amount" value="100">
             <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
             <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-            <button type="submit" title="Otorgar +100 monedas de oro"
-                    class="px-2 py-1 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/40 text-[10px] font-black">
+            <button type="submit" class="px-2 py-1 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/40 text-[10px] font-black">
               +100🪙
             </button>
           </form>
 
-          <!-- Reset Ruleta Individual -->
+          <!-- Conceder Salvoconducto Manual (Inmunidad) -->
           <form method="POST" class="m-0">
             {% csrf_token %}
-            <input type="hidden" name="accion" value="reset_bonus">
+            <input type="hidden" name="accion" value="grant_shield">
+            <input type="hidden" name="shield_days" value="15">
             <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
             <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-            <button type="submit" title="Resetear cooldown de ruleta diaria"
-                    class="px-2 py-1 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-200 border border-purple-700 text-[10px]">
-              ⏱️
+            <button type="submit" title="Otorgar +15 días de Salvoconducto manual"
+                    class="px-2 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500 text-[10px] font-black">
+              🛡️+15d
             </button>
           </form>
 
@@ -5569,9 +5578,8 @@ ARCHIVO: .\templates\core\admin_panel.html
             <input type="hidden" name="accion" value="toggle_ban">
             <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
             <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-            <button type="submit" onclick="return confirm('¿Cambiar estado de mazmorra (Ban/Desban) para este súbdito?')"
-                    class="px-2 py-1 rounded-lg text-[10px] font-bold border transition-all
-                    {% if u.is_banned %}bg-emerald-950 text-emerald-200 border-emerald-600 hover:bg-emerald-900{% else %}bg-rose-950 text-rose-300 border-rose-700 hover:bg-rose-900{% endif %}">
+            <button type="submit" onclick="return confirm('¿Cambiar estado de mazmorra para este usuario?')"
+                    class="px-2 py-1 rounded-lg text-[10px] font-bold border {% if u.is_banned %}bg-emerald-950 text-emerald-200 border-emerald-600{% else %}bg-rose-950 text-rose-300 border-rose-700{% endif %}">
               {% if u.is_banned %}Soltar{% else %}Mazmorra{% endif %}
             </button>
           </form>
@@ -5581,22 +5589,212 @@ ARCHIVO: .\templates\core\admin_panel.html
       </div>
       {% endfor %}
     </div>
+  </div>
+
+  <!-- ⚡ PESTAÑA 2: DECRETOS IMPERIALES & COMUNICACIÓN -->
+  <div id="adm-panel-decretos" class="hidden space-y-4">
+    
+    <!-- 1. Enviar Mensaje Oficial al Grupo de Telegram -->
+    <div class="admin-card p-4 rounded-3xl space-y-2.5 border border-purple-500/40">
+      <h3 class="text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-white/10 pb-2">
+        <span>📢</span> Mensaje Directo al Grupo Oficial de Telegram
+      </h3>
+      <p class="text-[10px] text-stone-400">El bot enviará este mensaje al chat de Telegram con botón de acceso al Reino.</p>
+      
+      <form method="POST" class="flex flex-col gap-2">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="telegram_broadcast">
+        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+        
+        <textarea name="tg_message_text" rows="3" required placeholder="Escribe el anuncio para el grupo de Telegram..."
+                  class="w-full bg-black/80 border border-purple-500/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 resize-none"></textarea>
+        
+        <button type="submit" onclick="return confirm('¿Enviar este mensaje a todo el grupo de Telegram?')" 
+                class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+          🚀 Transmitir al Grupo de Telegram
+        </button>
+      </form>
+    </div>
+
+    <!-- 2. Decretos Globales de Economía -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      
+      <!-- Lluvia de Oro -->
+      <form method="POST" class="admin-card p-4 rounded-2xl flex flex-col justify-between gap-2.5">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="mass_gold">
+        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+        <div>
+          <span class="text-xs font-bold text-yellow-300 flex items-center gap-1"><span>🌧️</span> Lluvia de Oro Real</span>
+          <p class="text-[10px] text-stone-400 mt-0.5">Otorga oro a todos los súbditos activos (no baneados).</p>
+        </div>
+        <div class="flex gap-2">
+          <input type="number" name="amount" value="50" min="1" class="w-24 bg-black border border-yellow-500/40 rounded-xl px-2 py-1.5 text-xs text-yellow-300 font-mono font-bold text-center">
+          <button type="submit" onclick="return confirm('¿Confirmas dar oro a TODOS los súbditos?')" 
+                  class="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs py-1.5 rounded-xl uppercase tracking-wider">
+            Lanzar Oro
+          </button>
+        </div>
+      </form>
+
+      <!-- Perdón de Ruleta -->
+      <form method="POST" class="admin-card p-4 rounded-2xl flex flex-col justify-between gap-2.5">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="reset_all_bonuses">
+        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+        <div>
+          <span class="text-xs font-bold text-purple-300 flex items-center gap-1"><span>⏱️</span> Perdón de Cooldown</span>
+          <p class="text-[10px] text-stone-400 mt-0.5">Permite a todos girar la Ruleta de la Fortuna ahora.</p>
+        </div>
+        <button type="submit" onclick="return confirm('¿Resetear cooldown de ruleta para todos?')" 
+                class="w-full bg-purple-950 border border-purple-500 text-purple-200 font-bold text-xs py-2 rounded-xl hover:bg-purple-900 uppercase tracking-wider">
+          Resetear Cooldowns
+        </button>
+      </form>
+
+    </div>
+
+    <!-- 3. Marquesina Pública en la App -->
+    <form method="POST" class="admin-card p-4 rounded-2xl flex flex-col gap-2">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="broadcast_message">
+      <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+      <div class="flex justify-between items-center">
+        <span class="text-xs font-bold text-yellow-300">📢 Decreto Público en la App</span>
+        <label class="text-[10px] text-stone-300 flex items-center gap-1 cursor-pointer">
+          <input type="checkbox" name="is_active" value="1" {% if broadcast_active %}checked{% endif %}> Visible
+        </label>
+      </div>
+      <input type="text" name="broadcast_text" value="{{ broadcast_msg }}" placeholder="Texto del decreto..." class="w-full bg-black border border-white/20 rounded-xl px-3 py-2 text-xs text-stone-200">
+      <button type="submit" class="bg-yellow-600 hover:bg-yellow-500 text-black font-black text-xs py-2 rounded-xl uppercase tracking-wider">
+        Guardar Decreto
+      </button>
+    </form>
 
   </div>
 
+  <!-- 🛡️ PESTAÑA 3: GESTOR DE PURGAS Y MAZMORRAS -->
+  <div id="adm-panel-purgas" class="hidden space-y-4">
+    
+    <!-- Aviso de Inmunidades para Telegram -->
+    <div class="p-3.5 bg-emerald-950/40 border border-emerald-500/50 rounded-2xl flex items-start gap-2.5">
+      <span class="text-xl">🛡️</span>
+      <div class="text-[11px] text-stone-300 leading-relaxed">
+        <strong>Guía de Purga de Telegram:</strong> Los usuarios marcados con <span class="text-emerald-300 font-bold">🛡️ Inmune</span> han adquirido su Salvoconducto en el Bazar. <strong>NO deben ser expulsados</strong> del grupo durante las limpiezas de inactividad.
+      </div>
+    </div>
+
+    <!-- Lista de Candidatos a Purga (Sin Inmunidad) -->
+    <div class="admin-card p-4 rounded-3xl space-y-3">
+      <div class="flex justify-between items-center border-b border-white/10 pb-2">
+        <h3 class="text-xs font-black text-rose-400 uppercase tracking-wider">
+          Súbditos Sin Salvoconducto (Candidatos a Purga)
+        </h3>
+        <span class="text-[9px] font-mono text-stone-400">Verificar antes de limpiar</span>
+      </div>
+
+      <div class="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
+        {% for u in usuarios %}
+          {% if not u.is_shield_active and not u.is_user_admin %}
+          <div class="p-2.5 rounded-xl bg-black/60 border border-white/5 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-stone-500 text-xs">👤</span>
+              <div class="min-w-0">
+                <span class="font-bold text-white truncate block">{{ u.display_name }} ({{ u.display_username }})</span>
+                <span class="text-[9px] text-stone-500 font-mono">ID: {{ u.telegram_id }} • {{ u.balance }} 🪙</span>
+              </div>
+            </div>
+            
+            <form method="POST" class="m-0 flex-shrink-0">
+              {% csrf_token %}
+              <input type="hidden" name="accion" value="grant_shield">
+              <input type="hidden" name="shield_days" value="15">
+              <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
+              <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+              <button type="submit" class="text-[9.5px] bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600 text-emerald-300 px-2 py-1 rounded-lg font-bold">
+                Indultar 🛡️
+              </button>
+            </form>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 📜 PESTAÑA 4: LIBRO DE AUDITORÍA DE LA CORONA -->
+  <div id="adm-panel-auditoria" class="hidden space-y-3">
+    <div class="admin-card p-4 rounded-3xl space-y-3">
+      <div class="flex justify-between items-center border-b border-white/10 pb-2">
+        <h3 class="text-xs font-black text-yellow-400 uppercase tracking-wider">
+          Libro de Auditoría de la Corona (Últimos 20 Eventos)
+        </h3>
+        <span class="text-[9px] text-stone-400 font-mono">Transparencia Imperial</span>
+      </div>
+
+      <div class="flex flex-col gap-2 max-h-96 overflow-y-auto pr-1">
+        {% for log in audit_logs %}
+        <div class="p-2.5 rounded-xl bg-black/60 border border-white/5 flex items-start justify-between text-xs">
+          <div class="flex flex-col min-w-0">
+            <span class="font-bold text-yellow-300 text-[11px]">{{ log.action }}</span>
+            <span class="text-[10px] text-stone-300 leading-tight mt-0.5">{{ log.details }}</span>
+            {% if log.target_tg_id %}
+              <span class="text-[9px] text-stone-500 font-mono mt-0.5">Destino ID: {{ log.target_tg_id }}</span>
+            {% endif %}
+          </div>
+          <span class="text-[9px] font-mono text-stone-500 flex-shrink-0 ml-2">{{ log.created_at|date:"d/m H:i" }}</span>
+        </div>
+        {% empty %}
+        <p class="text-center text-xs text-stone-500 py-6">No hay registros de auditoría aún.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Purga de Datos Peligrosa -->
+    <form method="POST" class="p-4 rounded-3xl bg-rose-950/30 border border-rose-600/50 flex items-center justify-between">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="purge_test_data">
+      <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+      <div>
+        <span class="text-xs font-black text-rose-400">🧹 Purga de Pruebas (Zona Peligrosa)</span>
+        <p class="text-[10px] text-stone-400">Elimina súbditos, fichas y fotos viejas. Solo sobrevive tu Corona.</p>
+      </div>
+      <button type="submit" onclick="return confirm('⚠️ ¿ELIMINAR TODOS los datos de prueba? Solo sobrevivirá tu cuenta.')" 
+              class="px-3.5 py-2 bg-rose-950 border border-rose-500 text-rose-200 font-black text-xs rounded-xl uppercase">
+        Purgar Todo
+      </button>
+    </form>
+  </div>
+
   <script>
-    // Filtro instantáneo sin recargar página
+    // Cambio instantáneo de pestañas sin recargar
+    function switchAdminTab(tabName) {
+      ['censo', 'decretos', 'purgas', 'auditoria'].forEach(t => {
+        const panel = document.getElementById(`adm-panel-${t}`);
+        const btn = document.getElementById(`adm-tab-${t}`);
+        if (panel && btn) {
+          if (t === tabName) {
+            panel.classList.remove('hidden');
+            btn.className = "py-2.5 rounded-xl bg-yellow-500 text-black font-black";
+          } else {
+            panel.classList.add('hidden');
+            btn.className = "py-2.5 rounded-xl text-stone-400 hover:text-white";
+          }
+        }
+      });
+    }
+
+    // Buscador instantáneo sin recargar
     function filtrarUsuarios() {
       const q = document.getElementById('searchInput').value.toLowerCase().trim();
       const items = document.querySelectorAll('.user-item');
-      
       items.forEach(item => {
         const text = item.getAttribute('data-search') || '';
         item.style.display = text.includes(q) ? 'flex' : 'none';
       });
     }
 
-    // Navegación universal limpia para volver
     function universalNav(targetPath) {
       const adminId = '{{ admin_tg_id }}';
       window.location.href = `${targetPath}?tg_id=${adminId}`;
