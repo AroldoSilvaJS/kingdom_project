@@ -1,126 +1,146 @@
+<!-- templates/economy/wallet.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-44">
+<div class="flex flex-col gap-4 mt-2 pb-44 max-w-md mx-auto">
     
-    <!-- TARJETA BLACK VIP: SALDO DE ORO -->
-    <div class="relative overflow-hidden rounded-3xl p-6 border border-vip-gold/50 shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_20px_rgba(212,175,55,0.18)] bg-gradient-to-br from-[#1c102c] via-[#0d0617] to-black">
-        <div class="absolute -top-12 -right-12 w-40 h-40 bg-vip-gold/15 rounded-full blur-3xl pointer-events-none"></div>
+    <!-- TARJETA BLACK VIP: BÓVEDA IMPERIAL -->
+    <div class="relative overflow-hidden rounded-3xl p-6 border-2 border-vip-gold/50 shadow-[0_12px_35px_rgba(0,0,0,0.9),0_0_25px_rgba(212,175,55,0.2)] bg-gradient-to-br from-[#1f1033] via-[#0d0517] to-black">
+        <div class="absolute -top-12 -right-12 w-44 h-44 bg-vip-gold/20 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div class="flex justify-between items-start">
+        <div class="flex justify-between items-start relative z-10">
             <div>
-                <span class="text-[10px] uppercase tracking-[0.2em] text-vip-gold/70 font-bold">Bóveda Imperial</span>
-                <p class="text-xs text-vip-text/50 font-mono mt-0.5">ID: <span>{{ wallet.telegram_user_id }}</span></p>
+                <span class="text-[9.5px] uppercase tracking-[0.25em] text-vip-gold font-bold">Bóveda Imperial VIP</span>
+                <p class="text-[11px] text-stone-400 font-mono mt-0.5">Titular: <span>{{ wallet.telegram_user_id }}</span></p>
             </div>
-            <span class="text-2xl filter drop-shadow-[0_0_8px_rgba(212,175,55,0.6)]">🪙</span>
+            <!-- Chip metálico aristocrático -->
+            <div class="w-10 h-7 rounded-lg bg-gradient-to-br from-yellow-300 via-amber-500 to-yellow-600 border border-yellow-200/60 shadow flex items-center justify-center text-xs">
+                🪙
+            </div>
         </div>
 
-        <div class="my-4">
-            <span class="text-[11px] text-vip-text/60 uppercase tracking-wider">Saldo Disponible</span>
+        <div class="my-4 relative z-10">
+            <span class="text-[11px] text-stone-400 uppercase tracking-wider font-semibold">Fortuna Disponible</span>
             <div class="flex items-baseline gap-2 mt-1">
-                <span class="font-serif text-4xl font-black text-gold-gradient tracking-tight">
+                <span class="font-serif text-4xl sm:text-5xl font-black text-gold-gradient tracking-tight">
                     {{ wallet.balance }}
                 </span>
-                <span class="text-xs font-bold text-vip-gold tracking-widest uppercase">Monedas de Oro</span>
+                <span class="text-xs font-bold text-yellow-400 tracking-widest uppercase font-mono">Monedas de Oro</span>
             </div>
         </div>
 
         {% if pet and pet.species == 'fox' %}
-            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-950/60 border border-amber-500/40 text-[10px] text-amber-300 font-bold">
-                <span>🦊</span> Bendición Kitsune Activa: Recarga de bono cada 22h
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/70 border border-amber-500/50 text-[10px] text-amber-300 font-bold relative z-10">
+                <span>🦊</span> Bendición Kitsune Activa: Recarga de bono cada {{ wallet.get_cooldown_hours }}h
             </div>
         {% endif %}
     </div>
 
-    <!-- MENSAJES DEL SISTEMA -->
+    <!-- MENSAJES -->
     {% if messages %}
         {% for message in messages %}
-            <div class="p-3.5 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
+            <div class="p-3 rounded-2xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/80 border-green-500 text-green-200{% else %}bg-rose-950/80 border-rose-500 text-rose-200{% endif %}">
                 {{ message }}
             </div>
         {% endfor %}
     {% endif %}
 
-    <!-- 🎡 SECCIÓN: RULETA DIARIA DE LA FORTUNA -->
-    <div class="vip-panel p-5 flex flex-col items-center text-center relative overflow-hidden border border-vip-gold/40 shadow-xl">
+    <!-- 🎡 RULETA DIARIA DE LA FORTUNA -->
+    <div class="vip-panel p-5 flex flex-col items-center text-center relative overflow-hidden border border-vip-gold/40 shadow-xl rounded-3xl bg-gradient-to-br from-[#1a0a28] via-[#090212] to-black">
         <div class="flex justify-between items-center w-full mb-1">
             <h3 class="font-serif text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
                 <span>🎡</span> Ruleta de la Fortuna
             </h3>
-            <span class="text-[10px] text-purple-300 font-bold uppercase">Premio Diario</span>
+            <span class="text-[10px] text-purple-300 font-bold uppercase font-mono">Ofrenda Diaria</span>
         </div>
-        <p class="text-[11px] text-vip-text/60 mb-3">Gira cada día y reclama tu ofrenda imperial</p>
+        <p class="text-[11px] text-stone-400 mb-2">Gira el disco sagrado para recibir oro y EXP gratis</p>
 
-        <!-- RUEDA VISUAL -->
+        <!-- Disco Giratorio -->
         <div class="relative my-2 flex items-center justify-center">
-            <div class="absolute -top-3.5 z-30 text-yellow-400 text-lg filter drop-shadow animate-bounce">▼</div>
+            <div class="absolute -top-3 z-30 text-yellow-400 text-base filter drop-shadow animate-bounce">▼</div>
             <div id="daily-wheel" class="w-36 h-36 rounded-full border-4 border-vip-gold shadow-[0_0_25px_rgba(212,175,55,0.35)] flex items-center justify-center relative overflow-hidden transition-transform duration-[3000ms] cubic-bezier(0.15,0.9,0.25,1)"
                  style="background: conic-gradient(#7e22ce 0deg 45deg, #171717 45deg 90deg, #d97706 90deg 135deg, #171717 135deg 180deg, #9333ea 180deg 225deg, #171717 225deg 270deg, #eab308 270deg 315deg, #171717 315deg 360deg);">
-                <div class="w-14 h-14 rounded-full bg-black border border-vip-gold flex flex-col items-center justify-center z-10">
-                    <span class="text-sm font-black">👑</span>
+                <div class="w-14 h-14 rounded-full bg-black border border-vip-gold flex items-center justify-center z-10 shadow-inner">
+                    <span class="text-sm">👑</span>
                 </div>
             </div>
         </div>
 
-        <form action="{% url 'economy:claim_bonus' %}" method="POST" id="daily-wheel-form" class="w-full mt-3 m-0">
+        <form action="{% url 'economy:claim_bonus' %}" method="POST" id="daily-wheel-form" class="w-full mt-2.5 m-0">
             {% csrf_token %}
             <input type="hidden" name="tg_id" id="bonus-tg-id" value="{{ wallet.telegram_user_id }}">
 
             {% if wallet.can_claim_bonus %}
                 <button type="button" id="btn-spin-daily" onclick="spinDailyWheel()"
-                        class="w-full btn-gold py-3.5 rounded-xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                        class="w-full btn-gold py-3.5 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all">
                     <span>✨</span> Girar Ruleta Diaria (Gratis)
                 </button>
             {% else %}
-                <div class="w-full bg-black/70 border border-vip-gold/30 py-3 px-4 rounded-xl flex items-center justify-between text-xs">
-                    <span class="text-vip-text/60 font-medium">⏳ Próximo giro en:</span>
+                <div class="w-full bg-black/80 border border-vip-gold/30 py-3 px-4 rounded-2xl flex items-center justify-between text-xs shadow-inner">
+                    <span class="text-stone-400 font-medium">⏳ Próximo giro en:</span>
                     <span id="countdown-timer" class="font-mono font-bold text-yellow-400 text-sm">Calculando...</span>
                 </div>
             {% endif %}
         </form>
     </div>
 
-    <div class="grid grid-cols-2 gap-2.5">
-            <!-- 1. Ruleta Imperial -->
+    <!-- 🎰 SALÓN DE CASINO (4 JUEGOS SIMÉTRICOS) -->
+    <div class="flex flex-col gap-2.5">
+        <div class="flex justify-between items-center px-1">
+            <h3 class="text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
+                <span>🎲</span> Juegos de Azar Clandestinos
+            </h3>
+            <span class="text-[10px] text-stone-400 font-mono">100% Interactivos</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2.5">
+            <!-- 1. Ruleta Real -->
             <button type="button" onclick="universalNav('/economy/casino/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-video cursor-pointer">
-                <span class="text-3xl pointer-events-none">🎡</span>
-                <div class="pointer-events-none">
-                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Ruleta Real</h4>
-                    <span class="text-[9px] text-yellow-400/80 font-mono">x1.95 / x14</span>
+               class="vip-panel p-3.5 rounded-2xl border border-vip-gold/30 flex flex-col items-center justify-between text-center hover:border-yellow-400 active:scale-95 transition-all aspect-video">
+                <span class="text-3xl">🎡</span>
+                <div>
+                    <h4 class="font-bold text-white text-xs uppercase tracking-wider">Ruleta Real</h4>
+                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">x2.0 / x14</span>
                 </div>
             </button>
 
-            <!-- 2. Minas del Reino (NUEVO) -->
+            <!-- 2. Minas VIP -->
             <button type="button" onclick="universalNav('/economy/mines/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-video cursor-pointer border-2 border-yellow-500/50 shadow-[0_0_15px_rgba(212,175,55,0.2)]">
-                <span class="text-3xl pointer-events-none">💣</span>
-                <div class="pointer-events-none">
-                    <h4 class="font-bold text-yellow-300 text-[11px] uppercase tracking-wider">Minas VIP</h4>
-                    <span class="text-[9px] text-yellow-400/80 font-mono">x20+ Retiro</span>
+               class="vip-panel p-3.5 rounded-2xl border border-yellow-500/50 flex flex-col items-center justify-between text-center hover:border-yellow-400 active:scale-95 transition-all aspect-video shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+                <span class="text-3xl">💣</span>
+                <div>
+                    <h4 class="font-bold text-yellow-300 text-xs uppercase tracking-wider">Minas VIP</h4>
+                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">Multiplicador</span>
                 </div>
             </button>
 
-            <!-- 3. Tragaperras / Slots -->
+            <!-- 3. Tragaperras -->
             <button type="button" onclick="universalNav('/economy/slots/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-purple-400/60 active:scale-95 transition-all aspect-video cursor-pointer">
-                <span class="text-3xl pointer-events-none">🍒</span>
-                <div class="pointer-events-none">
-                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Tragaperras</h4>
-                    <span class="text-[9px] text-purple-300 font-mono">Jackpot x15</span>
+               class="vip-panel p-3.5 rounded-2xl border border-purple-500/40 flex flex-col items-center justify-between text-center hover:border-purple-300 active:scale-95 transition-all aspect-video">
+                <span class="text-3xl">🍒</span>
+                <div>
+                    <h4 class="font-bold text-white text-xs uppercase tracking-wider">Tragaperras</h4>
+                    <span class="text-[9.5px] text-purple-300 font-mono font-bold">Jackpot x15</span>
                 </div>
             </button>
 
-            <!-- 4. Blackjack VIP -->
+            <!-- 4. Blackjack Imperial -->
             <button type="button" onclick="universalNav('/economy/blackjack/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-vip-gold/60 active:scale-95 transition-all aspect-video cursor-pointer">
-                <span class="text-3xl pointer-events-none">🃏</span>
-                <div class="pointer-events-none">
-                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Blackjack</h4>
-                    <span class="text-[9px] text-vip-gold/80 font-mono">21 Real</span>
+               class="vip-panel p-3.5 rounded-2xl border border-vip-gold/40 flex flex-col items-center justify-between text-center hover:border-yellow-400 active:scale-95 transition-all aspect-video">
+                <span class="text-3xl">🃏</span>
+                <div>
+                    <h4 class="font-bold text-white text-xs uppercase tracking-wider">Blackjack</h4>
+                    <span class="text-[9.5px] text-yellow-400 font-mono font-bold">21 Real</span>
                 </div>
             </button>
         </div>
+    </div>
+
+    <!-- 🏛️ BOTÓN DIRECTO AL BAZAR DE LA CORONA -->
+    <button type="button" onclick="universalNav('/economy/bazar/')" 
+            class="w-full btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.35)] flex items-center justify-center gap-2 active:scale-95 transition-all">
+        <span>🏛️</span> <span>Ir al Bazar de la Corona (Gastar Oro)</span>
+    </button>
 
 </div>
 

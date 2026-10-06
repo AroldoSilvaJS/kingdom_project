@@ -1,107 +1,138 @@
+<!-- templates/idols/form.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="vip-panel p-6 mt-2 mb-36 flex flex-col gap-4 mx-auto w-full max-w-md border border-vip-gold/40 shadow-2xl">
+<div class="vip-panel p-5 mt-2 mb-36 flex flex-col gap-4 mx-auto w-full max-w-md border border-vip-gold/40 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1c0c2e] via-[#090212] to-black">
     
     <!-- Encabezado con navegación segura -->
-    <div class="flex justify-between items-center border-b border-vip-gold/20 pb-3">
+    <div class="flex justify-between items-center border-b border-white/10 pb-3">
         <div>
             <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
                 {% if idol %}Editar a {{ idol.stage_name }}{% else %}Nueva Musa VIP{% endif %}
             </h2>
-            <p class="text-[11px] text-vip-text/60">Configura tu presencia estelar en el Reino</p>
+            <p class="text-[11px] text-stone-400">Consagración de identidad artística en el Reino</p>
         </div>
-        <button type="button" onclick="universalNav('/idols/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
+        <button type="button" onclick="universalNav('/idols/')" class="text-xs text-stone-400 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 active:scale-95 transition-all">
             ⬅ Volver
         </button>
     </div>
+
+    <!-- MENSAJES -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-2xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/80 border-green-500 text-green-200{% else %}bg-rose-950/80 border-rose-500 text-rose-200{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
 
     <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3.5">
         {% csrf_token %}
         <input type="hidden" name="tg_id" id="hidden_tg_id" value="{{ tg_id }}">
         <input type="hidden" name="tg_username" id="hidden_tg_username" value="{{ tg_username|default:'' }}">
 
-        <!-- Nombre Artístico -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre Artístico *</label>
-            <input type="text" name="stage_name" value="{{ idol.stage_name|default:'' }}" required placeholder="Ej: Scarlett, Luna, Mia..."
-                   class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
+        <!-- 1. IDENTIDAD ARTÍSTICA -->
+        <div class="bg-black/60 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">1. Identidad de Rol</span>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Nombre Artístico *</label>
+                <input type="text" name="stage_name" value="{{ idol.stage_name|default:'' }}" required placeholder="Ej: Scarlett, Luna, Mia, Karina..."
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Grupo o Solista</label>
+                <input type="text" name="group" value="{{ idol.group|default:'' }}" placeholder="Ej: Solista, K-Pop Queens, o grupo de rol..."
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Lema o Frase de Seducción</label>
+                <input type="text" name="tagline" value="{{ idol.tagline|default:'' }}" placeholder="Ej: «La musa prohibida de la noche clandestina»"
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
         </div>
 
-        <!-- Grupo o Solista -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Grupo o Solista</label>
-            <input type="text" name="group" value="{{ idol.group|default:'' }}" placeholder="Ej: Solista, BLACKPINK, o grupo rol..."
-                   class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
+        <!-- 2. SELECTOR VISUAL DE AURA MÍSTICA -->
+        <div class="bg-black/60 p-3.5 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-purple-300">2. Aura Mística de la Musa</span>
+            <div class="grid grid-cols-2 gap-2">
+                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/50 cursor-pointer hover:border-purple-300">
+                    <input type="radio" name="aura_color" value="purple" {% if not idol or idol.aura_color == 'purple' %}checked{% endif %}>
+                    <span class="text-xs font-bold text-purple-300">💜 Púrpura Mística</span>
+                </label>
+                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/50 cursor-pointer hover:border-yellow-300">
+                    <input type="radio" name="aura_color" value="gold" {% if idol.aura_color == 'gold' %}checked{% endif %}>
+                    <span class="text-xs font-bold text-yellow-300">💛 Oro Celestial</span>
+                </label>
+                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/50 cursor-pointer hover:border-rose-300">
+                    <input type="radio" name="aura_color" value="ruby" {% if idol.aura_color == 'ruby' %}checked{% endif %}>
+                    <span class="text-xs font-bold text-rose-300">❤️ Pasión Rubí</span>
+                </label>
+                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 cursor-pointer hover:border-emerald-300">
+                    <input type="radio" name="aura_color" value="emerald" {% if idol.aura_color == 'emerald' %}checked{% endif %}>
+                    <span class="text-xs font-bold text-emerald-300">💚 Seducción Verde</span>
+                </label>
+            </div>
         </div>
 
-        <!-- Lema / Tagline -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Lema o Frase de Seducción</label>
-            <input type="text" name="tagline" value="{{ idol.tagline|default:'' }}" placeholder="Ej: «La musa prohibida de la noche»"
-                   class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
+        <!-- 3. ROL Y ATENCIÓN -->
+        <div class="bg-black/60 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">3. Estilo de Atención</span>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Especialidad de Rol</label>
+                <input type="text" name="specialty" value="{{ idol.specialty|default:'' }}" placeholder="Ej: Rol dulce, sesiones atrevidas, petición de antojos..."
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Saludo de Bienvenida al Chat</label>
+                <input type="text" name="welcome_message" value="{{ idol.welcome_message|default:'' }}" placeholder="Ej: Bienvenido a mis aposentos, cuéntame tus secretos..."
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Presentación / Biografía *</label>
+                <textarea name="bio" rows="3" required placeholder="Describe la personalidad de tu personaje, gustos y estilo de rol..."
+                          class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 resize-none">{{ idol.bio|default:'' }}</textarea>
+            </div>
         </div>
 
-        <!-- Aura Mística -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Aura Mística de la Musa</label>
-            <select name="aura_color" class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
-                <option value="purple" {% if idol.aura_color == 'purple' %}selected{% endif %}>💜 Aura Mística Púrpura</option>
-                <option value="gold" {% if idol.aura_color == 'gold' %}selected{% endif %}>💛 Aura Celestial Dorada</option>
-                <option value="ruby" {% if idol.aura_color == 'ruby' %}selected{% endif %}>❤️ Aura Pasión Rubí</option>
-                <option value="emerald" {% if idol.aura_color == 'emerald' %}selected{% endif %}>💚 Aura Seducción Esmeralda</option>
-            </select>
+        <!-- 4. FOTOGRAFÍAS (RETRATO & BANNER) -->
+        <div class="bg-black/60 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">4. Retrato & Portada</span>
+
+            <!-- Foto de Perfil -->
+            <div class="bg-black/40 p-2.5 rounded-xl border border-white/5 flex flex-col gap-1.5">
+                <label class="block text-[11px] text-yellow-300 font-bold uppercase">Foto de Perfil (Retrato) *</label>
+                {% if idol and idol.photo %}
+                    <div class="flex items-center gap-3 my-1">
+                        <img src="{{ idol.photo.url }}" class="w-12 h-12 rounded-xl object-cover border border-vip-gold/40">
+                        <span class="text-[10px] text-stone-400">Retrato actual activo. Elige otro solo si deseas reemplazarlo.</span>
+                    </div>
+                {% endif %}
+                <input type="file" name="photo" accept="image/*" {% if not idol %}required{% endif %}
+                       class="w-full text-xs text-stone-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+            </div>
+
+            <!-- Banner de Portada -->
+            <div class="bg-black/40 p-2.5 rounded-xl border border-white/5 flex flex-col gap-1.5">
+                <label class="block text-[11px] text-purple-300 font-bold uppercase">Foto de Portada / Banner (Opcional)</label>
+                {% if idol and idol.banner %}
+                    <div class="flex items-center gap-3 my-1">
+                        <img src="{{ idol.banner.url }}" class="w-20 h-9 rounded-lg object-cover border border-purple-500/40">
+                        <span class="text-[10px] text-stone-400">Banner actual cargado.</span>
+                    </div>
+                {% endif %}
+                <input type="file" name="banner" accept="image/*"
+                       class="w-full text-xs text-stone-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-purple-900 file:text-purple-200 hover:file:bg-purple-800 cursor-pointer">
+            </div>
         </div>
 
-        <!-- Especialidad de Rol -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Especialidad de Rol</label>
-            <input type="text" name="specialty" value="{{ idol.specialty|default:'' }}" placeholder="Ej: Rol romántico dulce, sesiones atrevidas, antojos..."
-                   class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
-        </div>
-
-        <!-- Saludo de bienvenida -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Saludo de Bienvenida al Chat</label>
-            <input type="text" name="welcome_message" value="{{ idol.welcome_message|default:'' }}" placeholder="Ej: Hola noble caballero, dime tus deseos..."
-                   class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
-        </div>
-
-        <!-- Biografía / Presentación -->
-        <div>
-            <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Presentación / Biografía *</label>
-            <textarea name="bio" rows="3" required placeholder="Describe la personalidad de tu personaje, gustos y estilo de rol..."
-                      class="w-full bg-black/70 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold resize-none">{{ idol.bio|default:'' }}</textarea>
-        </div>
-
-        <!-- Foto de Perfil (Retrato) -->
-        <div class="bg-black/40 p-3 rounded-xl border border-vip-gold/20 flex flex-col gap-1.5">
-            <label class="block text-[11px] text-vip-gold uppercase font-bold">Foto de Perfil (Retrato)</label>
-            {% if idol and idol.photo %}
-                <div class="flex items-center gap-3 my-1">
-                    <img src="{{ idol.photo.url }}" class="w-12 h-12 rounded-lg object-cover border border-vip-gold/40">
-                    <span class="text-[10px] text-vip-text/60">Foto actual cargada. Sube otra solo si deseas cambiarla.</span>
-                </div>
-            {% endif %}
-            <input type="file" name="photo" accept="image/*" {% if not idol %}required{% endif %}
-                   class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
-        </div>
-
-        <!-- Foto de Portada / Banner -->
-        <div class="bg-black/40 p-3 rounded-xl border border-vip-gold/20 flex flex-col gap-1.5">
-            <label class="block text-[11px] text-vip-gold uppercase font-bold">Foto de Portada / Banner (Opcional)</label>
-            {% if idol and idol.banner %}
-                <div class="flex items-center gap-3 my-1">
-                    <img src="{{ idol.banner.url }}" class="w-16 h-8 rounded-lg object-cover border border-vip-gold/40">
-                    <span class="text-[10px] text-vip-text/60">Banner cargado.</span>
-                </div>
-            {% endif %}
-            <input type="file" name="banner" accept="image/*"
-                   class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-purple-900 file:text-purple-200 hover:file:bg-purple-800 cursor-pointer">
-        </div>
-
-        <button type="submit" class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider mt-2 shadow-[0_0_15px_rgba(212,175,55,0.3)] active:scale-95 transition-all">
-            {% if idol %}💾 Guardar Cambios de la Idol{% else %}✨ Consagrar Nueva Idol{% endif %}
+        <button type="submit" class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all mt-1">
+            {% if idol %}💾 Guardar Cambios de la Musa{% else %}✨ Consagrar Musa en el Reino{% endif %}
         </button>
     </form>
 </div>
