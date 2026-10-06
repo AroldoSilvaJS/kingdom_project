@@ -184,7 +184,7 @@ TELEGRAM_GROUP_ID = int(os.environ.get('TELEGRAM_GROUP_ID', -1004393120413))
 
 TELEGRAM_INTERVIEW_GROUP_URL = os.environ.get(
     'TELEGRAM_INTERVIEW_GROUP_URL', 
-    'https://t.me/+dmASjFCI2N01NDc5')
+    'https://t.me/KingdomOfPleasureOf')
 
 # Permitir que Telegram WebApp cargue el sitio en su iframe
 X_FRAME_OPTIONS = 'ALLOWALL'
