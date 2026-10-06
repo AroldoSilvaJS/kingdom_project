@@ -2850,6 +2850,7 @@ urlpatterns = [
     path('claim-bonus/', views.claim_bonus, name='claim_bonus'),
     path('slots/', views.slots_game, name='slots'),
     path('blackjack/', views.blackjack_game, name='blackjack'), # <- AÑADIR AQUÍ
+    path('mines/', views.mines_game, name='mines'),
 ]
 
 ==================================================
@@ -3286,6 +3287,189 @@ def blackjack_game(request):
         'current_bet': current_bet
     })
 
+# ==========================================
+# JUEGO: LAS MINAS DEL REINO (MINES VIP)
+# ==========================================
+
+def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
+    if revealed_count <= 0:
+        return 1.0
+    gems_count = total_tiles - mines_count
+    prob = 1.0
+    for i in range(revealed_count):
+        prob *= (gems_count - i) / (total_tiles - i)
+    
+    if prob <= 0:
+        return 1.0
+    
+    # Margen de la casa 4% (paga 96% justo)
+    raw_mult = 0.96 / prob
+    return max(1.05, round(raw_mult, 2))
+
+
+def mines_game(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    max_bet = profile.max_bet_allowed
+    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+
+    session_mines = request.session.get('mines_state')
+
+    if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+        action = request.POST.get('action')
+
+        # 1. INICIAR PARTIDA
+        if action == 'start':
+            try:
+                bet = int(request.POST.get('bet_amount', 20))
+                mines_count = int(request.POST.get('mines_count', 3))
+
+                if bet <= 0:
+                    err = "La apuesta debe ser mayor a 0."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                elif bet > max_bet:
+                    err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                elif bet > wallet.balance:
+                    err = "No tienes suficiente oro en tu Bóveda."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                elif mines_count not in [1, 2, 3, 5, 10]:
+                    mines_count = 3
+                else:
+                    wallet.remove_funds(bet)
+
+                    # Generar 25 casilleros y colocar las minas al azar
+                    all_indices = list(range(25))
+                    mines_locations = random.sample(all_indices, mines_count)
+
+                    session_mines = {
+                        'bet': bet,
+                        'mines_count': mines_count,
+                        'mines': mines_locations,
+                        'revealed': [],
+                        'in_game': True
+                    }
+                    request.session['mines_state'] = session_mines
+
+                    if is_ajax:
+                        return JsonResponse({
+                            'success': True,
+                            'in_game': True,
+                            'nuevo_saldo': wallet.balance,
+                            'bet': bet,
+                            'mines_count': mines_count,
+                            'revealed': [],
+                            'multiplier': 1.0,
+                            'current_cashout': bet
+                        })
+            except ValueError:
+                if is_ajax: return JsonResponse({'success': False, 'error': 'Valores no válidos.'}, status=400)
+
+        # 2. DESTAPAR UN COFRE
+        elif action == 'reveal' and session_mines and session_mines.get('in_game'):
+            try:
+                tile_idx = int(request.POST.get('tile_index', -1))
+                if 0 <= tile_idx <= 24 and tile_idx not in session_mines['revealed']:
+                    # ¿TOCÓ MINA?
+                    if tile_idx in session_mines['mines']:
+                        session_mines['in_game'] = False
+                        all_mines = session_mines['mines']
+                        bet_lost = session_mines['bet']
+                        request.session['mines_state'] = None
+
+                        grant_user_xp(request, tg_id, max(2, bet_lost // 5), reason="Minas del Reino")
+
+                        if is_ajax:
+                            return JsonResponse({
+                                'success': True,
+                                'status': 'bust',
+                                'hit_tile': tile_idx,
+                                'all_mines': all_mines,
+                                'nuevo_saldo': wallet.balance
+                            })
+                    else:
+                        # ¡GEMA ENCONTRADA!
+                        session_mines['revealed'].append(tile_idx)
+                        revealed_count = len(session_mines['revealed'])
+                        mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
+                        cashout_val = int(session_mines['bet'] * mult)
+
+                        # ¿Completó todas las gemas posibles?
+                        total_gems = 25 - session_mines['mines_count']
+                        auto_win = (revealed_count == total_gems)
+
+                        if auto_win:
+                            session_mines['in_game'] = False
+                            if pet and pet.species == 'panther':
+                                cashout_val = int(cashout_val * 1.10)
+                            wallet.add_funds(cashout_val)
+                            request.session['mines_state'] = None
+                            grant_user_xp(request, tg_id, max(10, cashout_val // 4), reason="Pleno en Minas")
+
+                        request.session['mines_state'] = session_mines if not auto_win else None
+
+                        if is_ajax:
+                            return JsonResponse({
+                                'success': True,
+                                'status': 'win_full' if auto_win else 'gem',
+                                'hit_tile': tile_idx,
+                                'revealed_count': revealed_count,
+                                'multiplier': mult,
+                                'current_cashout': cashout_val,
+                                'nuevo_saldo': wallet.balance,
+                                'all_mines': session_mines['mines'] if auto_win else []
+                            })
+            except ValueError:
+                pass
+
+        # 3. RETIRARSE Y COBRAR (CASHOUT)
+        elif action == 'cashout' and session_mines and session_mines.get('in_game'):
+            revealed_count = len(session_mines['revealed'])
+            if revealed_count > 0:
+                mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
+                ganancia = int(session_mines['bet'] * mult)
+
+                if pet and pet.species == 'panther':
+                    ganancia = int(ganancia * 1.10)
+
+                wallet.add_funds(ganancia)
+                all_mines = session_mines['mines']
+                request.session['mines_state'] = None
+
+                grant_user_xp(request, tg_id, max(5, ganancia // 4), reason="Retiro de Minas")
+
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'status': 'cashout',
+                        'ganancia': ganancia,
+                        'multiplier': mult,
+                        'all_mines': all_mines,
+                        'nuevo_saldo': wallet.balance
+                    })
+
+    in_game = session_mines is not None and session_mines.get('in_game', False)
+    current_revealed = session_mines.get('revealed', []) if session_mines else []
+    current_bet = session_mines.get('bet', 20) if session_mines else 20
+    current_mines_count = session_mines.get('mines_count', 3) if session_mines else 3
+    current_mult = calculate_mines_multiplier(25, current_mines_count, len(current_revealed)) if in_game else 1.0
+    current_cashout = int(current_bet * current_mult) if in_game else current_bet
+
+    return render(request, 'economy/mines.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'max_bet': max_bet,
+        'in_game': in_game,
+        'current_bet': current_bet,
+        'current_mines_count': current_mines_count,
+        'current_revealed': current_revealed,
+        'current_mult': current_mult,
+        'current_cashout': current_cashout,
+    })
+
 ==================================================
 ARCHIVO: .\economy\__init__.py
 ==================================================
@@ -3584,7 +3768,7 @@ class Photocard(models.Model):
         ('legendary', 'Legendaria 👑'),
     ]
 
-    box = models.ForeignKey(PhotocardBox, on_delete=models.CASCADE, related_name='cards', verbose_name="Caja a la que pertenece")
+    box = models.ForeignKey(PhotocardBox, on_delete=models.SET_NULL, null=True, blank=True, related_name='cards', verbose_name="Caja a la que pertenece")
     idol = models.ForeignKey(IdolProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='photocards', verbose_name="Musa del Rol (Opcional)")
     idol_name = models.CharField("Idol de K-Pop / Artista", max_length=100, default='', blank=True) # 👈 LIBRE PARA CUALQUIER IDOL
     name = models.CharField("Nombre de la Carta", max_length=100)
@@ -4591,8 +4775,19 @@ def admin_photocards_manage(request):
             box_id = request.POST.get('box_id')
             box = get_object_or_404(PhotocardBox, id=box_id)
             box_name = box.name
-            box.delete()
-            messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
+
+            # Verificar si los usuarios ya tienen cartas de esta caja en sus álbumes
+            owned_cards = UserPhotocard.objects.filter(photocard__box=box).count()
+            if owned_cards > 0:
+                # En lugar de destruir inventarios, solo pausamos la caja
+                box.is_active = False
+                box.save()
+                messages.error(request, f"⚠️ La caja «{box_name}» no se puede eliminar porque los usuarios ya tienen {owned_cards} cartas en sus álbumes. La caja fue PAUSADA para que nadie más la abra.")
+            else:
+                # Si nadie ha sacado cartas de esta caja, es seguro eliminarla
+                box.cards.all().delete()
+                box.delete()
+                messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
 
         elif action == 'toggle_box':
             box_id = request.POST.get('box_id')
@@ -4932,36 +5127,42 @@ class PetsConfig(AppConfig):
 ARCHIVO: .\pets\models.py
 ==================================================
 
+# pets/models.py
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
+from pets.species_registry import get_evolution_stage, get_species_data
 
 class Pet(models.Model):
-    SPECIES_CHOICES = [
-        ('panther', 'Pantera de Ébano 🐆'),
-        ('fox', 'Zorro Kitsune Dorado 🦊'),
-        ('viper', 'Víbora de Esmeralda 🐍'),
-        ('raven', 'Cuervo de Medianoche 🦅'),
-        ('wolf', 'Lobo Espectral de Plata 🐺'),
-    ]
-
     telegram_user_id = models.BigIntegerField("ID del Dueño", db_index=True, unique=True)
     name = models.CharField("Nombre de la Mascota", max_length=50)
-    species = models.CharField("Especie", max_length=20, choices=SPECIES_CHOICES)
-    
+    species = models.CharField("Especie Base", max_length=50, default='fox')
+
     level = models.PositiveIntegerField("Nivel", default=1)
     xp = models.PositiveIntegerField("Experiencia", default=0)
     energy = models.PositiveIntegerField("Energía / Saciedad", default=80)
     happiness = models.PositiveIntegerField("Felicidad / Vínculo", default=70)
-    
+
     last_fed = models.DateTimeField(null=True, blank=True)
     last_petted = models.DateTimeField(null=True, blank=True)
     last_expedition = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
+    def stage_info(self):
+        """Retorna la fase evolutiva actual (1, 2 o 3) según el nivel"""
+        return get_evolution_stage(self.species, self.level)
+
+    @property
+    def evolution_stage_number(self):
+        return self.stage_info['stage']
+
+    @property
+    def evolved_name(self):
+        return self.stage_info['name']
+
+    @property
     def xp_to_next_level(self):
-        # Curva de nivel de mascota: Nivel 1 = 100, Nivel 2 = 180, Nivel 3 = 260...
         return 100 + ((self.level - 1) * 80)
 
     @property
@@ -4971,7 +5172,6 @@ class Pet(models.Model):
             return 0
         return min(100, int((self.xp / needed) * 100))
 
-    # --- REGLA 1: COOLDOWN DE CARICIAS (30 MINUTOS) ---
     def can_be_petted(self):
         if not self.last_petted:
             return True
@@ -4983,7 +5183,6 @@ class Pet(models.Model):
         tiempo_restante = (self.last_petted + timedelta(minutes=30)) - timezone.now()
         return max(1, int(tiempo_restante.total_seconds() // 60))
 
-    # --- REGLA 2: COOLDOWN DE EXPEDICIÓN (1 HORA Y MEDIA) ---
     def can_go_expedition(self):
         if not self.last_expedition:
             return True
@@ -5007,7 +5206,7 @@ class Pet(models.Model):
         self.save()
 
     def pet_action(self):
-        """Acaricia a la mascota (solo si el cooldown lo permite)"""
+        """Acaricia a la mascota aumentando vínculo y experiencia"""
         self.happiness = min(100, self.happiness + 20)
         self.xp += 15
         if self.xp >= self.xp_to_next_level:
@@ -5017,33 +5216,135 @@ class Pet(models.Model):
         self.save()
 
     def get_image_url(self):
-        mapping = {
-            'fox': 'fox.png',
-            'zorro': 'fox.png',
-            'panther': 'panther.png',
-            'pantera': 'panther.png',
-            'raven': 'raven.png',
-            'cuervo': 'raven.png',
-            'viper': 'viper.png',
-            'vibora': 'viper.png',
-            'wolf': 'wolf.png',
-            'lobo': 'wolf.png',
-        }
-        filename = mapping.get(str(self.species).lower(), 'fox.png')
-        return f"/media/pets/{filename}"
+        sprite_filename = self.stage_info['sprite']
+        return f"/media/pets/{sprite_filename}"
 
     def get_buff_description(self):
-        buffs = {
-            'panther': '+10% de Oro extra en victorias de Casino',
-            'fox': 'Bono Diario cada 22h (en vez de 24h)',
-            'viper': '15% de Descuento en fotos de KingdomFans',
-            'raven': '+20% de probabilidad de Jackpots en Slots',
-            'wolf': '10% de Protección contra derrotas en Blackjack',
-        }
-        return buffs.get(self.species, 'Bendición Real Activa')
+        return self.stage_info['buff_desc']
 
     def __str__(self):
-        return f"{self.name} ({self.get_species_display()}) - Nivel {self.level}"
+        return f"{self.name} ({self.evolved_name}) - Nivel {self.level}"
+
+==================================================
+ARCHIVO: .\pets\species_registry.py
+==================================================
+
+# pets/species_registry.py
+
+PET_SPECIES_REGISTRY = {
+    'fox': {
+        'id': 'fox',
+        'family_name': 'Zorro Kitsune Astral',
+        'element': 'Luz & Fortuna',
+        'stages': [
+            {'stage': 1, 'name': 'Kitling', 'min_lvl': 1, 'title': 'Cachorro Solar ✨', 'sprite': 'Kitling.png', 'buff_desc': 'Bono diario cada 22h y expedición rápida (+10%)'},
+            {'stage': 2, 'name': 'Kitsuray', 'min_lvl': 10, 'title': 'Zorro de Tres Colas 🦊', 'sprite': 'Kitsuray.png', 'buff_desc': 'Bono diario cada 20h y expedición rápida (+20%)'},
+            {'stage': 3, 'name': 'Kitsunami Imperial', 'min_lvl': 25, 'title': 'Soberano de Nueve Colas ⚜️', 'sprite': 'Kitsunami.png', 'buff_desc': 'Bono diario cada 18h y expedición rápida (+35%)'},
+        ]
+    },
+    'panther': {
+        'id': 'panther',
+        'family_name': 'Pantera de Ébano',
+        'element': 'Sombra & Fortuna',
+        'stages': [
+            {'stage': 1, 'name': 'Nocx', 'min_lvl': 1, 'title': 'Cría Umbría 🐾', 'sprite': 'Nocx.png', 'buff_desc': '+10% de Oro extra en victorias de Casino'},
+            {'stage': 2, 'name': 'Umbrather', 'min_lvl': 10, 'title': 'Pantera Nocturna 🐆', 'sprite': 'Umbrather.png', 'buff_desc': '+18% de Oro extra en victorias de Casino'},
+            {'stage': 3, 'name': 'Nyxador Soberano', 'min_lvl': 25, 'title': 'Gran Señor del Vacío 👑', 'sprite': 'Nyxador Soberano.png', 'buff_desc': '+28% de Oro extra en victorias de Casino'},
+        ]
+    },
+    'viper': {
+        'id': 'viper',
+        'family_name': 'Víbora Esmeralda',
+        'element': 'Veneno & Seducción',
+        'stages': [
+            {'stage': 1, 'name': 'Serpet', 'min_lvl': 1, 'title': 'Sierpe de Jade 🐍', 'sprite': 'Serpet.png', 'buff_desc': '15% de Descuento en fotos de KingdomFans'},
+            {'stage': 2, 'name': 'Viperis', 'min_lvl': 10, 'title': 'Cobra Regia 👑', 'sprite': 'Viperis.png', 'buff_desc': '22% de Descuento en fotos de KingdomFans'},
+            {'stage': 3, 'name': 'Ouroboria Reina', 'min_lvl': 25, 'title': 'Diosa Alada Emplumada ⚜️', 'sprite': 'Ouroboria Reina.png', 'buff_desc': '30% de Descuento en fotos de KingdomFans'},
+        ]
+    },
+    'raven': {
+        'id': 'raven',
+        'family_name': 'Cuervo Abisal',
+        'element': 'Medianoche & Destino',
+        'stages': [
+            {'stage': 1, 'name': 'Corvyn', 'min_lvl': 1, 'title': 'Polluelo Arcano 🪶', 'sprite': 'Corvyn.png', 'buff_desc': '+20% de probabilidad de Jackpots en Slots'},
+            {'stage': 2, 'name': 'Ravencore', 'min_lvl': 10, 'title': 'Cuervo de Medianoche 🦅', 'sprite': 'Ravencore.png', 'buff_desc': '+35% de probabilidad de Jackpots en Slots'},
+            {'stage': 3, 'name': 'Kranor Arcano', 'min_lvl': 25, 'title': 'Fénix Estelar Cósmico 👑', 'sprite': 'Kranor Arcano.png', 'buff_desc': '+55% de probabilidad de Jackpots en Slots'},
+        ]
+    },
+    'wolf': {
+        'id': 'wolf',
+        'family_name': 'Lobo Espectral',
+        'element': 'Escarcha & Escudo',
+        'stages': [
+            {'stage': 1, 'name': 'Lupen', 'min_lvl': 1, 'title': 'Lobicito Ártico 🐺', 'sprite': 'Lupen.png', 'buff_desc': '10% de Protección contra derrotas en Blackjack'},
+            {'stage': 2, 'name': 'Fenris de Plata', 'min_lvl': 10, 'title': 'Lobo de Runas Lunares 🌙', 'sprite': 'Fenris.png', 'buff_desc': '18% de Protección contra derrotas en Blackjack'},
+            {'stage': 3, 'name': 'Skollgard Titán', 'min_lvl': 25, 'title': 'Monarca de Hielo Imperial 👑', 'sprite': 'Skollgard.png', 'buff_desc': '25% de Protección contra derrotas en Blackjack'},
+        ]
+    },
+    'dragon': {
+        'id': 'dragon',
+        'family_name': 'Dragón Carmesí',
+        'element': 'Fuego & Rubí',
+        'stages': [
+            {'stage': 1, 'name': 'Drakito', 'min_lvl': 1, 'title': 'Dragoncito de Rubí 🐉', 'sprite': 'Drakito.png', 'buff_desc': '+0.10x Multiplicador en Minas del Reino'},
+            {'stage': 2, 'name': 'Pyralis Noble', 'min_lvl': 10, 'title': 'Dragón Oriental Sagrado 🔥', 'sprite': 'Pyralis.png', 'buff_desc': '+0.25x Multiplicador en Minas del Reino'},
+            {'stage': 3, 'name': 'Aethelgard Rey', 'min_lvl': 25, 'title': 'Emperador del Magma 👑', 'sprite': 'Aethelgard.png', 'buff_desc': '+0.50x Multiplicador en Minas del Reino'},
+        ]
+    },
+    'owl': {
+        'id': 'owl',
+        'family_name': 'Búho Cronos',
+        'element': 'Tiempo & Sabiduría',
+        'stages': [
+            {'stage': 1, 'name': 'Owlet', 'min_lvl': 1, 'title': 'Lechucita con Monóculo 🦉', 'sprite': 'Owlet.png', 'buff_desc': '+15% EXP nobiliaria en todas las acciones'},
+            {'stage': 2, 'name': 'Stryx Nocturno', 'min_lvl': 10, 'title': 'Búho del Reloj de Arena ⏳', 'sprite': 'Stryx.png', 'buff_desc': '+30% EXP nobiliaria en todas las acciones'},
+            {'stage': 3, 'name': 'Chronix Arconte', 'min_lvl': 25, 'title': 'Arconte del Destino Estelar 👑', 'sprite': 'Chronix.png', 'buff_desc': '+50% EXP nobiliaria en todas las acciones'},
+        ]
+    },
+    'deer': {
+        'id': 'deer',
+        'family_name': 'Ciervo de Jade',
+        'element': 'Naturaleza & Rocío',
+        'stages': [
+            {'stage': 1, 'name': 'Fawny', 'min_lvl': 1, 'title': 'Cervatillo de Cristal 🦌', 'sprite': 'Fawny.png', 'buff_desc': '15% de probabilidad de botín doble en expedición'},
+            {'stage': 2, 'name': 'Silvandor', 'min_lvl': 10, 'title': 'Venado de Cuernos Dorados 🌿', 'sprite': 'Silvandor.png', 'buff_desc': '25% de probabilidad de botín doble en expedición'},
+            {'stage': 3, 'name': 'Cernunnos Divino', 'min_lvl': 25, 'title': 'Deidad del Bosque Eterno 👑', 'sprite': 'Cernunnos.png', 'buff_desc': '40% de probabilidad de botín doble en expedición'},
+        ]
+    },
+    'scorpion': {
+        'id': 'scorpion',
+        'family_name': 'Escorpión Dorado',
+        'element': 'Arena & Oro',
+        'stages': [
+            {'stage': 1, 'name': 'Scorpi', 'min_lvl': 1, 'title': 'Arácnido de Ámbar 🦂', 'sprite': 'Scorpi.png', 'buff_desc': '5% Cashback de oro en compras y brindis'},
+            {'stage': 2, 'name': 'Venomarch', 'min_lvl': 10, 'title': 'Escorpión Acorazado ⚡', 'sprite': 'Venomarch.png', 'buff_desc': '10% Cashback de oro en compras y brindis'},
+            {'stage': 3, 'name': 'Azrael de las Dunas', 'min_lvl': 25, 'title': 'Faraón de las Arenas 👑', 'sprite': 'Azrael.png', 'buff_desc': '15% Cashback de oro en compras y brindis'},
+        ]
+    },
+    'rabbit': {
+        'id': 'rabbit',
+        'family_name': 'Conejo Lunar',
+        'element': 'Seda & Misticismo',
+        'stages': [
+            {'stage': 1, 'name': 'Bunbún', 'min_lvl': 1, 'title': 'Conejito de Seda 🐇', 'sprite': 'Bunbún.png', 'buff_desc': '+5% probabilidad de Photocards Legendarias'},
+            {'stage': 2, 'name': 'Lunaris', 'min_lvl': 10, 'title': 'Liebre de Perlas Lunares ✨', 'sprite': 'Lunaris.png', 'buff_desc': '+12% probabilidad de Photocards Legendarias'},
+            {'stage': 3, 'name': 'Tsukuyomi Reina', 'min_lvl': 25, 'title': 'Diosa Lunar de la Seda 👑', 'sprite': 'Tsukuyomi.png', 'buff_desc': '+20% probabilidad de Photocards Legendarias'},
+        ]
+    }
+}
+
+def get_species_data(species_id):
+    return PET_SPECIES_REGISTRY.get(str(species_id).lower(), PET_SPECIES_REGISTRY['fox'])
+
+def get_evolution_stage(species_id, level):
+    data = get_species_data(species_id)
+    stages = data['stages']
+    current = stages[0]
+    for s in stages:
+        if level >= s['min_lvl']:
+            current = s
+    return current
 
 ==================================================
 ARCHIVO: .\pets\tests.py
@@ -5075,13 +5376,18 @@ urlpatterns = [
 ARCHIVO: .\pets\views.py
 ==================================================
 
+# pets/views.py
 import random
 from django.utils import timezone
+from datetime import timedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
+from django.http import JsonResponse
 from .models import Pet
 from economy.models import Wallet
 from core.utils import grant_user_xp
+from idols.models import Photocard, UserPhotocard
+from pets.species_registry import PET_SPECIES_REGISTRY, get_species_data
 
 
 def resolve_tg_id(request):
@@ -5101,14 +5407,18 @@ def resolve_tg_id(request):
 def pet_sanctuary(request):
     tg_id = resolve_tg_id(request)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-    return render(request, 'pets/sanctuary.html', {'tg_id': tg_id, 'pet': pet})
+    return render(request, 'pets/sanctuary.html', {
+        'tg_id': tg_id, 
+        'pet': pet,
+        'all_species': PET_SPECIES_REGISTRY,
+    })
 
 
 def adopt_pet(request):
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
         name = request.POST.get('name', '').strip()
-        species = request.POST.get('species') or request.POST.get('new_species')
+        species = request.POST.get('species') or request.POST.get('new_species') or 'fox'
         
         if name and species:
             if not Pet.objects.filter(telegram_user_id=tg_id).exists():
@@ -5127,75 +5437,240 @@ def adopt_pet(request):
 def interact_pet(request):
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         action = request.POST.get('action')
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
-        
-        # 1. ACCIÓN ALIMENTAR
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+
+        old_stage = pet.evolution_stage_number
+
         if action == 'feed':
             if pet.energy >= 100:
-                messages.info(request, f"🍖 {pet.name} está lleno y saciado (100% de energía). Envíalo a explorar antes de alimentarlo otra vez.")
+                msg = f"🍖 {pet.evolved_name} está lleno y saciado (100% de energía)."
+                if is_ajax:
+                    return JsonResponse({'success': False, 'error': msg}, status=400)
+                messages.info(request, msg)
                 return redirect(f'/pets/?tg_id={tg_id}')
 
-            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
             if wallet.remove_funds(15):
                 pet.feed()
                 grant_user_xp(request, tg_id, 8, reason="Alimentar Mascota")
-                messages.success(request, f"🍖 ¡Alimentaste a {pet.name}! (+25 Energía, +10 Vínculo, +20 XP Mascota) (-15 🪙).")
-            else:
-                messages.error(request, f"No tienes suficientes monedas (15 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
                 
-        # 2. ACCIÓN ACARICIAR
+                new_stage = pet.evolution_stage_number
+                did_evolve = (new_stage > old_stage)
+
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'action': 'feed',
+                        'message': f"🍖 ¡Alimentaste a {pet.evolved_name}! (+25% Energía, +10% Vínculo, +20 XP)",
+                        'pet_energy': pet.energy,
+                        'pet_happiness': pet.happiness,
+                        'pet_xp': pet.xp,
+                        'pet_xp_needed': pet.xp_to_next_level,
+                        'pet_xp_percent': pet.xp_percentage,
+                        'pet_level': pet.level,
+                        'nuevo_saldo': wallet.balance,
+                        'evolved': did_evolve,
+                        'new_stage': new_stage,
+                        'new_name': pet.evolved_name,
+                        'new_title': pet.stage_info.get('title', ''),
+                        'new_sprite': pet.get_image_url(),
+                        'new_buff': pet.get_buff_description()
+                    })
+                messages.success(request, f"🍖 ¡Alimentaste a {pet.name}!")
+            else:
+                msg = f"No tienes suficientes monedas (15 🪙)."
+                if is_ajax:
+                    return JsonResponse({'success': False, 'error': msg}, status=400)
+                messages.error(request, msg)
+
         elif action == 'pet':
             if not pet.can_be_petted():
                 minutos = pet.minutes_until_next_pet()
-                messages.info(request, f"💤 {pet.name} está descansando plácidamente. Podrás acariciarlo en {minutos} minutos.")
+                msg = f"💤 {pet.evolved_name} descansa plácidamente. Podrás acariciarlo en {minutos} minutos."
+                if is_ajax:
+                    return JsonResponse({'success': False, 'error': msg, 'cooldown_minutes': minutos}, status=400)
+                messages.info(request, msg)
                 return redirect(f'/pets/?tg_id={tg_id}')
 
             pet.pet_action()
             grant_user_xp(request, tg_id, 5, reason="Acariciar Mascota")
-            messages.success(request, f"💖 ¡Acariciaste a {pet.name}! (+20 Vínculo, +15 XP Mascota, +5 EXP Jugador).")
-            
+
+            new_stage = pet.evolution_stage_number
+            did_evolve = (new_stage > old_stage)
+
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'action': 'pet',
+                    'message': f"💖 ¡Acariciaste a {pet.evolved_name}! (+20% Vínculo, +15 XP)",
+                    'pet_energy': pet.energy,
+                    'pet_happiness': pet.happiness,
+                    'pet_xp': pet.xp,
+                    'pet_xp_needed': pet.xp_to_next_level,
+                    'pet_xp_percent': pet.xp_percentage,
+                    'pet_level': pet.level,
+                    'cooldown_minutes': 30,
+                    'evolved': did_evolve,
+                    'new_stage': new_stage,
+                    'new_name': pet.evolved_name,
+                    'new_title': pet.stage_info.get('title', ''),
+                    'new_sprite': pet.get_image_url(),
+                    'new_buff': pet.get_buff_description()
+                })
+            messages.success(request, f"💖 ¡Acariciaste a {pet.name}!")
+
         return redirect(f'/pets/?tg_id={tg_id}')
 
 
 def expedition_pet(request):
-    """Envía a la mascota a explorar en busca de oro (gasta energía y tiene cooldown)"""
+    """Envía a la mascota a explorar una de las 3 zonas con probabilidad de Photocards reales"""
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
-        
-        if pet.energy < 25:
-            messages.error(request, f"⚠️ {pet.name} no tiene suficiente energía ({pet.energy}%). Necesita al menos 25% para explorar.")
+        zone = request.POST.get('zone', 'forest')
+
+        ZONES = {
+            'forest': {'name': 'Bosque de Jade', 'min_lvl': 1, 'energy': 15, 'cooldown': 15, 'icon': '🌲'},
+            'crypts': {'name': 'Criptas Olvidadas', 'min_lvl': 2, 'energy': 25, 'cooldown': 45, 'icon': '🏛️'},
+            'cavern': {'name': 'Caverna de Cristal', 'min_lvl': 4, 'energy': 40, 'cooldown': 90, 'icon': '💎'},
+        }
+
+        z_data = ZONES.get(zone, ZONES['forest'])
+
+        if pet.level < z_data['min_lvl']:
+            err = f"⚠️ {pet.evolved_name} necesita ser Nivel {z_data['min_lvl']} para entrar a {z_data['name']}."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
             return redirect(f'/pets/?tg_id={tg_id}')
 
-        if not pet.can_go_expedition():
-            minutos = pet.minutes_until_next_expedition()
-            messages.info(request, f"⏳ {pet.name} aún está exhausto de su último viaje. Podrá salir de expedición en {minutos} minutos.")
+        if pet.energy < z_data['energy']:
+            err = f"⚠️ {pet.evolved_name} no tiene suficiente energía ({pet.energy}%). Necesita al menos {z_data['energy']}%."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
             return redirect(f'/pets/?tg_id={tg_id}')
 
-        # Gastar energía
-        pet.energy = max(0, pet.energy - 25)
+        cooldown_min = z_data['cooldown']
+        if pet.species == 'fox':
+            cooldown_min = int(cooldown_min * 0.8)
+
+        if pet.last_expedition:
+            tiempo_pasado = timezone.now() - pet.last_expedition
+            if tiempo_pasado < timedelta(minutes=cooldown_min):
+                restante = int((timedelta(minutes=cooldown_min) - tiempo_pasado).total_seconds() // 60)
+                err = f"⏳ {pet.evolved_name} aún está descansando. Podrá explorar en {max(1, restante)} minutos."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.info(request, err)
+                return redirect(f'/pets/?tg_id={tg_id}')
+
+        pet.energy = max(0, pet.energy - z_data['energy'])
         pet.last_expedition = timezone.now()
 
-        # Botín de oro controlado y balanceado (10 a 20 🪙 + nivel de mascota):
-        gold_found = random.randint(10, 20) + (pet.level)
-        xp_mascota = 25
-        
+        food_found = False
+        card_dropped = None
+
+        if zone == 'forest':
+            gold_found = random.randint(15, 35) + pet.level
+            xp_mascota = 25
+            if random.random() < 0.30:
+                food_found = True
+                pet.energy = min(100, pet.energy + 20)
+
+        elif zone == 'crypts':
+            gold_found = random.randint(45, 85) + (pet.level * 2)
+            xp_mascota = 50
+            if random.random() < 0.20:
+                food_found = True
+                pet.energy = min(100, pet.energy + 20)
+
+            # Buff Conejo Lunar aumenta probabilidad
+            chance_card = 0.25 if pet.species == 'rabbit' else 0.15
+            if random.random() < chance_card:
+                pool = Photocard.objects.filter(rarity__in=['common', 'rare'])
+                if pool.exists():
+                    c = random.choice(pool)
+                    UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=c)
+                    card_dropped = {
+                        'name': c.name,
+                        'idol_name': c.display_idol_name,
+                        'rarity_display': c.get_rarity_display(),
+                        'color': c.get_color_hex(),
+                        'image_url': c.image.url if c.image else ''
+                    }
+
+        else: # cavern
+            gold_found = random.randint(100, 200) + (pet.level * 3)
+            xp_mascota = 85
+
+            chance_card = 0.40 if pet.species == 'rabbit' else 0.25
+            if random.random() < chance_card:
+                pool = Photocard.objects.filter(rarity__in=['epic', 'legendary'])
+                if not pool.exists():
+                    pool = Photocard.objects.all()
+                if pool.exists():
+                    c = random.choice(pool)
+                    UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=c)
+                    card_dropped = {
+                        'name': c.name,
+                        'idol_name': c.display_idol_name,
+                        'rarity_display': c.get_rarity_display(),
+                        'color': c.get_color_hex(),
+                        'image_url': c.image.url if c.image else ''
+                    }
+
+        # Buff Ciervo de Jade: Probabilidad de duplicar oro
+        if pet.species == 'deer' and random.random() < 0.25:
+            gold_found *= 2
+
+        old_stage = pet.evolution_stage_number
+        leveled_up = False
         pet.xp += xp_mascota
         if pet.xp >= pet.xp_to_next_level:
             pet.xp -= pet.xp_to_next_level
             pet.level += 1
-            messages.success(request, f"🎉 ¡{pet.name} subió al Nivel {pet.level}!")
+            leveled_up = True
 
         pet.save()
 
-        # Entregar botín al jugador con EXP moderada
+        new_stage = pet.evolution_stage_number
+        did_evolve = (new_stage > old_stage)
+
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         wallet.add_funds(gold_found)
-        grant_user_xp(request, tg_id, 10, reason="Expedición de Mascota")
+        
+        # Buff Búho Cronos: EXP aumentada para el noble
+        xp_gain_player = max(10, gold_found // 4)
+        if pet.species == 'owl':
+            xp_gain_player = int(xp_gain_player * 1.30)
+            
+        grant_user_xp(request, tg_id, xp_gain_player, reason=f"Expedición {z_data['name']}")
 
-        messages.success(request, f"🌲 ¡{pet.name} regresó de los bosques con +{gold_found} 🪙 y +{xp_mascota} XP! (-25% Energía)")
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'zone_name': z_data['name'],
+                'gold': gold_found,
+                'xp': xp_mascota,
+                'food_found': food_found,
+                'card_dropped': card_dropped,
+                'leveled_up': leveled_up,
+                'pet_level': pet.level,
+                'pet_energy': pet.energy,
+                'nuevo_saldo': wallet.balance,
+                'evolved': did_evolve,
+                'new_stage': new_stage,
+                'new_name': pet.evolved_name,
+                'new_title': pet.stage_info.get('title', ''),
+                'new_sprite': pet.get_image_url(),
+                'new_buff': pet.get_buff_description()
+            })
+
+        messages.success(request, f"¡{pet.evolved_name} exploró {z_data['name']} y volvió con +{gold_found} 🪙 y +{xp_mascota} XP!")
         return redirect(f'/pets/?tg_id={tg_id}')
+
+    return redirect('/pets/')
 
 
 def change_pet(request):
@@ -5221,7 +5696,7 @@ def change_pet(request):
             pet.happiness = 100
             pet.save()
             grant_user_xp(request, tg_id, 30, reason="Ritual de Transmutación")
-            messages.success(request, f"✨ ¡Ritual completado! Has transmutado tu mascota a {new_name} por {cost} 🪙.")
+            messages.success(request, f"✨ ¡Ritual completado! Has transmutado tu mascota a {new_name} ({pet.evolved_name}) por {cost} 🪙.")
         else:
             messages.error(request, f"No tienes suficiente oro ({cost} 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
             
@@ -7133,6 +7608,403 @@ ARCHIVO: .\templates\economy\casino.html
 {% endblock %}
 
 ==================================================
+ARCHIVO: .\templates\economy\mines.html
+==================================================
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-44 max-w-md mx-auto">
+    
+    <!-- ENCABEZADO Y BALANCE -->
+    <div class="flex justify-between items-center px-1">
+        <button type="button" onclick="universalNav('/economy/wallet/')" 
+          class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
+            <span>⬅</span> <span>Bóveda</span>
+        </button>
+        <div class="flex items-center gap-1.5 bg-black/70 border border-vip-gold/40 px-3.5 py-1.5 rounded-full shadow-inner">
+            <span class="text-xs">🪙</span>
+            <span class="text-xs font-mono font-bold text-gold-gradient" id="mines-balance">{{ wallet.balance }}</span>
+        </div>
+    </div>
+
+    <!-- TABLERO PRINCIPAL DE LAS MINAS -->
+    <div class="vip-panel p-5 rounded-3xl border border-vip-gold/40 shadow-2xl flex flex-col items-center relative overflow-hidden bg-gradient-to-b from-[#1b082e] via-[#0d0417] to-black">
+        
+        <div class="text-center mb-2">
+            <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
+                Cofres & Minas
+            </h2>
+            <p class="text-[10px] text-stone-400">Destapa gemas, multiplica tu oro y retírate antes de que explote</p>
+        </div>
+
+        <!-- INDICADOR DE MULTIPLICADOR Y CASHOUT FLOTANTE -->
+        <div class="w-full bg-black/70 border border-vip-gold/30 rounded-2xl p-3 my-2 flex justify-between items-center shadow-inner">
+            <div>
+                <span class="text-[9px] uppercase tracking-wider text-stone-400 block font-bold">Multiplicador</span>
+                <span id="multiplier-badge" class="font-mono text-xl font-black text-yellow-400">
+                    x<span id="mult-val">{{ current_mult|floatformat:2 }}</span>
+                </span>
+            </div>
+
+            <!-- Botón Cobrar en Vivo -->
+            <button type="button" id="cashout-btn" onclick="cashoutMines()" 
+                    class="{% if not in_game or current_revealed|length == 0 %}hidden{% endif %} btn-gold py-2.5 px-5 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.5)] active:scale-95 transition-all animate-bounce">
+                Cobrar <span id="cashout-val" class="font-mono font-black">{{ current_cashout }}</span> 🪙
+            </button>
+
+            <div id="status-tag" class="{% if in_game and current_revealed|length > 0 %}hidden{% endif %} text-right">
+                <span class="text-[9px] uppercase tracking-wider text-stone-400 block font-bold">Estado</span>
+                <span id="status-label" class="text-xs font-bold text-stone-300">{% if in_game %}En juego{% else %}Listo{% endif %}</span>
+            </div>
+        </div>
+
+        <!-- CUADRÍCULA 5x5 (25 CASILLEROS) -->
+        <div class="grid grid-cols-5 gap-2 w-full my-2 aspect-square p-2 bg-black/60 rounded-2xl border border-white/10 shadow-inner" id="mines-grid">
+            {% for i in "0123456789012345678901234" %}
+            <button type="button" onclick="revealTile({{ forloop.counter0 }})" id="tile-{{ forloop.counter0 }}" 
+                    class="mine-tile relative rounded-xl bg-gradient-to-br from-[#281340] to-[#120520] border border-vip-gold/30 flex items-center justify-center text-xl shadow hover:border-vip-gold active:scale-95 transition-all aspect-square select-none disabled:opacity-80">
+                <span class="tile-icon text-lg filter drop-shadow">💎</span>
+                <span class="tile-hidden absolute inset-0 rounded-xl bg-gradient-to-br from-[#2c1348] via-[#1a0830] to-[#0c0316] border border-vip-gold/40 flex items-center justify-center text-xs font-mono font-bold text-vip-gold/60 shadow">
+                    ✨
+                </span>
+            </button>
+            {% endfor %}
+        </div>
+
+        <!-- BANNER DE RESULTADO -->
+        <div id="mines-result-box" class="w-full min-h-[38px] flex items-center justify-center my-1 text-center"></div>
+
+        <!-- CONTROLES DE INICIO DE PARTIDA -->
+        <div id="mines-setup-controls" class="{% if in_game %}hidden{% endif %} w-full flex flex-col gap-3 mt-2">
+            
+            <!-- Selector de Minas (Peligro) -->
+            <div>
+                <label class="block text-[11px] text-purple-300 uppercase font-bold mb-1.5 text-left">
+                    Número de Minas Escondidas
+                </label>
+                <div class="grid grid-cols-4 gap-1.5 text-center">
+                    <button type="button" onclick="setMinesCount(1)" id="btn-m-1" class="py-2 rounded-xl border border-purple-500/40 bg-black/60 text-xs font-mono font-bold text-stone-300">1 💣</button>
+                    <button type="button" onclick="setMinesCount(3)" id="btn-m-3" class="py-2 rounded-xl border-2 border-yellow-400 bg-yellow-500/20 text-xs font-mono font-bold text-yellow-300 shadow">3 💣</button>
+                    <button type="button" onclick="setMinesCount(5)" id="btn-m-5" class="py-2 rounded-xl border border-purple-500/40 bg-black/60 text-xs font-mono font-bold text-stone-300">5 💣</button>
+                    <button type="button" onclick="setMinesCount(10)" id="btn-m-10" class="py-2 rounded-xl border border-purple-500/40 bg-black/60 text-xs font-mono font-bold text-stone-300">10 💣</button>
+                </div>
+                <input type="hidden" id="selected-mines-count" value="{{ current_mines_count|default:3 }}">
+            </div>
+
+            <!-- Selector de Apuesta -->
+            <div>
+                <div class="flex justify-between items-center mb-1 text-left">
+                    <label class="text-[11px] text-yellow-400 uppercase font-bold">Oro a Apostar</label>
+                    <span class="text-[10px] text-stone-400">Tope: {{ max_bet }} 🪙</span>
+                </div>
+                <div class="grid grid-cols-4 gap-1.5 mb-2">
+                    <button type="button" onclick="setBetAmount(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">10</button>
+                    <button type="button" onclick="setBetAmount(25)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">25</button>
+                    <button type="button" onclick="setBetAmount(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">50</button>
+                    <button type="button" onclick="setBetAmount({{ max_bet }})" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">{{ max_bet }}</button>
+                </div>
+                <input type="number" id="mines-bet-input" min="1" max="{{ max_bet }}" value="25"
+                       class="w-full bg-black/80 border border-vip-gold/50 rounded-xl p-2.5 text-center font-mono font-bold text-white text-base focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <button type="button" onclick="startMinesGame()" 
+                    class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-all">
+                <span>🎮</span> <span>Iniciar Ronda</span>
+            </button>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- SINTETIZADOR DE AUDIO MINAS VIP -->
+<script>
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let minesAudioCtx = null;
+
+    function getAudioCtx() {
+        if (!minesAudioCtx) minesAudioCtx = new AudioCtx();
+        if (minesAudioCtx.state === 'suspended') minesAudioCtx.resume();
+        return minesAudioCtx;
+    }
+
+    // Sonido brillante al descubrir Gema
+    function playGemSound(pitchStep = 0) {
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            const baseFreq = 880 + (pitchStep * 60);
+            osc.frequency.setValueAtTime(baseFreq, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, ctx.currentTime + 0.15);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.25);
+        } catch(e) {}
+    }
+
+    // Sonido sordo de Explosión / Bomba
+    function playBombSound() {
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(140, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.35);
+            gain.gain.setValueAtTime(0.4, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.35);
+        } catch(e) {}
+    }
+
+    // Tintineo de monedas al cobrar
+    function playCoins() {
+        try {
+            const ctx = getAudioCtx();
+            [987, 1318, 1567, 2093].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.08));
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + (idx * 0.08));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.08) + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.08));
+                osc.stop(ctx.currentTime + (idx * 0.08) + 0.25);
+            });
+        } catch(e) {}
+    }
+</script>
+
+<script>
+    let isGameRunning = {{ in_game|yesno:'true,false' }};
+    let revealedGems = {{ current_revealed|safe }};
+
+    function setMinesCount(count) {
+        if (isGameRunning) return;
+        document.getElementById('selected-mines-count').value = count;
+        [1, 3, 5, 10].forEach(c => {
+            const btn = document.getElementById(`btn-m-${c}`);
+            if (btn) {
+                if (c === count) {
+                    btn.className = "py-2 rounded-xl border-2 border-yellow-400 bg-yellow-500/20 text-xs font-mono font-bold text-yellow-300 shadow";
+                } else {
+                    btn.className = "py-2 rounded-xl border border-purple-500/40 bg-black/60 text-xs font-mono font-bold text-stone-300";
+                }
+            }
+        });
+    }
+
+    function setBetAmount(val) {
+        if (!isGameRunning) document.getElementById('mines-bet-input').value = val;
+    }
+
+    async function startMinesGame() {
+        const betVal = parseInt(document.getElementById('mines-bet-input').value, 10);
+        const minesCount = parseInt(document.getElementById('selected-mines-count').value, 10);
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('action', 'start');
+        formData.append('bet_amount', betVal);
+        formData.append('mines_count', minesCount);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            const resp = await fetch("{% url 'economy:mines' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            if (!data.success) {
+                alert(data.error);
+                return;
+            }
+
+            isGameRunning = true;
+            revealedGems = [];
+
+            // Actualizar saldo
+            document.getElementById('mines-balance').innerText = data.nuevo_saldo;
+
+            // Resetear casilleros visualmente
+            for (let i = 0; i < 25; i++) {
+                const tile = document.getElementById(`tile-${i}`);
+                const hiddenCover = tile.querySelector('.tile-hidden');
+                tile.className = "mine-tile relative rounded-xl bg-gradient-to-br from-[#281340] to-[#120520] border border-vip-gold/30 flex items-center justify-center text-xl shadow hover:border-vip-gold active:scale-95 transition-all aspect-square select-none";
+                hiddenCover.classList.remove('hidden');
+                tile.querySelector('.tile-icon').innerText = '💎';
+            }
+
+            document.getElementById('mult-val').innerText = '1.00';
+            document.getElementById('cashout-val').innerText = data.bet;
+            document.getElementById('cashout-btn').classList.add('hidden');
+            document.getElementById('status-tag').classList.remove('hidden');
+            document.getElementById('status-label').innerText = 'En juego';
+            document.getElementById('mines-setup-controls').classList.add('hidden');
+            document.getElementById('mines-result-box').innerHTML = '<span class="text-xs text-yellow-300 font-bold animate-pulse">¡Ronda iniciada! Toca un cofre...</span>';
+
+            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+
+        } catch(e) {
+            alert("Error de conexión al iniciar.");
+        }
+    }
+
+    async function revealTile(index) {
+        if (!isGameRunning || revealedGems.includes(index)) return;
+
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('action', 'reveal');
+        formData.append('tile_index', index);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            const resp = await fetch("{% url 'economy:mines' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            if (!data.success) return;
+
+            const tile = document.getElementById(`tile-${index}`);
+            const hiddenCover = tile.querySelector('.tile-hidden');
+
+            if (data.status === 'bust') {
+                // EXPLOSIÓN (BOMBA)
+                playBombSound();
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
+                isGameRunning = false;
+
+                hiddenCover.classList.add('hidden');
+                tile.className = "mine-tile relative rounded-xl bg-red-600 border-2 border-red-300 flex items-center justify-center text-2xl shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-bounce";
+                tile.querySelector('.tile-icon').innerText = '💣';
+
+                // Revelar todas las demás minas
+                data.all_mines.forEach(mIdx => {
+                    const mTile = document.getElementById(`tile-${mIdx}`);
+                    mTile.querySelector('.tile-hidden').classList.add('hidden');
+                    mTile.className = "mine-tile relative rounded-xl bg-neutral-900 border border-red-500/50 flex items-center justify-center text-lg";
+                    mTile.querySelector('.tile-icon').innerText = '💣';
+                });
+
+                document.getElementById('mines-result-box').innerHTML = `
+                    <div class="p-2 bg-rose-950/90 border border-rose-600 text-rose-200 text-xs font-bold rounded-xl w-full">
+                        💥 ¡BOOM! Has tocado una mina. Pierdes la apuesta.
+                    </div>`;
+
+                document.getElementById('cashout-btn').classList.add('hidden');
+                document.getElementById('status-tag').classList.remove('hidden');
+                document.getElementById('status-label').innerText = 'Derrota';
+                document.getElementById('mines-setup-controls').classList.remove('hidden');
+
+            } else {
+                // GEMA ENCONTRADA
+                revealedGems.push(index);
+                playGemSound(revealedGems.length);
+                try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+
+                hiddenCover.classList.add('hidden');
+                tile.className = "mine-tile relative rounded-xl bg-gradient-to-br from-emerald-600 to-green-950 border-2 border-emerald-400 flex items-center justify-center text-2xl shadow-[0_0_15px_rgba(16,185,129,0.6)]";
+                tile.querySelector('.tile-icon').innerText = '💎';
+
+                document.getElementById('mult-val').innerText = Number(data.multiplier).toFixed(2);
+                document.getElementById('cashout-val').innerText = data.current_cashout;
+
+                if (data.status === 'win_full') {
+                    // Limpió todo el tablero
+                    playCoins();
+                    isGameRunning = false;
+                    document.getElementById('mines-balance').innerText = data.nuevo_saldo;
+                    document.getElementById('mines-result-box').innerHTML = `
+                        <div class="p-2 bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-xs font-black uppercase rounded-xl w-full animate-bounce">
+                            👑 ¡PERFECTO! Limpiaste todas las gemas (+${data.current_cashout} 🪙).
+                        </div>`;
+                    document.getElementById('cashout-btn').classList.add('hidden');
+                    document.getElementById('mines-setup-controls').classList.remove('hidden');
+                } else {
+                    document.getElementById('cashout-btn').classList.remove('hidden');
+                    document.getElementById('status-tag').classList.add('hidden');
+                }
+            }
+
+        } catch(e) {
+            alert("Error de conexión al abrir cofre.");
+        }
+    }
+
+    async function cashoutMines() {
+        if (!isGameRunning) return;
+
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('action', 'cashout');
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            const resp = await fetch("{% url 'economy:mines' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            if (!data.success) return;
+
+            isGameRunning = false;
+            playCoins();
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+
+            document.getElementById('mines-balance').innerText = data.nuevo_saldo;
+
+            // Mostrar dónde estaban las minas restantes
+            data.all_mines.forEach(mIdx => {
+                const mTile = document.getElementById(`tile-${mIdx}`);
+                mTile.querySelector('.tile-hidden').classList.add('hidden');
+                mTile.className = "mine-tile relative rounded-xl bg-neutral-900 border border-neutral-700 flex items-center justify-center text-sm opacity-50";
+                mTile.querySelector('.tile-icon').innerText = '💣';
+            });
+
+            document.getElementById('cashout-btn').classList.add('hidden');
+            document.getElementById('status-tag').classList.remove('hidden');
+            document.getElementById('status-label').innerText = 'Retirado';
+
+            document.getElementById('mines-result-box').innerHTML = `
+                <div class="p-2.5 bg-emerald-950/90 border border-emerald-500 text-emerald-200 text-xs font-bold rounded-xl w-full shadow-[0_0_15px_rgba(16,185,129,0.4)] animate-bounce">
+                    🎉 ¡Te retiraste con éxito! Has cobrado +${data.ganancia} 🪙 (x${Number(data.multiplier).toFixed(2)}).
+                </div>`;
+
+            document.getElementById('mines-setup-controls').classList.remove('hidden');
+
+        } catch(e) {
+            alert("Error al cobrar.");
+        }
+    }
+</script>
+{% endblock %}
+
+==================================================
 ARCHIVO: .\templates\economy\slots.html
 ==================================================
 
@@ -7522,39 +8394,40 @@ ARCHIVO: .\templates\economy\wallet.html
         </form>
     </div>
 
-    <!-- SECCIÓN: SALÓN DE JUEGOS Y CASINO IMPERIAL -->
-    <div class="flex flex-col gap-3">
-        <div class="flex justify-between items-center px-1">
-            <h3 class="font-serif text-sm font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
-                <span>🎰</span> Salón de Fortuna y Azar
-            </h3>
-            <span class="text-[10px] text-vip-text/50 uppercase">Tope máx: 100 🪙</span>
-        </div>
-
-        <div class="grid grid-cols-3 gap-2.5">
+    <div class="grid grid-cols-2 gap-2.5">
             <!-- 1. Ruleta Imperial -->
             <button type="button" onclick="universalNav('/economy/casino/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-square cursor-pointer">
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-video cursor-pointer">
                 <span class="text-3xl pointer-events-none">🎡</span>
                 <div class="pointer-events-none">
-                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Ruleta</h4>
-                    <span class="text-[9px] text-yellow-400/80 font-mono">x1.95</span>
+                    <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Ruleta Real</h4>
+                    <span class="text-[9px] text-yellow-400/80 font-mono">x1.95 / x14</span>
                 </div>
             </button>
 
-            <!-- 2. Tragamonedas / Slots -->
+            <!-- 2. Minas del Reino (NUEVO) -->
+            <button type="button" onclick="universalNav('/economy/mines/')" 
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-yellow-400/60 active:scale-95 transition-all aspect-video cursor-pointer border-2 border-yellow-500/50 shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+                <span class="text-3xl pointer-events-none">💣</span>
+                <div class="pointer-events-none">
+                    <h4 class="font-bold text-yellow-300 text-[11px] uppercase tracking-wider">Minas VIP</h4>
+                    <span class="text-[9px] text-yellow-400/80 font-mono">x20+ Retiro</span>
+                </div>
+            </button>
+
+            <!-- 3. Tragaperras / Slots -->
             <button type="button" onclick="universalNav('/economy/slots/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-purple-400/60 active:scale-95 transition-all aspect-square cursor-pointer">
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-purple-400/60 active:scale-95 transition-all aspect-video cursor-pointer">
                 <span class="text-3xl pointer-events-none">🍒</span>
                 <div class="pointer-events-none">
                     <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Tragaperras</h4>
-                    <span class="text-[9px] text-purple-300 font-mono">Jackpot</span>
+                    <span class="text-[9px] text-purple-300 font-mono">Jackpot x15</span>
                 </div>
             </button>
 
-            <!-- 3. Blackjack VIP -->
+            <!-- 4. Blackjack VIP -->
             <button type="button" onclick="universalNav('/economy/blackjack/')" 
-               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-vip-gold/60 active:scale-95 transition-all aspect-square cursor-pointer">
+               class="vip-panel p-3.5 flex flex-col items-center justify-between text-center hover:border-vip-gold/60 active:scale-95 transition-all aspect-video cursor-pointer">
                 <span class="text-3xl pointer-events-none">🃏</span>
                 <div class="pointer-events-none">
                     <h4 class="font-bold text-white text-[11px] uppercase tracking-wider">Blackjack</h4>
@@ -7562,7 +8435,6 @@ ARCHIVO: .\templates\economy\wallet.html
                 </div>
             </button>
         </div>
-    </div>
 
 </div>
 
@@ -9621,169 +10493,257 @@ ARCHIVO: .\templates\idols\photocards_market.html
 {% load static %}
 
 {% block content %}
-<div class="min-h-screen bg-vip-base text-gray-200 pb-28 pt-4 px-4 max-w-lg mx-auto">
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
 
-    <!-- SUB-NAV SUPERIOR DE PHOTOCARDS: 3 PESTAÑAS CLARAS -->
-    <div class="grid grid-cols-3 gap-1 bg-black/50 p-1 rounded-xl border border-vip-gold/30 mb-6 text-xs font-semibold text-center">
-        <a href="/idols/photocards/?tg_id={{ tg_id }}" 
-           class="py-2.5 rounded-lg transition-all text-gray-400 hover:text-white flex items-center justify-center gap-1">
+    <!-- SUB-NAV SUPERIOR: CAJAS | ÁLBUM | MERCADO -->
+    <div class="grid grid-cols-3 gap-1 bg-black/60 p-1 rounded-2xl border border-vip-gold/30 text-xs font-semibold text-center shadow-lg">
+        <button type="button" onclick="universalNav('/idols/photocards/')" 
+           class="py-2 rounded-xl transition-all text-stone-400 hover:text-white flex items-center justify-center gap-1">
             <span>🎁</span> <span>Cajas</span>
-        </a>
-        <a href="/idols/photocards/album/?tg_id={{ tg_id }}" 
-           class="py-2.5 rounded-lg transition-all text-gray-400 hover:text-white flex items-center justify-center gap-1">
+        </button>
+        <button type="button" onclick="universalNav('/idols/photocards/album/')" 
+           class="py-2 rounded-xl transition-all text-stone-400 hover:text-white flex items-center justify-center gap-1">
             <span>📖</span> <span>Mi Álbum</span>
-        </a>
-        <a href="/idols/photocards/market/?tg_id={{ tg_id }}" 
-           class="py-2.5 rounded-lg transition-all bg-gradient-to-r from-vip-gold/30 to-amber-600/30 text-vip-gold border border-vip-gold/50 shadow-sm flex items-center justify-center gap-1 font-bold">
+        </button>
+        <button type="button" onclick="universalNav('/idols/photocards/market/')" 
+           class="py-2 rounded-xl transition-all bg-gradient-to-r from-vip-gold/30 to-amber-600/30 text-vip-gold border border-vip-gold/50 shadow-sm flex items-center justify-center gap-1 font-bold">
             <span>🏛️</span> <span>Mercado</span>
-        </a>
+        </button>
     </div>
 
     <!-- ENCABEZADO Y BALANCE -->
-    <div class="flex items-center justify-between mb-5 bg-vip-panel border border-vip-gold/30 p-4 rounded-2xl shadow-lg">
+    <div class="vip-panel p-4 flex items-center justify-between border border-vip-gold/30 rounded-2xl shadow-xl bg-gradient-to-br from-[#1a0a24] to-black">
         <div>
-            <h1 class="text-xl font-serif font-extrabold text-vip-gold flex items-center gap-2">
+            <h1 class="text-base font-serif font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
                 <span>🏛️</span> Bazar Clandestino
             </h1>
-            <p class="text-xs text-gray-400">Compra y vende Photocards entre nobles</p>
+            <p class="text-[11px] text-stone-400">Compra, vende e intercambia con nobles</p>
         </div>
         <div class="text-right">
-            <span class="text-[10px] text-gray-400 uppercase tracking-widest block">Tu Fortuna</span>
-            <span class="text-sm font-bold text-amber-300 flex items-center justify-end gap-1">
+            <span class="text-[9px] text-stone-400 uppercase tracking-widest block font-bold">Tu Fortuna</span>
+            <span class="text-sm font-black text-amber-300 font-mono flex items-center justify-end gap-1">
                 <span>🪙</span> {{ wallet.balance|default:0 }}
             </span>
         </div>
     </div>
 
-    <!-- FILTROS POR RAREZA -->
-    <div class="flex items-center gap-1.5 overflow-x-auto pb-3 mb-4 scrollbar-none text-xs">
-        <a href="?tg_id={{ tg_id }}&rarity=all" 
-           class="px-3 py-1.5 rounded-lg border whitespace-nowrap transition-all {% if current_rarity == 'all' %}bg-vip-gold text-black font-bold border-vip-gold shadow-md{% else %}bg-black/40 text-gray-300 border-white/10 hover:border-vip-gold/40{% endif %}">
-            Todas
-        </a>
-        <a href="?tg_id={{ tg_id }}&rarity=common" 
-           class="px-3 py-1.5 rounded-lg border whitespace-nowrap transition-all {% if current_rarity == 'common' %}bg-gray-400 text-black font-bold border-gray-300{% else %}bg-black/40 text-gray-400 border-white/10 hover:border-gray-500{% endif %}">
-            ⚪ Comunes
-        </a>
-        <a href="?tg_id={{ tg_id }}&rarity=rare" 
-           class="px-3 py-1.5 rounded-lg border whitespace-nowrap transition-all {% if current_rarity == 'rare' %}bg-blue-500 text-white font-bold border-blue-400{% else %}bg-black/40 text-blue-400 border-white/10 hover:border-blue-500{% endif %}">
-            🔵 Raras
-        </a>
-        <a href="?tg_id={{ tg_id }}&rarity=epic" 
-           class="px-3 py-1.5 rounded-lg border whitespace-nowrap transition-all {% if current_rarity == 'epic' %}bg-purple-600 text-white font-bold border-purple-400{% else %}bg-black/40 text-purple-400 border-white/10 hover:border-purple-500{% endif %}">
-            🟣 Épicas
-        </a>
-        <a href="?tg_id={{ tg_id }}&rarity=legendary" 
-           class="px-3 py-1.5 rounded-lg border whitespace-nowrap transition-all {% if current_rarity == 'legendary' %}bg-amber-500 text-black font-bold border-amber-300{% else %}bg-black/40 text-amber-400 border-white/10 hover:border-amber-500{% endif %}">
-            🟡 Legendarias
-        </a>
-    </div>
-
-    <!-- MIS PUBLICACIONES ACTIVAS (SI TIENE) -->
-    {% if my_listings %}
-    <div class="mb-6 bg-amber-950/20 border border-amber-500/30 rounded-2xl p-3">
-        <h2 class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2 flex items-center justify-between">
-            <span>🏷️ Tus cartas a la venta ({{ my_listings|length }})</span>
-            <span class="text-[10px] text-gray-400">Puedes cancelar cuando quieras</span>
-        </h2>
-        <div class="grid grid-cols-2 gap-2">
-            {% for item in my_listings %}
-            <div class="bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col justify-between">
-                <div class="flex items-center gap-2 mb-2">
-                    <img src="{{ item.photocard.image.url }}" class="w-10 h-14 object-cover rounded-lg border border-vip-gold/40">
-                    <div class="overflow-hidden">
-                        <div class="text-xs font-bold truncate text-white">{{ item.photocard.name }}</div>
-                        <div class="text-[11px] text-amber-300 font-semibold">🪙 {{ item.price }}</div>
-                    </div>
-                </div>
-                <form action="/idols/photocards/market/cancel/{{ item.id }}/" method="POST">
-                    {% csrf_token %}
-                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                    <button type="submit" class="w-full py-1 text-[10px] bg-red-950/60 hover:bg-red-900 border border-red-500/40 text-red-200 rounded-lg font-semibold transition-all">
-                        Cancelar Venta
-                    </button>
-                </form>
+    <!-- MENSAJES -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="p-3 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% elif message.tags == 'info' %}bg-blue-950/60 border-blue-500/60 text-blue-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
+                {{ message }}
             </div>
-            {% endfor %}
-        </div>
-    </div>
+        {% endfor %}
     {% endif %}
 
-    <!-- VITRINA DEL MERCADO -->
-    <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-bold text-white uppercase tracking-wider">Cartas Disponibles</h2>
-        <a href="/idols/photocards/album/?tg_id={{ tg_id }}" class="text-xs text-vip-gold hover:underline flex items-center gap-1">
-            <span>+ Vender desde mi Álbum</span> <span>↗</span>
-        </a>
+    <!-- PESTAÑAS DEL MERCADO: VENTA EN ORO vs PROPUESTAS DE INTERCAMBIO -->
+    <div class="grid grid-cols-2 gap-1 bg-black/60 p-1 rounded-2xl border border-vip-gold/25 text-xs font-bold uppercase text-center shadow-inner">
+        <button type="button" onclick="switchMarketTab('cards')" id="tab-btn-cards" class="py-2 rounded-xl bg-vip-gold text-black font-black">
+            🏷️ En Venta ({{ market_cards.count }})
+        </button>
+        <button type="button" onclick="switchMarketTab('trades')" id="tab-btn-trades" class="py-2 rounded-xl text-stone-400 hover:text-white">
+            🤝 Intercambios ({{ received_trades.count }})
+        </button>
     </div>
 
-    {% if listings %}
-    <div class="grid grid-cols-2 gap-3.5">
-        {% for item in listings %}
-        <div class="bg-vip-panel/90 border border-vip-gold/20 rounded-2xl p-2.5 flex flex-col justify-between shadow-lg relative group overflow-hidden">
-            
-            <!-- BADGE DE RAREZA -->
-            <div class="absolute top-4 left-4 z-10">
-                {% if item.photocard.rarity == 'legendary' %}
-                    <span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-500 text-black font-extrabold uppercase shadow">Legendaria</span>
-                {% elif item.photocard.rarity == 'epic' %}
-                    <span class="text-[9px] px-2 py-0.5 rounded-full bg-purple-600 text-white font-extrabold uppercase shadow">Épica</span>
-                {% elif item.photocard.rarity == 'rare' %}
-                    <span class="text-[9px] px-2 py-0.5 rounded-full bg-blue-600 text-white font-extrabold uppercase shadow">Rara</span>
-                {% else %}
-                    <span class="text-[9px] px-2 py-0.5 rounded-full bg-gray-600 text-gray-200 font-semibold uppercase shadow">Común</span>
-                {% endif %}
+    <!-- SECCIÓN 1: CARTAS A LA VENTA EN ORO -->
+    <div id="market-cards-tab" class="flex flex-col gap-3">
+        
+        <!-- TUS CARTAS A LA VENTA (SI TIENES) -->
+        {% if my_sales %}
+        <div class="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-3">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider">🏷️ Tus Publicaciones ({{ my_sales.count }})</span>
+                <span class="text-[9.5px] text-stone-400">Puedes retirar tu carta cuando quieras</span>
             </div>
-
-            <!-- FOTO DE LA CARTA -->
-            <div class="w-full aspect-[3/4] rounded-xl overflow-hidden bg-black/60 mb-2.5 border border-white/5 relative">
-                <img src="{{ item.photocard.image.url }}" 
-                     alt="{{ item.photocard.name }}" 
-                     class="w-full h-full object-cover">
+            <div class="grid grid-cols-2 gap-2">
+                {% for item in my_sales %}
+                <div class="bg-black/70 border border-white/10 rounded-xl p-2 flex flex-col justify-between">
+                    <div class="flex items-center gap-2 mb-2">
+                        <img src="{{ item.photocard.image.url }}" class="w-10 h-14 object-cover rounded-lg border" style="border-color: {{ item.photocard.get_color_hex }};">
+                        <div class="overflow-hidden min-w-0">
+                            <div class="text-xs font-bold truncate text-white">{{ item.photocard.name }}</div>
+                            <div class="text-[11px] text-amber-300 font-mono font-bold">🪙 {{ item.sale_price }}</div>
+                        </div>
+                    </div>
+                    <form action="/idols/photocards/sell/{{ item.id }}/" method="POST" class="m-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                        <input type="hidden" name="mode" value="cancel">
+                        <button type="submit" class="w-full py-1 text-[10px] bg-red-950/70 hover:bg-red-900 border border-red-500/40 text-red-200 rounded-lg font-bold transition-all">
+                            Retirar Venta
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
             </div>
+        </div>
+        {% endif %}
 
-            <!-- DATOS DE LA CARTA -->
-            <div class="mb-2">
-                <h3 class="text-xs font-bold text-white truncate">{{ item.photocard.name }}</h3>
-                <p class="text-[10px] text-gray-400 truncate">Vendedor: {{ item.seller_profile.username|default:"Noble Anónimo" }}</p>
-            </div>
+        <!-- VITRINA DEL MERCADO (CARTAS DE OTROS USUARIOS) -->
+        <div class="flex items-center justify-between px-1">
+            <h2 class="text-xs font-bold text-stone-300 uppercase tracking-wider">Photocards Disponibles</h2>
+            <button type="button" onclick="universalNav('/idols/photocards/album/')" class="text-xs text-vip-gold hover:underline flex items-center gap-1 font-bold">
+                <span>+ Vender desde mi Álbum</span> <span>➔</span>
+            </button>
+        </div>
 
-            <!-- PRECIO Y BOTÓN DE COMPRA -->
-            <div class="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
-                <div class="text-xs font-black text-amber-300 flex items-center gap-1">
-                    <span>🪙</span> {{ item.price }}
+        {% if market_cards %}
+        <div class="grid grid-cols-2 gap-3">
+            {% for item in market_cards %}
+            <div class="bg-black/70 border rounded-2xl p-2.5 flex flex-col justify-between shadow-xl relative group overflow-hidden"
+                 style="border-color: {{ item.photocard.get_color_hex }};">
+                
+                <!-- BADGE DE RAREZA -->
+                <div class="absolute top-3.5 left-3.5 z-10">
+                    <span class="text-[8px] font-mono uppercase font-black px-2 py-0.5 rounded-full border shadow backdrop-blur-md"
+                          style="color: {{ item.photocard.get_color_hex }}; border-color: {{ item.photocard.get_color_hex }}; background: rgba(0,0,0,0.85);">
+                        {{ item.photocard.get_rarity_display }}
+                    </span>
                 </div>
 
-                {% if item.seller_tg_id|stringformat:"s" == tg_id|stringformat:"s" %}
-                    <span class="text-[10px] text-gray-500 italic py-1">Tuya</span>
-                {% else %}
-                    <form action="/idols/photocards/market/buy/{{ item.id }}/" method="POST" onsubmit="return confirm('¿Comprar por {{ item.price }} de oro?');">
+                <!-- FOTO DE LA CARTA -->
+                <div class="w-full aspect-[5/7] rounded-xl overflow-hidden bg-black mb-2 border border-white/10 relative">
+                    <img src="{{ item.photocard.image.url }}" 
+                         alt="{{ item.photocard.name }}" 
+                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                </div>
+
+                <!-- DATOS DE LA CARTA -->
+                <div class="mb-2">
+                    <h3 class="text-xs font-black text-white truncate leading-tight">{{ item.photocard.name }}</h3>
+                    <p class="text-[10px] text-yellow-400 font-bold truncate">{{ item.photocard.display_idol_name }}</p>
+                </div>
+
+                <!-- PRECIO Y BOTÓN DE COMPRA -->
+                <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-1.5">
+                    <div class="text-xs font-black text-amber-300 font-mono flex items-center gap-1">
+                        <span>🪙</span> {{ item.sale_price }}
+                    </div>
+
+                    <form action="/idols/photocards/buy/{{ item.id }}/" method="POST" class="m-0" 
+                          onsubmit="return confirm('¿Comprar «{{ item.photocard.name|escapejs }}» por {{ item.sale_price }} 🪙?');">
                         {% csrf_token %}
                         <input type="hidden" name="tg_id" value="{{ tg_id }}">
                         <button type="submit" 
-                                class="px-3 py-1 bg-gradient-to-r from-vip-gold to-amber-500 text-black text-xs font-bold rounded-lg shadow-sm hover:brightness-110 active:scale-95 transition-all">
+                                class="btn-gold px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider shadow active:scale-95 transition-all">
                             Comprar
                         </button>
                     </form>
-                {% endif %}
+                </div>
+
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
+            <span class="text-4xl my-2">🏷️</span>
+            <p class="text-sm font-bold text-white mb-1">No hay cartas a la venta ahora mismo</p>
+            <p class="text-xs text-stone-400 mb-3 max-w-xs leading-relaxed">Sé el primero en poner a la venta una carta repetida de tu colección.</p>
+            <button type="button" onclick="universalNav('/idols/photocards/album/')" 
+               class="btn-gold px-4 py-2 rounded-xl text-xs font-bold uppercase">
+                Ir a Mi Álbum
+            </button>
+        </div>
+        {% endif %}
+
+    </div>
+
+    <!-- SECCIÓN 2: TABLÓN DE INTERCAMBIOS (TRADES) -->
+    <div id="market-trades-tab" class="hidden flex flex-col gap-3">
+        
+        <!-- PROPUESTAS RECIBIDAS -->
+        <div class="flex items-center justify-between px-1">
+            <h3 class="text-xs font-bold text-purple-300 uppercase tracking-wider">Propuestas para Ti</h3>
+            <span class="text-[10px] text-stone-500">{{ received_trades.count }} pendientes</span>
+        </div>
+
+        {% for trade in received_trades %}
+        <div class="bg-black/70 border border-purple-500/40 p-3.5 rounded-2xl flex flex-col gap-2.5 shadow-lg">
+            <div class="flex justify-between items-center">
+                <span class="text-xs font-bold text-white flex items-center gap-1">
+                    <span>👤</span> <span>De: {{ trade.sender_username }}</span>
+                </span>
+                <span class="text-[9px] font-mono text-purple-300 bg-purple-950/80 px-2 py-0.5 rounded-full border border-purple-700">
+                    {{ trade.created_at|timesince }} atrás
+                </span>
             </div>
 
+            <div class="flex items-center gap-3 bg-purple-950/30 p-2 rounded-xl border border-purple-500/20">
+                <img src="{{ trade.sender_card.photocard.image.url }}" class="w-12 h-16 object-cover rounded-lg border" style="border-color: {{ trade.sender_card.photocard.get_color_hex }};">
+                <div class="flex flex-col min-w-0">
+                    <span class="text-[9px] font-mono uppercase font-bold" style="color: {{ trade.sender_card.photocard.get_color_hex }};">
+                        {{ trade.sender_card.photocard.get_rarity_display }}
+                    </span>
+                    <span class="text-xs font-black text-white truncate">{{ trade.sender_card.photocard.name }}</span>
+                    <span class="text-[10px] text-yellow-400 font-bold truncate">Idol: {{ trade.sender_card.photocard.display_idol_name }}</span>
+                </div>
+            </div>
+
+            <!-- Botones Aceptar / Rechazar -->
+            <div class="grid grid-cols-2 gap-2 pt-1">
+                <a href="/idols/photocards/trade/{{ trade.id }}/accept/?tg_id={{ tg_id }}" 
+                   class="btn-gold py-2 rounded-xl text-center text-[10px] font-black uppercase tracking-wider shadow">
+                    ✅ Aceptar
+                </a>
+                <a href="/idols/photocards/trade/{{ trade.id }}/reject/?tg_id={{ tg_id }}" 
+                   class="bg-rose-950 border border-rose-600 text-rose-200 py-2 rounded-xl text-center text-[10px] font-bold uppercase">
+                    ❌ Rechazar
+                </a>
+            </div>
+        </div>
+        {% empty %}
+        <div class="bg-black/40 border border-white/5 p-6 rounded-2xl text-center text-xs text-stone-500">
+            No tienes ofertas de intercambio pendientes.
         </div>
         {% endfor %}
+
+        <!-- TUS PROPUESTAS ENVIADAS -->
+        {% if sent_trades %}
+        <h3 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1 mt-2">Tus Ofertas Enviadas ({{ sent_trades.count }})</h3>
+        <div class="flex flex-col gap-2">
+            {% for st in sent_trades %}
+            <div class="bg-black/60 border border-white/10 p-3 rounded-2xl flex items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-2 min-w-0">
+                    <img src="{{ st.sender_card.photocard.image.url }}" class="w-8 h-11 object-cover rounded border border-vip-gold/30">
+                    <div class="flex flex-col min-w-0">
+                        <span class="font-bold text-white truncate">{{ st.sender_card.photocard.name }}</span>
+                        <span class="text-[10px] text-stone-400 truncate">Para: {{ st.receiver_username }}</span>
+                    </div>
+                </div>
+                <a href="/idols/photocards/trade/{{ st.id }}/cancel/?tg_id={{ tg_id }}" 
+                   class="text-[10px] text-rose-400 hover:text-rose-300 font-bold bg-rose-950/60 border border-rose-700/60 px-2 py-1 rounded-lg">
+                    Cancelar
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
     </div>
-    {% else %}
-    <div class="text-center py-16 bg-black/30 border border-white/5 rounded-2xl p-6">
-        <span class="text-4xl block mb-2">🏷️</span>
-        <p class="text-sm font-semibold text-gray-300 mb-1">No hay cartas en venta en esta categoría</p>
-        <p class="text-xs text-gray-500 mb-4">Sé el primero en publicar una carta repetida de tu colección.</p>
-        <a href="/idols/photocards/album/?tg_id={{ tg_id }}" 
-           class="inline-block px-4 py-2 bg-vip-gold/20 border border-vip-gold/40 text-vip-gold rounded-xl text-xs font-bold">
-            Ir a Mi Álbum a Publicar
-        </a>
-    </div>
-    {% endif %}
 
 </div>
+
+<script>
+    function switchMarketTab(tab) {
+        const cardsTab = document.getElementById('market-cards-tab');
+        const tradesTab = document.getElementById('market-trades-tab');
+        const btnCards = document.getElementById('tab-btn-cards');
+        const btnTrades = document.getElementById('tab-btn-trades');
+
+        if (tab === 'cards') {
+            cardsTab.classList.remove('hidden');
+            tradesTab.classList.add('hidden');
+            btnCards.className = "py-2 rounded-xl bg-vip-gold text-black font-black";
+            btnTrades.className = "py-2 rounded-xl text-stone-400 hover:text-white";
+        } else {
+            cardsTab.classList.add('hidden');
+            tradesTab.classList.remove('hidden');
+            btnTrades.className = "py-2 rounded-xl bg-vip-gold text-black font-black";
+            btnCards.className = "py-2 rounded-xl text-stone-400 hover:text-white";
+        }
+    }
+</script>
 {% endblock %}
 
 ==================================================
@@ -9852,13 +10812,13 @@ ARCHIVO: .\templates\idols\photocard_boxes.html
     <!-- LISTA DE CAJAS BLINDADAS (CS2 CASE DESIGN) -->
     <div class="flex flex-col gap-3.5">
         {% for box in boxes %}
-        <div class="vip-panel p-4 flex flex-col gap-3.5 border border-vip-gold/30 hover:border-yellow-400/70 transition-all duration-300 rounded-3xl shadow-xl bg-gradient-to-br from-[#160824] via-[#0d0416] to-black relative overflow-hidden group">
+        <div class="vip-panel p-4 flex flex-col gap-3.5 border border-vip-gold/30 hover:border-yellow-400/70 transition-all duration-300 rounded-3xl shadow-xl bg-gradient-to-br from-[#160824] via-[#0d0416] to-black relative overflow-hidden group max-w-full">
             
-            <div class="flex items-center gap-3.5">
-                <!-- Portada Maletín de la Caja con Efecto Bisel -->
-                <div class="w-22 h-22 rounded-2xl bg-black/90 border-2 border-vip-gold/50 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_18px_rgba(212,175,55,0.25)] relative group-hover:scale-105 transition-transform">
+            <div class="flex items-center gap-3.5 min-w-0">
+                <!-- Portada Maletín de la Caja con Medidas Fijas (Nunca se desborda) -->
+                <div class="w-24 h-24 min-w-[96px] max-w-[96px] h-24 min-h-[96px] max-h-[96px] rounded-2xl bg-black/90 border-2 border-vip-gold/50 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_18px_rgba(212,175,55,0.25)] relative group-hover:scale-105 transition-transform p-1">
                     {% if box.cover_image %}
-                        <img src="{{ box.cover_image.url }}" alt="{{ box.name }}" class="w-full h-full object-cover">
+                        <img src="{{ box.cover_image.url }}" alt="{{ box.name }}" class="w-full h-full object-contain block drop-shadow">
                     {% else %}
                         <span class="text-4xl filter drop-shadow">📦</span>
                     {% endif %}
@@ -9868,16 +10828,16 @@ ARCHIVO: .\templates\idols\photocard_boxes.html
                 </div>
 
                 <!-- Info de la Caja -->
-                <div class="flex flex-col min-w-0 flex-1">
+                <div class="flex flex-col min-w-0 flex-1 overflow-hidden">
                     <div class="flex items-center gap-1.5">
                         <h3 class="font-serif text-sm font-black text-white leading-tight truncate group-hover:text-vip-gold transition-colors">
                             {{ box.name }}
                         </h3>
                     </div>
-                    <p class="text-[11px] text-vip-text/60 mt-1 line-clamp-2 leading-relaxed">{{ box.description }}</p>
+                    <p class="text-[11px] text-vip-text/60 mt-1 line-clamp-2 leading-relaxed truncate">{{ box.description }}</p>
 
                     <!-- Rarezas representadas como en CS:GO / CS2 -->
-                    <div class="flex items-center gap-2 mt-2 pt-1 border-t border-white/5">
+                    <div class="flex items-center gap-2 mt-2 pt-1 border-t border-white/5 flex-wrap">
                         <span class="inline-flex items-center gap-1 text-[9px] font-mono text-stone-400 font-bold">
                             <span class="w-2 h-2 rounded-full bg-stone-400"></span> Común
                         </span>
@@ -10210,227 +11170,254 @@ ARCHIVO: .\templates\idols\photocard_boxes.html
 ARCHIVO: .\templates\pets\sanctuary.html
 ==================================================
 
+<!-- templates/pets/sanctuary.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-44">
+<div class="flex flex-col gap-4 mt-2 pb-44 max-w-md mx-auto">
     
     <!-- ENCABEZADO -->
     <div class="flex justify-between items-center px-1">
-        <div>
-            <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
-                Santuario de Fieles
-            </h2>
-            <p class="text-[11px] text-vip-text/60">Compañeros leales del Reino</p>
-        </div>
-        <span class="text-xs bg-purple-950/80 border border-purple-500/50 text-purple-300 px-3 py-1 rounded-full uppercase tracking-wider font-bold">
+        <button type="button" onclick="universalNav('/')" 
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
+            <span>⬅</span> <span>Menú</span>
+        </button>
+        <span class="text-xs bg-purple-950/80 border border-purple-500/50 text-purple-300 px-3.5 py-1 rounded-full uppercase tracking-wider font-bold">
             Altar Sagrado
         </span>
     </div>
 
-    <!-- MENSAJES -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="p-3.5 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% elif message.tags == 'info' %}bg-blue-950/60 border-blue-500/60 text-blue-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
+    <!-- MENSAJES FLASH DINÁMICOS -->
+    <div id="pet-toast-box" class="w-full"></div>
 
     {% if pet %}
-    <!-- TARJETA DEL ALTAR DE LA MASCOTA -->
-    <div class="vip-panel p-6 flex flex-col items-center text-center relative overflow-hidden">
+    <!-- ALTAR MÍSTICO DE LA MASCOTA -->
+    <div class="vip-panel p-6 flex flex-col items-center text-center relative overflow-hidden border border-vip-gold/40 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1a082c] via-[#0b0314] to-black">
         
-        <!-- Ilustración PNG Real de la Mascota con Pedestal Místico -->
-        <div class="relative w-48 h-48 my-2 flex items-center justify-center group">
-            <div class="absolute inset-0 bg-gradient-to-t from-purple-600/30 via-fuchsia-500/20 to-transparent rounded-full blur-2xl pointer-events-none animate-pulse"></div>
-
-            <img src="{{ pet.get_image_url }}" 
-                 alt="{{ pet.name }}" 
-                 class="relative z-10 w-44 h-44 object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)] filter group-hover:scale-105 transition-transform duration-500">
-
-            <span class="absolute -bottom-1 z-20 bg-gradient-to-r from-vip-gold via-yellow-300 to-amber-500 text-black text-[11px] font-black px-3.5 py-0.5 rounded-full shadow-[0_0_12px_rgba(212,175,55,0.7)] font-mono">
-                LVL {{ pet.level }}
+        <!-- Insignia de Fase Evolutiva -->
+        <div class="flex items-center gap-2 mb-1">
+            <span id="pet-stage-badge" class="text-[9.5px] font-mono font-bold uppercase tracking-widest bg-amber-950/80 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 rounded-full shadow">
+                Fase {{ pet.evolution_stage_number }}/3: {{ pet.stage_info.title }}
             </span>
         </div>
 
-        <h3 class="font-serif text-2xl font-black text-white mt-2">{{ pet.name }}</h3>
-        <span class="text-xs text-purple-300 uppercase tracking-widest font-semibold">{{ pet.get_species_display }}</span>
+        <!-- Pedestal & Avatar Táctil con Partículas -->
+        <div onclick="triggerPetTouch(event)" 
+             class="relative w-44 h-44 my-1 flex items-center justify-center group cursor-pointer select-none active:scale-95 transition-transform"
+             title="Toca para acariciar a tu compañero">
+            <div class="absolute inset-0 bg-gradient-to-t from-purple-600/30 via-fuchsia-500/20 to-transparent rounded-full blur-2xl pointer-events-none animate-pulse"></div>
+
+            <img src="{{ pet.get_image_url }}" 
+                 alt="{{ pet.evolved_name }}" 
+                 id="pet-avatar-img"
+                 class="relative z-10 w-40 h-40 object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)] filter group-hover:scale-105 transition-transform duration-500">
+
+            <span class="absolute -bottom-1 z-20 bg-gradient-to-r from-vip-gold via-yellow-300 to-amber-500 text-black text-[11px] font-black px-3.5 py-0.5 rounded-full shadow-[0_0_12px_rgba(212,175,55,0.7)] font-mono">
+                LVL <span id="pet-level-badge">{{ pet.level }}</span>
+            </span>
+        </div>
+
+        <h3 class="font-serif text-xl font-black text-white mt-1">
+            <span id="pet-custom-name">{{ pet.name }}</span>
+            <span id="pet-evolved-name" class="text-xs text-amber-400/80 font-normal ml-1">({{ pet.evolved_name }})</span>
+        </h3>
+        <span class="text-xs text-purple-300 uppercase tracking-widest font-semibold">{{ pet.stage_info.title }}</span>
         
-        <!-- Insignia del Buff Activo -->
-        <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 border border-vip-gold/30 text-[10px] text-yellow-300 font-bold">
-            <span>✨</span> {{ pet.get_buff_description }}
+        <!-- Buff Activo Dinámico -->
+        <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 border border-vip-gold/30 text-[10px] text-yellow-300 font-bold shadow-inner">
+            <span>✨</span> <span id="pet-buff-text">{{ pet.get_buff_description }}</span>
         </div>
 
-        <!-- BARRAS DE ESTADO (VITALIDAD, FELICIDAD Y EXPERIENCIA) -->
-        <div class="w-full flex flex-col gap-2.5 my-4 bg-black/50 p-4 rounded-2xl border border-vip-gold/20">
-            <!-- Energía -->
-            <div class="flex flex-col gap-1">
-                <div class="flex justify-between text-[11px] font-bold">
-                    <span class="text-yellow-400 flex items-center gap-1">⚡ Vitalidad</span>
-                    <span class="font-mono text-white">{{ pet.energy }}%</span>
+        <!-- Indicador de Próxima Evolución -->
+        <div id="next-evolution-hint" class="mt-2 text-[10px] text-stone-400 bg-black/50 px-3 py-0.5 rounded-full border border-white/10 font-mono">
+            {% if pet.level < 10 %}
+                Siguiente Evolución a <strong class="text-amber-400">Nivel 10</strong>
+            {% elif pet.level < 25 %}
+                Siguiente Evolución a <strong class="text-amber-400">Nivel 25</strong>
+            {% else %}
+                <span class="text-yellow-400 font-bold">👑 Forma Apex Soberana Alcanzada</span>
+            {% endif %}
+        </div>
+
+        <!-- 3 BARRAS DE ESTADO: VITALIDAD, VÍNCULO Y PROGRESIÓN -->
+        <div class="w-full flex flex-col gap-2.5 my-3 bg-black/50 p-3.5 rounded-2xl border border-vip-gold/20">
+            <!-- 1. Energía / Saciedad -->
+            <div class="flex flex-col gap-1 text-left">
+                <div class="flex justify-between text-[10px] font-bold">
+                    <span class="text-yellow-400 flex items-center gap-1">⚡ Vitalidad / Energía</span>
+                    <span class="font-mono text-white" id="pet-energy-text">{{ pet.energy }}%</span>
                 </div>
-                <div class="w-full bg-black h-2.5 rounded-full overflow-hidden border border-yellow-500/20 p-0.5">
-                    <div class="bg-gradient-to-r from-yellow-600 to-yellow-300 h-full rounded-full transition-all duration-500" style="width: {{ pet.energy }}%;"></div>
+                <div class="w-full bg-black h-2 rounded-full overflow-hidden border border-yellow-500/20 p-0.5">
+                    <div id="pet-energy-bar" class="bg-gradient-to-r from-yellow-600 to-yellow-300 h-full rounded-full transition-all duration-500" style="width: {{ pet.energy }}%;"></div>
                 </div>
             </div>
 
-            <!-- Felicidad / Vínculo -->
-            <div class="flex flex-col gap-1">
-                <div class="flex justify-between text-[11px] font-bold">
-                    <span class="text-pink-400 flex items-center gap-1">💖 Vínculo Afectivo</span>
-                    <span class="font-mono text-white">{{ pet.happiness|default:80 }}%</span>
+            <!-- 2. Vínculo / Felicidad -->
+            <div class="flex flex-col gap-1 text-left">
+                <div class="flex justify-between text-[10px] font-bold">
+                    <span class="text-pink-400 flex items-center gap-1">
+                        💖 Vínculo: <span id="pet-mood-badge" class="text-pink-200 font-normal">
+                            {% if pet.happiness >= 80 %}🥰 Devoto & Radiante{% elif pet.happiness >= 50 %}😊 Alegre{% elif pet.happiness >= 25 %}🥱 Cansado{% else %}🥺 Solitario{% endif %}
+                        </span>
+                    </span>
+                    <span class="font-mono text-white" id="pet-happiness-text">{{ pet.happiness }}%</span>
                 </div>
-                <div class="w-full bg-black h-2.5 rounded-full overflow-hidden border border-pink-500/20 p-0.5">
-                    <div class="bg-gradient-to-r from-pink-600 to-rose-400 h-full rounded-full transition-all duration-500" style="width: {{ pet.happiness|default:80 }}%;"></div>
+                <div class="w-full bg-black h-2 rounded-full overflow-hidden border border-pink-500/20 p-0.5">
+                    <div id="pet-happiness-bar" class="bg-gradient-to-r from-pink-600 via-rose-400 to-fuchsia-300 h-full rounded-full transition-all duration-500" style="width: {{ pet.happiness }}%;"></div>
                 </div>
             </div>
 
-            <!-- Experiencia XP -->
-            <div class="flex flex-col gap-1">
-                <div class="flex justify-between text-[11px] font-bold">
-                    <span class="text-purple-400 flex items-center gap-1">✨ Experiencia</span>
-                    <span class="font-mono text-white">{{ pet.xp }} / {{ pet.xp_to_next_level }} XP</span>
+            <!-- 3. Experiencia XP -->
+            <div class="flex flex-col gap-1 text-left">
+                <div class="flex justify-between text-[10px] font-bold">
+                    <span class="text-purple-400 flex items-center gap-1">✨ Progresión Espiritual</span>
+                    <span class="font-mono text-white" id="pet-xp-text">{{ pet.xp }} / {{ pet.xp_to_next_level }} XP</span>
                 </div>
-                <div class="w-full bg-black h-2.5 rounded-full overflow-hidden border border-purple-500/20 p-0.5">
-                    <div class="bg-gradient-to-r from-purple-800 to-fuchsia-400 h-full rounded-full transition-all duration-500" style="width: {{ pet.xp_percentage }}%;"></div>
+                <div class="w-full bg-black h-2 rounded-full overflow-hidden border border-purple-500/20 p-0.5">
+                    <div id="pet-xp-bar" class="bg-gradient-to-r from-purple-800 to-fuchsia-400 h-full rounded-full transition-all duration-500" style="width: {{ pet.xp_percentage }}%;"></div>
                 </div>
             </div>
         </div>
 
-        <!-- BOTONES DE INTERACCIÓN BALANCEADOS -->
-        <div class="grid grid-cols-3 gap-2 w-full mt-2">
-            
-            <!-- 1. Alimentar (15 🪙) -->
-            <form action="{% url 'pets:interact' %}" method="POST" class="m-0">
-                {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <input type="hidden" name="action" value="feed">
-                <button type="submit" 
-                        class="w-full btn-gold py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider {% if pet.energy >= 100 %}opacity-60 cursor-not-allowed{% endif %}">
-                    <span class="text-sm mb-0.5">🍖</span>
-                    <span>Alimentar</span>
-                    <span class="text-[8px] font-mono opacity-80">
-                        {% if pet.energy >= 100 %}Lleno{% else %}-15 🪙{% endif %}
-                    </span>
-                </button>
-            </form>
+        <!-- BOTONES RÁPIDOS 100% AJAX -->
+        <div class="grid grid-cols-2 gap-2.5 w-full">
+            <button type="button" onclick="ajaxInteractPet('feed')" id="btn-feed-pet"
+                    class="btn-gold py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                <span>🍖</span> <span>Alimentar (-15🪙)</span>
+            </button>
 
-            <!-- 2. Acariciar (Cooldown de 30 min) -->
-            <form action="{% url 'pets:interact' %}" method="POST" class="m-0">
-                {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <input type="hidden" name="action" value="pet">
-                <button type="submit" 
-                        class="w-full py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider transition-all shadow-md
-                        {% if pet.can_be_petted %}
-                            bg-purple-950/80 border border-purple-500/70 text-purple-200 hover:bg-purple-900 active:scale-95
-                        {% else %}
-                            bg-black/60 border border-neutral-800 text-stone-500 opacity-60
-                        {% endif %}">
-                    <span class="text-sm mb-0.5">💖</span>
-                    <span>Acariciar</span>
-                    <span class="text-[8px] font-mono">
-                        {% if pet.can_be_petted %}+15 XP{% else %}{{ pet.minutes_until_next_pet }}m esp.{% endif %}
-                    </span>
-                </button>
-            </form>
-
-            <!-- 3. Expedición (Cooldown de 90 min) -->
-            <form action="{% url 'pets:expedition' %}" method="POST" class="m-0">
-                {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <button type="submit" 
-                        class="w-full py-2.5 rounded-xl flex flex-col items-center justify-center text-[10px] font-black uppercase tracking-wider transition-all shadow-md
-                        {% if pet.can_go_expedition and pet.energy >= 25 %}
-                            bg-emerald-950/80 border border-emerald-500/70 text-emerald-200 hover:bg-emerald-900 active:scale-95
-                        {% else %}
-                            bg-black/60 border border-neutral-800 text-stone-500 opacity-60
-                        {% endif %}">
-                    <span class="text-sm mb-0.5">🌲</span>
-                    <span>Explorar</span>
-                    <span class="text-[8px] font-mono">
-                        {% if pet.can_go_expedition %}Botín Oro{% else %}{{ pet.minutes_until_next_expedition }}m esp.{% endif %}
-                    </span>
-                </button>
-            </form>
-
-        </div>
-
-        <!-- BOTÓN DE TRANSMUTACIÓN / CAMBIO DE ESPECIE -->
-        <button type="button" onclick="toggleTransmuteModal()" 
-                class="mt-4 text-[11px] text-vip-text/50 hover:text-vip-gold uppercase tracking-wider underline">
-            🔮 Ritual de Transmutación (300 🪙)
-        </button>
-
-        <!-- MODAL DESPLEGABLE DE TRANSMUTACIÓN -->
-        <div id="transmute-modal" class="hidden mt-4 w-full bg-black/85 border border-purple-500/50 p-4 rounded-2xl text-left">
-            <h4 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider text-center mb-1">
-                Transmutar Esencia (300 🪙)
-            </h4>
-            <p class="text-[10px] text-vip-text/60 text-center mb-3">
-                Cambia la especie y el nombre de tu compañero espiritual.
-            </p>
-
-            <form action="{% url 'pets:change_pet' %}" method="POST" class="flex flex-col gap-2.5">
-                {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                
-                <div>
-                    <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1">Nueva Especie</label>
-                    <select name="species" class="w-full bg-black/70 border border-vip-gold/40 rounded-xl p-3 text-xs text-white">
-                        <option value="fox">🦊 Zorro Kitsune Dorado (Astucia & Carisma)</option>
-                        <option value="panther">🐆 Pantera de Ébano (Misterio & Sigilo)</option>
-                        <option value="raven">🦅 Cuervo de Medianoche (Augurio & Fortuna)</option>
-                        <option value="viper">🐍 Víbora de Esmeralda (Sensualidad & Peligro)</option>
-                        <option value="wolf">🐺 Lobo Espectral de Plata (Lealtad & Fuerza)</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1">Nuevo Nombre</label>
-                    <input type="text" name="new_name" required placeholder="Nombre de tu mascota..." 
-                           class="w-full bg-vip-panel border border-vip-gold/30 rounded-xl p-2 text-xs text-white">
-                </div>
-
-                <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase mt-1">
-                    Completar Ritual
-                </button>
-            </form>
+            <button type="button" onclick="ajaxInteractPet('pet')" id="btn-pet-action"
+                    class="bg-purple-950/80 border border-purple-500/70 text-purple-200 hover:bg-purple-900 py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                <span>💖</span> <span id="pet-action-label">{% if pet.can_be_petted %}Acariciar (+15XP){% else %}Descanso ({{ pet.minutes_until_next_pet }}m){% endif %}</span>
+            </button>
         </div>
 
     </div>
 
+    <!-- TERRITORIOS DE EXPEDICIÓN -->
+    <div class="flex flex-col gap-3">
+        <div class="flex justify-between items-center px-1">
+            <h3 class="font-serif text-sm font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
+                <span>🗺️</span> Territorios de Exploración
+            </h3>
+            <span class="text-[10px] text-stone-400">Botín de oro y Photocards</span>
+        </div>
+
+        <!-- Bosque de Jade -->
+        <div class="vip-panel p-3.5 rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-black to-[#0c0416] flex items-center justify-between gap-3 shadow hover:border-emerald-400 transition-all">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="w-12 h-12 rounded-xl bg-emerald-950 border border-emerald-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">🌲</div>
+                <div class="flex flex-col min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <h4 class="text-xs font-black text-white truncate">Bosque de Jade</h4>
+                        <span class="text-[9px] bg-emerald-900/60 text-emerald-300 font-bold px-1.5 py-0.2 rounded border border-emerald-700">Lvl 1+</span>
+                    </div>
+                    <span class="text-[10px] text-stone-300 mt-0.5">Oro garantizado + Probabilidad de Comida</span>
+                    <span class="text-[9px] text-stone-500 font-mono">-15% Energía • Cooldown 15m</span>
+                </div>
+            </div>
+            <button type="button" onclick="launchExpedition('forest', 'Bosque de Jade')" 
+                    class="bg-emerald-600 hover:bg-emerald-500 text-black font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex-shrink-0 shadow active:scale-95 transition-all">
+                Explorar
+            </button>
+        </div>
+
+        <!-- Criptas Olvidadas -->
+        <div class="vip-panel p-3.5 rounded-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/40 via-black to-[#0c0416] flex items-center justify-between gap-3 shadow hover:border-purple-400 transition-all">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="w-12 h-12 rounded-xl bg-purple-950 border border-purple-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">🏛️</div>
+                <div class="flex flex-col min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <h4 class="text-xs font-black text-white truncate">Criptas Olvidadas</h4>
+                        <span class="text-[9px] bg-purple-900/60 text-purple-300 font-bold px-1.5 py-0.2 rounded border border-purple-700">Lvl 2+</span>
+                    </div>
+                    <span class="text-[10px] text-yellow-300 font-bold mt-0.5">¡Puede desenterrar Photocards! 🎴</span>
+                    <span class="text-[9px] text-stone-500 font-mono">-25% Energía • Cooldown 45m</span>
+                </div>
+            </div>
+            <button type="button" onclick="launchExpedition('crypts', 'Criptas Olvidadas')" 
+                    class="btn-gold text-[10px] font-black uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex-shrink-0 shadow active:scale-95 transition-all">
+                Explorar
+            </button>
+        </div>
+
+        <!-- Caverna de Cristal -->
+        <div class="vip-panel p-3.5 rounded-2xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-black to-[#0c0416] flex items-center justify-between gap-3 shadow hover:border-yellow-400 transition-all">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="w-12 h-12 rounded-xl bg-amber-950 border border-amber-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">💎</div>
+                <div class="flex flex-col min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <h4 class="text-xs font-black text-white truncate">Caverna de Cristal</h4>
+                        <span class="text-[9px] bg-amber-900/60 text-amber-300 font-bold px-1.5 py-0.2 rounded border border-amber-700">Lvl 4+</span>
+                    </div>
+                    <span class="text-[10px] text-amber-300 font-bold mt-0.5">Cartas Épicas & Legendarias 👑</span>
+                    <span class="text-[9px] text-stone-500 font-mono">-40% Energía • Cooldown 90m</span>
+                </div>
+            </div>
+            <button type="button" onclick="launchExpedition('cavern', 'Caverna de Cristal')" 
+                    class="bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-black font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex-shrink-0 shadow active:scale-95 transition-all">
+                Explorar
+            </button>
+        </div>
+    </div>
+
+    <!-- TRANSMUTACIÓN (CATÁLOGO DE LAS 10 ESPECIES) -->
+    <div class="text-center pt-2">
+        <button type="button" onclick="toggleTransmuteModal()" 
+                class="text-[11px] text-stone-400 hover:text-vip-gold uppercase tracking-wider underline">
+            🔮 Ritual de Transmutación entre las 10 Especies (300 🪙)
+        </button>
+    </div>
+
+    <!-- MODAL DE TRANSMUTACIÓN CON LAS 10 ESPECIES -->
+    <div id="transmute-modal" class="hidden w-full bg-black/90 border border-purple-500/50 p-4 rounded-2xl text-left">
+        <h4 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider text-center mb-1">
+            Transmutar Esencia (300 🪙)
+        </h4>
+        <form action="{% url 'pets:change_pet' %}" method="POST" class="flex flex-col gap-2.5 mt-2">
+            {% csrf_token %}
+            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+            
+            <select name="species" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+                {% for key, val in all_species.items %}
+                    <option value="{{ key }}">{{ val.family_name }} ({{ val.element }})</option>
+                {% endfor %}
+            </select>
+
+            <input type="text" name="new_name" required placeholder="Nuevo nombre de tu mascota..." 
+                   class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+
+            <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase">
+                Completar Ritual
+            </button>
+        </form>
+    </div>
+
     {% else %}
-    <!-- SI AÚN NO TIENE MASCOTA: PANTALLA DE ADOPCIÓN -->
-    <div class="vip-panel p-6 text-center flex flex-col items-center">
+    <!-- PANTALLA DE ADOPCIÓN CON LAS 10 ESPECIES -->
+    <div class="vip-panel p-6 text-center flex flex-col items-center rounded-3xl">
         <span class="text-5xl my-2 animate-bounce">🥚</span>
         <h3 class="font-serif text-xl font-black text-white mt-1">Invoca a tu Compañero</h3>
         <p class="text-xs text-vip-text/60 mt-1 max-w-xs">
-            Cada noble del Reino tiene derecho a adoptar una mascota espiritual gratuita para que lo acompañe en su aventura.
+            Cada noble del Reino tiene derecho a adoptar una de las 10 criaturas místicas para explorar el mundo y evolucionar.
         </p>
 
         <form action="{% url 'pets:adopt' %}" method="POST" class="w-full flex flex-col gap-3 mt-5">
             {% csrf_token %}
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
-
             <div>
-                <label class="block text-xs text-vip-gold font-bold uppercase mb-1">Especie Deseada</label>
-                <select name="species" class="w-full bg-vip-panel border border-vip-gold/30 rounded-xl p-2 text-xs text-white">
-                    <option value="fox">🦊 Zorro Kitsune Dorado</option>
-                    <option value="panther">🐆 Pantera de Ébano</option>
-                    <option value="raven">🦅 Cuervo de Medianoche</option>
-                    <option value="viper">🐍 Víbora de Esmeralda</option>
-                    <option value="wolf">🐺 Lobo Espectral de Plata</option>
+                <label class="block text-xs text-vip-gold font-bold uppercase mb-1">Especie Deseada (10 Disponibles)</label>
+                <select name="species" class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
+                    {% for key, val in all_species.items %}
+                        <option value="{{ key }}">{{ val.family_name }} — {{ val.stages.0.title }}</option>
+                    {% endfor %}
                 </select>
             </div>
-
             <div>
                 <label class="block text-xs text-vip-gold font-bold uppercase mb-1">Nombre</label>
                 <input type="text" name="name" required placeholder="Ej: Luna, Kitsu, Nero..." 
                        class="w-full bg-black/70 border border-vip-gold/40 rounded-xl p-3 text-xs text-white text-center">
             </div>
-
             <button type="submit" class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider mt-2">
                 ✨ Despertar Mascota
             </button>
@@ -10440,10 +11427,332 @@ ARCHIVO: .\templates\pets\sanctuary.html
 
 </div>
 
+<!-- 🌟 MODAL CINEMATOGRÁFICO DE EVOLUCIÓN (¡EVOLUCIÓN CONSUMADA!) -->
+<div id="evolution-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 select-none">
+    <div class="w-full max-w-sm bg-gradient-to-b from-[#2a0e4a] via-[#10041f] to-black border-2 border-yellow-400 rounded-3xl p-6 shadow-[0_0_60px_rgba(234,179,8,0.5)] flex flex-col items-center text-center relative overflow-hidden">
+        
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(234,179,8,0.2)_0%,transparent_70%)] pointer-events-none"></div>
+
+        <span class="text-[10px] font-mono font-bold uppercase tracking-widest text-amber-300 bg-black/70 px-3 py-0.5 rounded-full border border-yellow-500/50 mb-2">
+            ¡Evolución Consumada!
+        </span>
+
+        <h3 id="evo-modal-name" class="font-serif text-2xl font-black text-gold-gradient uppercase tracking-widest mb-1">
+            Nombre Forma
+        </h3>
+        <p id="evo-modal-title" class="text-xs text-purple-200 mb-4">Título de la Forma</p>
+
+        <!-- Avatar con Haz de Luz -->
+        <div class="relative w-44 h-44 my-2 flex items-center justify-center animate-bounce">
+            <div class="absolute inset-0 bg-yellow-400/30 rounded-full blur-2xl animate-pulse"></div>
+            <img id="evo-modal-img" src="" class="w-40 h-40 rounded-full object-cover border-4 border-yellow-400 shadow-[0_0_35px_rgba(234,179,8,0.8)] relative z-10">
+        </div>
+
+        <div class="p-3 bg-black/70 rounded-2xl border border-yellow-500/40 w-full mt-3">
+            <span class="text-[10px] text-amber-300 font-bold uppercase block mb-1">Nuevo Buff Despertado</span>
+            <p id="evo-modal-buff" class="text-xs text-white font-medium">Descripción del Buff</p>
+        </div>
+
+        <button type="button" onclick="closeEvolutionModal()" 
+                class="w-full mt-4 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-600 text-stone-950 font-black text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.6)] active:scale-95 transition-all">
+            Aceptar Bendición Soberana
+        </button>
+    </div>
+</div>
+
+<!-- MODAL DEL COFRE DEL TESORO (EXPEDICIÓN) -->
+<div id="expedition-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-4 select-none">
+    <div class="w-full max-w-sm bg-gradient-to-b from-[#1c0c2e] via-[#0d0417] to-black border-2 border-vip-gold/60 rounded-3xl p-6 shadow-[0_0_50px_rgba(0,0,0,0.95)] flex flex-col items-center text-center relative overflow-hidden">
+        <h3 id="exp-modal-title" class="font-serif text-base font-black text-gold-gradient uppercase tracking-widest mb-1">Explorando Territorio</h3>
+        <p class="text-xs text-stone-400 mb-4" id="exp-modal-subtitle">Tu mascota se adentra en las sombras...</p>
+
+        <div id="chest-box" class="relative my-3 cursor-pointer group" onclick="openFoundChest()">
+            <div class="w-24 h-24 rounded-3xl bg-amber-950/60 border-2 border-yellow-400/80 flex items-center justify-center text-5xl shadow-[0_0_30px_rgba(234,179,8,0.5)] animate-bounce">📦</div>
+            <span class="text-[11px] text-yellow-300 font-bold uppercase tracking-wider block mt-2 animate-pulse">¡Toca el Cofre para Abrir!</span>
+        </div>
+
+        <div id="loot-reveal" class="hidden w-full flex flex-col gap-3">
+            <div class="bg-black/70 border border-yellow-500/40 rounded-2xl p-3 flex justify-around items-center">
+                <div>
+                    <span class="text-[9px] uppercase font-bold text-stone-400 block">Oro Rescatado</span>
+                    <span id="loot-gold" class="font-mono text-lg font-black text-amber-300"></span> 🪙
+                </div>
+                <div class="border-l border-white/10 pl-3">
+                    <span class="text-[9px] uppercase font-bold text-stone-400 block">XP Mascota</span>
+                    <span id="loot-xp" class="font-mono text-lg font-black text-purple-300"></span> ✨
+                </div>
+            </div>
+
+            <div id="loot-food" class="hidden p-2 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-200 text-xs font-bold">
+                🍖 ¡Encontró comida en el camino! (+20% Energía recuperada)
+            </div>
+
+            <div id="loot-card-box" class="hidden flex flex-col items-center bg-purple-950/40 border-2 rounded-2xl p-3 shadow-xl">
+                <span class="text-[9px] uppercase font-black px-2.5 py-0.5 rounded-full border mb-1.5" id="loot-card-rarity"></span>
+                <img id="loot-card-img" src="" class="w-24 h-34 object-cover rounded-xl shadow border mb-1">
+                <h4 class="text-xs font-black text-white" id="loot-card-name"></h4>
+                <span class="text-[10px] text-yellow-300 font-bold" id="loot-card-idol"></span>
+                <span class="text-[9px] text-emerald-400 font-mono mt-1 font-bold">¡Guardada en tu Álbum!</span>
+            </div>
+
+            <button type="button" onclick="closeExpeditionModal()" 
+                    class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
+                Guardar Recompensas
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    let sanctuaryAudioCtx = null;
+
+    function getSanctuaryAudio() {
+        if (!sanctuaryAudioCtx) sanctuaryAudioCtx = new AudioContextClass();
+        if (sanctuaryAudioCtx.state === 'suspended') sanctuaryAudioCtx.resume();
+        return sanctuaryAudioCtx;
+    }
+
+    function playSoundEffect(type) {
+        try {
+            const ctx = getSanctuaryAudio();
+            if (type === 'feed') {
+                [330, 440, 550].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.07);
+                    gain.gain.setValueAtTime(0.2, ctx.currentTime + idx * 0.07);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.07 + 0.15);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + idx * 0.07);
+                    osc.stop(ctx.currentTime + idx * 0.07 + 0.15);
+                });
+            } else if (type === 'pet') {
+                [659, 880, 987].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
+                    gain.gain.setValueAtTime(0.25, ctx.currentTime + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.08 + 0.25);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + idx * 0.08);
+                    osc.stop(ctx.currentTime + idx * 0.08 + 0.25);
+                });
+            } else if (type === 'evolve') {
+                [523, 659, 783, 1046, 1318].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.1);
+                    gain.gain.setValueAtTime(0.35, ctx.currentTime + idx * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.1 + 0.5);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + idx * 0.1);
+                    osc.stop(ctx.currentTime + idx * 0.1 + 0.5);
+                });
+            }
+        } catch(e) {}
+    }
+
+    function triggerPetTouch(e) {
+        spawnFloatingHeart(e.clientX, e.clientY);
+        ajaxInteractPet('pet');
+    }
+
+    function spawnFloatingHeart(x, y) {
+        const heart = document.createElement('div');
+        heart.innerText = '💖 +15 XP';
+        heart.className = 'fixed pointer-events-none z-50 text-xs font-black text-pink-300 drop-shadow-[0_0_8px_rgba(244,114,182,0.9)]';
+        heart.style.left = `${(x || window.innerWidth / 2) - 25}px`;
+        heart.style.top = `${(y || window.innerHeight / 2) - 20}px`;
+        heart.style.transition = 'all 1s cubic-bezier(0.1, 0.8, 0.2, 1)';
+        document.body.appendChild(heart);
+
+        setTimeout(() => {
+            heart.style.transform = 'translateY(-50px) scale(1.15)';
+            heart.style.opacity = '0';
+        }, 20);
+
+        setTimeout(() => { heart.remove(); }, 1050);
+    }
+
+    async function ajaxInteractPet(action) {
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('action', action);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            const resp = await fetch("{% url 'pets:interact' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            const toastBox = document.getElementById('pet-toast-box');
+
+            if (!data.success) {
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning'); } catch(e) {}
+                toastBox.innerHTML = `
+                    <div class="p-3 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-bold text-center shadow-lg">
+                        ${data.error}
+                    </div>
+                `;
+                setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
+                return;
+            }
+
+            playSoundEffect(action);
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+
+            document.getElementById('pet-energy-text').innerText = `${data.pet_energy}%`;
+            document.getElementById('pet-energy-bar').style.width = `${data.pet_energy}%`;
+
+            document.getElementById('pet-happiness-text').innerText = `${data.pet_happiness}%`;
+            document.getElementById('pet-happiness-bar').style.width = `${data.pet_happiness}%`;
+
+            const moodBadge = document.getElementById('pet-mood-badge');
+            if (data.pet_happiness >= 80) moodBadge.innerText = '🥰 Devoto & Radiante';
+            else if (data.pet_happiness >= 50) moodBadge.innerText = '😊 Alegre';
+            else if (data.pet_happiness >= 25) moodBadge.innerText = '🥱 Cansado';
+            else moodBadge.innerText = '🥺 Solitario';
+
+            document.getElementById('pet-xp-text').innerText = `${data.pet_xp} / ${data.pet_xp_needed} XP`;
+            document.getElementById('pet-xp-bar').style.width = `${data.pet_xp_percent}%`;
+            document.getElementById('pet-level-badge').innerText = data.pet_level;
+
+            if (data.cooldown_minutes) {
+                document.getElementById('pet-action-label').innerText = `Descanso (${data.cooldown_minutes}m)`;
+            }
+
+            if (data.evolved) {
+                triggerEvolutionPopup(data);
+            }
+
+            toastBox.innerHTML = `
+                <div class="p-3 rounded-2xl bg-emerald-950/90 border border-emerald-500 text-emerald-200 text-xs font-bold text-center shadow-lg">
+                    ${data.message}
+                </div>
+            `;
+            setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
+
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    function triggerEvolutionPopup(data) {
+        playSoundEffect('evolve');
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
+
+        document.getElementById('evo-modal-name').innerText = data.new_name;
+        document.getElementById('evo-modal-title').innerText = data.new_title;
+        document.getElementById('evo-modal-buff').innerText = data.new_buff;
+        document.getElementById('evo-modal-img').src = data.new_sprite;
+
+        document.getElementById('pet-avatar-img').src = data.new_sprite;
+        document.getElementById('pet-evolved-name').innerText = `(${data.new_name})`;
+        document.getElementById('pet-buff-text').innerText = data.new_buff;
+        document.getElementById('pet-stage-badge').innerText = `Fase ${data.new_stage}/3: ${data.new_title}`;
+
+        document.getElementById('evolution-modal').classList.remove('hidden');
+    }
+
+    function closeEvolutionModal() {
+        document.getElementById('evolution-modal').classList.add('hidden');
+    }
+
+    let currentLootData = null;
+
+    async function launchExpedition(zoneKey, zoneTitle) {
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('zone', zoneKey);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            const resp = await fetch("{% url 'pets:expedition' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            if (!data.success) {
+                alert(data.error);
+                return;
+            }
+
+            currentLootData = data;
+            document.getElementById('exp-modal-title').innerText = `Explorando ${zoneTitle}`;
+            document.getElementById('exp-modal-subtitle').innerText = `Tu mascota regresó de ${zoneTitle} con un cofre antiguo:`;
+            document.getElementById('chest-box').classList.remove('hidden');
+            document.getElementById('loot-reveal').classList.add('hidden');
+            document.getElementById('expedition-modal').classList.remove('hidden');
+
+            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
+        } catch(e) {
+            alert("Error al iniciar expedición.");
+        }
+    }
+
+    function openFoundChest() {
+        if (!currentLootData) return;
+        playSoundEffect('pet');
+        try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+
+        document.getElementById('chest-box').classList.add('hidden');
+        document.getElementById('loot-reveal').classList.remove('hidden');
+
+        document.getElementById('loot-gold').innerText = `+${currentLootData.gold}`;
+        document.getElementById('loot-xp').innerText = `+${currentLootData.xp}`;
+
+        const foodElem = document.getElementById('loot-food');
+        if (currentLootData.food_found) foodElem.classList.remove('hidden');
+        else foodElem.classList.add('hidden');
+
+        const cardBox = document.getElementById('loot-card-box');
+        if (currentLootData.card_dropped) {
+            const c = currentLootData.card_dropped;
+            cardBox.classList.remove('hidden');
+            cardBox.style.borderColor = c.color;
+            document.getElementById('loot-card-img').src = c.image_url;
+            document.getElementById('loot-card-name').innerText = c.name;
+            document.getElementById('loot-card-idol').innerText = `Idol: ${c.idol_name}`;
+            
+            const badge = document.getElementById('loot-card-rarity');
+            badge.innerText = c.rarity_display;
+            badge.style.borderColor = c.color;
+            badge.style.color = c.color;
+        } else {
+            cardBox.classList.add('hidden');
+        }
+
+        document.getElementById('pet-energy-text').innerText = `${currentLootData.pet_energy}%`;
+        document.getElementById('pet-energy-bar').style.width = `${currentLootData.pet_energy}%`;
+        document.getElementById('pet-level-badge').innerText = currentLootData.pet_level;
+
+        if (currentLootData.evolved) {
+            triggerEvolutionPopup(currentLootData);
+        }
+    }
+
+    function closeExpeditionModal() {
+        document.getElementById('expedition-modal').classList.add('hidden');
+    }
+
     function toggleTransmuteModal() {
-        const modal = document.getElementById('transmute-modal');
-        modal.classList.toggle('hidden');
+        document.getElementById('transmute-modal').classList.toggle('hidden');
     }
 </script>
 {% endblock %}

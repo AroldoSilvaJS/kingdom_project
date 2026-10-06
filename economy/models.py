@@ -35,16 +35,21 @@ class Wallet(models.Model):
             return True
         return False
 
-    # --- LÓGICA DE COOLDOWN DINÁMICA (BUFF DE MASCOTA: ZORRO) ---
+    # --- LÓGICA DE COOLDOWN DINÁMICA (BUFF DE MASCOTA: KITSUNE EN SUS 3 FASES) ---
     def get_cooldown_hours(self):
         """
-        Si el usuario posee un Zorro Kitsune en su Santuario,
-        el bono diario se recarga en 22 horas en vez de 24.
+        Calcula el cooldown dinámico del bono diario:
+        Kitsune Etapa 1: 22h | Etapa 2: 20h | Etapa 3: 18h | Por defecto: 24h
         """
         try:
             from pets.models import Pet
             pet = Pet.objects.filter(telegram_user_id=self.telegram_user_id).first()
             if pet and pet.species == 'fox':
+                stage = pet.evolution_stage_number
+                if stage >= 3:
+                    return 18
+                elif stage == 2:
+                    return 20
                 return 22
         except Exception:
             pass

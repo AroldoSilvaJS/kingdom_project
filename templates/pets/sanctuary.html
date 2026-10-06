@@ -1,3 +1,4 @@
+<!-- templates/pets/sanctuary.html -->
 {% extends 'base.html' %}
 
 {% block content %}
@@ -14,25 +15,29 @@
         </span>
     </div>
 
-    <!-- MENSAJES -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="p-3.5 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% elif message.tags == 'info' %}bg-blue-950/60 border-blue-500/60 text-blue-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
+    <!-- MENSAJES FLASH DINÁMICOS -->
+    <div id="pet-toast-box" class="w-full"></div>
 
     {% if pet %}
-    <!-- TARJETA DEL ALTAR DE LA MASCOTA -->
+    <!-- ALTAR MÍSTICO DE LA MASCOTA -->
     <div class="vip-panel p-6 flex flex-col items-center text-center relative overflow-hidden border border-vip-gold/40 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1a082c] via-[#0b0314] to-black">
         
-        <!-- Ilustración de la Mascota con Pedestal Místico -->
-        <div class="relative w-44 h-44 my-1 flex items-center justify-center group">
+        <!-- Insignia de Fase Evolutiva -->
+        <div class="flex items-center gap-2 mb-1">
+            <span id="pet-stage-badge" class="text-[9.5px] font-mono font-bold uppercase tracking-widest bg-amber-950/80 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 rounded-full shadow">
+                Fase {{ pet.evolution_stage_number }}/3: {{ pet.stage_info.title }}
+            </span>
+        </div>
+
+        <!-- Pedestal & Avatar Táctil con Partículas -->
+        <div onclick="triggerPetTouch(event)" 
+             class="relative w-44 h-44 my-1 flex items-center justify-center group cursor-pointer select-none active:scale-95 transition-transform"
+             title="Toca para acariciar a tu compañero">
             <div class="absolute inset-0 bg-gradient-to-t from-purple-600/30 via-fuchsia-500/20 to-transparent rounded-full blur-2xl pointer-events-none animate-pulse"></div>
 
             <img src="{{ pet.get_image_url }}" 
-                 alt="{{ pet.name }}" 
+                 alt="{{ pet.evolved_name }}" 
+                 id="pet-avatar-img"
                  class="relative z-10 w-40 h-40 object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.85)] filter group-hover:scale-105 transition-transform duration-500">
 
             <span class="absolute -bottom-1 z-20 bg-gradient-to-r from-vip-gold via-yellow-300 to-amber-500 text-black text-[11px] font-black px-3.5 py-0.5 rounded-full shadow-[0_0_12px_rgba(212,175,55,0.7)] font-mono">
@@ -40,20 +45,34 @@
             </span>
         </div>
 
-        <h3 class="font-serif text-xl font-black text-white mt-1">{{ pet.name }}</h3>
-        <span class="text-xs text-purple-300 uppercase tracking-widest font-semibold">{{ pet.get_species_display }}</span>
+        <h3 class="font-serif text-xl font-black text-white mt-1">
+            <span id="pet-custom-name">{{ pet.name }}</span>
+            <span id="pet-evolved-name" class="text-xs text-amber-400/80 font-normal ml-1">({{ pet.evolved_name }})</span>
+        </h3>
+        <span class="text-xs text-purple-300 uppercase tracking-widest font-semibold">{{ pet.stage_info.title }}</span>
         
-        <!-- Insignia del Buff Activo -->
-        <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 border border-vip-gold/30 text-[10px] text-yellow-300 font-bold">
-            <span>✨</span> {{ pet.get_buff_description }}
+        <!-- Buff Activo Dinámico -->
+        <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 border border-vip-gold/30 text-[10px] text-yellow-300 font-bold shadow-inner">
+            <span>✨</span> <span id="pet-buff-text">{{ pet.get_buff_description }}</span>
         </div>
 
-        <!-- BARRAS DE ESTADO (VITALIDAD Y EXP) -->
-        <div class="w-full flex flex-col gap-2 my-3 bg-black/50 p-3.5 rounded-2xl border border-vip-gold/20">
-            <!-- Energía -->
-            <div class="flex flex-col gap-1">
+        <!-- Indicador de Próxima Evolución -->
+        <div id="next-evolution-hint" class="mt-2 text-[10px] text-stone-400 bg-black/50 px-3 py-0.5 rounded-full border border-white/10 font-mono">
+            {% if pet.level < 10 %}
+                Siguiente Evolución a <strong class="text-amber-400">Nivel 10</strong>
+            {% elif pet.level < 25 %}
+                Siguiente Evolución a <strong class="text-amber-400">Nivel 25</strong>
+            {% else %}
+                <span class="text-yellow-400 font-bold">👑 Forma Apex Soberana Alcanzada</span>
+            {% endif %}
+        </div>
+
+        <!-- 3 BARRAS DE ESTADO: VITALIDAD, VÍNCULO Y PROGRESIÓN -->
+        <div class="w-full flex flex-col gap-2.5 my-3 bg-black/50 p-3.5 rounded-2xl border border-vip-gold/20">
+            <!-- 1. Energía / Saciedad -->
+            <div class="flex flex-col gap-1 text-left">
                 <div class="flex justify-between text-[10px] font-bold">
-                    <span class="text-yellow-400 flex items-center gap-1">⚡ Vitalidad</span>
+                    <span class="text-yellow-400 flex items-center gap-1">⚡ Vitalidad / Energía</span>
                     <span class="font-mono text-white" id="pet-energy-text">{{ pet.energy }}%</span>
                 </div>
                 <div class="w-full bg-black h-2 rounded-full overflow-hidden border border-yellow-500/20 p-0.5">
@@ -61,44 +80,49 @@
                 </div>
             </div>
 
-            <!-- Experiencia XP -->
-            <div class="flex flex-col gap-1">
+            <!-- 2. Vínculo / Felicidad -->
+            <div class="flex flex-col gap-1 text-left">
                 <div class="flex justify-between text-[10px] font-bold">
-                    <span class="text-purple-400 flex items-center gap-1">✨ Experiencia</span>
-                    <span class="font-mono text-white">{{ pet.xp }} / {{ pet.xp_to_next_level }} XP</span>
+                    <span class="text-pink-400 flex items-center gap-1">
+                        💖 Vínculo: <span id="pet-mood-badge" class="text-pink-200 font-normal">
+                            {% if pet.happiness >= 80 %}🥰 Devoto & Radiante{% elif pet.happiness >= 50 %}😊 Alegre{% elif pet.happiness >= 25 %}🥱 Cansado{% else %}🥺 Solitario{% endif %}
+                        </span>
+                    </span>
+                    <span class="font-mono text-white" id="pet-happiness-text">{{ pet.happiness }}%</span>
+                </div>
+                <div class="w-full bg-black h-2 rounded-full overflow-hidden border border-pink-500/20 p-0.5">
+                    <div id="pet-happiness-bar" class="bg-gradient-to-r from-pink-600 via-rose-400 to-fuchsia-300 h-full rounded-full transition-all duration-500" style="width: {{ pet.happiness }}%;"></div>
+                </div>
+            </div>
+
+            <!-- 3. Experiencia XP -->
+            <div class="flex flex-col gap-1 text-left">
+                <div class="flex justify-between text-[10px] font-bold">
+                    <span class="text-purple-400 flex items-center gap-1">✨ Progresión Espiritual</span>
+                    <span class="font-mono text-white" id="pet-xp-text">{{ pet.xp }} / {{ pet.xp_to_next_level }} XP</span>
                 </div>
                 <div class="w-full bg-black h-2 rounded-full overflow-hidden border border-purple-500/20 p-0.5">
-                    <div class="bg-gradient-to-r from-purple-800 to-fuchsia-400 h-full rounded-full transition-all duration-500" style="width: {{ pet.xp_percentage }}%;"></div>
+                    <div id="pet-xp-bar" class="bg-gradient-to-r from-purple-800 to-fuchsia-400 h-full rounded-full transition-all duration-500" style="width: {{ pet.xp_percentage }}%;"></div>
                 </div>
             </div>
         </div>
 
-        <!-- BOTONES RÁPIDOS DE CUIDADO -->
+        <!-- BOTONES RÁPIDOS 100% AJAX -->
         <div class="grid grid-cols-2 gap-2.5 w-full">
-            <form action="{% url 'pets:interact' %}" method="POST" class="m-0">
-                {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <input type="hidden" name="action" value="feed">
-                <button type="submit" 
-                        class="w-full btn-gold py-2 rounded-xl flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider shadow">
-                    <span>🍖</span> <span>Alimentar (-15🪙)</span>
-                </button>
-            </form>
+            <button type="button" onclick="ajaxInteractPet('feed')" id="btn-feed-pet"
+                    class="btn-gold py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                <span>🍖</span> <span>Alimentar (-15🪙)</span>
+            </button>
 
-            <form action="{% url 'pets:interact' %}" method="POST" class="m-0">
-                {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <input type="hidden" name="action" value="pet">
-                <button type="submit" 
-                        class="w-full bg-purple-950/80 border border-purple-500/70 text-purple-200 hover:bg-purple-900 py-2 rounded-xl flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider shadow">
-                    <span>💖</span> <span>Acariciar (+15XP)</span>
-                </button>
-            </form>
+            <button type="button" onclick="ajaxInteractPet('pet')" id="btn-pet-action"
+                    class="bg-purple-950/80 border border-purple-500/70 text-purple-200 hover:bg-purple-900 py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                <span>💖</span> <span id="pet-action-label">{% if pet.can_be_petted %}Acariciar (+15XP){% else %}Descanso ({{ pet.minutes_until_next_pet }}m){% endif %}</span>
+            </button>
         </div>
 
     </div>
 
-    <!-- 🗺️ SECCIÓN: EXPEDICIONES TERRITORIALES (NUEVO) -->
+    <!-- TERRITORIOS DE EXPEDICIÓN -->
     <div class="flex flex-col gap-3">
         <div class="flex justify-between items-center px-1">
             <h3 class="font-serif text-sm font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
@@ -107,12 +131,10 @@
             <span class="text-[10px] text-stone-400">Botín de oro y Photocards</span>
         </div>
 
-        <!-- ZONA 1: BOSQUE DE JADE -->
+        <!-- Bosque de Jade -->
         <div class="vip-panel p-3.5 rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-black to-[#0c0416] flex items-center justify-between gap-3 shadow hover:border-emerald-400 transition-all">
             <div class="flex items-center gap-3 min-w-0">
-                <div class="w-12 h-12 rounded-xl bg-emerald-950 border border-emerald-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">
-                    🌲
-                </div>
+                <div class="w-12 h-12 rounded-xl bg-emerald-950 border border-emerald-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">🌲</div>
                 <div class="flex flex-col min-w-0">
                     <div class="flex items-center gap-1.5">
                         <h4 class="text-xs font-black text-white truncate">Bosque de Jade</h4>
@@ -122,19 +144,16 @@
                     <span class="text-[9px] text-stone-500 font-mono">-15% Energía • Cooldown 15m</span>
                 </div>
             </div>
-
             <button type="button" onclick="launchExpedition('forest', 'Bosque de Jade')" 
                     class="bg-emerald-600 hover:bg-emerald-500 text-black font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex-shrink-0 shadow active:scale-95 transition-all">
                 Explorar
             </button>
         </div>
 
-        <!-- ZONA 2: CRIPTAS OLVIDADAS -->
+        <!-- Criptas Olvidadas -->
         <div class="vip-panel p-3.5 rounded-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/40 via-black to-[#0c0416] flex items-center justify-between gap-3 shadow hover:border-purple-400 transition-all">
             <div class="flex items-center gap-3 min-w-0">
-                <div class="w-12 h-12 rounded-xl bg-purple-950 border border-purple-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">
-                    🏛️
-                </div>
+                <div class="w-12 h-12 rounded-xl bg-purple-950 border border-purple-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">🏛️</div>
                 <div class="flex flex-col min-w-0">
                     <div class="flex items-center gap-1.5">
                         <h4 class="text-xs font-black text-white truncate">Criptas Olvidadas</h4>
@@ -144,19 +163,16 @@
                     <span class="text-[9px] text-stone-500 font-mono">-25% Energía • Cooldown 45m</span>
                 </div>
             </div>
-
             <button type="button" onclick="launchExpedition('crypts', 'Criptas Olvidadas')" 
                     class="btn-gold text-[10px] font-black uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex-shrink-0 shadow active:scale-95 transition-all">
                 Explorar
             </button>
         </div>
 
-        <!-- ZONA 3: CAVERNA ANCESTRAL DE CRISTAL -->
+        <!-- Caverna de Cristal -->
         <div class="vip-panel p-3.5 rounded-2xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 via-black to-[#0c0416] flex items-center justify-between gap-3 shadow hover:border-yellow-400 transition-all">
             <div class="flex items-center gap-3 min-w-0">
-                <div class="w-12 h-12 rounded-xl bg-amber-950 border border-amber-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">
-                    💎
-                </div>
+                <div class="w-12 h-12 rounded-xl bg-amber-950 border border-amber-500 flex items-center justify-center text-2xl flex-shrink-0 shadow">💎</div>
                 <div class="flex flex-col min-w-0">
                     <div class="flex items-center gap-1.5">
                         <h4 class="text-xs font-black text-white truncate">Caverna de Cristal</h4>
@@ -166,24 +182,22 @@
                     <span class="text-[9px] text-stone-500 font-mono">-40% Energía • Cooldown 90m</span>
                 </div>
             </div>
-
             <button type="button" onclick="launchExpedition('cavern', 'Caverna de Cristal')" 
                     class="bg-gradient-to-r from-amber-500 to-yellow-400 hover:brightness-110 text-black font-black text-[10px] uppercase tracking-wider px-3.5 py-2.5 rounded-xl flex-shrink-0 shadow active:scale-95 transition-all">
                 Explorar
             </button>
         </div>
-
     </div>
 
-    <!-- BOTÓN DE TRANSMUTACIÓN -->
+    <!-- TRANSMUTACIÓN (CATÁLOGO DE LAS 10 ESPECIES) -->
     <div class="text-center pt-2">
         <button type="button" onclick="toggleTransmuteModal()" 
                 class="text-[11px] text-stone-400 hover:text-vip-gold uppercase tracking-wider underline">
-            🔮 Ritual de Transmutación de Mascota (300 🪙)
+            🔮 Ritual de Transmutación entre las 10 Especies (300 🪙)
         </button>
     </div>
 
-    <!-- MODAL DESPLEGABLE DE TRANSMUTACIÓN -->
+    <!-- MODAL DE TRANSMUTACIÓN CON LAS 10 ESPECIES -->
     <div id="transmute-modal" class="hidden w-full bg-black/90 border border-purple-500/50 p-4 rounded-2xl text-left">
         <h4 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider text-center mb-1">
             Transmutar Esencia (300 🪙)
@@ -193,11 +207,9 @@
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
             
             <select name="species" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
-                <option value="fox">🦊 Zorro Kitsune Dorado (Bono 22h + Expedición Rápida)</option>
-                <option value="panther">🐆 Pantera de Ébano (+10% Oro en Casino)</option>
-                <option value="raven">🦅 Cuervo de Medianoche (Jackpots en Slots)</option>
-                <option value="viper">🐍 Víbora de Esmeralda (15% Descuento Fans)</option>
-                <option value="wolf">🐺 Lobo Espectral de Plata (Protección Blackjack)</option>
+                {% for key, val in all_species.items %}
+                    <option value="{{ key }}">{{ val.family_name }} ({{ val.element }})</option>
+                {% endfor %}
             </select>
 
             <input type="text" name="new_name" required placeholder="Nuevo nombre de tu mascota..." 
@@ -210,35 +222,30 @@
     </div>
 
     {% else %}
-    <!-- PANTALLA DE ADOPCIÓN -->
+    <!-- PANTALLA DE ADOPCIÓN CON LAS 10 ESPECIES -->
     <div class="vip-panel p-6 text-center flex flex-col items-center rounded-3xl">
         <span class="text-5xl my-2 animate-bounce">🥚</span>
         <h3 class="font-serif text-xl font-black text-white mt-1">Invoca a tu Compañero</h3>
         <p class="text-xs text-vip-text/60 mt-1 max-w-xs">
-            Cada noble del Reino tiene derecho a adoptar una mascota espiritual gratuita para explorar el mundo y buscar tesoros.
+            Cada noble del Reino tiene derecho a adoptar una de las 10 criaturas místicas para explorar el mundo y evolucionar.
         </p>
 
         <form action="{% url 'pets:adopt' %}" method="POST" class="w-full flex flex-col gap-3 mt-5">
             {% csrf_token %}
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
-
             <div>
-                <label class="block text-xs text-vip-gold font-bold uppercase mb-1">Especie Deseada</label>
+                <label class="block text-xs text-vip-gold font-bold uppercase mb-1">Especie Deseada (10 Disponibles)</label>
                 <select name="species" class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white">
-                    <option value="fox">🦊 Zorro Kitsune Dorado</option>
-                    <option value="panther">🐆 Pantera de Ébano</option>
-                    <option value="raven">🦅 Cuervo de Medianoche</option>
-                    <option value="viper">🐍 Víbora de Esmeralda</option>
-                    <option value="wolf">🐺 Lobo Espectral de Plata</option>
+                    {% for key, val in all_species.items %}
+                        <option value="{{ key }}">{{ val.family_name }} — {{ val.stages.0.title }}</option>
+                    {% endfor %}
                 </select>
             </div>
-
             <div>
                 <label class="block text-xs text-vip-gold font-bold uppercase mb-1">Nombre</label>
                 <input type="text" name="name" required placeholder="Ej: Luna, Kitsu, Nero..." 
                        class="w-full bg-black/70 border border-vip-gold/40 rounded-xl p-3 text-xs text-white text-center">
             </div>
-
             <button type="submit" class="btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider mt-2">
                 ✨ Despertar Mascota
             </button>
@@ -248,29 +255,51 @@
 
 </div>
 
-<!-- 🎁 MODAL DEL COFRE DEL TESORO (EXPEDICIÓN EN VIVO) -->
-<div id="expedition-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-4 select-none">
-    
-    <div class="w-full max-w-sm bg-gradient-to-b from-[#1c0c2e] via-[#0d0417] to-black border-2 border-vip-gold/60 rounded-3xl p-6 shadow-[0_0_50px_rgba(0,0,0,0.95)] flex flex-col items-center text-center relative overflow-hidden">
+<!-- 🌟 MODAL CINEMATOGRÁFICO DE EVOLUCIÓN (¡EVOLUCIÓN CONSUMADA!) -->
+<div id="evolution-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 select-none">
+    <div class="w-full max-w-sm bg-gradient-to-b from-[#2a0e4a] via-[#10041f] to-black border-2 border-yellow-400 rounded-3xl p-6 shadow-[0_0_60px_rgba(234,179,8,0.5)] flex flex-col items-center text-center relative overflow-hidden">
         
-        <h3 id="exp-modal-title" class="font-serif text-base font-black text-gold-gradient uppercase tracking-widest mb-1">
-            Explorando Territorio
-        </h3>
-        <p class="text-xs text-stone-400 mb-4" id="exp-modal-subtitle">Tu mascota se adentra en las sombras...</p>
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(234,179,8,0.2)_0%,transparent_70%)] pointer-events-none"></div>
 
-        <!-- Cofre animado tembloroso -->
-        <div id="chest-box" class="relative my-3 cursor-pointer group" onclick="openFoundChest()">
-            <div class="w-24 h-24 rounded-3xl bg-amber-950/60 border-2 border-yellow-400/80 flex items-center justify-center text-5xl shadow-[0_0_30px_rgba(234,179,8,0.5)] animate-bounce">
-                📦
-            </div>
-            <span class="text-[11px] text-yellow-300 font-bold uppercase tracking-wider block mt-2 animate-pulse">
-                ¡Toca el Cofre para Abrir!
-            </span>
+        <span class="text-[10px] font-mono font-bold uppercase tracking-widest text-amber-300 bg-black/70 px-3 py-0.5 rounded-full border border-yellow-500/50 mb-2">
+            ¡Evolución Consumada!
+        </span>
+
+        <h3 id="evo-modal-name" class="font-serif text-2xl font-black text-gold-gradient uppercase tracking-widest mb-1">
+            Nombre Forma
+        </h3>
+        <p id="evo-modal-title" class="text-xs text-purple-200 mb-4">Título de la Forma</p>
+
+        <!-- Avatar con Haz de Luz -->
+        <div class="relative w-44 h-44 my-2 flex items-center justify-center animate-bounce">
+            <div class="absolute inset-0 bg-yellow-400/30 rounded-full blur-2xl animate-pulse"></div>
+            <img id="evo-modal-img" src="" class="w-40 h-40 rounded-full object-cover border-4 border-yellow-400 shadow-[0_0_35px_rgba(234,179,8,0.8)] relative z-10">
         </div>
 
-        <!-- REVELACIÓN DE BOTÍN (OCULTO HASTA TOCAR EL COFRE) -->
+        <div class="p-3 bg-black/70 rounded-2xl border border-yellow-500/40 w-full mt-3">
+            <span class="text-[10px] text-amber-300 font-bold uppercase block mb-1">Nuevo Buff Despertado</span>
+            <p id="evo-modal-buff" class="text-xs text-white font-medium">Descripción del Buff</p>
+        </div>
+
+        <button type="button" onclick="closeEvolutionModal()" 
+                class="w-full mt-4 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-300 to-amber-600 text-stone-950 font-black text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.6)] active:scale-95 transition-all">
+            Aceptar Bendición Soberana
+        </button>
+    </div>
+</div>
+
+<!-- MODAL DEL COFRE DEL TESORO (EXPEDICIÓN) -->
+<div id="expedition-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-4 select-none">
+    <div class="w-full max-w-sm bg-gradient-to-b from-[#1c0c2e] via-[#0d0417] to-black border-2 border-vip-gold/60 rounded-3xl p-6 shadow-[0_0_50px_rgba(0,0,0,0.95)] flex flex-col items-center text-center relative overflow-hidden">
+        <h3 id="exp-modal-title" class="font-serif text-base font-black text-gold-gradient uppercase tracking-widest mb-1">Explorando Territorio</h3>
+        <p class="text-xs text-stone-400 mb-4" id="exp-modal-subtitle">Tu mascota se adentra en las sombras...</p>
+
+        <div id="chest-box" class="relative my-3 cursor-pointer group" onclick="openFoundChest()">
+            <div class="w-24 h-24 rounded-3xl bg-amber-950/60 border-2 border-yellow-400/80 flex items-center justify-center text-5xl shadow-[0_0_30px_rgba(234,179,8,0.5)] animate-bounce">📦</div>
+            <span class="text-[11px] text-yellow-300 font-bold uppercase tracking-wider block mt-2 animate-pulse">¡Toca el Cofre para Abrir!</span>
+        </div>
+
         <div id="loot-reveal" class="hidden w-full flex flex-col gap-3">
-            
             <div class="bg-black/70 border border-yellow-500/40 rounded-2xl p-3 flex justify-around items-center">
                 <div>
                     <span class="text-[9px] uppercase font-bold text-stone-400 block">Oro Rescatado</span>
@@ -282,12 +311,10 @@
                 </div>
             </div>
 
-            <!-- Hallazgo de comida -->
             <div id="loot-food" class="hidden p-2 rounded-xl bg-emerald-950/80 border border-emerald-500 text-emerald-200 text-xs font-bold">
                 🍖 ¡Encontró comida en el camino! (+20% Energía recuperada)
             </div>
 
-            <!-- Hallazgo de Photocard -->
             <div id="loot-card-box" class="hidden flex flex-col items-center bg-purple-950/40 border-2 rounded-2xl p-3 shadow-xl">
                 <span class="text-[9px] uppercase font-black px-2.5 py-0.5 rounded-full border mb-1.5" id="loot-card-rarity"></span>
                 <img id="loot-card-img" src="" class="w-24 h-34 object-cover rounded-xl shadow border mb-1">
@@ -301,58 +328,177 @@
                 Guardar Recompensas
             </button>
         </div>
-
     </div>
-
 </div>
 
-<!-- SINTETIZADOR DE AUDIO EXPEDICIONES -->
 <script>
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    let expAudioCtx = null;
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    let sanctuaryAudioCtx = null;
 
-    function playExpSound(type) {
+    function getSanctuaryAudio() {
+        if (!sanctuaryAudioCtx) sanctuaryAudioCtx = new AudioContextClass();
+        if (sanctuaryAudioCtx.state === 'suspended') sanctuaryAudioCtx.resume();
+        return sanctuaryAudioCtx;
+    }
+
+    function playSoundEffect(type) {
         try {
-            if (!expAudioCtx) expAudioCtx = new AudioCtx();
-            if (expAudioCtx.state === 'suspended') expAudioCtx.resume();
-            
-            if (type === 'chest') {
-                [440, 554, 659, 880].forEach((freq, idx) => {
-                    const osc = expAudioCtx.createOscillator();
-                    const gain = expAudioCtx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(freq, expAudioCtx.currentTime + (idx * 0.07));
-                    gain.gain.setValueAtTime(0.3, expAudioCtx.currentTime + (idx * 0.07));
-                    gain.gain.exponentialRampToValueAtTime(0.001, expAudioCtx.currentTime + (idx * 0.07) + 0.3);
-                    osc.connect(gain);
-                    gain.connect(expAudioCtx.destination);
-                    osc.start(expAudioCtx.currentTime + (idx * 0.07));
-                    osc.stop(expAudioCtx.currentTime + (idx * 0.07) + 0.3);
-                });
-            } else if (type === 'rare') {
-                [523, 659, 783, 1046, 1318].forEach((freq, idx) => {
-                    const osc = expAudioCtx.createOscillator();
-                    const gain = expAudioCtx.createGain();
+            const ctx = getSanctuaryAudio();
+            if (type === 'feed') {
+                [330, 440, 550].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
                     osc.type = 'sine';
-                    osc.frequency.setValueAtTime(freq, expAudioCtx.currentTime + (idx * 0.09));
-                    gain.gain.setValueAtTime(0.35, expAudioCtx.currentTime + (idx * 0.09));
-                    gain.gain.exponentialRampToValueAtTime(0.001, expAudioCtx.currentTime + (idx * 0.09) + 0.4);
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.07);
+                    gain.gain.setValueAtTime(0.2, ctx.currentTime + idx * 0.07);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.07 + 0.15);
                     osc.connect(gain);
-                    gain.connect(expAudioCtx.destination);
-                    osc.start(expAudioCtx.currentTime + (idx * 0.09));
-                    osc.stop(expAudioCtx.currentTime + (idx * 0.09) + 0.4);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + idx * 0.07);
+                    osc.stop(ctx.currentTime + idx * 0.07 + 0.15);
+                });
+            } else if (type === 'pet') {
+                [659, 880, 987].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
+                    gain.gain.setValueAtTime(0.25, ctx.currentTime + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.08 + 0.25);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + idx * 0.08);
+                    osc.stop(ctx.currentTime + idx * 0.08 + 0.25);
+                });
+            } else if (type === 'evolve') {
+                [523, 659, 783, 1046, 1318].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.1);
+                    gain.gain.setValueAtTime(0.35, ctx.currentTime + idx * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.1 + 0.5);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + idx * 0.1);
+                    osc.stop(ctx.currentTime + idx * 0.1 + 0.5);
                 });
             }
         } catch(e) {}
     }
-</script>
 
-<script>
-    let currentLootData = null;
-
-    function toggleTransmuteModal() {
-        document.getElementById('transmute-modal').classList.toggle('hidden');
+    function triggerPetTouch(e) {
+        spawnFloatingHeart(e.clientX, e.clientY);
+        ajaxInteractPet('pet');
     }
+
+    function spawnFloatingHeart(x, y) {
+        const heart = document.createElement('div');
+        heart.innerText = '💖 +15 XP';
+        heart.className = 'fixed pointer-events-none z-50 text-xs font-black text-pink-300 drop-shadow-[0_0_8px_rgba(244,114,182,0.9)]';
+        heart.style.left = `${(x || window.innerWidth / 2) - 25}px`;
+        heart.style.top = `${(y || window.innerHeight / 2) - 20}px`;
+        heart.style.transition = 'all 1s cubic-bezier(0.1, 0.8, 0.2, 1)';
+        document.body.appendChild(heart);
+
+        setTimeout(() => {
+            heart.style.transform = 'translateY(-50px) scale(1.15)';
+            heart.style.opacity = '0';
+        }, 20);
+
+        setTimeout(() => { heart.remove(); }, 1050);
+    }
+
+    async function ajaxInteractPet(action) {
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('action', action);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            const resp = await fetch("{% url 'pets:interact' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            const toastBox = document.getElementById('pet-toast-box');
+
+            if (!data.success) {
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning'); } catch(e) {}
+                toastBox.innerHTML = `
+                    <div class="p-3 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-bold text-center shadow-lg">
+                        ${data.error}
+                    </div>
+                `;
+                setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
+                return;
+            }
+
+            playSoundEffect(action);
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+
+            document.getElementById('pet-energy-text').innerText = `${data.pet_energy}%`;
+            document.getElementById('pet-energy-bar').style.width = `${data.pet_energy}%`;
+
+            document.getElementById('pet-happiness-text').innerText = `${data.pet_happiness}%`;
+            document.getElementById('pet-happiness-bar').style.width = `${data.pet_happiness}%`;
+
+            const moodBadge = document.getElementById('pet-mood-badge');
+            if (data.pet_happiness >= 80) moodBadge.innerText = '🥰 Devoto & Radiante';
+            else if (data.pet_happiness >= 50) moodBadge.innerText = '😊 Alegre';
+            else if (data.pet_happiness >= 25) moodBadge.innerText = '🥱 Cansado';
+            else moodBadge.innerText = '🥺 Solitario';
+
+            document.getElementById('pet-xp-text').innerText = `${data.pet_xp} / ${data.pet_xp_needed} XP`;
+            document.getElementById('pet-xp-bar').style.width = `${data.pet_xp_percent}%`;
+            document.getElementById('pet-level-badge').innerText = data.pet_level;
+
+            if (data.cooldown_minutes) {
+                document.getElementById('pet-action-label').innerText = `Descanso (${data.cooldown_minutes}m)`;
+            }
+
+            if (data.evolved) {
+                triggerEvolutionPopup(data);
+            }
+
+            toastBox.innerHTML = `
+                <div class="p-3 rounded-2xl bg-emerald-950/90 border border-emerald-500 text-emerald-200 text-xs font-bold text-center shadow-lg">
+                    ${data.message}
+                </div>
+            `;
+            setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
+
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    function triggerEvolutionPopup(data) {
+        playSoundEffect('evolve');
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
+
+        document.getElementById('evo-modal-name').innerText = data.new_name;
+        document.getElementById('evo-modal-title').innerText = data.new_title;
+        document.getElementById('evo-modal-buff').innerText = data.new_buff;
+        document.getElementById('evo-modal-img').src = data.new_sprite;
+
+        document.getElementById('pet-avatar-img').src = data.new_sprite;
+        document.getElementById('pet-evolved-name').innerText = `(${data.new_name})`;
+        document.getElementById('pet-buff-text').innerText = data.new_buff;
+        document.getElementById('pet-stage-badge').innerText = `Fase ${data.new_stage}/3: ${data.new_title}`;
+
+        document.getElementById('evolution-modal').classList.remove('hidden');
+    }
+
+    function closeEvolutionModal() {
+        document.getElementById('evolution-modal').classList.add('hidden');
+    }
+
+    let currentLootData = null;
 
     async function launchExpedition(zoneKey, zoneTitle) {
         const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
@@ -376,46 +522,35 @@
             }
 
             currentLootData = data;
-
-            // Abrir Modal
             document.getElementById('exp-modal-title').innerText = `Explorando ${zoneTitle}`;
-            document.getElementById('exp-modal-subtitle').innerText = `Tu mascota regresó de ${zoneTitle} con un hallazgo:`;
+            document.getElementById('exp-modal-subtitle').innerText = `Tu mascota regresó de ${zoneTitle} con un cofre antiguo:`;
             document.getElementById('chest-box').classList.remove('hidden');
             document.getElementById('loot-reveal').classList.add('hidden');
             document.getElementById('expedition-modal').classList.remove('hidden');
 
             try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
-
         } catch(e) {
-            alert("Error de conexión al iniciar expedición.");
+            alert("Error al iniciar expedición.");
         }
     }
 
     function openFoundChest() {
         if (!currentLootData) return;
-
-        playExpSound('chest');
+        playSoundEffect('pet');
         try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
 
         document.getElementById('chest-box').classList.add('hidden');
         document.getElementById('loot-reveal').classList.remove('hidden');
 
-        // Llenar datos de botín
         document.getElementById('loot-gold').innerText = `+${currentLootData.gold}`;
         document.getElementById('loot-xp').innerText = `+${currentLootData.xp}`;
 
-        // Comida
         const foodElem = document.getElementById('loot-food');
-        if (currentLootData.food_found) {
-            foodElem.classList.remove('hidden');
-        } else {
-            foodElem.classList.add('hidden');
-        }
+        if (currentLootData.food_found) foodElem.classList.remove('hidden');
+        else foodElem.classList.add('hidden');
 
-        // Photocard
         const cardBox = document.getElementById('loot-card-box');
         if (currentLootData.card_dropped) {
-            playExpSound('rare');
             const c = currentLootData.card_dropped;
             cardBox.classList.remove('hidden');
             cardBox.style.borderColor = c.color;
@@ -431,15 +566,21 @@
             cardBox.classList.add('hidden');
         }
 
-        // Actualizar barras en tiempo real
         document.getElementById('pet-energy-text').innerText = `${currentLootData.pet_energy}%`;
         document.getElementById('pet-energy-bar').style.width = `${currentLootData.pet_energy}%`;
         document.getElementById('pet-level-badge').innerText = currentLootData.pet_level;
+
+        if (currentLootData.evolved) {
+            triggerEvolutionPopup(currentLootData);
+        }
     }
 
     function closeExpeditionModal() {
         document.getElementById('expedition-modal').classList.add('hidden');
-        window.location.reload();
+    }
+
+    function toggleTransmuteModal() {
+        document.getElementById('transmute-modal').classList.toggle('hidden');
     }
 </script>
 {% endblock %}

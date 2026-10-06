@@ -1,21 +1,20 @@
 import random
 from urllib.parse import quote as encode_param
 from django.shortcuts import render, redirect, get_object_or_404
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.contrib import messages
-from django.db.models import Q
+from django.db import transaction
+
 from .models import (
     IdolProfile, Review, Post, PostUnlock, PostLike, 
-    CustomRequest, PostComment, PhotocardBox, Photocard, UserPhotocard
+    CustomRequest, PostComment, PhotocardBox, Photocard, UserPhotocard, PhotocardTrade
 )
 from economy.models import Wallet
 from core.models import UserProfile, UserRole
 from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
-from django.db import transaction
-from .models import PhotocardTrade
 
 
 def resolve_safe_tg(request):
@@ -429,11 +428,23 @@ def unlock_post(request, post_id):
         if post.network == 'fans':
             pet = Pet.objects.filter(telegram_user_id=tg_id).first()
             precio_final = post.price
+
+            # BUFF VÍBORA ESMERALDA: 15% / 22% / 30% Descuento
             if pet and pet.species == 'viper':
-                precio_final = max(1, int(post.price * 0.85))
+                discount_rates = {1: 0.85, 2: 0.78, 3: 0.70}
+                rate = discount_rates.get(pet.evolution_stage_number, 0.85)
+                precio_final = max(1, int(post.price * rate))
 
             if wallet.balance >= precio_final:
                 wallet.remove_funds(precio_final)
+                
+                # BUFF ESCORPIÓN DORADO (Cashback de oro: 5% / 10% / 15%)
+                if pet and pet.species == 'scorpion':
+                    cb_rates = {1: 0.05, 2: 0.10, 3: 0.15}
+                    reembolso = int(precio_final * cb_rates.get(pet.evolution_stage_number, 0.05))
+                    if reembolso > 0:
+                        wallet.add_funds(reembolso)
+
                 PostUnlock.objects.get_or_create(post=post, client_telegram_id=tg_id)
                 
                 idol_profile = UserProfile.objects.filter(telegram_user_id=post.idol.telegram_user_id).first()
@@ -443,7 +454,6 @@ def unlock_post(request, post_id):
                 idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
                 idol_wallet.add_funds(ganancia_idol)
                 
-                # EXP moderada y balanceada
                 grant_user_xp(request, tg_id, max(5, precio_final // 4), reason="Desbloqueo VIP")
                 grant_user_xp(None, post.idol.telegram_user_id, max(5, precio_final // 5), reason="Venta de Contenido VIP")
 
@@ -464,7 +474,7 @@ def unlock_post(request, post_id):
                     button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={post.idol.telegram_user_id}"
                 )
                 
-                desc_txt = " (con 15% de descuento por tu Víbora)" if (pet and pet.species == 'viper') else ""
+                desc_txt = f" (con descuento por tu {pet.evolved_name})" if (pet and pet.species == 'viper') else ""
                 messages.success(request, f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt})")
             else:
                 messages.error(request, "No tienes suficiente oro en tu Bóveda.")
@@ -592,10 +602,17 @@ def send_tip(request, post_id):
             comision = int(amount * 0.10)
             neto_idol = amount - comision
             
+            # BUFF ESCORPIÓN (Cashback en brindis)
+            pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+            if pet and pet.species == 'scorpion':
+                cb_rates = {1: 0.05, 2: 0.10, 3: 0.15}
+                reembolso = int(amount * cb_rates.get(pet.evolution_stage_number, 0.05))
+                if reembolso > 0:
+                    client_wallet.add_funds(reembolso)
+
             idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
             idol_wallet.add_funds(neto_idol)
             
-            # EXP calibrada
             grant_user_xp(request, tg_id, max(5, amount // 5), reason="Ofrenda a Musa")
             grant_user_xp(None, post.idol.telegram_user_id, max(5, amount // 5), reason="Ofrenda Recibida")
 
@@ -755,11 +772,14 @@ def open_photocard_box_ajax(request, box_id):
 
     wallet.remove_funds(box.price)
 
-    # Probabilidades de Counter-Strike
+    # BUFF CONEJO LUNAR: Aumenta probabilidad de cartas Épicas y Legendarias
+    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+    extra_legendary = {1: 5.0, 2: 12.0, 3: 20.0}.get(pet.evolution_stage_number, 5.0) if (pet and pet.species == 'rabbit') else 0.0
+
     roll = random.random() * 100
-    if roll < 3.0:
+    if roll < (3.0 + extra_legendary):
         target_rarity = 'legendary'
-    elif roll < 15.0:
+    elif roll < (15.0 + extra_legendary):
         target_rarity = 'epic'
     elif roll < 40.0:
         target_rarity = 'rare'
@@ -771,7 +791,6 @@ def open_photocard_box_ajax(request, box_id):
 
     UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=winner)
 
-    # EXP balanceada (sin inflación)
     xp_map = {'common': 5, 'rare': 12, 'epic': 25, 'legendary': 50}
     grant_user_xp(request, tg_id, xp_map.get(winner.rarity, 10), reason=f"Photocard {winner.get_rarity_display()}")
 
@@ -818,7 +837,6 @@ def my_photocards_album(request):
     legendaries = user_cards.filter(photocard__rarity='legendary').count()
     epics = user_cards.filter(photocard__rarity='epic').count()
 
-    # 👈 Lista de todos los miembros del Reino para elegir sin saberse su ID
     members = UserProfile.objects.exclude(
         telegram_user_id=tg_id
     ).order_by('-level')[:60]
@@ -831,7 +849,6 @@ def my_photocards_album(request):
         'epics': epics,
         'members': members,
     })
-
 
 
 def admin_photocards_manage(request):
@@ -873,15 +890,12 @@ def admin_photocards_manage(request):
             box = get_object_or_404(PhotocardBox, id=box_id)
             box_name = box.name
 
-            # Verificar si los usuarios ya tienen cartas de esta caja en sus álbumes
             owned_cards = UserPhotocard.objects.filter(photocard__box=box).count()
             if owned_cards > 0:
-                # En lugar de destruir inventarios, solo pausamos la caja
                 box.is_active = False
                 box.save()
-                messages.error(request, f"⚠️ La caja «{box_name}» no se puede eliminar porque los usuarios ya tienen {owned_cards} cartas en sus álbumes. La caja fue PAUSADA para que nadie más la abra.")
+                messages.error(request, f"⚠️ La caja «{box_name}» no se puede eliminar porque los usuarios ya tienen {owned_cards} cartas en sus álbumes. La caja fue PAUSADA.")
             else:
-                # Si nadie ha sacado cartas de esta caja, es seguro eliminarla
                 box.cards.all().delete()
                 box.delete()
                 messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
@@ -948,7 +962,6 @@ def admin_photocards_manage(request):
     })
 
 
-# 5. MERCADO DE PHOTOCARDS Y GESTIÓN DE INTERCAMBIOS
 def photocards_market(request):
     tg_id = resolve_safe_tg(request)
     if not tg_id:
@@ -965,7 +978,6 @@ def photocards_market(request):
         is_for_sale=True
     ).select_related('photocard')
 
-    # Muestra ofertas dirigidas a ti O intercambios abiertos para cualquiera en el Reino
     received_trades = PhotocardTrade.objects.filter(
         Q(receiver_telegram_id=tg_id) | Q(receiver_telegram_id=0),
         status='pending'
@@ -985,7 +997,7 @@ def photocards_market(request):
         'sent_trades': sent_trades,
     })
 
-# 6. ACCIÓN DE PONER EN VENTA O CANCELAR VENTA
+
 def photocard_sell_action(request, user_card_id):
     if request.method == 'POST':
         tg_id = resolve_safe_tg(request)
@@ -1013,7 +1025,6 @@ def photocard_sell_action(request, user_card_id):
     return redirect('/idols/photocards/album/')
 
 
-# 7. ACCIÓN DE COMPRA EN EL MERCADO (P2P CON RETENCIÓN REAL)
 def photocard_buy_action(request, user_card_id):
     if request.method == 'POST':
         tg_id = resolve_safe_tg(request)
@@ -1030,35 +1041,28 @@ def photocard_buy_action(request, user_card_id):
             return redirect('/idols/photocards/market/')
 
         with transaction.atomic():
-            # Cobrar al comprador
             buyer_wallet.remove_funds(price)
 
-            # Comisión imperial 10%
             fee = int(price * 0.10)
             neto_vendedor = price - fee
 
-            # Pagar al vendedor
             seller_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=user_card.telegram_user_id)
             seller_wallet.add_funds(neto_vendedor)
 
             vendedor_id = user_card.telegram_user_id
             carta_nombre = user_card.photocard.name
 
-            # Transferir propiedad
             user_card.telegram_user_id = tg_id
             user_card.is_for_sale = False
             user_card.sale_price = 0
             user_card.save()
 
-            # Cancelar trades pendientes que involucren esta carta
             PhotocardTrade.objects.filter(sender_card=user_card, status='pending').update(status='cancelled')
             PhotocardTrade.objects.filter(receiver_card=user_card, status='pending').update(status='cancelled')
 
-            # EXP por comercio
             grant_user_xp(request, tg_id, 10, reason="Compra en Mercado")
             grant_user_xp(None, vendedor_id, 15, reason="Venta de Photocard")
 
-            # Notificación a Telegram al vendedor
             send_telegram_msg(
                 chat_id=vendedor_id,
                 text=(
@@ -1077,7 +1081,6 @@ def photocard_buy_action(request, user_card_id):
     return redirect('/idols/photocards/market/')
 
 
-# 8. CREAR PROPUESTA DE INTERCAMBIO
 def create_trade_offer(request, user_card_id):
     if request.method == 'POST':
         tg_id = resolve_safe_tg(request)
@@ -1087,17 +1090,14 @@ def create_trade_offer(request, user_card_id):
         receiver_id = None
         receiver_name = 'Noble'
 
-        # Si eligió la opción "Intercambio Abierto"
         if target_raw == 'open':
             receiver_id = 0
             receiver_name = 'Cualquier Miembro del Reino'
         elif target_raw.isdigit():
-            # Si eligió un usuario de la lista desplegable por su ID
             receiver_id = int(target_raw)
             p = UserProfile.objects.filter(telegram_user_id=receiver_id).first()
             if p and p.username: receiver_name = p.username
         else:
-            # Búsqueda libre por texto
             clean_at = target_raw if target_raw.startswith('@') else f"@{target_raw}"
             p = UserProfile.objects.filter(username__iexact=clean_at).first()
             if p:
@@ -1140,21 +1140,19 @@ def create_trade_offer(request, user_card_id):
 
     return redirect('/idols/photocards/album/')
 
-# 9. ACEPTAR O RECHAZAR INTERCAMBIO
+
 def handle_trade_offer(request, trade_id, action):
     tg_id = resolve_safe_tg(request)
     trade = get_object_or_404(PhotocardTrade, id=trade_id, status='pending')
 
     if action == 'accept' and trade.receiver_telegram_id == tg_id:
         with transaction.atomic():
-            # Transferir la carta del emisor al receptor
             sender_card = trade.sender_card
             sender_card.telegram_user_id = trade.receiver_telegram_id
             sender_card.is_for_sale = False
             sender_card.sale_price = 0
             sender_card.save()
 
-            # Si pedía una carta a cambio, transferirla de vuelta
             if trade.receiver_card and trade.receiver_card.telegram_user_id == tg_id:
                 rec_card = trade.receiver_card
                 rec_card.telegram_user_id = trade.sender_telegram_id
@@ -1165,7 +1163,6 @@ def handle_trade_offer(request, trade_id, action):
             trade.status = 'accepted'
             trade.save()
 
-            # Notificar al emisor
             send_telegram_msg(
                 chat_id=trade.sender_telegram_id,
                 text=f"🎉 <b>¡Tu intercambio con {trade.receiver_username} fue aceptado!</b>\nLa Photocard ha sido transferida a su nuevo dueño.",
