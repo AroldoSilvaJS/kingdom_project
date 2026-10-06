@@ -15,6 +15,7 @@ from idols.models import IdolProfile, Post, PostUnlock, CustomRequest, UserPhoto
 from pets.models import Pet
 from core.telegram_auth import is_user_in_group
 from core.telegram_notify import send_telegram_msg
+import threading
 
 
 ADMIN_TG_ID = '7474444797'
@@ -455,62 +456,72 @@ def admin_panel(request, admin_tg_id):
     })
 
 
+def _process_telegram_update(data):
+    """Procesamiento desacoplado para responder a Telegram a velocidad ultra rápida"""
+    try:
+        msg = data.get('message') or data.get('channel_post') or data.get('edited_message')
+        if not msg:
+            return
+
+        text = (msg.get('text') or '').strip().lower()
+        chat = msg.get('chat', {})
+        chat_id = chat.get('id')
+        user = msg.get('from', {})
+        user_id = user.get('id')
+        first_name = user.get('first_name', 'Noble')
+        username = user.get('username')
+        
+        handle_real = f"@{username}" if username else first_name
+
+        if user_id:
+            user_prof, _ = UserProfile.objects.get_or_create(telegram_user_id=user_id)
+            if user_prof.username != handle_real:
+                user_prof.username = handle_real
+                user_prof.save(update_fields=['username'])
+            IdolProfile.objects.filter(telegram_user_id=user_id).update(owner_username=handle_real)
+
+        if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
+            is_group = int(chat_id) < 0
+            if is_group:
+                app_link = "https://t.me/KingdomPleasure_bot?start=entrar"
+            else:
+                app_link = f"https://kingdom-pleasure-app.onrender.com/?tg_id={user_id}&tg_username={encode_param(handle_real)}"
+            
+            if text.startswith('/id'):
+                texto = (
+                    f"🆔 <b>Identificación Nobiliaria</b>\n\n"
+                    f"👤 <b>Nombre:</b> {first_name}\n"
+                    f"🏷️ <b>Usuario:</b> {handle_real}\n"
+                    f"🔢 <b>Telegram ID:</b> <code>{user_id}</code>\n"
+                    f"🏰 <b>Grupo ID:</b> <code>{chat_id}</code>"
+                )
+                btn_txt = "🌹 Abrir Mi Reino"
+            else:
+                texto = (
+                    f"👑 <b>¡Saludos, {first_name}!</b>\n\n"
+                    f"Las puertas de <b>Kingdom of Pleasure</b> están abiertas para los miembros de este círculo.\n\n"
+                    f"Pulsa el botón dorado para cruzar el umbral con tu propia cuenta."
+                )
+                btn_txt = "✨ Entrar al Kingdom"
+            
+            send_telegram_msg(
+                chat_id=chat_id, 
+                text=texto, 
+                button_text=btn_txt, 
+                button_url=app_link
+            )
+    except Exception as e:
+        print(f"⚠️ Error procesando update de webhook: {e}")
+
 @csrf_exempt
 def telegram_webhook(request):
     if request.method == "POST":
         try:
             data = json.loads(request.body.decode('utf-8'))
-            msg = data.get('message') or data.get('channel_post') or data.get('edited_message')
-            
-            if msg:
-                text = (msg.get('text') or '').strip().lower()
-                chat = msg.get('chat', {})
-                chat_id = chat.get('id')
-                user = msg.get('from', {})
-                user_id = user.get('id')
-                first_name = user.get('first_name', 'Noble')
-                username = user.get('username')
-                
-                handle_real = f"@{username}" if username else first_name
-
-                if user_id:
-                    user_prof, _ = UserProfile.objects.get_or_create(telegram_user_id=user_id)
-                    user_prof.username = handle_real
-                    user_prof.save(update_fields=['username'])
-                    IdolProfile.objects.filter(telegram_user_id=user_id).update(owner_username=handle_real)
-
-                if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
-                    is_group = int(chat_id) < 0
-                    if is_group:
-                        app_link = "https://t.me/KingdomPleasure_bot?start=entrar"
-                    else:
-                        app_link = f"https://kingdom-pleasure-app.onrender.com/?tg_id={user_id}&tg_username={encode_param(handle_real)}"
-                    
-                    if text.startswith('/id'):
-                        texto = (
-                            f"🆔 <b>Identificación Nobiliaria</b>\n\n"
-                            f"👤 <b>Nombre:</b> {first_name}\n"
-                            f"🏷️ <b>Usuario:</b> {handle_real}\n"
-                            f"🔢 <b>Telegram ID:</b> <code>{user_id}</code>\n"
-                            f"🏰 <b>Grupo ID:</b> <code>{chat_id}</code>"
-                        )
-                        btn_txt = "🌹 Abrir Mi Reino"
-                    else:
-                        texto = (
-                            f"👑 <b>¡Saludos, {first_name}!</b>\n\n"
-                            f"Las puertas de <b>Kingdom of Pleasure</b> están abiertas para los miembros de este círculo.\n\n"
-                            f"Pulsa el botón dorado para cruzar el umbral con tu propia cuenta."
-                        )
-                        btn_txt = "✨ Entrar al Kingdom"
-                    
-                    send_telegram_msg(
-                        chat_id=chat_id, 
-                        text=texto, 
-                        button_text=btn_txt, 
-                        button_url=app_link
-                    )
+            # Procesar en segundo plano para liberar la conexión con Telegram en <50ms
+            threading.Thread(target=_process_telegram_update, args=(data,), daemon=True).start()
         except Exception as e:
-            print(f"⚠️ Error procesando webhook: {e}")
+            print(f"⚠️ Error recibiendo webhook: {e}")
 
     return HttpResponse("OK")
 

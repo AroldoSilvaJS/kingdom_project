@@ -2,13 +2,11 @@
 import urllib.request
 import urllib.parse
 import json
+import threading
 from django.conf import settings
 
-def send_telegram_msg(chat_id, text, button_text=None, button_url=None):
-    """
-    Envía un mensaje formal de la Corona al chat o grupo de Telegram.
-    """
-    if not chat_id or not settings.TELEGRAM_BOT_TOKEN:
+def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None):
+    if not chat_id or not getattr(settings, 'TELEGRAM_BOT_TOKEN', None):
         return False
 
     url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -19,8 +17,6 @@ def send_telegram_msg(chat_id, text, button_text=None, button_url=None):
     }
 
     if button_text and button_url:
-        # Si chat_id es negativo, es un GRUPO (se usa 'url')
-        # Si chat_id es positivo, es un PRIVADO (se usa 'web_app')
         is_group = int(chat_id) < 0
         btn_dict = {'text': button_text}
         
@@ -39,14 +35,25 @@ def send_telegram_msg(chat_id, text, button_text=None, button_url=None):
             data=json.dumps(payload).encode('utf-8'),
             headers={'Content-Type': 'application/json'}
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=4) as resp:
             return resp.status == 200
-        
-    # ✅ REEMPLAZAR POR:
-    except urllib.error.HTTPError as e:
-        error_detalle = e.read().decode('utf-8')
-        print(f"❌ Error Telegram API ({e.code}): {error_detalle}")
-        return False
     except Exception as e:
-        print(f"⚠️ Error general en send_telegram_msg: {e}")
+        print(f"⚠️ Error en envío asíncrono Telegram: {e}")
         return False
+
+def send_telegram_msg(chat_id, text, button_text=None, button_url=None, sync=False):
+    """
+    Envía mensajes a Telegram. Por defecto lo hace en segundo plano (daemon thread)
+    para no retrasar respuestas HTTP ni congelar el frontend.
+    """
+    if sync:
+        return _do_send_telegram_msg(chat_id, text, button_text, button_url)
+    
+    # Despachar en hilo secundario no bloqueante
+    t = threading.Thread(
+        target=_do_send_telegram_msg,
+        args=(chat_id, text, button_text, button_url),
+        daemon=True
+    )
+    t.start()
+    return True
