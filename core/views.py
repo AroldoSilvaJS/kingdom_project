@@ -104,10 +104,12 @@ def choose_role(request):
         return render(request, 'core/access_denied.html', {
             'tg_id': tg_id,
             'interview_url': interview_link
-    })    
+        })    
     
+    # Si ya tiene rol y NO es un reseteo intencional, mandar al menú
+    force_choose = request.GET.get('force') == '1'
     existing_role = UserRole.objects.filter(telegram_id=tg_id).first()
-    if existing_role and request.method != 'POST':
+    if existing_role and not force_choose and request.method != 'POST':
         return redirect(f'/?tg_id={tg_id}')
 
     if request.method == 'POST':
@@ -117,13 +119,15 @@ def choose_role(request):
         
         request.session['tg_id'] = clean_id
 
+        # Si es la Corona, guardamos el rol elegido para que tenga acceso completo de juego
+        # pero NUNCA pierde los privilegios de administración (ADMIN_TG_ID manda siempre)
         UserRole.objects.update_or_create(
             telegram_id=clean_id,
             defaults={'role': selected_role}
         )
         
-        Wallet.objects.get_or_create(telegram_user_id=clean_id)
-        UserProfile.objects.get_or_create(telegram_user_id=clean_id)
+        Wallet.objects.get_or_create(telegram_user_id=clean_id, defaults={'balance': 150})
+        UserProfile.objects.get_or_create(telegram_user_id=clean_id, defaults={'level': 1, 'current_xp': 0})
         
         tipo_nombre = "Idol Real 🌹" if selected_role == 'idol' else "Cliente VIP 🥂"
         messages.success(request, f"✨ ¡Bienvenido al Reino como {tipo_nombre}!")
@@ -383,8 +387,19 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "📢 Decreto público de la app actualizado.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 9. PURGA DE DATOS DE PRUEBA
+        # 9. PURGA DE DATOS DE PRUEBA (REINICIO TOTAL A NIVEL 1)
         elif accion == 'purge_test_data':
+            from idols.models import (
+                PhotocardBox, Photocard, UserPhotocard, PostComment, 
+                PostUnlock, PostLike, CustomRequest, Review, Post, 
+                IdolProfile, PhotocardTrade, IdolTribute
+            )
+            from economy.models import UserInventoryItem
+
+            # Limpiar absolutamente todos los datos de juego
+            UserInventoryItem.objects.all().delete()
+            PhotocardTrade.objects.all().delete()
+            IdolTribute.objects.all().delete()
             UserPhotocard.objects.all().delete()
             Photocard.objects.all().delete()
             PhotocardBox.objects.all().delete()
@@ -397,17 +412,25 @@ def admin_panel(request, admin_tg_id):
             IdolProfile.objects.all().delete()
             Pet.objects.all().delete()
 
-            UserRole.objects.exclude(telegram_id=7474444797).delete()
-            UserProfile.objects.exclude(telegram_user_id=7474444797).delete()
-            Wallet.objects.exclude(telegram_user_id=7474444797).delete()
+            # Borrar todos los usuarios y perfiles (incluso la sesión de juego de la Corona)
+            UserRole.objects.all().delete()
+            UserProfile.objects.all().delete()
+            Wallet.objects.all().delete()
 
-            UserRole.objects.update_or_create(telegram_id=7474444797, defaults={'role': 'admin'})
-            w, _ = Wallet.objects.get_or_create(telegram_user_id=7474444797)
-            w.balance = 1000
-            w.save()
+            # Reiniciar tu cuenta Corona a Nivel 1 limpio con 150 monedas iniciales
+            # Dejamos UserRole vacío para que al entrar te obligue a elegir rol (Idol o Cliente)
+            Wallet.objects.create(telegram_user_id=7474444797, balance=150)
+            UserProfile.objects.create(
+                telegram_user_id=7474444797,
+                username="@CoronaImperial",
+                level=1,
+                current_xp=0,
+                total_xp=0,
+                title='plebeyo'
+            )
 
-            messages.success(request, "🧹 Purga completada. Solo queda la cuenta de la Corona.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+            messages.success(request, "🧹 Purga completada. Reino reseteado al 100%. Elige tu rol inicial.")
+            return redirect(f"/choose-role/?tg_id={admin_tg_id}&force=1")
 
         # 10. TEMÁTICA SEMANAL DEL MURO
         elif accion == 'save_feed_theme':
