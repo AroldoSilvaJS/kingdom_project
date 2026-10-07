@@ -2,244 +2,296 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+<div class="flex flex-col gap-4 mt-1 pb-44 max-w-md mx-auto">
     
-    <!-- ENCABEZADO Y FILTROS METÁLICOS -->
-    <div class="flex flex-col gap-3">
-        <div class="flex justify-between items-center px-1">
-            <div>
-                <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
-                    Muro Clandestino
-                </h1>
-                <p class="text-[11px] text-stone-400">Contenido oficial y exclusivo de Musas</p>
-            </div>
-            
-            <a href="{% url 'idols:create_post' %}?tg_id={{ tg_id }}" 
-               class="bg-gradient-to-r from-purple-900 to-fuchsia-800 border border-purple-400/60 text-white text-[11px] font-bold px-3.5 py-1.5 rounded-full flex items-center gap-1 shadow-[0_0_12px_rgba(168,85,247,0.3)] hover:brightness-110 active:scale-95 transition-all">
-                <span>➕</span> <span>Publicar</span>
-            </a>
+    <!-- 👑 ENCABEZADO PRINCIPAL & PUBLICAR -->
+    <div class="flex justify-between items-center px-1">
+        <div>
+            <span class="text-[9px] uppercase font-bold tracking-[0.25em] text-vip-gold/80 block">Comunidad de la Corte</span>
+            <h1 class="font-serif text-xl font-black text-gold-gradient uppercase tracking-wider leading-tight">
+                Muro Clandestino
+            </h1>
         </div>
-
-        <!-- Pestañas de Filtro (Todo / Solo VIP) -->
-        <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/70 border border-vip-gold/30 rounded-2xl shadow-inner">
-            <button type="button" onclick="filterFeed('all')" id="btn-filter-all"
-                    class="py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-vip-gold text-black shadow">
-                🌐 Todo el Muro
-            </button>
-            <button type="button" onclick="filterFeed('vip')" id="btn-filter-vip"
-                    class="py-2 rounded-xl text-xs font-black uppercase tracking-wider text-stone-400 hover:text-white transition-all">
-                🔒 Solo Antojos VIP
-            </button>
-        </div>
+        
+        <button type="button" onclick="universalNav('{% url 'idols:create_post' %}')" 
+           class="btn-gold text-[10px] font-black uppercase px-4 py-2 rounded-full flex items-center gap-1.5 shadow-[0_0_15px_rgba(212,175,55,0.35)] active:scale-95 transition-all">
+            <span>✨</span> <span>Publicar</span>
+        </button>
     </div>
 
-    <!-- MENSAJES -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="p-3 rounded-2xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/80 border-green-500 text-green-200{% else %}bg-rose-950/80 border-rose-500 text-rose-200{% endif %}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-
-    <!-- FEED DE PUBLICACIONES -->
-    <div class="flex flex-col gap-5" id="feed-container">
-        {% for post in posts %}
-        <article class="vip-panel overflow-hidden border border-vip-gold/30 rounded-3xl feed-item shadow-2xl {% if post.network == 'fans' %}is-vip{% else %}is-public{% endif %}" data-network="{{ post.network }}">
-            
-            <!-- Cabecera del Post -->
-            <div class="p-3.5 flex items-center justify-between border-b border-white/10 bg-black/50">
-                <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" class="flex items-center gap-3 group min-w-0">
-                    <div class="w-10 h-10 rounded-2xl overflow-hidden border border-vip-gold/50 group-hover:scale-105 transition-transform bg-black flex-shrink-0 shadow">
+    <!-- 🎭 CARRUSEL DE HISTORIAS DE MUSAS (STORIES VIP) -->
+    <div class="w-full flex gap-3 overflow-x-auto py-1 px-1 no-scrollbar select-none">
+        {% for post in posts|slice:":8" %}
+            <div onclick="universalNav('{% url 'idols:detail' post.idol.id %}')" 
+                 class="flex flex-col items-center flex-shrink-0 cursor-pointer active:scale-90 transition-transform group">
+                
+                <!-- Aro de Luz Neón según el Aura de la Musa -->
+                <div class="w-14 h-14 rounded-full p-[2px] shadow-lg relative flex items-center justify-center transition-all duration-300 group-hover:scale-105"
+                     style="background: linear-gradient(135deg, {% if post.idol.aura_color == 'gold' %}#F59E0B, #FBBF24{% elif post.idol.aura_color == 'ruby' %}#F43F5E, #FB7185{% elif post.idol.aura_color == 'emerald' %}#10B981, #34D399{% else %}#A855F7, #C084FC{% endif %});">
+                    <div class="w-full h-full rounded-full overflow-hidden bg-black p-[1.5px]">
                         {% if post.idol.photo %}
-                            <img src="{{ post.idol.photo.url }}" alt="{{ post.idol.stage_name }}" class="w-full h-full object-cover">
+                            <img src="{{ post.idol.photo.url }}" class="w-full h-full rounded-full object-cover">
                         {% else %}
-                            <div class="w-full h-full flex items-center justify-center text-sm">🎭</div>
+                            <div class="w-full h-full rounded-full bg-neutral-900 flex items-center justify-center text-xs">🎭</div>
                         {% endif %}
                     </div>
-                    <div class="min-w-0">
-                        <div class="flex items-center gap-1.5">
-                            <h4 class="font-bold text-white text-xs group-hover:text-vip-gold transition-colors truncate">
-                                {{ post.idol.stage_name }}
-                            </h4>
-                            {% if post.idol.rating >= 4.8 %}
-                                <span class="text-[10px] text-yellow-400">⭐</span>
+
+                    <!-- Punto de estado -->
+                    <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-black {% if post.idol.status == 'online' %}bg-emerald-400 animate-pulse{% elif post.idol.status == 'antojos' %}bg-purple-400{% else %}bg-stone-500{% endif %}"></span>
+                </div>
+
+                <span class="text-[9.5px] font-bold text-stone-300 truncate max-w-[56px] text-center mt-1 group-hover:text-vip-gold transition-colors">
+                    {{ post.idol.stage_name }}
+                </span>
+            </div>
+        {% endfor %}
+    </div>
+
+    <!-- 🌐 SELECTOR DE FILTRO DE CONTENIDO (ESTILO CRISTAL AHUMADO) -->
+    <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl shadow-inner text-xs font-bold uppercase text-center">
+        <button type="button" onclick="filterFeed('all')" id="btn-filter-all"
+                class="py-2.5 rounded-xl text-xs font-black tracking-wider transition-all bg-vip-gold text-black shadow">
+            🌐 Todo el Muro
+        </button>
+        <button type="button" onclick="filterFeed('vip')" id="btn-filter-vip"
+                class="py-2.5 rounded-xl text-xs font-black tracking-wider text-stone-400 hover:text-white transition-all">
+            🔒 Solo Antojos VIP
+        </button>
+    </div>
+
+    <!-- 📱 FEED DE PUBLICACIONES (CARDS DE ALTA COSTURA) -->
+    <div class="flex flex-col gap-6" id="feed-container">
+        {% for post in posts %}
+        <article class="feed-item rounded-[30px] overflow-hidden border-2 bg-gradient-to-b from-[#180a29] via-[#0d0417] to-black shadow-[0_15px_40px_rgba(0,0,0,0.9)] transition-all duration-300"
+                 data-network="{{ post.network }}"
+                 style="border-color: {% if post.network == 'fans' %}rgba(168,85,247,0.45){% else %}rgba(212,175,55,0.35){% endif %};">
+            
+            <!-- 1. CABECERA DEL POST -->
+            <div class="p-4 flex items-center justify-between border-b border-white/10 bg-black/60 backdrop-blur-md">
+                
+                <!-- Musa Info -->
+                <div onclick="universalNav('{% url 'idols:detail' post.idol.id %}')" 
+                     class="flex items-center gap-3 cursor-pointer group min-w-0">
+                    
+                    <div class="w-11 h-11 rounded-2xl p-[1.5px] bg-black border-2 flex-shrink-0 shadow"
+                         style="border-color: {% if post.idol.aura_color == 'gold' %}#F59E0B{% elif post.idol.aura_color == 'ruby' %}#F43F5E{% elif post.idol.aura_color == 'emerald' %}#10B981{% else %}#A855F7{% endif %};">
+                        <div class="w-full h-full rounded-[13px] overflow-hidden bg-black flex items-center justify-center">
+                            {% if post.idol.photo %}
+                                <img src="{{ post.idol.photo.url }}" alt="{{ post.idol.stage_name }}" class="w-full h-full object-cover">
+                            {% else %}
+                                <span class="text-sm">🎭</span>
                             {% endif %}
                         </div>
-                        <span class="text-[9.5px] text-stone-400 font-mono">{{ post.created_at|timesince }} atrás</span>
                     </div>
-                </a>
 
-                <!-- Insignia y Botones de Autor -->
-                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <div class="flex flex-col min-w-0">
+                        <div class="flex items-center gap-1.5">
+                            <h3 class="font-serif font-black text-white text-xs group-hover:text-vip-gold transition-colors truncate">
+                                {{ post.idol.stage_name }}
+                            </h3>
+                            <span class="text-[9.5px] text-yellow-400 font-mono font-bold">⭐ {{ post.idol.rating }}</span>
+                        </div>
+                        <span class="text-[9.5px] font-mono text-stone-400 mt-0.5">{{ post.created_at|timesince }} atrás</span>
+                    </div>
+                </div>
+
+                <!-- Insignia de Red y Acciones de Autor/Admin -->
+                <div class="flex items-center gap-2 flex-shrink-0">
                     {% if post.network == 'fans' %}
-                        <span class="bg-purple-950/90 border border-purple-500 text-purple-300 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow flex items-center gap-1">
-                            <span>🔒</span> VIP
+                        <span class="bg-gradient-to-r from-purple-950 via-purple-900 to-fuchsia-950 border border-purple-400 text-purple-200 text-[9px] font-black uppercase px-3 py-1 rounded-full shadow-[0_0_12px_rgba(168,85,247,0.4)] flex items-center gap-1 font-mono">
+                            <span>🔞</span> VIP FANS
                         </span>
                     {% else %}
-                        <span class="bg-black/60 border border-vip-gold/30 text-yellow-300 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full">
-                            📸 Libre
+                        <span class="bg-black/80 border border-vip-gold/40 text-yellow-300 text-[9px] font-bold uppercase px-3 py-1 rounded-full shadow-inner font-mono">
+                            📸 PÚBLICO
                         </span>
                     {% endif %}
 
                     {% if is_admin or post.idol.telegram_user_id == tg_id %}
                         <button type="button" onclick="universalNav('{% url 'idols:edit_post' post.id %}')" 
-                                class="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-1 rounded-lg bg-black/70 border border-yellow-500/40" title="Editar">
+                                class="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-1 rounded-xl bg-black/80 border border-yellow-500/40 shadow active:scale-90" title="Editar">
                             ✏️
                         </button>
                         <form action="{% url 'idols:delete_post' post.id %}" method="POST" class="m-0" 
-                              onsubmit="return confirm('¿Confirmas eliminar esta foto del Muro?')">
+                              onsubmit="return confirm('¿Confirmas eliminar esta foto del Muro?');">
                             {% csrf_token %}
                             <input type="hidden" name="tg_id" value="{{ tg_id }}">
                             <button type="submit" 
-                                    class="text-rose-400 hover:text-rose-300 text-xs px-2 py-1 rounded-lg bg-rose-950/70 border border-rose-500/50" title="Eliminar">
+                                    class="text-rose-400 hover:text-rose-300 text-xs px-2 py-1 rounded-xl bg-rose-950/80 border border-rose-500/50 shadow active:scale-90" title="Eliminar">
                                 🗑️
                             </button>
                         </form>
                     {% endif %}
                 </div>
+
             </div>
 
-            <!-- FOTOGRAFÍA PRINCIPAL (DESBLOQUEADA O VIP) -->
-            <div class="relative w-full bg-black min-h-[350px] max-h-[550px] flex items-center justify-center overflow-hidden">
+            <!-- 2. FOTOGRAFÍA PRINCIPAL (DESBLOQUEADA vs VIP CENSURADA DE LUJO) -->
+            <div class="relative w-full bg-black min-h-[380px] max-h-[580px] flex items-center justify-center overflow-hidden">
+                
                 {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
-                    <!-- Foto Visible -->
+                    <!-- FOTO DESBLOQUEADA EN ALTA DEFINICIÓN -->
                     {% if post.image %}
                         <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
-                             class="w-full max-h-[550px] object-contain sm:object-cover">
+                             class="w-full max-h-[580px] object-contain sm:object-cover">
                     {% endif %}
 
                     {% if post.network == 'fans' and post.id in unlocked_ids %}
-                        <span class="absolute top-3 right-3 bg-emerald-950/90 border border-emerald-500 text-emerald-300 text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow backdrop-blur-md">
+                        <span class="absolute top-3 right-3 bg-emerald-950/95 border border-emerald-400 text-emerald-200 text-[9px] font-mono font-black uppercase px-3 py-1 rounded-full shadow-xl backdrop-blur-md">
                             ✓ Desbloqueada
                         </span>
                     {% endif %}
                 {% else %}
-                    <!-- Contenido VIP Bloqueado con Censura Glamour -->
+                    <!-- NIEBLA DE OBSIDIANA: FOTO VIP BLOQUEADA -->
                     {% if post.image %}
-                        <img src="{{ post.image.url }}" alt="VIP" class="w-full max-h-[550px] object-cover filter blur-2xl brightness-[0.22] scale-110">
+                        <img src="{{ post.image.url }}" alt="VIP" class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.18] scale-110">
                     {% endif %}
-                    
-                    <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
-                        <div class="w-16 h-16 rounded-3xl bg-black/80 border border-purple-500/70 flex items-center justify-center text-3xl shadow-[0_0_30px_rgba(168,85,247,0.5)] mb-3 animate-pulse">
-                            🔒
-                        </div>
-                        <h4 class="font-serif text-sm font-black text-purple-200 uppercase tracking-wider mb-1">
-                            Contenido Exclusivo VIP
-                        </h4>
-                        <p class="text-[11px] text-stone-300 mb-4 max-w-[220px]">
-                            Desbloquea esta sesión privada de {{ post.idol.stage_name }}.
-                        </p>
 
-                        <form action="{% url 'idols:unlock_post' post.id %}" method="POST" class="m-0">
-                            {% csrf_token %}
-                            <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                            <button type="submit" 
-                                    class="btn-gold py-2.5 px-6 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
-                                <span>Desbloquear por</span>
-                                <span class="font-mono text-sm font-black">{{ post.price }} 🪙</span>
-                            </button>
-                        </form>
+                    <!-- Tarjeta Flotante de Cristal Templado -->
+                    <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
+                        <div class="vip-panel p-6 max-w-xs w-full flex flex-col items-center rounded-3xl border-2 border-purple-500/60 shadow-[0_0_35px_rgba(168,85,247,0.35)] bg-gradient-to-b from-[#1e0a33]/95 to-black/95">
+                            
+                            <div class="w-16 h-16 rounded-2xl bg-black border-2 border-purple-400 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(168,85,247,0.6)] mb-3 animate-pulse">
+                                🔒
+                            </div>
+
+                            <span class="text-[9px] font-mono font-bold uppercase tracking-widest text-purple-300 mb-1">
+                                KingdomFans • Contenido Exclusivo
+                            </span>
+
+                            <h4 class="font-serif text-sm font-black text-white uppercase tracking-wider mb-1">
+                                Sesión Privada de {{ post.idol.stage_name }}
+                            </h4>
+                            
+                            <p class="text-[11px] text-stone-300 mb-4 leading-relaxed">
+                                Esta fotografía se guardará para siempre en tu Colección Privada.
+                            </p>
+
+                            <form action="{% url 'idols:unlock_post' post.id %}" method="POST" class="w-full m-0">
+                                {% csrf_token %}
+                                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                                <button type="submit" 
+                                        class="w-full btn-gold py-3 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
+                                    <span>Desbloquear</span>
+                                    <span class="font-mono text-sm font-black">🪙 {{ post.price }}</span>
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 {% endif %}
+
             </div>
 
-            <!-- BARRA DE ACCIONES: LIKE, COMENTARIO & BRINDIS -->
-            <div class="px-4 py-3 flex items-center justify-between border-b border-white/5 bg-black/40">
-                <div class="flex items-center gap-4">
-                    <!-- Like interactivo -->
+            <!-- 3. BARRA DE REACCIONES VIP (LIKE, COMENTARIO & BRINDIS) -->
+            <div class="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-black/60 backdrop-blur-md">
+                <div class="flex items-center gap-3">
+                    
+                    <!-- Botón Like -->
                     <button type="button" onclick="handleLike({{ post.id }})" id="like-btn-{{ post.id }}"
-                            class="flex items-center gap-1.5 text-sm font-bold transition-all active:scale-125 select-none {% if post.id in liked_ids %}text-rose-500{% else %}text-stone-400 hover:text-rose-400{% endif %}">
-                        <span id="like-icon-{{ post.id }}">{% if post.id in liked_ids %}❤️{% else %}🤍{% endif %}</span>
-                        <span id="like-count-{{ post.id }}" class="text-xs font-mono font-bold">{{ post.likes }}</span>
+                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-black/70 transition-all active:scale-125 select-none {% if post.id in liked_ids %}border-rose-500/60 text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.3)]{% else %}border-white/10 text-stone-400 hover:text-white{% endif %}">
+                        <span id="like-icon-{{ post.id }}" class="text-sm">{% if post.id in liked_ids %}❤️{% else %}🤍{% endif %}</span>
+                        <span id="like-count-{{ post.id }}" class="text-xs font-mono font-black">{{ post.likes }}</span>
                     </button>
 
-                    <!-- Comentarios -->
+                    <!-- Botón Comentarios -->
                     <button type="button" onclick="toggleComments({{ post.id }})" 
-                            class="flex items-center gap-1.5 text-stone-400 hover:text-purple-300 text-sm font-bold active:scale-95 transition-all select-none">
-                        <span>💬</span>
+                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 bg-black/70 text-stone-300 hover:text-purple-300 active:scale-95 transition-all select-none">
+                        <span class="text-sm">💬</span>
                         <span class="text-xs font-mono font-bold" id="comment-count-{{ post.id }}">{{ post.comments.count }}</span>
                     </button>
 
-                    <!-- Invitar Trago -->
+                    <!-- Botón Invitar Trago con Oro -->
                     <button type="button" onclick="openTipModal('{{ post.id }}', '{{ post.idol.stage_name }}')" 
-                            class="flex items-center gap-1 text-purple-300 hover:text-yellow-300 text-xs font-bold bg-purple-950/60 border border-purple-500/40 px-2.5 py-1 rounded-full active:scale-95 transition-all">
+                            class="flex items-center gap-1 text-yellow-300 hover:text-white text-xs font-black bg-gradient-to-r from-amber-950/80 to-yellow-950/80 border border-yellow-500/50 px-3 py-1.5 rounded-full active:scale-95 transition-all shadow-[0_0_10px_rgba(212,175,55,0.2)]">
                         <span>🥂</span> <span>Invitar Trago</span>
                     </button>
+
                 </div>
 
-                <a href="{% url 'idols:detail' post.idol.id %}?tg_id={{ tg_id }}" 
-                   class="text-[10px] text-yellow-400 font-bold uppercase tracking-wider hover:underline">
-                    Ver Perfil ➔
-                </a>
+                <!-- Enlace al Perfil -->
+                <button type="button" onclick="universalNav('{% url 'idols:detail' post.idol.id %}')" 
+                        class="text-[10px] text-vip-gold font-bold uppercase tracking-wider flex items-center gap-1 hover:underline">
+                    <span>Ficha</span> <span>➔</span>
+                </button>
             </div>
 
-            <!-- DESCRIPCIÓN Y COMENTARIOS -->
-            <div class="p-4 flex flex-col gap-2 bg-gradient-to-t from-black/80 to-transparent">
+            <!-- 4. TEXTO DE DESCRIPCIÓN Y COMENTARIOS -->
+            <div class="p-4 flex flex-col gap-2.5 bg-gradient-to-t from-black via-black/80 to-transparent">
+                
                 {% if post.caption %}
-                    <p class="text-xs text-stone-200 leading-relaxed">
-                        <strong class="text-yellow-400 font-bold mr-1">{{ post.idol.stage_name }}</strong>{{ post.caption }}
+                    <p class="text-xs text-stone-200 leading-relaxed font-normal">
+                        <strong class="font-serif text-yellow-300 font-bold mr-1">{{ post.idol.stage_name }}</strong>{{ post.caption }}
                     </p>
                 {% endif %}
 
-                <!-- Comentarios Desplegables -->
-                <div id="comments-section-{{ post.id }}" class="hidden mt-2 pt-2 border-t border-white/10 flex flex-col gap-2.5">
-                    <div class="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                <!-- SECCIÓN DE COMENTARIOS DESPLEGABLE -->
+                <div id="comments-section-{{ post.id }}" class="hidden mt-2 pt-3 border-t border-white/10 flex flex-col gap-3">
+                    
+                    <div class="flex flex-col gap-2 max-h-52 overflow-y-auto pr-1">
                         {% for c in post.comments.all %}
-                            <div class="bg-black/60 border border-white/10 p-2.5 rounded-2xl text-xs flex flex-col gap-0.5">
+                            <div class="bg-black/70 border border-white/10 p-3 rounded-2xl text-xs flex flex-col gap-1 shadow">
                                 <div class="flex justify-between items-center text-[10px]">
-                                    <span class="font-bold text-yellow-300">{{ c.author_name }}</span>
-                                    <span class="text-stone-500 font-mono">{{ c.created_at|timesince }} atrás</span>
+                                    <span class="font-bold text-yellow-300 flex items-center gap-1">
+                                        <span>💬</span> {{ c.author_name }}
+                                    </span>
+                                    <span class="text-stone-500 font-mono text-[9px]">{{ c.created_at|timesince }} atrás</span>
                                 </div>
-                                <p class="text-stone-300 leading-relaxed">{{ c.text }}</p>
+                                <p class="text-stone-200 leading-relaxed pl-1">{{ c.text }}</p>
                             </div>
                         {% empty %}
-                            <p class="text-center text-[11px] text-stone-500 py-1 italic">
+                            <p class="text-center text-[11px] text-stone-500 py-2 italic">
                                 Sé el primero en dejar un elogio para la Musa...
                             </p>
                         {% endfor %}
                     </div>
 
-                    <!-- Input Comentar -->
+                    <!-- Input para Comentar -->
                     <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 m-0 mt-1">
                         {% csrf_token %}
                         <input type="hidden" name="tg_id" value="{{ tg_id }}">
                         <input type="hidden" name="tg_username" value="{{ tg_username }}">
                         
-                        <input type="text" name="text" required placeholder="Escribe un halago..." 
-                               class="flex-1 bg-black/80 border border-vip-gold/30 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
+                        <input type="text" name="text" required placeholder="Escribe tu halago para {{ post.idol.stage_name }}..." 
+                               class="flex-1 bg-black border border-vip-gold/30 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
                         
                         <button type="submit" 
-                                class="bg-purple-900 hover:bg-purple-800 border border-purple-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold active:scale-95 transition-all">
+                                class="btn-gold px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider active:scale-95 transition-all shadow">
                             Enviar
                         </button>
                     </form>
+
                 </div>
+
             </div>
 
         </article>
         {% empty %}
-        <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
-            <span class="text-4xl my-2">📭</span>
-            <h4 class="font-serif text-sm font-bold text-white">Muro en Calma</h4>
-            <p class="text-xs text-stone-400 mt-1">Aún no hay publicaciones en el Kingdom. ¡Sé el primero en compartir un momento!</p>
+        <div class="vip-panel p-10 text-center flex flex-col items-center rounded-3xl">
+            <span class="text-5xl my-2">📭</span>
+            <h4 class="font-serif text-sm font-bold text-white uppercase tracking-wider">Muro en Calma</h4>
+            <p class="text-xs text-stone-400 mt-1 max-w-xs leading-relaxed">
+                Aún no hay publicaciones en la corte. ¡Consagra tu primer momento o anima a las Musas a publicar!
+            </p>
         </div>
         {% endfor %}
     </div>
 
 </div>
 
-<!-- MODAL PARA INVITAR UN TRAGO -->
-<div id="tip-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="vip-panel max-w-sm w-full p-6 relative border-purple-500/60 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1d0830] to-black">
-        <button onclick="closeTipModal()" class="absolute top-4 right-4 text-stone-400 hover:text-white text-xl">&times;</button>
+<!-- 🥂 MODAL ARISTOCRÁTICO PARA INVITAR UN TRAGO (CON FICHAS DE ORO) -->
+<div id="tip-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 select-none">
+    <div class="vip-panel max-w-sm w-full p-6 relative border-2 border-yellow-400/70 shadow-[0_0_40px_rgba(212,175,55,0.3)] rounded-3xl bg-gradient-to-b from-[#200d35] via-[#0d0417] to-black">
+        
+        <button onclick="closeTipModal()" class="absolute top-4 right-4 text-stone-400 hover:text-white text-2xl active:scale-90">&times;</button>
         
         <div class="text-center flex flex-col items-center">
-            <span class="text-4xl my-1">🥂</span>
-            <h3 class="font-serif text-base font-black text-gold-gradient uppercase tracking-wider mt-1">
+            <div class="w-16 h-16 rounded-2xl bg-amber-950/70 border border-yellow-400/80 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(212,175,55,0.4)] mb-2 animate-bounce">
+                🥂
+            </div>
+            <h3 class="font-serif text-base font-black text-gold-gradient uppercase tracking-widest mt-1">
                 Invitar un Trago Real
             </h3>
-            <p class="text-xs text-stone-300 mt-1" id="tip-idol-target">Ofrenda de oro directo al camerino.</p>
+            <p class="text-xs text-stone-300 mt-1" id="tip-idol-target">Ofrenda directa a la Bóveda de la Musa.</p>
         </div>
 
         <form id="tip-form" action="" method="POST" class="mt-4 flex flex-col gap-3">
@@ -247,18 +299,22 @@
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
             <div>
-                <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1.5 text-center">Selecciona el Brindis (🪙)</label>
-                <div class="grid grid-cols-3 gap-2">
-                    <button type="button" onclick="setTipAmount(20)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">20 🪙</button>
-                    <button type="button" onclick="setTipAmount(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">50 🪙</button>
-                    <button type="button" onclick="setTipAmount(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-2 rounded-xl text-xs font-mono font-bold">100 🪙</button>
+                <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1.5 text-center">Selecciona tu Ofrenda (🪙)</label>
+                
+                <!-- Fichas Rápidas -->
+                <div class="grid grid-cols-4 gap-1.5">
+                    <button type="button" onclick="setTipAmount(20)" class="bg-black border border-vip-gold/40 hover:border-vip-gold text-yellow-300 py-2 rounded-xl text-xs font-mono font-bold active:scale-95">20🪙</button>
+                    <button type="button" onclick="setTipAmount(50)" class="bg-black border border-vip-gold/40 hover:border-vip-gold text-yellow-300 py-2 rounded-xl text-xs font-mono font-bold active:scale-95">50🪙</button>
+                    <button type="button" onclick="setTipAmount(100)" class="bg-black border border-vip-gold/40 hover:border-vip-gold text-yellow-300 py-2 rounded-xl text-xs font-mono font-bold active:scale-95">100🪙</button>
+                    <button type="button" onclick="setTipAmount(250)" class="bg-black border border-vip-gold/40 hover:border-vip-gold text-yellow-300 py-2 rounded-xl text-xs font-mono font-bold active:scale-95">250🪙</button>
                 </div>
-                <input type="number" id="tip-amount-input" name="tip_amount" min="10" value="20" required
-                       class="mt-2.5 w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-black text-white text-base focus:outline-none focus:border-yellow-400">
+
+                <input type="number" id="tip-amount-input" name="tip_amount" min="10" value="50" required
+                       class="mt-2.5 w-full bg-black/90 border border-vip-gold/50 rounded-xl p-2.5 text-center font-mono font-black text-white text-lg focus:outline-none focus:border-yellow-400 shadow-inner">
             </div>
 
-            <button type="submit" class="btn-gold py-3 rounded-2xl text-xs font-black uppercase tracking-wider mt-1 shadow">
-                Brindar con la Musa
+            <button type="submit" class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all mt-1">
+                Brindar con la Musa (+EXP)
             </button>
         </form>
     </div>
@@ -281,10 +337,10 @@
 
             if (data.liked) {
                 icon.innerText = '❤️';
-                btn.className = "flex items-center gap-1.5 text-sm font-bold transition-all active:scale-125 select-none text-rose-500";
+                btn.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-rose-500/60 bg-black/70 text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.3)] transition-all active:scale-125 select-none";
             } else {
                 icon.innerText = '🤍';
-                btn.className = "flex items-center gap-1.5 text-sm font-bold transition-all active:scale-125 select-none text-stone-400 hover:text-rose-400";
+                btn.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 bg-black/70 text-stone-400 hover:text-white transition-all active:scale-125 select-none";
             }
             count.innerText = data.likes;
         } catch(e) {}
@@ -301,12 +357,12 @@
         const btnVip = document.getElementById('btn-filter-vip');
 
         if (type === 'vip') {
-            btnVip.className = "py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-gradient-to-r from-purple-800 to-fuchsia-700 text-white shadow";
-            btnAll.className = "py-2 rounded-xl text-xs font-black uppercase tracking-wider text-stone-400 hover:text-white transition-all";
+            btnVip.className = "py-2.5 rounded-xl text-xs font-black tracking-wider transition-all bg-gradient-to-r from-purple-800 to-fuchsia-700 text-white shadow";
+            btnAll.className = "py-2.5 rounded-xl text-xs font-black tracking-wider text-stone-400 hover:text-white transition-all";
             items.forEach(el => { el.style.display = (el.dataset.network === 'fans') ? 'block' : 'none'; });
         } else {
-            btnAll.className = "py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-vip-gold text-black shadow";
-            btnVip.className = "py-2 rounded-xl text-xs font-black uppercase tracking-wider text-stone-400 hover:text-white transition-all";
+            btnAll.className = "py-2.5 rounded-xl text-xs font-black tracking-wider transition-all bg-vip-gold text-black shadow";
+            btnVip.className = "py-2.5 rounded-xl text-xs font-black tracking-wider text-stone-400 hover:text-white transition-all";
             items.forEach(el => el.style.display = 'block');
         }
     }
@@ -317,7 +373,12 @@
         document.getElementById('tip-modal').classList.remove('hidden');
     }
 
-    function closeTipModal() { document.getElementById('tip-modal').classList.add('hidden'); }
-    function setTipAmount(val) { document.getElementById('tip-amount-input').value = val; }
+    function closeTipModal() { 
+        document.getElementById('tip-modal').classList.add('hidden'); 
+    }
+    
+    function setTipAmount(val) { 
+        document.getElementById('tip-amount-input').value = val; 
+    }
 </script>
 {% endblock %}
