@@ -10,10 +10,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 
 from core.models import UserRole, UserProfile, KingdomSetting, AdminAuditLog
-from economy.models import Wallet
+from economy.models import Wallet, UserInventoryItem
 from idols.models import (
     IdolProfile, Post, PostUnlock, PostLike, CustomRequest, 
-    UserPhotocard, Review, PostComment, Photocard, PhotocardBox
+    UserPhotocard, Review, PostComment, Photocard, PhotocardBox,
+    PhotocardTrade, IdolTribute
 )
 from pets.models import Pet
 from core.telegram_auth import is_user_in_group
@@ -389,13 +390,6 @@ def admin_panel(request, admin_tg_id):
 
         # 9. PURGA DE DATOS DE PRUEBA (REINICIO TOTAL A NIVEL 1)
         elif accion == 'purge_test_data':
-            from idols.models import (
-                PhotocardBox, Photocard, UserPhotocard, PostComment, 
-                PostUnlock, PostLike, CustomRequest, Review, Post, 
-                IdolProfile, PhotocardTrade, IdolTribute
-            )
-            from economy.models import UserInventoryItem
-
             # Limpiar absolutamente todos los datos de juego
             UserInventoryItem.objects.all().delete()
             PhotocardTrade.objects.all().delete()
@@ -412,13 +406,12 @@ def admin_panel(request, admin_tg_id):
             IdolProfile.objects.all().delete()
             Pet.objects.all().delete()
 
-            # Borrar todos los usuarios y perfiles (incluso la sesión de juego de la Corona)
+            # Borrar todos los usuarios y perfiles
             UserRole.objects.all().delete()
             UserProfile.objects.all().delete()
             Wallet.objects.all().delete()
 
             # Reiniciar tu cuenta Corona a Nivel 1 limpio con 150 monedas iniciales
-            # Dejamos UserRole vacío para que al entrar te obligue a elegir rol (Idol o Cliente)
             Wallet.objects.create(telegram_user_id=7474444797, balance=150)
             UserProfile.objects.create(
                 telegram_user_id=7474444797,
