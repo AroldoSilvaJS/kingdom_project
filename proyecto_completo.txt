@@ -137,7 +137,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'], # <- Modificar esta línea
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -145,6 +145,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.kingdom_notifications', # 👈 AÑADIR ESTA LÍNEA
             ],
         },
     },
@@ -375,6 +376,53 @@ from django.apps import AppConfig
 class CoreConfig(AppConfig):
     name = 'core'
 
+
+==================================================
+ARCHIVO: .\core\context_processors.py
+==================================================
+
+# core/context_processors.py
+from idols.models import CustomRequest
+from core.models import UserRole
+
+ADMIN_TG_ID = '7474444797'
+
+def kingdom_notifications(request):
+    """
+    Calcula el badge de la campanita en tiempo real:
+    - Para Idols: Antojos pendientes por atender.
+    - Para Clientes: Antojos entregados listos para ver en su colección.
+    """
+    raw_id = (
+        request.GET.get('tg_id') or 
+        request.POST.get('tg_id') or 
+        request.COOKIES.get('tg_id') or 
+        request.session.get('tg_id')
+    )
+    if not raw_id or str(raw_id).strip() in ['', 'None', 'undefined', 'null']:
+        return {'unread_notifications_count': 0}
+
+    try:
+        tg_id = int(raw_id)
+    except (ValueError, TypeError):
+        return {'unread_notifications_count': 0}
+
+    role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+    is_idol = (role_obj and role_obj.role == 'idol')
+
+    count = 0
+    if is_idol:
+        count = CustomRequest.objects.filter(
+            idol__telegram_user_id=tg_id, 
+            status='pending'
+        ).count()
+    else:
+        count = CustomRequest.objects.filter(
+            client_telegram_id=tg_id,
+            status='accepted'
+        ).count()
+
+    return {'unread_notifications_count': count}
 
 ==================================================
 ARCHIVO: .\core\middleware.py
@@ -1546,6 +1594,27 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🧹 Purga completada. Solo queda la cuenta de la Corona.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
+        # 10. TEMÁTICA SEMANAL DEL MURO
+        elif accion == 'save_feed_theme':
+            title = request.POST.get('theme_title', '').strip()
+            msg = request.POST.get('theme_message', '').strip()
+            is_active = request.POST.get('theme_active') == '1'
+
+            KingdomSetting.set_val('feed_theme_title', title)
+            KingdomSetting.set_val('feed_theme_message', msg)
+            KingdomSetting.set_val('feed_theme_active', 'true' if is_active else 'false')
+
+            if 'theme_banner' in request.FILES:
+                from idols.views import optimize_uploaded_image
+                from django.core.files.storage import default_storage
+                file_obj = optimize_uploaded_image(request.FILES['theme_banner'])
+                saved_path = default_storage.save(f'themes/banner_{file_obj.name}', file_obj)
+                image_url = default_storage.url(saved_path)
+                KingdomSetting.set_val('feed_theme_banner', image_url)
+
+            messages.success(request, "🎭 ¡Temática semanal del Muro actualizada con éxito!")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
     # Consultas optimizadas para el Dashboard
     usuarios_roles = list(UserRole.objects.all().order_by('-id'))
     user_ids = [u.telegram_id for u in usuarios_roles]
@@ -1590,6 +1659,13 @@ def admin_panel(request, admin_tg_id):
     audit_logs = AdminAuditLog.objects.all().order_by('-created_at')[:20]
     total_cards = UserPhotocard.objects.count()
 
+    feed_theme = {
+        'is_active': KingdomSetting.get_val('feed_theme_active', 'false') == 'true',
+        'title': KingdomSetting.get_val('feed_theme_title', 'Temática de la Semana'),
+        'message': KingdomSetting.get_val('feed_theme_message', ''),
+        'banner_url': KingdomSetting.get_val('feed_theme_banner', '')
+    }
+
     return render(request, 'core/admin_panel.html', {
         'admin_tg_id': admin_tg_id,
         'usuarios': usuarios_roles,
@@ -1602,6 +1678,7 @@ def admin_panel(request, admin_tg_id):
         'broadcast_msg': broadcast_msg,
         'broadcast_active': broadcast_active,
         'audit_logs': audit_logs,
+        'feed_theme': feed_theme,
     })
 
 
@@ -3730,6 +3807,15 @@ def social_feed(request):
         propios = list(Post.objects.filter(idol__telegram_user_id=tg_id).values_list('id', flat=True))
         unlocked_ids = set(pagados + propios)
         liked_ids = list(PostLike.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
+
+    # 🎭 Temática Semanal del Muro
+    theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
+    feed_theme = {
+        'is_active': theme_active,
+        'title': KingdomSetting.get_val('feed_theme_title', 'Temática Semanal'),
+        'message': KingdomSetting.get_val('feed_theme_message', ''),
+        'banner_url': KingdomSetting.get_val('feed_theme_banner', '')
+    }
         
     return render(request, 'idols/feed.html', {
         'posts': posts,
@@ -3738,6 +3824,7 @@ def social_feed(request):
         'liked_ids': liked_ids,
         'tg_username': tg_username,
         'is_admin': is_admin,
+        'feed_theme': feed_theme,  # 👈 Añadir esta línea
     })
 
 
@@ -5332,6 +5419,23 @@ ARCHIVO: .\templates\base.html
         }
     </style>
 </head>
+
+<!-- 🖼️ VISOR MODAL LIGHTBOX PANTALLA COMPLETA -->
+    <div id="image-lightbox-modal" class="hidden fixed inset-0 z-[999999] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-3 select-none" onclick="closeImageLightbox()">
+        <!-- Botón Cerrar -->
+        <button type="button" onclick="closeImageLightbox()" 
+                class="absolute top-4 right-4 text-stone-300 hover:text-white bg-black/80 border border-vip-gold/50 rounded-full w-10 h-10 flex items-center justify-center text-xl z-20 shadow-lg active:scale-90 transition-all">
+            &times;
+        </button>
+
+        <div class="relative max-w-md w-full flex flex-col items-center" onclick="event.stopPropagation()">
+            <div class="rounded-3xl overflow-hidden border-2 border-vip-gold/60 shadow-[0_0_50px_rgba(212,175,55,0.4)] bg-black max-h-[82vh] flex items-center justify-center">
+                <img id="lightbox-img" src="" alt="Foto VIP" class="w-full h-auto max-h-[80vh] object-contain block">
+            </div>
+            <p id="lightbox-caption" class="text-xs text-stone-200 text-center mt-3 px-4 italic font-medium leading-relaxed"></p>
+        </div>
+    </div>
+
 <body class="font-sans antialiased flex flex-col items-center min-h-screen relative pb-28">
 
     <!-- 📢 NOTIFICACIONES FLASH GLOBALES (SE MUESTRAN SIEMPRE EN LA PÁGINA ACTUAL Y DESAPARECEN SOLAS) -->
@@ -5360,9 +5464,14 @@ ARCHIVO: .\templates\base.html
         
         {% if not hide_bottom_nav %}
         <button type="button" onclick="universalNav('/buzon/')" 
-                class="absolute right-3 top-3 bg-black/70 hover:bg-black border border-vip-gold/40 text-yellow-300 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-[0_0_12px_rgba(212,175,55,0.3)] active:scale-90 transition-all z-30" 
+                class="absolute right-3 top-3 bg-black/70 hover:bg-black border border-vip-gold/40 text-yellow-300 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-[0_0_12px_rgba(212,175,55,0.3)] active:scale-90 transition-all z-30 relative" 
                 title="Abrir Buzón Real">
             <span>🔔</span>
+            {% if unread_notifications_count > 0 %}
+                <span class="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] font-mono font-black w-4 h-4 rounded-full flex items-center justify-center border border-white shadow animate-pulse">
+                    {{ unread_notifications_count }}
+                </span>
+            {% endif %}
         </button>
         {% endif %}
 
@@ -5536,6 +5645,22 @@ ARCHIVO: .\templates\base.html
         };
         window.closeVipAlert = function() {
             document.getElementById('vip-global-modal').classList.add('hidden');
+        };
+
+        window.openImageLightbox = function(src, caption = '') {
+            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+            const modal = document.getElementById('image-lightbox-modal');
+            const img = document.getElementById('lightbox-img');
+            const cap = document.getElementById('lightbox-caption');
+            if (modal && img) {
+                img.src = src;
+                cap.innerText = caption ? `«${caption}»` : '';
+                modal.classList.remove('hidden');
+            }
+        };
+        window.closeImageLightbox = function() {
+            const modal = document.getElementById('image-lightbox-modal');
+            if (modal) modal.classList.add('hidden');
         };
     </script>
 </body>
@@ -5935,6 +6060,56 @@ ARCHIVO: .\templates\core\admin_panel.html
         Guardar Decreto
       </button>
     </form>
+
+    <!-- 🎭 GESTOR DE LA TEMÁTICA DE LA SEMANA DEL MURO -->
+    <div class="admin-card p-4 rounded-3xl space-y-2.5 border border-amber-500/40">
+      <div class="flex justify-between items-center border-b border-white/10 pb-2">
+        <h3 class="text-xs font-black text-yellow-300 uppercase tracking-wider flex items-center gap-1.5">
+          <span>🎭</span> Temática Semanal del Muro
+        </h3>
+        <span class="text-[9px] font-mono text-stone-400">Cartel & Evento</span>
+      </div>
+
+      <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="save_feed_theme">
+        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+
+        <div class="flex items-center justify-between p-2 rounded-xl bg-black/60 border border-white/10">
+          <span class="text-xs text-stone-300 font-bold">¿Mostrar Cartel en el Muro?</span>
+          <label class="text-[10px] text-yellow-300 flex items-center gap-1.5 cursor-pointer font-bold">
+            <input type="checkbox" name="theme_active" value="1" {% if feed_theme.is_active %}checked{% endif %}> Activo en el Muro
+          </label>
+        </div>
+
+        <div>
+          <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Título de la Temática *</label>
+          <input type="text" name="theme_title" value="{{ feed_theme.title }}" placeholder="Ej: 🎃 Especial Halloween 2026: Seducción Prohibida"
+                 class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
+        </div>
+
+        <div>
+          <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Mensaje / Pautas para las Musas</label>
+          <textarea name="theme_message" rows="2" placeholder="Ej: Esta semana las Musas subirán fotos con disfraces y atuendos oscuros..."
+                    class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white resize-none">{{ feed_theme.message }}</textarea>
+        </div>
+
+        <div class="bg-black/50 p-2.5 rounded-xl border border-white/10 flex flex-col gap-1">
+          <label class="block text-[10px] text-stone-300 uppercase font-bold">Banner / Imagen Temática (Opcional)</label>
+          {% if feed_theme.banner_url %}
+            <div class="flex items-center gap-2 my-1">
+              <img src="{{ feed_theme.banner_url }}" class="h-10 w-24 object-cover rounded border border-yellow-500/40">
+              <span class="text-[9.5px] text-stone-400">Banner actual cargado.</span>
+            </div>
+          {% endif %}
+          <input type="file" name="theme_banner" accept="image/*" class="text-xs text-stone-400">
+        </div>
+
+        <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+          💾 Guardar Temática Semanal
+        </button>
+      </form>
+    </div>
 
   </div>
 
@@ -7779,6 +7954,8 @@ ARCHIVO: .\templates\economy\casino.html
 
                 // 3. Mostrar banner de victoria o derrota
                 if (data.resultado === 'win') {
+                    playCoins();
+                    playWinSound();
                     resultBox.innerHTML = `
                         <div class="p-2.5 bg-emerald-950/90 border border-emerald-500 rounded-xl text-emerald-200 text-xs font-bold w-full animate-bounce shadow-[0_0_15px_rgba(16,185,129,0.4)]">
                             🎉 ¡Acertaste! Cayó el ${data.numero_ganador} (${centerText.innerText}). Has ganado +${data.ganancia} 🪙.
@@ -7804,6 +7981,25 @@ ARCHIVO: .\templates\economy\casino.html
             btn.innerHTML = '<span>🎡</span> Girar Ruleta Imperial';
             resultBox.innerHTML = '<span class="text-xs text-red-400 font-bold">⚠️ Error de conexión al apostar</span>';
         }
+    }
+
+    function playWinSound() {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioCtx();
+            [587.33, 880, 1174.66].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.1));
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + (idx * 0.1));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.1) + 0.3);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.1));
+                osc.stop(ctx.currentTime + (idx * 0.1) + 0.3);
+            });
+        } catch(e) {}
     }
 </script>
 {% endblock %}
@@ -8175,7 +8371,8 @@ ARCHIVO: .\templates\economy\mines.html
             if (!data.success) return;
 
             isGameRunning = false;
-            playCoins();
+            playCoins(); // 👈 Tintineo de monedas
+            playWinFanfare(); // 👈 Fanfarria noble
             try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
 
             document.getElementById('mines-balance').innerText = data.nuevo_saldo;
@@ -8201,6 +8398,25 @@ ARCHIVO: .\templates\economy\mines.html
         } catch(e) {
             console.error(e);
         }
+    }
+
+    function playWinFanfare() {
+        try {
+            const ctx = getAudioCtx();
+            const notes = [523.25, 659.25, 783.99, 1046.50]; // Acorde Mayor triunfal Do-Mi-Sol-Do
+            notes.forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.09));
+                gain.gain.setValueAtTime(0.25, ctx.currentTime + (idx * 0.09));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.09) + 0.35);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.09));
+                osc.stop(ctx.currentTime + (idx * 0.09) + 0.35);
+            });
+        } catch(e) {}
     }
 </script>
 {% endblock %}
@@ -9169,7 +9385,9 @@ ARCHIVO: .\templates\idols\collection.html
             <div class="grid grid-cols-2 gap-3">
                 {% for ant in antojos %}
                     <div class="relative rounded-2xl overflow-hidden border border-yellow-500/50 aspect-[3/4] bg-black shadow-lg flex flex-col justify-end group">
-                        <img src="{{ ant.delivered_photo.url }}" alt="{{ ant.description }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
+                             onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
+                             class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
                         <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
                         <div class="relative z-10 p-2.5 flex flex-col">
                             <span class="text-[9px] bg-yellow-500 text-black font-black uppercase px-1.5 py-0.2 rounded w-fit mb-1">Antojo Exclusivo</span>
@@ -9192,7 +9410,9 @@ ARCHIVO: .\templates\idols\collection.html
                 {% for post in posts %}
                     <div class="relative rounded-2xl overflow-hidden border border-purple-500/40 aspect-[3/4] bg-black shadow-md flex flex-col justify-end group">
                         {% if post.image %}
-                            <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                            <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
+                             onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
+                             class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
                         {% endif %}
                         <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
                         <div class="relative z-10 p-2.5 flex flex-col">
@@ -9819,6 +10039,50 @@ ARCHIVO: .\templates\idols\feed.html
         </button>
     </div>
 
+    <!-- 🎃 CARTEL DE LA TEMÁTICA DE LA SEMANA -->
+    {% if feed_theme.is_active %}
+    <div class="relative rounded-3xl overflow-hidden border-2 border-amber-500/60 bg-gradient-to-b from-[#200b28] via-[#0d0414] to-black shadow-[0_8px_30px_rgba(212,175,55,0.25)] flex flex-col group my-1">
+        
+        <!-- Orbe luminoso de ambiente -->
+        <div class="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+        <!-- Barra de Insignia Superior -->
+        <div class="p-3 pb-2 flex items-center justify-between relative z-10 bg-black/60 backdrop-blur-md border-b border-white/5">
+            <span class="inline-flex items-center gap-1.5 text-[9px] font-mono font-black uppercase tracking-widest bg-amber-950/80 text-amber-300 border border-amber-500/50 px-3 py-0.5 rounded-full shadow">
+                <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-ping"></span>
+                <span>Temática de la Semana 🎭</span>
+            </span>
+
+            <span class="text-[10px] font-mono text-purple-300 font-bold bg-black/60 px-2 py-0.5 rounded-md border border-purple-500/30">
+                Evento Oficial
+            </span>
+        </div>
+
+        <!-- Banner Visual (Si se subió imagen) -->
+        {% if feed_theme.banner_url %}
+        <div class="w-full bg-black relative overflow-hidden border-b border-amber-500/30">
+            <img src="{{ feed_theme.banner_url }}" alt="{{ feed_theme.title }}" 
+                 class="w-full h-auto max-h-48 object-cover object-center group-hover:scale-[1.02] transition-transform duration-500 block">
+            <div class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[#0d0414] to-transparent pointer-events-none"></div>
+        </div>
+        {% endif %}
+
+        <!-- Título y Mensaje de la Semana -->
+        <div class="p-3.5 flex flex-col gap-1 relative z-10">
+            <h3 class="font-serif text-sm font-black text-gold-gradient tracking-wide uppercase leading-tight">
+                {{ feed_theme.title }}
+            </h3>
+            
+            {% if feed_theme.message %}
+            <p class="text-[11.5px] text-stone-200 leading-relaxed font-normal">
+                {{ feed_theme.message }}
+            </p>
+            {% endif %}
+        </div>
+
+    </div>
+    {% endif %}
+
     <!-- 🎭 CARRUSEL DE HISTORIAS DE MUSAS (STORIES VIP) -->
     <div class="w-full flex gap-3 overflow-x-auto py-1 px-1 no-scrollbar select-none">
         {% for post in posts|slice:":8" %}
@@ -9933,7 +10197,8 @@ ARCHIVO: .\templates\idols\feed.html
                     <!-- FOTO DESBLOQUEADA EN ALTA DEFINICIÓN -->
                     {% if post.image %}
                         <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
-                             class="w-full max-h-[580px] object-contain sm:object-cover">
+                             onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
+                             class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
                     {% endif %}
 
                     {% if post.network == 'fans' and post.id in unlocked_ids %}
@@ -11051,6 +11316,25 @@ ARCHIVO: .\templates\idols\photocards_market.html
             </button>
         </div>
 
+        <!-- BARRA DE BÚSQUEDA Y FILTRO RÁPIDO EN VIVO -->
+        <div class="flex flex-col gap-2 my-1">
+            <div class="relative w-full">
+                <span class="absolute inset-y-0 left-3 flex items-center text-xs opacity-50">🔍</span>
+                <input type="text" id="marketSearchInput" onkeyup="filterMarketCards()" 
+                       placeholder="Buscar por Idol (ej: Jennie, Karina) o carta..." 
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <!-- Botones de Rareza -->
+            <div class="grid grid-cols-5 gap-1 p-1 bg-black/60 border border-white/10 rounded-xl text-[9px] font-bold uppercase text-center">
+                <button type="button" onclick="setRarityFilter('all')" class="py-1 rounded-lg bg-vip-gold text-black font-black m-rarity-btn" id="m-f-all">Todas</button>
+                <button type="button" onclick="setRarityFilter('common')" class="py-1 rounded-lg text-stone-400 hover:text-white m-rarity-btn" id="m-f-common">Común</button>
+                <button type="button" onclick="setRarityFilter('rare')" class="py-1 rounded-lg text-blue-400 hover:text-white m-rarity-btn" id="m-f-rare">Rara</button>
+                <button type="button" onclick="setRarityFilter('epic')" class="py-1 rounded-lg text-purple-400 hover:text-white m-rarity-btn" id="m-f-epic">Épica</button>
+                <button type="button" onclick="setRarityFilter('legendary')" class="py-1 rounded-lg text-yellow-400 hover:text-white m-rarity-btn" id="m-f-legendary">👑</button>
+            </div>
+        </div>
+
         {% if market_cards %}
         <div class="grid grid-cols-2 gap-3">
             {% for item in market_cards %}
@@ -11206,6 +11490,33 @@ ARCHIVO: .\templates\idols\photocards_market.html
             btnCards.className = "py-2 rounded-xl text-stone-400 hover:text-white";
         }
     }
+
+    let selectedMarketRarity = 'all';
+
+    function setRarityFilter(rarity) {
+        selectedMarketRarity = rarity;
+        document.querySelectorAll('.m-rarity-btn').forEach(b => {
+            b.className = "py-1 rounded-lg text-stone-400 hover:text-white m-rarity-btn";
+        });
+        const activeBtn = document.getElementById(`m-f-${rarity}`);
+        if (activeBtn) activeBtn.className = "py-1 rounded-lg bg-vip-gold text-black font-black m-rarity-btn";
+        filterMarketCards();
+    }
+
+    function filterMarketCards() {
+        const query = (document.getElementById('marketSearchInput')?.value || '').toLowerCase().trim();
+        const items = document.querySelectorAll('.market-card-item');
+
+        items.forEach(card => {
+            const text = card.getAttribute('data-search') || '';
+            const cardRarity = card.getAttribute('data-rarity') || '';
+
+            const matchesText = text.includes(query);
+            const matchesRarity = (selectedMarketRarity === 'all' || cardRarity === selectedMarketRarity);
+
+            card.style.display = (matchesText && matchesRarity) ? 'flex' : 'none';
+        });
+    }
 </script>
 {% endblock %}
 
@@ -11264,45 +11575,56 @@ ARCHIVO: .\templates\idols\photocard_boxes.html
         </div>
     </div>
 
-    <!-- 🌟 VENTANA DE PRÓXIMO LANZAMIENTO (SI ESTÁ ACTIVA) -->
+    <!-- 🌟 BANNER CINEMATOGRÁFICO DE PRÓXIMO LANZAMIENTO (SNEAK PEEK VIP) -->
     {% if upcoming.is_active %}
-    <div class="relative rounded-3xl overflow-hidden border-2 border-purple-400/80 bg-gradient-to-br from-[#240c38] via-[#0f0418] to-black p-4 shadow-[0_10px_35px_rgba(168,85,247,0.35)] flex flex-col gap-3 group">
+    <div class="relative rounded-3xl overflow-hidden border-2 border-purple-500/80 bg-gradient-to-b from-[#1b082e] via-[#0d0417] to-black shadow-[0_12px_35px_rgba(168,85,247,0.35)] flex flex-col group">
         
-        <!-- Destello neón ambiental -->
-        <div class="absolute -top-10 -right-10 w-40 h-40 bg-fuchsia-600/25 rounded-full blur-3xl pointer-events-none"></div>
+        <!-- Orbe Neón de Ambiente -->
+        <div class="absolute -top-12 -right-12 w-48 h-48 bg-fuchsia-600/25 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div class="flex items-center justify-between relative z-10">
-            <span class="inline-flex items-center gap-1.5 text-[9px] font-mono font-black uppercase tracking-widest bg-purple-950/90 text-purple-200 border border-purple-400 px-3 py-1 rounded-full shadow">
+        <!-- 1. Cabecera con Insignia y Fecha de Estreno -->
+        <div class="p-3.5 pb-2.5 flex items-center justify-between relative z-10 bg-black/60 backdrop-blur-md border-b border-white/5">
+            <span class="inline-flex items-center gap-1.5 text-[9.5px] font-mono font-black uppercase tracking-widest bg-gradient-to-r from-purple-950 to-fuchsia-950 text-purple-200 border border-purple-400 px-3 py-1 rounded-full shadow-[0_0_12px_rgba(168,85,247,0.4)]">
                 <span class="w-2 h-2 rounded-full bg-fuchsia-400 animate-ping"></span>
                 <span>Próximo Lanzamiento ⏳</span>
             </span>
-            
-            <span class="text-xs font-mono font-bold text-yellow-300 bg-black/70 px-2.5 py-0.5 rounded-full border border-yellow-500/40">
-                {{ upcoming.release_date|default:"Muy pronto" }}
+
+            <span class="text-xs font-mono font-black text-amber-300 bg-amber-950/80 px-3 py-1 rounded-full border border-yellow-500/50 shadow-inner flex items-center gap-1">
+                <span>🗓️</span> <span>{{ upcoming.release_date|default:"Muy pronto" }}</span>
             </span>
         </div>
 
-        <div class="flex items-center gap-3.5 relative z-10">
-            <!-- Portada de la Caja Futura -->
-            <div class="w-24 h-24 min-w-[96px] max-w-[96px] rounded-2xl bg-black/90 border-2 border-purple-400/60 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_20px_rgba(168,85,247,0.4)] p-1">
-                {% if upcoming.image_url %}
-                    <img src="{{ upcoming.image_url }}" alt="Próxima Caja" class="w-full h-full object-contain filter drop-shadow">
-                {% else %}
-                    <span class="text-4xl animate-pulse">📦</span>
-                {% endif %}
-            </div>
+        <!-- 2. Portada Panorámica en Ancho Completo (Sin recortes ni deformaciones) -->
+        {% if upcoming.image_url %}
+        <div class="w-full bg-black relative overflow-hidden border-b border-purple-500/30">
+            <img src="{{ upcoming.image_url }}" 
+                 alt="{{ upcoming.title }}" 
+                 class="w-full h-auto max-h-56 object-cover object-center group-hover:scale-[1.02] transition-transform duration-500 block">
+            <!-- Degradado sutil para fusionar con el fondo inferior -->
+            <div class="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#0d0417] to-transparent pointer-events-none"></div>
+        </div>
+        {% endif %}
 
-            <!-- Título y Descripción del Lanzamiento -->
-            <div class="flex flex-col min-w-0 flex-1">
-                <h3 class="font-serif text-sm font-black text-white leading-tight truncate text-gold-gradient">
+        <!-- 3. Información del Lanzamiento (Título, Descripción y Tag) -->
+        <div class="p-4 flex flex-col gap-1.5 relative z-10 bg-gradient-to-t from-black via-black/80 to-transparent">
+            <div class="flex items-center justify-between gap-2">
+                <h3 class="font-serif text-base sm:text-lg font-black text-gold-gradient tracking-wide uppercase leading-tight">
                     {{ upcoming.title }}
                 </h3>
-                <p class="text-[11px] text-stone-300 mt-1 line-clamp-2 leading-relaxed">
-                    {{ upcoming.description|default:"Una nueva colección mística se prepara para abrir sus puertas en la corte." }}
-                </p>
-                <div class="mt-2 text-[9.5px] font-mono text-purple-300 flex items-center gap-1">
-                    <span>👑</span> <span>Edición Limitada en camino</span>
-                </div>
+                <span class="text-[9px] font-mono uppercase font-black text-yellow-400 bg-black/80 px-2 py-0.5 rounded-md border border-yellow-500/40 flex-shrink-0">
+                    👑 Edición Limitada
+                </span>
+            </div>
+
+            <p class="text-xs text-stone-300 leading-relaxed font-normal">
+                {{ upcoming.description|default:"Una nueva colección mística se prepara para abrir sus puertas en la corte." }}
+            </p>
+
+            <div class="mt-1 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-purple-300">
+                <span class="flex items-center gap-1">
+                    <span>✨</span> <span>Nuevas Photocards & Cajas temáticas</span>
+                </span>
+                <span class="text-stone-400 font-bold">Reserva tu oro</span>
             </div>
         </div>
 

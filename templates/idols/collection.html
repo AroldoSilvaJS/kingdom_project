@@ -31,7 +31,9 @@
             <div class="grid grid-cols-2 gap-3">
                 {% for ant in antojos %}
                     <div class="relative rounded-2xl overflow-hidden border border-yellow-500/50 aspect-[3/4] bg-black shadow-lg flex flex-col justify-end group">
-                        <img src="{{ ant.delivered_photo.url }}" alt="{{ ant.description }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                        <img src="{{ ant.delivered_photo.url }}" alt="{{ ant.description }}" 
+                        onclick="openImageLightbox('{{ ant.delivered_photo.url }}', '{{ ant.description|escapejs }}')"
+                        class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
                         <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
                         <div class="relative z-10 p-2.5 flex flex-col">
                             <span class="text-[9px] bg-yellow-500 text-black font-black uppercase px-1.5 py-0.2 rounded w-fit mb-1">Antojo Exclusivo</span>
@@ -54,7 +56,9 @@
                 {% for post in posts %}
                     <div class="relative rounded-2xl overflow-hidden border border-purple-500/40 aspect-[3/4] bg-black shadow-md flex flex-col justify-end group">
                         {% if post.image %}
-                            <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                            <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
+                             onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
+                             class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
                         {% endif %}
                         <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
                         <div class="relative z-10 p-2.5 flex flex-col">

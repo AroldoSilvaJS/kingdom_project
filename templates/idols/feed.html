@@ -177,7 +177,8 @@
                     <!-- FOTO DESBLOQUEADA EN ALTA DEFINICIÓN -->
                     {% if post.image %}
                         <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
-                             class="w-full max-h-[580px] object-contain sm:object-cover">
+                             onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
+                             class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
                     {% endif %}
 
                     {% if post.network == 'fans' and post.id in unlocked_ids %}

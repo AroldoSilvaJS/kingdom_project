@@ -97,6 +97,25 @@
             </button>
         </div>
 
+        <!-- BARRA DE BÚSQUEDA Y FILTRO RÁPIDO EN VIVO -->
+        <div class="flex flex-col gap-2 my-1">
+            <div class="relative w-full">
+                <span class="absolute inset-y-0 left-3 flex items-center text-xs opacity-50">🔍</span>
+                <input type="text" id="marketSearchInput" onkeyup="filterMarketCards()" 
+                       placeholder="Buscar por Idol (ej: Jennie, Karina) o carta..." 
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <!-- Botones de Rareza -->
+            <div class="grid grid-cols-5 gap-1 p-1 bg-black/60 border border-white/10 rounded-xl text-[9px] font-bold uppercase text-center">
+                <button type="button" onclick="setRarityFilter('all')" class="py-1 rounded-lg bg-vip-gold text-black font-black m-rarity-btn" id="m-f-all">Todas</button>
+                <button type="button" onclick="setRarityFilter('common')" class="py-1 rounded-lg text-stone-400 hover:text-white m-rarity-btn" id="m-f-common">Común</button>
+                <button type="button" onclick="setRarityFilter('rare')" class="py-1 rounded-lg text-blue-400 hover:text-white m-rarity-btn" id="m-f-rare">Rara</button>
+                <button type="button" onclick="setRarityFilter('epic')" class="py-1 rounded-lg text-purple-400 hover:text-white m-rarity-btn" id="m-f-epic">Épica</button>
+                <button type="button" onclick="setRarityFilter('legendary')" class="py-1 rounded-lg text-yellow-400 hover:text-white m-rarity-btn" id="m-f-legendary">👑</button>
+            </div>
+        </div>
+
         {% if market_cards %}
         <div class="grid grid-cols-2 gap-3">
             {% for item in market_cards %}
@@ -251,6 +270,33 @@
             btnTrades.className = "py-2 rounded-xl bg-vip-gold text-black font-black";
             btnCards.className = "py-2 rounded-xl text-stone-400 hover:text-white";
         }
+    }
+
+    let selectedMarketRarity = 'all';
+
+    function setRarityFilter(rarity) {
+        selectedMarketRarity = rarity;
+        document.querySelectorAll('.m-rarity-btn').forEach(b => {
+            b.className = "py-1 rounded-lg text-stone-400 hover:text-white m-rarity-btn";
+        });
+        const activeBtn = document.getElementById(`m-f-${rarity}`);
+        if (activeBtn) activeBtn.className = "py-1 rounded-lg bg-vip-gold text-black font-black m-rarity-btn";
+        filterMarketCards();
+    }
+
+    function filterMarketCards() {
+        const query = (document.getElementById('marketSearchInput')?.value || '').toLowerCase().trim();
+        const items = document.querySelectorAll('.market-card-item');
+
+        items.forEach(card => {
+            const text = card.getAttribute('data-search') || '';
+            const cardRarity = card.getAttribute('data-rarity') || '';
+
+            const matchesText = text.includes(query);
+            const matchesRarity = (selectedMarketRarity === 'all' || cardRarity === selectedMarketRarity);
+
+            card.style.display = (matchesText && matchesRarity) ? 'flex' : 'none';
+        });
     }
 </script>
 {% endblock %}
