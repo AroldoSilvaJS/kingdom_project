@@ -315,6 +315,56 @@
       </button>
     </form>
 
+    <!-- 🎭 GESTOR DE LA TEMÁTICA DE LA SEMANA DEL MURO -->
+    <div class="admin-card p-4 rounded-3xl space-y-2.5 border border-amber-500/40">
+      <div class="flex justify-between items-center border-b border-white/10 pb-2">
+        <h3 class="text-xs font-black text-yellow-300 uppercase tracking-wider flex items-center gap-1.5">
+          <span>🎭</span> Temática Semanal del Muro
+        </h3>
+        <span class="text-[9px] font-mono text-stone-400">Cartel & Evento</span>
+      </div>
+
+      <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="save_feed_theme">
+        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+
+        <div class="flex items-center justify-between p-2 rounded-xl bg-black/60 border border-white/10">
+          <span class="text-xs text-stone-300 font-bold">¿Mostrar Cartel en el Muro?</span>
+          <label class="text-[10px] text-yellow-300 flex items-center gap-1.5 cursor-pointer font-bold">
+            <input type="checkbox" name="theme_active" value="1" {% if feed_theme.is_active %}checked{% endif %}> Activo en el Muro
+          </label>
+        </div>
+
+        <div>
+          <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Título de la Temática *</label>
+          <input type="text" name="theme_title" value="{{ feed_theme.title }}" placeholder="Ej: 🎃 Especial Halloween 2026: Seducción Prohibida"
+                 class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
+        </div>
+
+        <div>
+          <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Mensaje / Pautas para las Musas</label>
+          <textarea name="theme_message" rows="2" placeholder="Ej: Esta semana las Musas subirán fotos con disfraces y atuendos oscuros..."
+                    class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white resize-none">{{ feed_theme.message }}</textarea>
+        </div>
+
+        <div class="bg-black/50 p-2.5 rounded-xl border border-white/10 flex flex-col gap-1">
+          <label class="block text-[10px] text-stone-300 uppercase font-bold">Banner / Imagen Temática (Opcional)</label>
+          {% if feed_theme.banner_url %}
+            <div class="flex items-center gap-2 my-1">
+              <img src="{{ feed_theme.banner_url }}" class="h-10 w-24 object-cover rounded border border-yellow-500/40">
+              <span class="text-[9.5px] text-stone-400">Banner actual cargado.</span>
+            </div>
+          {% endif %}
+          <input type="file" name="theme_banner" accept="image/*" class="text-xs text-stone-400">
+        </div>
+
+        <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+          💾 Guardar Temática Semanal
+        </button>
+      </form>
+    </div>
+
   </div>
 
   <!-- 🛡️ PESTAÑA 3: GESTOR DE PURGAS Y MAZMORRAS -->

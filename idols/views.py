@@ -390,6 +390,15 @@ def social_feed(request):
         propios = list(Post.objects.filter(idol__telegram_user_id=tg_id).values_list('id', flat=True))
         unlocked_ids = set(pagados + propios)
         liked_ids = list(PostLike.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
+
+    # 🎭 Temática Semanal del Muro
+    theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
+    feed_theme = {
+        'is_active': theme_active,
+        'title': KingdomSetting.get_val('feed_theme_title', 'Temática Semanal'),
+        'message': KingdomSetting.get_val('feed_theme_message', ''),
+        'banner_url': KingdomSetting.get_val('feed_theme_banner', '')
+    }
         
     return render(request, 'idols/feed.html', {
         'posts': posts,
@@ -398,6 +407,7 @@ def social_feed(request):
         'liked_ids': liked_ids,
         'tg_username': tg_username,
         'is_admin': is_admin,
+        'feed_theme': feed_theme,  # 👈 Añadir esta línea
     })
 
 

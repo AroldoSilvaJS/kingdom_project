@@ -407,6 +407,27 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🧹 Purga completada. Solo queda la cuenta de la Corona.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
+        # 10. TEMÁTICA SEMANAL DEL MURO
+        elif accion == 'save_feed_theme':
+            title = request.POST.get('theme_title', '').strip()
+            msg = request.POST.get('theme_message', '').strip()
+            is_active = request.POST.get('theme_active') == '1'
+
+            KingdomSetting.set_val('feed_theme_title', title)
+            KingdomSetting.set_val('feed_theme_message', msg)
+            KingdomSetting.set_val('feed_theme_active', 'true' if is_active else 'false')
+
+            if 'theme_banner' in request.FILES:
+                from idols.views import optimize_uploaded_image
+                from django.core.files.storage import default_storage
+                file_obj = optimize_uploaded_image(request.FILES['theme_banner'])
+                saved_path = default_storage.save(f'themes/banner_{file_obj.name}', file_obj)
+                image_url = default_storage.url(saved_path)
+                KingdomSetting.set_val('feed_theme_banner', image_url)
+
+            messages.success(request, "🎭 ¡Temática semanal del Muro actualizada con éxito!")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
     # Consultas optimizadas para el Dashboard
     usuarios_roles = list(UserRole.objects.all().order_by('-id'))
     user_ids = [u.telegram_id for u in usuarios_roles]
@@ -451,6 +472,13 @@ def admin_panel(request, admin_tg_id):
     audit_logs = AdminAuditLog.objects.all().order_by('-created_at')[:20]
     total_cards = UserPhotocard.objects.count()
 
+    feed_theme = {
+        'is_active': KingdomSetting.get_val('feed_theme_active', 'false') == 'true',
+        'title': KingdomSetting.get_val('feed_theme_title', 'Temática de la Semana'),
+        'message': KingdomSetting.get_val('feed_theme_message', ''),
+        'banner_url': KingdomSetting.get_val('feed_theme_banner', '')
+    }
+
     return render(request, 'core/admin_panel.html', {
         'admin_tg_id': admin_tg_id,
         'usuarios': usuarios_roles,
@@ -463,6 +491,7 @@ def admin_panel(request, admin_tg_id):
         'broadcast_msg': broadcast_msg,
         'broadcast_active': broadcast_active,
         'audit_logs': audit_logs,
+        'feed_theme': feed_theme,
     })
 
 

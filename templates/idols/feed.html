@@ -19,6 +19,50 @@
         </button>
     </div>
 
+    <!-- 🎃 CARTEL DE LA TEMÁTICA DE LA SEMANA -->
+    {% if feed_theme.is_active %}
+    <div class="relative rounded-3xl overflow-hidden border-2 border-amber-500/60 bg-gradient-to-b from-[#200b28] via-[#0d0414] to-black shadow-[0_8px_30px_rgba(212,175,55,0.25)] flex flex-col group my-1">
+        
+        <!-- Orbe luminoso de ambiente -->
+        <div class="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+        <!-- Barra de Insignia Superior -->
+        <div class="p-3 pb-2 flex items-center justify-between relative z-10 bg-black/60 backdrop-blur-md border-b border-white/5">
+            <span class="inline-flex items-center gap-1.5 text-[9px] font-mono font-black uppercase tracking-widest bg-amber-950/80 text-amber-300 border border-amber-500/50 px-3 py-0.5 rounded-full shadow">
+                <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-ping"></span>
+                <span>Temática de la Semana 🎭</span>
+            </span>
+
+            <span class="text-[10px] font-mono text-purple-300 font-bold bg-black/60 px-2 py-0.5 rounded-md border border-purple-500/30">
+                Evento Oficial
+            </span>
+        </div>
+
+        <!-- Banner Visual (Si se subió imagen) -->
+        {% if feed_theme.banner_url %}
+        <div class="w-full bg-black relative overflow-hidden border-b border-amber-500/30">
+            <img src="{{ feed_theme.banner_url }}" alt="{{ feed_theme.title }}" 
+                 class="w-full h-auto max-h-48 object-cover object-center group-hover:scale-[1.02] transition-transform duration-500 block">
+            <div class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[#0d0414] to-transparent pointer-events-none"></div>
+        </div>
+        {% endif %}
+
+        <!-- Título y Mensaje de la Semana -->
+        <div class="p-3.5 flex flex-col gap-1 relative z-10">
+            <h3 class="font-serif text-sm font-black text-gold-gradient tracking-wide uppercase leading-tight">
+                {{ feed_theme.title }}
+            </h3>
+            
+            {% if feed_theme.message %}
+            <p class="text-[11.5px] text-stone-200 leading-relaxed font-normal">
+                {{ feed_theme.message }}
+            </p>
+            {% endif %}
+        </div>
+
+    </div>
+    {% endif %}
+
     <!-- 🎭 CARRUSEL DE HISTORIAS DE MUSAS (STORIES VIP) -->
     <div class="w-full flex gap-3 overflow-x-auto py-1 px-1 no-scrollbar select-none">
         {% for post in posts|slice:":8" %}
