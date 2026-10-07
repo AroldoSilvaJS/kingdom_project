@@ -388,15 +388,17 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "📢 Decreto público de la app actualizado.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 9. PURGA DE DATOS DE PRUEBA (REINICIO TOTAL A NIVEL 1)
+       # 9. PURGA NUCLEAR DE DATOS (REINICIO TOTAL A CERO ABSOLUTO)
         elif accion == 'purge_test_data':
-            # Limpiar absolutamente todos los datos de juego
+            # 1. Limpieza de tablas de comercio y cartas
             UserInventoryItem.objects.all().delete()
             PhotocardTrade.objects.all().delete()
             IdolTribute.objects.all().delete()
             UserPhotocard.objects.all().delete()
             Photocard.objects.all().delete()
             PhotocardBox.objects.all().delete()
+
+            # 2. Limpieza de interacciones, muro y peticiones
             PostComment.objects.all().delete()
             PostUnlock.objects.all().delete()
             PostLike.objects.all().delete()
@@ -404,25 +406,63 @@ def admin_panel(request, admin_tg_id):
             Review.objects.all().delete()
             Post.objects.all().delete()
             IdolProfile.objects.all().delete()
+
+            # 3. Limpieza de Santuario de Mascotas
             Pet.objects.all().delete()
 
-            # Borrar todos los usuarios y perfiles
+            # 4. Limpieza de Auditoría
+            AdminAuditLog.objects.all().delete()
+
+            # 5. RESETEO TOTAL DE ANUNCIOS, TEMÁTICAS Y PRÓXIMAS CAJAS
+            KingdomSetting.objects.all().delete()
+            # Forzamos los valores en blanco y apagados para que no quede nada residual
+            KingdomSetting.set_val('upcoming_box_active', 'false')
+            KingdomSetting.set_val('upcoming_box_title', '')
+            KingdomSetting.set_val('upcoming_box_date', '')
+            KingdomSetting.set_val('upcoming_box_desc', '')
+            KingdomSetting.set_val('upcoming_box_image', '')
+
+            KingdomSetting.set_val('feed_theme_active', 'false')
+            KingdomSetting.set_val('feed_theme_title', '')
+            KingdomSetting.set_val('feed_theme_message', '')
+            KingdomSetting.set_val('feed_theme_banner', '')
+
+            KingdomSetting.set_val('broadcast_active', 'false')
+            KingdomSetting.set_val('broadcast_message', '')
+
+            # 6. Borrado completo de roles, perfiles y billeteras de todos los usuarios
             UserRole.objects.all().delete()
             UserProfile.objects.all().delete()
             Wallet.objects.all().delete()
 
-            # Reiniciar tu cuenta Corona a Nivel 1 limpio con 150 monedas iniciales
-            Wallet.objects.create(telegram_user_id=7474444797, balance=150)
+            # 7. Limpieza de sesión HTTP
+            request.session.flush()
+            request.session['tg_id'] = int(admin_tg_id)
+
+            # 8. Crear tu Bóveda limpia con 150 monedas iniciales
+            Wallet.objects.create(telegram_user_id=int(admin_tg_id), balance=150)
+
+            # 9. Crear tu Perfil limpio a Nivel 1, 0 EXP
             UserProfile.objects.create(
-                telegram_user_id=7474444797,
+                telegram_user_id=int(admin_tg_id),
                 username="@CoronaImperial",
                 level=1,
                 current_xp=0,
                 total_xp=0,
-                title='plebeyo'
+                title='plebeyo',
+                motto='',
+                bio='',
+                profile_theme='velvet',
+                vip_badge='none',
+                avatar_frame='gold',
+                favorite_idol=None,
+                has_vip_badge=False,
+                has_custom_avatar_frame=False,
+                custom_title_text=None,
+                inactivity_shield_until=None
             )
 
-            messages.success(request, "🧹 Purga completada. Reino reseteado al 100%. Elige tu rol inicial.")
+            messages.success(request, "🧹 Purga total completada. Anuncios, temáticas y progreso reseteados al 100%. Elige tu destino.")
             return redirect(f"/choose-role/?tg_id={admin_tg_id}&force=1")
 
         # 10. TEMÁTICA SEMANAL DEL MURO

@@ -802,9 +802,9 @@ def photocard_boxes_view(request):
     upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
     upcoming_data = {
         'is_active': upcoming_active,
-        'title': KingdomSetting.get_val('upcoming_box_title', 'Colección Secreta de la Corte'),
-        'release_date': KingdomSetting.get_val('upcoming_box_date', 'Próximamente'),
-        'description': KingdomSetting.get_val('upcoming_box_desc', 'Nuevas Photocards exclusivas de edición limitada.'),
+        'title': KingdomSetting.get_val('upcoming_box_title', ''),
+        'release_date': KingdomSetting.get_val('upcoming_box_date', ''),
+        'description': KingdomSetting.get_val('upcoming_box_desc', ''),
         'image_url': KingdomSetting.get_val('upcoming_box_image', '')
     }
 
