@@ -94,11 +94,13 @@
     <header class="w-full max-w-md pt-2 pb-1 px-3 flex flex-col items-center z-20 relative">
         
         <!-- Botón Flotante del Buzón (Arriba a la derecha) -->
+        {% if not hide_bottom_nav %}
         <button type="button" onclick="universalNav('/buzon/')" 
                 class="absolute right-3 top-3 bg-black/70 hover:bg-black border border-vip-gold/40 text-yellow-300 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-[0_0_12px_rgba(212,175,55,0.3)] active:scale-90 transition-all z-30" 
                 title="Abrir Buzón Real">
             <span>🔔</span>
         </button>
+        {% endif %}
 
         <div class="relative w-full flex justify-center items-center py-1">
             <div class="absolute w-44 h-24 bg-gradient-to-r from-amber-600/25 via-yellow-500/35 to-amber-600/25 rounded-full blur-2xl pointer-events-none"></div>
@@ -118,55 +120,69 @@
         {% endblock %}
     </main>
 
-    <!-- 📱 BARRA DE NAVEGACIÓN INFERIOR 100% SIMÉTRICA (6 MÓDULOS EQUILIBRADOS) -->
+    <!-- 📱 BARRA DE NAVEGACIÓN INFERIOR DINÁMICA -->
+    {% if not hide_bottom_nav %}
     <div class="fixed bottom-0 inset-x-0 z-[99999] pointer-events-none pb-[max(0.6rem,env(safe-area-inset-bottom))] px-2.5 pt-1.5">
         <nav class="max-w-md mx-auto pointer-events-auto bg-[#0a0514]/95 border border-vip-gold/40 backdrop-blur-xl rounded-2xl p-1.5 px-1 shadow-[0_10px_35px_rgba(0,0,0,0.95),0_0_18px_rgba(212,175,55,0.22)]">
-            <div class="grid grid-cols-6 gap-0.5 items-center justify-items-stretch">
+            <div class="grid grid-cols-6 gap-0.5 items-center justify-items-stretch" id="bottom-nav-bar">
                 
                 <!-- 1. Inicio -->
-                <button type="button" onclick="universalNav('/')" 
-                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-300 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl hover:bg-white/5">
+                <button type="button" data-nav="/" onclick="universalNav('/')" 
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">🏛️</span>
-                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1 text-stone-300">Inicio</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Inicio</span>
                 </button>
 
                 <!-- 2. Feed VIP -->
-                <button type="button" onclick="universalNav('/idols/feed/')" 
-                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-300 hover:text-purple-300 active:scale-90 transition-all select-none rounded-xl hover:bg-white/5">
+                <button type="button" data-nav="/idols/feed/" onclick="universalNav('/idols/feed/')" 
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-purple-300 active:scale-90 transition-all select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">📱</span>
-                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1 text-stone-300">Muro</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Muro</span>
                 </button>
 
                 <!-- 3. Cajas CS -->
-                <button type="button" onclick="universalNav('/idols/photocards/')" 
-                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-300 hover:text-yellow-400 active:scale-90 transition-all select-none rounded-xl hover:bg-white/5">
+                <button type="button" data-nav="/idols/photocards/" onclick="universalNav('/idols/photocards/')" 
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-yellow-400 active:scale-90 transition-all select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">🎁</span>
-                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1 text-stone-300">Cajas</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Cajas</span>
                 </button>
 
-                <!-- 4. Elenco de Musas (Nivelado y con acento dorado) -->
-                <button type="button" onclick="universalNav('/idols/gallery/')" 
-                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-vip-gold hover:text-yellow-300 active:scale-90 transition-all select-none rounded-xl bg-gradient-to-b from-yellow-500/15 to-transparent border border-vip-gold/30 shadow-[0_0_10px_rgba(212,175,55,0.2)]">
-                    <span class="text-base sm:text-lg leading-none filter drop-shadow">🎭</span>
-                    <span class="text-[8px] sm:text-[8.5px] font-black uppercase tracking-tight mt-1 text-vip-gold">Elenco</span>
+                <!-- 4. Elenco de Musas -->
+                <button type="button" data-nav="/idols/gallery/" onclick="universalNav('/idols/gallery/')" 
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl">
+                    <span class="text-base sm:text-lg leading-none">🎭</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Elenco</span>
                 </button>
 
                 <!-- 5. Santuario -->
-                <button type="button" onclick="universalNav('/pets/')" 
-                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-300 hover:text-purple-300 active:scale-90 transition-all select-none rounded-xl hover:bg-white/5">
+                <button type="button" data-nav="/pets/" onclick="universalNav('/pets/')" 
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-purple-300 active:scale-90 transition-all select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">🐾</span>
-                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1 text-stone-300">Santuario</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Santuario</span>
                 </button>
 
                 <!-- 6. Bóveda -->
-                <button type="button" onclick="universalNav('/economy/wallet/')" 
-                        class="w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-300 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl hover:bg-white/5">
+                <button type="button" data-nav="/economy/wallet/" onclick="universalNav('/economy/wallet/')" 
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">🪙</span>
-                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1 text-stone-300">Bóveda</span>
+                    <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Bóveda</span>
                 </button>
 
             </div>
         </nav>
+    </div>
+    {% endif %}
+
+    <!-- MODAL VIP FLOTANTE UNIVERSAL -->
+    <div id="vip-global-modal" class="hidden fixed inset-0 z-[999999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="vip-panel p-5 max-w-xs w-full text-center border-2 border-vip-gold/60 rounded-3xl shadow-2xl flex flex-col items-center bg-gradient-to-b from-[#1c0c2e] to-black">
+            <span id="vip-modal-icon" class="text-3xl mb-1">👑</span>
+            <h4 id="vip-modal-title" class="font-serif text-sm font-black text-gold-gradient uppercase tracking-wider mb-1">Aviso Imperial</h4>
+            <p id="vip-modal-text" class="text-xs text-stone-300 leading-relaxed mb-4"></p>
+            <button type="button" onclick="closeVipAlert()" class="w-full btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+                Entendido
+            </button>
+        </div>
     </div>
 
     <!-- Script de Autenticación y Navegación Oficial de Telegram Mini App -->
@@ -179,7 +195,6 @@
             } catch(e) {}
         }
 
-        // Obtener el ID y el @ de Telegram del usuario que TIENE LA APP ABIERTA AHORA MISMO
         function getRealTelegramUser() {
             const tgUser = tgApp?.initDataUnsafe?.user;
             if (tgUser && tgUser.id) {
@@ -206,7 +221,6 @@
             };
         }
 
-        // Sincronizar cuenta al cargar la página
         (function syncAccount() {
             const currentUser = getRealTelegramUser();
             const urlParams = new URLSearchParams(window.location.search);
@@ -216,15 +230,12 @@
             localStorage.setItem('current_tg_id', currentUser.id);
             localStorage.setItem('current_tg_user', currentUser.username);
 
-            // Si Telegram WebApp reporta un usuario y la URL tiene el fallback (123456789) o ninguno
             if (tgApp?.initDataUnsafe?.user && (currentUrlId !== currentUser.id || !currentUrlName)) {
-                // 👈 Si cayó en choose-role por error de inicio, mandarlo a la raíz '/' con su ID real
                 const targetPath = (window.location.pathname.includes('choose-role') && currentUrlId === '123456789') ? '/' : window.location.pathname;
                 window.location.replace(`${targetPath}?tg_id=${currentUser.id}&tg_username=${encodeURIComponent(currentUser.username)}`);
             }
         })();
 
-        // Navegación universal limpia
         window.universalNav = function(targetPath) {
             try {
                 tgApp?.HapticFeedback?.impactOccurred('light');
@@ -238,6 +249,30 @@
         window.navGo = window.universalNav;
         window.getGlobalTgId = function() { return getRealTelegramUser().id; };
         window.getGlobalTgUser = function() { return getRealTelegramUser().username; };
+
+        (function highlightActiveTab() {
+            const path = window.location.pathname;
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                const tabPath = tab.getAttribute('data-nav');
+                const isActive = (tabPath === '/' && path === '/') || (tabPath !== '/' && path.startsWith(tabPath));
+                
+                if (isActive) {
+                    tab.className = "nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-vip-gold active:scale-90 transition-all select-none rounded-xl bg-gradient-to-b from-yellow-500/15 to-transparent border border-vip-gold/30 shadow-[0_0_10px_rgba(212,175,55,0.2)]";
+                    tab.querySelector('span:last-child').className = "text-[8px] sm:text-[8.5px] font-black uppercase tracking-tight mt-1 text-vip-gold";
+                }
+            });
+        })();
+
+        window.showVipAlert = function(msg, title = "Aviso de la Corte", icon = "👑") {
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning'); } catch(e) {}
+            document.getElementById('vip-modal-title').innerText = title;
+            document.getElementById('vip-modal-text').innerText = msg;
+            document.getElementById('vip-modal-icon').innerText = icon;
+            document.getElementById('vip-global-modal').classList.remove('hidden');
+        };
+        window.closeVipAlert = function() {
+            document.getElementById('vip-global-modal').classList.add('hidden');
+        };
     </script>
 </body>
 </html>

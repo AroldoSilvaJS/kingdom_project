@@ -157,8 +157,16 @@
         const degrees = 1800 + Math.floor(Math.random() * 360);
         wheel.style.transform = `rotate(${degrees}deg)`;
 
+        // Gira 3s, luego muestra el mensaje de éxito durante 2s para que dé tiempo a leer
         setTimeout(() => {
-            document.getElementById('daily-wheel-form')?.submit();
+            btn.innerHTML = '<span>🎉</span> ¡Premio Concedido! Guardando oro...';
+            btn.classList.remove('opacity-60');
+            btn.classList.add('bg-emerald-600', 'text-white');
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+            
+            setTimeout(() => {
+                document.getElementById('daily-wheel-form')?.submit();
+            }, 1800);
         }, 3000);
     }
 

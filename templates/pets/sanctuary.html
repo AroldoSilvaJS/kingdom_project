@@ -18,8 +18,8 @@
         </div>
     </div>
 
-    <!-- NOTIFICACIONES Y TOASTS EN VIVO -->
-    <div id="pet-toast-box" class="w-full"></div>
+    <!-- NOTIFICACIONES Y TOASTS EN VIVO (Flotante fijo en pantalla) -->
+    <div id="pet-toast-box" class="fixed top-4 inset-x-4 z-[9999] max-w-md mx-auto pointer-events-none"></div>
 
     {% if pet %}
     <!-- 👑 ALTAR ARISTOCRÁTICO DE LA CRIATURA ESPIRITUAL -->
@@ -54,7 +54,7 @@
             <!-- Aura brillante de fondo -->
             <div class="absolute w-40 h-40 bg-purple-600/30 rounded-full blur-2xl pointer-events-none group-hover:bg-purple-500/40 transition-colors"></div>
 
-            <!-- Marco Circular de Oro Pulido con Recorte Total (Elimina bordes cuadrados) -->
+            <!-- Marco Circular de Oro Pulido con Recorte Total -->
             <div class="relative z-10 w-36 h-36 sm:w-40 sm:h-40 rounded-full p-[3px] bg-gradient-to-b from-yellow-300 via-vip-gold to-amber-700 shadow-[0_0_25px_rgba(212,175,55,0.45)] flex items-center justify-center">
                 <div class="w-full h-full rounded-full overflow-hidden bg-black flex items-center justify-center relative">
                     <img src="{{ pet.get_image_url }}" 
@@ -166,7 +166,7 @@
 
     </div>
 
-    <!-- 🧭 SUB-NAV PRO DEL SANTUARIO: [EXPEDICIONES] | [ESPECIES & RITUAL] -->
+    <!-- 🧭 SUB-NAV PRO DEL SANTUARIO -->
     <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/60 border border-vip-gold/30 rounded-2xl text-xs font-bold uppercase text-center shadow-lg">
         <button type="button" onclick="switchSanctuaryTab('expeditions')" id="tab-btn-expeditions" 
                 class="py-2.5 rounded-xl bg-vip-gold text-black font-black flex items-center justify-center gap-1.5 shadow">
@@ -345,7 +345,7 @@
     </div>
 
     {% else %}
-    <!-- 🥚 ALTAR DE DESPERTAR Y ADOPCIÓN (CUANDO NO TIENE MASCOTA) -->
+    <!-- 🥚 ALTAR DE DESPERTAR Y ADOPCIÓN -->
     <div class="vip-panel p-6 text-center flex flex-col items-center rounded-3xl border border-vip-gold/50 shadow-2xl bg-gradient-to-br from-[#1d0b2e] via-[#0b0314] to-black">
         <div class="relative w-24 h-24 my-2 flex items-center justify-center">
             <div class="absolute inset-0 bg-yellow-400/20 rounded-full blur-2xl animate-pulse"></div>
@@ -588,12 +588,16 @@
 
             if (!data.success) {
                 try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning'); } catch(e) {}
-                toastBox.innerHTML = `
-                    <div class="p-3 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-bold text-center shadow-lg">
-                        ${data.error}
-                    </div>
-                `;
-                setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
+                if (window.showVipAlert) {
+                    showVipAlert(data.error, "Descanso de Mascota", "💤");
+                } else {
+                    toastBox.innerHTML = `
+                        <div class="p-3 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-bold text-center shadow-lg">
+                            ${data.error}
+                        </div>
+                    `;
+                    setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
+                }
                 return;
             }
 
@@ -676,13 +680,11 @@
             const data = await resp.json();
 
             if (!data.success) {
-                const toastBox = document.getElementById('pet-toast-box');
-                toastBox.innerHTML = `
-                    <div class="p-3 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-bold text-center shadow-lg">
-                        ${data.error}
-                    </div>
-                `;
-                setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
+                if (window.showVipAlert) {
+                    showVipAlert(data.error, "Mascota en Descanso", "⏳");
+                } else {
+                    alert(data.error);
+                }
                 return;
             }
 
@@ -695,7 +697,11 @@
 
             try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
         } catch(e) {
-            alert("Error al iniciar expedición.");
+            if (window.showVipAlert) {
+                showVipAlert("Error al conectar con la expedición.", "Aviso", "⚠️");
+            } else {
+                alert("Error al iniciar expedición.");
+            }
         }
     }
 

@@ -1,24 +1,69 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Acceso Restringido | Kingdom of Pleasure</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
 
-{% block content %}
-<div class="vip-panel p-8 mt-12 text-center flex flex-col items-center border border-red-500/40 bg-black/85 shadow-2xl rounded-3xl">
-    <span class="text-6xl my-2 filter drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]">⛔</span>
-    <h2 class="font-serif text-xl font-black text-red-400 uppercase tracking-widest mt-2">
-        Acceso Restringido
-    </h2>
-    <p class="text-xs text-vip-text/70 mt-2 max-w-xs leading-relaxed">
-        El <strong>Kingdom of Pleasure</strong> es un círculo privado y exclusivo. 
-        Para cruzar estas puertas debes ser miembro activo de nuestro grupo principal.
-    </p>
+    <style>
+        body {
+            background: radial-gradient(circle at 50% -20%, #200E38 0%, #08040E 60%, #030106 100%);
+            color: #EAE6F0;
+            min-height: 100vh;
+        }
+        .vip-panel {
+            background: linear-gradient(135deg, rgba(21, 10, 36, 0.95) 0%, rgba(13, 6, 22, 0.98) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 24px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9), 0 0 25px rgba(239, 68, 68, 0.15);
+        }
+        .btn-gold {
+            background: linear-gradient(135deg, #ECC440 0%, #D4AF37 50%, #9A7B1C 100%);
+            color: #08040E;
+            font-weight: 800;
+            text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.35);
+        }
+    </style>
+</head>
+<body class="font-sans antialiased flex flex-col items-center justify-center min-h-screen p-4">
 
-    <div class="my-3 p-3 bg-red-950/40 border border-red-500/30 rounded-2xl text-[11px] text-red-200">
-        ¿Aún no eres parte de la Corte? Preséntate en nuestro grupo de admisiones para solicitar tu pase de entrada.
+    <!-- Tarjeta Hermética de Bloqueo Imperial (Sin barras ni menú) -->
+    <div class="vip-panel p-7 max-w-sm w-full text-center flex flex-col items-center relative overflow-hidden">
+        
+        <!-- Logo del Reino -->
+        <div class="w-24 h-24 mb-2 flex items-center justify-center">
+            <img src="/media/logo.png" alt="Kingdom of Pleasure" class="w-full h-full object-contain filter drop-shadow">
+        </div>
+
+        <span class="text-5xl my-2 filter drop-shadow-[0_0_15px_rgba(239,68,68,0.6)]">⛔</span>
+        
+        <h1 class="font-serif text-lg font-black text-rose-400 uppercase tracking-widest mt-1">
+            Acceso Restringido
+        </h1>
+
+        <p class="text-xs text-stone-300 mt-2 leading-relaxed">
+            <strong>Kingdom of Pleasure</strong> es un círculo privado y aristocrático. 
+            Las puertas del Reino están reservadas exclusivamente a los miembros de la Corte Oficial.
+        </p>
+
+        <div class="my-4 p-3 bg-rose-950/40 border border-rose-500/30 rounded-2xl text-[11px] text-rose-200">
+            ¿Deseas pertenecer al Reino? Preséntate en nuestro grupo de admisiones para ser evaluado por la Corona.
+        </div>
+
+        <!-- Botón Único de Salida hacia Entrevistas -->
+        <a href="{{ interview_url|default:'https://t.me/KingdomOfPleasureOf' }}" target="_blank"
+           class="w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
+            <span>🏰</span> Solicitar Entrada en Entrevistas
+        </a>
+
+        <span class="text-[9.5px] font-mono text-stone-500 mt-4 block">ID: {{ tg_id }} • No Admitido</span>
     </div>
 
-    <!-- Botón directo al Grupo de Entrevistas -->
-    <a href="{{ interview_url|default:'https://t.me/' }}" target="_blank"
-       class="mt-3 w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
-        <span>🏰</span> Solicitar Entrada en Entrevistas
-    </a>
-</div>
-{% endblock %}
+</body>
+</html>

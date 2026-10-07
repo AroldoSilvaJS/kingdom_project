@@ -116,7 +116,6 @@
         return minesAudioCtx;
     }
 
-    // Sonido brillante al descubrir Gema
     function playGemSound(pitchStep = 0) {
         try {
             const ctx = getAudioCtx();
@@ -135,7 +134,6 @@
         } catch(e) {}
     }
 
-    // Sonido sordo de Explosión / Bomba
     function playBombSound() {
         try {
             const ctx = getAudioCtx();
@@ -153,7 +151,6 @@
         } catch(e) {}
     }
 
-    // Tintineo de monedas al cobrar
     function playCoins() {
         try {
             const ctx = getAudioCtx();
@@ -218,10 +215,14 @@
             const data = await resp.json();
 
             if (!data.success) {
-                alert(data.error);
+                if (window.showVipAlert) {
+                    showVipAlert(data.error, "Tope de Apuesta", "🪙");
+                } else {
+                    alert(data.error);
+                }
                 return;
-            }
-
+            } 
+            
             isGameRunning = true;
             revealedGems = [];
 
@@ -248,7 +249,11 @@
             try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
 
         } catch(e) {
-            alert("Error de conexión al iniciar.");
+            if (window.showVipAlert) {
+                showVipAlert("Error de conexión al iniciar la ronda.", "Conexión", "⚠️");
+            } else {
+                alert("Error de conexión al iniciar.");
+            }
         }
     }
 
@@ -277,7 +282,6 @@
             const hiddenCover = tile.querySelector('.tile-hidden');
 
             if (data.status === 'bust') {
-                // EXPLOSIÓN (BOMBA)
                 playBombSound();
                 try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
                 isGameRunning = false;
@@ -286,7 +290,6 @@
                 tile.className = "mine-tile relative rounded-xl bg-red-600 border-2 border-red-300 flex items-center justify-center text-2xl shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-bounce";
                 tile.querySelector('.tile-icon').innerText = '💣';
 
-                // Revelar todas las demás minas
                 data.all_mines.forEach(mIdx => {
                     const mTile = document.getElementById(`tile-${mIdx}`);
                     mTile.querySelector('.tile-hidden').classList.add('hidden');
@@ -305,7 +308,6 @@
                 document.getElementById('mines-setup-controls').classList.remove('hidden');
 
             } else {
-                // GEMA ENCONTRADA
                 revealedGems.push(index);
                 playGemSound(revealedGems.length);
                 try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
@@ -318,7 +320,6 @@
                 document.getElementById('cashout-val').innerText = data.current_cashout;
 
                 if (data.status === 'win_full') {
-                    // Limpió todo el tablero
                     playCoins();
                     isGameRunning = false;
                     document.getElementById('mines-balance').innerText = data.nuevo_saldo;
@@ -335,7 +336,7 @@
             }
 
         } catch(e) {
-            alert("Error de conexión al abrir cofre.");
+            console.error(e);
         }
     }
 
@@ -365,7 +366,6 @@
 
             document.getElementById('mines-balance').innerText = data.nuevo_saldo;
 
-            // Mostrar dónde estaban las minas restantes
             data.all_mines.forEach(mIdx => {
                 const mTile = document.getElementById(`tile-${mIdx}`);
                 mTile.querySelector('.tile-hidden').classList.add('hidden');
@@ -385,7 +385,7 @@
             document.getElementById('mines-setup-controls').classList.remove('hidden');
 
         } catch(e) {
-            alert("Error al cobrar.");
+            console.error(e);
         }
     }
 </script>
