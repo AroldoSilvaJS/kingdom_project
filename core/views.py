@@ -554,7 +554,6 @@ def admin_panel(request, admin_tg_id):
 
 
 def _process_telegram_update(data):
-    """Procesamiento desacoplado con filtro de grupo y filtro de entrevistas"""
     try:
         msg = data.get('message') or data.get('channel_post') or data.get('edited_message')
         if not msg:
@@ -563,6 +562,7 @@ def _process_telegram_update(data):
         text = (msg.get('text') or '').strip().lower()
         chat = msg.get('chat', {})
         chat_id = chat.get('id')
+        message_thread_id = msg.get('message_thread_id')  # 👈 Captura el ID del Tema/Topic
         user = msg.get('from', {})
         user_id = user.get('id')
         first_name = user.get('first_name', 'Noble')
@@ -619,11 +619,13 @@ def _process_telegram_update(data):
                 )
                 btn_txt = "✨ Entrar al Kingdom"
             
+            # 👈 Responde en el MISMO tema/topic donde se escribió el comando
             send_telegram_msg(
                 chat_id=chat_id, 
                 text=texto, 
                 button_text=btn_txt, 
-                button_url=app_link
+                button_url=app_link,
+                message_thread_id=message_thread_id
             )
     except Exception as e:
         print(f"⚠️ Error procesando update de webhook: {e}")

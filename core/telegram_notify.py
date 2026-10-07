@@ -5,7 +5,7 @@ import json
 import threading
 from django.conf import settings
 
-def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None):
+def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None, message_thread_id=None):
     if not chat_id or not getattr(settings, 'TELEGRAM_BOT_TOKEN', None):
         return False
 
@@ -15,6 +15,10 @@ def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None):
         'text': text,
         'parse_mode': 'HTML'
     }
+
+    # Si se envía a un tema/foro específico
+    if message_thread_id:
+        payload['message_thread_id'] = int(message_thread_id)
 
     if button_text and button_url:
         is_group = int(chat_id) < 0
@@ -41,18 +45,17 @@ def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None):
         print(f"⚠️ Error en envío asíncrono Telegram: {e}")
         return False
 
-def send_telegram_msg(chat_id, text, button_text=None, button_url=None, sync=False):
+def send_telegram_msg(chat_id, text, button_text=None, button_url=None, message_thread_id=None, sync=False):
     """
-    Envía mensajes a Telegram. Por defecto lo hace en segundo plano (daemon thread)
-    para no retrasar respuestas HTTP ni congelar el frontend.
+    Envía mensajes a Telegram. Si message_thread_id está presente,
+    el mensaje entra directamente al tema/topic correspondiente.
     """
     if sync:
-        return _do_send_telegram_msg(chat_id, text, button_text, button_url)
+        return _do_send_telegram_msg(chat_id, text, button_text, button_url, message_thread_id)
     
-    # Despachar en hilo secundario no bloqueante
     t = threading.Thread(
         target=_do_send_telegram_msg,
-        args=(chat_id, text, button_text, button_url),
+        args=(chat_id, text, button_text, button_url, message_thread_id),
         daemon=True
     )
     t.start()
