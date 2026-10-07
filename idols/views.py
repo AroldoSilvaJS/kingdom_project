@@ -1,5 +1,8 @@
 import random
 import os
+import sys
+from io import BytesIO
+from PIL import Image
 from urllib.parse import quote as encode_param
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q
@@ -7,6 +10,7 @@ from django.http import JsonResponse
 from django.contrib import messages
 from django.db import transaction
 from django.core.files.storage import default_storage
+from django.core.files.uploadedfile import InMemoryUploadedFile
 
 from .models import (
     IdolProfile, Review, Post, PostUnlock, PostLike, 
@@ -17,6 +21,49 @@ from core.models import UserProfile, UserRole, KingdomSetting
 from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
+
+
+def optimize_uploaded_image(file_obj, max_dimension=1600, quality=85):
+    """
+    Comprime y redimensiona imágenes automáticamente antes de enviarlas a Cloudinary
+    para que nunca excedan el límite de 10MB ni ralenticen Telegram.
+    """
+    if not file_obj:
+        return file_obj
+
+    try:
+        img = Image.open(file_obj)
+        has_alpha = img.mode in ('RGBA', 'LA') or ('transparency' in img.info)
+
+        if img.width > max_dimension or img.height > max_dimension:
+            img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
+
+        output = BytesIO()
+        if has_alpha:
+            img.save(output, format='PNG', optimize=True)
+            content_type = 'image/png'
+            ext = 'png'
+        else:
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            img.save(output, format='JPEG', quality=quality, optimize=True)
+            content_type = 'image/jpeg'
+            ext = 'jpg'
+
+        output.seek(0)
+        filename = os.path.splitext(file_obj.name)[0] + f'.{ext}'
+
+        return InMemoryUploadedFile(
+            output,
+            'ImageField',
+            filename,
+            content_type,
+            output.getbuffer().nbytes,
+            None
+        )
+    except Exception as e:
+        print(f"⚠️ No se pudo comprimir la imagen: {e}")
+        return file_obj
 
 
 def resolve_safe_tg(request):
@@ -100,7 +147,7 @@ def idol_list(request):
                 if not delivered_photo:
                     messages.error(request, "Debes adjuntar la foto para completar la entrega.")
                 else:
-                    req_obj.delivered_photo = delivered_photo
+                    req_obj.delivered_photo = optimize_uploaded_image(delivered_photo)
                     req_obj.status = 'accepted'
                     req_obj.save()
                     
@@ -162,8 +209,8 @@ def idol_create(request):
         aura_color = request.POST.get('aura_color', 'purple')
         specialty = request.POST.get('specialty', '').strip()
         welcome_message = request.POST.get('welcome_message', '').strip()
-        photo = request.FILES.get('photo')
-        banner = request.FILES.get('banner')
+        photo = optimize_uploaded_image(request.FILES.get('photo'))
+        banner = optimize_uploaded_image(request.FILES.get('banner'))
         
         try:
             IdolProfile.objects.create(
@@ -211,9 +258,9 @@ def idol_edit(request, idol_id):
         idol.welcome_message = request.POST.get('welcome_message', idol.welcome_message).strip()
         
         if 'photo' in request.FILES:
-            idol.photo = request.FILES['photo']
+            idol.photo = optimize_uploaded_image(request.FILES['photo'])
         if 'banner' in request.FILES:
-            idol.banner = request.FILES['banner']
+            idol.banner = optimize_uploaded_image(request.FILES['banner'])
             
         idol.save()
         messages.success(request, f"¡Perfil de {idol.stage_name} actualizado!")
@@ -392,7 +439,7 @@ def edit_post(request, post_id):
         price = request.POST.get('price', post.price)
 
         if 'image' in request.FILES:
-            post.image = request.FILES['image']
+            post.image = optimize_uploaded_image(request.FILES['image'])
 
         post.network = network
         if network == 'fans':
@@ -497,7 +544,7 @@ def create_post(request):
         idol_id = request.POST.get('idol_id')
         network = request.POST.get('network')
         caption = request.POST.get('caption')
-        image = request.FILES.get('image')
+        image = optimize_uploaded_image(request.FILES.get('image'))
         price = request.POST.get('price', 50)
 
         if not price or str(price).strip() == '':
@@ -742,7 +789,6 @@ def photocard_boxes_view(request):
 
     my_cards_count = UserPhotocard.objects.filter(telegram_user_id=tg_id).count()
 
-    # Cargar anuncio de Próximo Lanzamiento
     upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
     upcoming_data = {
         'is_active': upcoming_active,
@@ -879,108 +925,117 @@ def admin_photocards_manage(request):
     if request.method == 'POST':
         action = request.POST.get('action')
 
-        if action == 'create_box':
-            name = request.POST.get('name', '').strip()
-            description = request.POST.get('description', '').strip()
-            price = int(request.POST.get('price', 50))
-            cover_image = request.FILES.get('cover_image')
-            if name:
-                PhotocardBox.objects.create(name=name, description=description, price=price, cover_image=cover_image)
-                messages.success(request, f"✨ Caja «{name}» creada.")
+        try:
+            if action == 'create_box':
+                name = request.POST.get('name', '').strip()
+                description = request.POST.get('description', '').strip()
+                price = int(request.POST.get('price', 50))
+                cover_image = optimize_uploaded_image(request.FILES.get('cover_image'))
+                if name:
+                    PhotocardBox.objects.create(name=name, description=description, price=price, cover_image=cover_image)
+                    messages.success(request, f"✨ Caja «{name}» creada.")
 
-        elif action == 'edit_box':
-            box_id = request.POST.get('box_id')
-            box = get_object_or_404(PhotocardBox, id=box_id)
-            box.name = request.POST.get('name', box.name).strip()
-            box.description = request.POST.get('description', box.description).strip()
-            box.price = int(request.POST.get('price', box.price))
-            if 'cover_image' in request.FILES:
-                box.cover_image = request.FILES['cover_image']
-            box.save()
-            messages.success(request, f"💾 Caja «{box.name}» actualizada.")
-
-        elif action == 'delete_box':
-            box_id = request.POST.get('box_id')
-            box = get_object_or_404(PhotocardBox, id=box_id)
-            box_name = box.name
-
-            owned_cards = UserPhotocard.objects.filter(photocard__box=box).count()
-            if owned_cards > 0:
-                box.is_active = False
+            elif action == 'edit_box':
+                box_id = request.POST.get('box_id')
+                box = get_object_or_404(PhotocardBox, id=box_id)
+                box.name = request.POST.get('name', box.name).strip()
+                box.description = request.POST.get('description', box.description).strip()
+                box.price = int(request.POST.get('price', box.price))
+                if 'cover_image' in request.FILES:
+                    box.cover_image = optimize_uploaded_image(request.FILES['cover_image'])
                 box.save()
-                messages.error(request, f"⚠️ La caja «{box_name}» no se puede eliminar porque los usuarios ya tienen {owned_cards} cartas en sus álbumes. La caja fue PAUSADA.")
+                messages.success(request, f"💾 Caja «{box.name}» actualizada.")
+
+            elif action == 'delete_box':
+                box_id = request.POST.get('box_id')
+                box = get_object_or_404(PhotocardBox, id=box_id)
+                box_name = box.name
+
+                owned_cards = UserPhotocard.objects.filter(photocard__box=box).count()
+                if owned_cards > 0:
+                    box.is_active = False
+                    box.save()
+                    messages.error(request, f"⚠️ La caja «{box_name}» no se puede eliminar porque los usuarios ya tienen {owned_cards} cartas en sus álbumes. La caja fue PAUSADA.")
+                else:
+                    box.cards.all().delete()
+                    box.delete()
+                    messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
+
+            elif action == 'toggle_box':
+                box_id = request.POST.get('box_id')
+                box = get_object_or_404(PhotocardBox, id=box_id)
+                box.is_active = not box.is_active
+                box.save()
+                estado = "Activada" if box.is_active else "Pausada"
+                messages.info(request, f"Caja {box.name} {estado}.")
+
+            elif action == 'upload_card':
+                box_id = request.POST.get('box_id')
+                idol_name = request.POST.get('idol_name', '').strip()
+                name = request.POST.get('name', '').strip()
+                rarity = request.POST.get('rarity', 'common')
+                raw_image = request.FILES.get('image')
+
+                if not raw_image or not name or not box_id:
+                    messages.error(request, "Debes adjuntar el archivo de Canva, asignar un nombre y una caja.")
+                else:
+                    box_obj = get_object_or_404(PhotocardBox, id=box_id)
+                    optimized_img = optimize_uploaded_image(raw_image)
+                    
+                    Photocard.objects.create(
+                        box=box_obj,
+                        idol_name=idol_name or "K-Pop Idol",
+                        name=name,
+                        rarity=rarity,
+                        image=optimized_img,
+                        created_by_tg_id=tg_id
+                    )
+                    messages.success(request, f"🎴 Photocard «{name}» ({idol_name}) subida con éxito.")
+
+            elif action == 'edit_card':
+                card_id = request.POST.get('card_id')
+                card = get_object_or_404(Photocard, id=card_id)
+                card.box_id = request.POST.get('box_id', card.box_id)
+                card.idol_name = request.POST.get('idol_name', card.idol_name).strip()
+                card.name = request.POST.get('name', card.name).strip()
+                card.rarity = request.POST.get('rarity', card.rarity)
+                if 'image' in request.FILES:
+                    card.image = optimize_uploaded_image(request.FILES['image'])
+                card.save()
+                messages.success(request, f"💾 Photocard «{card.name}» actualizada.")
+
+            elif action == 'delete_card':
+                card_id = request.POST.get('card_id')
+                card = get_object_or_404(Photocard, id=card_id)
+                c_name = card.name
+                card.delete()
+                messages.warning(request, f"🗑️ Photocard «{c_name}» eliminada.")
+
+            elif action == 'save_upcoming_box':
+                title = request.POST.get('upcoming_title', '').strip()
+                date = request.POST.get('upcoming_date', '').strip()
+                desc = request.POST.get('upcoming_desc', '').strip()
+                is_active = request.POST.get('upcoming_active') == '1'
+
+                KingdomSetting.set_val('upcoming_box_title', title)
+                KingdomSetting.set_val('upcoming_box_date', date)
+                KingdomSetting.set_val('upcoming_box_desc', desc)
+                KingdomSetting.set_val('upcoming_box_active', 'true' if is_active else 'false')
+
+                if 'upcoming_image' in request.FILES:
+                    file_obj = optimize_uploaded_image(request.FILES['upcoming_image'])
+                    saved_path = default_storage.save(f'photocard_boxes/upcoming_{file_obj.name}', file_obj)
+                    image_url = default_storage.url(saved_path)
+                    KingdomSetting.set_val('upcoming_box_image', image_url)
+
+                messages.success(request, "📢 ¡Anuncio de Próximo Lanzamiento guardado con éxito!")
+
+        except Exception as e:
+            err_str = str(e)
+            if "File size too large" in err_str:
+                messages.error(request, "⚠️ La imagen supera el límite de Cloudinary (10 MB). Por favor comprímela antes de subir.")
             else:
-                box.cards.all().delete()
-                box.delete()
-                messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
-
-        elif action == 'toggle_box':
-            box_id = request.POST.get('box_id')
-            box = get_object_or_404(PhotocardBox, id=box_id)
-            box.is_active = not box.is_active
-            box.save()
-            estado = "Activada" if box.is_active else "Pausada"
-            messages.info(request, f"Caja {box.name} {estado}.")
-
-        elif action == 'upload_card':
-            box_id = request.POST.get('box_id')
-            idol_name = request.POST.get('idol_name', '').strip()
-            name = request.POST.get('name', '').strip()
-            rarity = request.POST.get('rarity', 'common')
-            image = request.FILES.get('image')
-
-            if not image or not name or not box_id:
-                messages.error(request, "Debes adjuntar el archivo de Canva, asignar un nombre y una caja.")
-            else:
-                box_obj = get_object_or_404(PhotocardBox, id=box_id)
-                Photocard.objects.create(
-                    box=box_obj,
-                    idol_name=idol_name or "K-Pop Idol",
-                    name=name,
-                    rarity=rarity,
-                    image=image,
-                    created_by_tg_id=tg_id
-                )
-                messages.success(request, f"🎴 Photocard «{name}» ({idol_name}) subida con éxito.")
-
-        elif action == 'edit_card':
-            card_id = request.POST.get('card_id')
-            card = get_object_or_404(Photocard, id=card_id)
-            card.box_id = request.POST.get('box_id', card.box_id)
-            card.idol_name = request.POST.get('idol_name', card.idol_name).strip()
-            card.name = request.POST.get('name', card.name).strip()
-            card.rarity = request.POST.get('rarity', card.rarity)
-            if 'image' in request.FILES:
-                card.image = request.FILES['image']
-            card.save()
-            messages.success(request, f"💾 Photocard «{card.name}» actualizada.")
-
-        elif action == 'delete_card':
-            card_id = request.POST.get('card_id')
-            card = get_object_or_404(Photocard, id=card_id)
-            c_name = card.name
-            card.delete()
-            messages.warning(request, f"🗑️ Photocard «{c_name}» eliminada.")
-
-        # 👈 GUARDAR ANUNCIO DE PRÓXIMA CAJA
-        elif action == 'save_upcoming_box':
-            title = request.POST.get('upcoming_title', '').strip()
-            date = request.POST.get('upcoming_date', '').strip()
-            desc = request.POST.get('upcoming_desc', '').strip()
-            is_active = request.POST.get('upcoming_active') == '1'
-
-            KingdomSetting.set_val('upcoming_box_title', title)
-            KingdomSetting.set_val('upcoming_box_date', date)
-            KingdomSetting.set_val('upcoming_box_desc', desc)
-            KingdomSetting.set_val('upcoming_box_active', 'true' if is_active else 'false')
-
-            if 'upcoming_image' in request.FILES:
-                file_obj = request.FILES['upcoming_image']
-                saved_path = default_storage.save(f'photocard_boxes/upcoming_{file_obj.name}', file_obj)
-                image_url = default_storage.url(saved_path)
-                KingdomSetting.set_val('upcoming_box_image', image_url)
-
-            messages.success(request, "📢 ¡Anuncio de Próximo Lanzamiento guardado con éxito!")
+                messages.error(request, f"⚠️ Error al procesar archivo: {err_str}")
 
         return redirect(f'/idols/photocards/admin/?tg_id={tg_id}')
 
