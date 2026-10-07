@@ -1,17 +1,19 @@
 import random
+import os
 from urllib.parse import quote as encode_param
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.contrib import messages
 from django.db import transaction
+from django.core.files.storage import default_storage
 
 from .models import (
     IdolProfile, Review, Post, PostUnlock, PostLike, 
     CustomRequest, PostComment, PhotocardBox, Photocard, UserPhotocard, PhotocardTrade
 )
 from economy.models import Wallet
-from core.models import UserProfile, UserRole
+from core.models import UserProfile, UserRole, KingdomSetting
 from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
@@ -310,7 +312,6 @@ def idol_detail(request, idol_id):
         except Exception as e:
             messages.error(request, f"Error al procesar reseña: {str(e)}")
 
-        # Redirigir SIEMPRE para que el mensaje se muestre inmediatamente en la propia ficha de la Musa
         return redirect(f'/idols/{idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
 
     context = {
@@ -430,7 +431,6 @@ def unlock_post(request, post_id):
             pet = Pet.objects.filter(telegram_user_id=tg_id).first()
             precio_final = post.price
 
-            # BUFF VÍBORA ESMERALDA: 15% / 22% / 30% Descuento
             if pet and pet.species == 'viper':
                 discount_rates = {1: 0.85, 2: 0.78, 3: 0.70}
                 rate = discount_rates.get(pet.evolution_stage_number, 0.85)
@@ -439,7 +439,6 @@ def unlock_post(request, post_id):
             if wallet.balance >= precio_final:
                 wallet.remove_funds(precio_final)
                 
-                # BUFF ESCORPIÓN DORADO (Cashback de oro: 5% / 10% / 15%)
                 if pet and pet.species == 'scorpion':
                     cb_rates = {1: 0.05, 2: 0.10, 3: 0.15}
                     reembolso = int(precio_final * cb_rates.get(pet.evolution_stage_number, 0.05))
@@ -603,7 +602,6 @@ def send_tip(request, post_id):
             comision = int(amount * 0.10)
             neto_idol = amount - comision
             
-            # BUFF ESCORPIÓN (Cashback en brindis)
             pet = Pet.objects.filter(telegram_user_id=tg_id).first()
             if pet and pet.species == 'scorpion':
                 cb_rates = {1: 0.05, 2: 0.10, 3: 0.15}
@@ -744,12 +742,23 @@ def photocard_boxes_view(request):
 
     my_cards_count = UserPhotocard.objects.filter(telegram_user_id=tg_id).count()
 
+    # Cargar anuncio de Próximo Lanzamiento
+    upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
+    upcoming_data = {
+        'is_active': upcoming_active,
+        'title': KingdomSetting.get_val('upcoming_box_title', 'Colección Secreta de la Corte'),
+        'release_date': KingdomSetting.get_val('upcoming_box_date', 'Próximamente'),
+        'description': KingdomSetting.get_val('upcoming_box_desc', 'Nuevas Photocards exclusivas de edición limitada.'),
+        'image_url': KingdomSetting.get_val('upcoming_box_image', '')
+    }
+
     return render(request, 'idols/photocard_boxes.html', {
         'tg_id': tg_id,
         'wallet': wallet,
         'boxes': boxes,
         'is_admin': is_admin,
         'my_cards_count': my_cards_count,
+        'upcoming': upcoming_data,
     })
 
 
@@ -773,17 +782,13 @@ def open_photocard_box_ajax(request, box_id):
 
     wallet.remove_funds(box.price)
 
-   # idols/views.py -> dentro de open_photocard_box_ajax
-
-    # 1. BUFF CONEJO LUNAR
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
     extra_legendary = {1: 5.0, 2: 12.0, 3: 20.0}.get(pet.evolution_stage_number, 5.0) if (pet and pet.species == 'rabbit') else 0.0
 
-    # 2. CONSUMO DE LLAVE DORADA DEL BAZAR (Si la tiene comprada)
     from economy.models import UserInventoryItem
     has_lucky_key = UserInventoryItem.consume_item(tg_id, 'lucky_charm')
     if has_lucky_key:
-        extra_legendary += 15.0  # +15% extra de probabilidad dorada/épica
+        extra_legendary += 15.0
 
     roll = random.random() * 100
     if roll < (3.0 + extra_legendary):
@@ -957,17 +962,47 @@ def admin_photocards_manage(request):
             card.delete()
             messages.warning(request, f"🗑️ Photocard «{c_name}» eliminada.")
 
+        # 👈 GUARDAR ANUNCIO DE PRÓXIMA CAJA
+        elif action == 'save_upcoming_box':
+            title = request.POST.get('upcoming_title', '').strip()
+            date = request.POST.get('upcoming_date', '').strip()
+            desc = request.POST.get('upcoming_desc', '').strip()
+            is_active = request.POST.get('upcoming_active') == '1'
+
+            KingdomSetting.set_val('upcoming_box_title', title)
+            KingdomSetting.set_val('upcoming_box_date', date)
+            KingdomSetting.set_val('upcoming_box_desc', desc)
+            KingdomSetting.set_val('upcoming_box_active', 'true' if is_active else 'false')
+
+            if 'upcoming_image' in request.FILES:
+                file_obj = request.FILES['upcoming_image']
+                saved_path = default_storage.save(f'photocard_boxes/upcoming_{file_obj.name}', file_obj)
+                image_url = default_storage.url(saved_path)
+                KingdomSetting.set_val('upcoming_box_image', image_url)
+
+            messages.success(request, "📢 ¡Anuncio de Próximo Lanzamiento guardado con éxito!")
+
         return redirect(f'/idols/photocards/admin/?tg_id={tg_id}')
 
     boxes = PhotocardBox.objects.all().prefetch_related('cards')
     all_idols = IdolProfile.objects.all().order_by('stage_name')
     all_cards = Photocard.objects.all().select_related('box').order_by('-created_at')
 
+    upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
+    upcoming_data = {
+        'is_active': upcoming_active,
+        'title': KingdomSetting.get_val('upcoming_box_title', ''),
+        'release_date': KingdomSetting.get_val('upcoming_box_date', ''),
+        'description': KingdomSetting.get_val('upcoming_box_desc', ''),
+        'image_url': KingdomSetting.get_val('upcoming_box_image', '')
+    }
+
     return render(request, 'idols/admin_photocards.html', {
         'tg_id': tg_id,
         'boxes': boxes,
         'all_idols': all_idols,
         'all_cards': all_cards,
+        'upcoming': upcoming_data,
     })
 
 
@@ -1049,14 +1084,11 @@ def photocard_buy_action(request, user_card_id):
             messages.error(request, f"No tienes suficiente oro ({price} 🪙 necesarios).")
             return redirect('/idols/photocards/market/')
 
-       
-
         with transaction.atomic():
             buyer_wallet.remove_funds(price)
 
             vendedor_id = user_card.telegram_user_id
             
-            # Verificar si el vendedor tiene la Patente 0% Impuesto del Bazar
             from economy.models import UserInventoryItem
             used_free_tax = UserInventoryItem.consume_item(vendedor_id, 'free_market')
             
@@ -1066,7 +1098,6 @@ def photocard_buy_action(request, user_card_id):
             seller_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=vendedor_id)
             seller_wallet.add_funds(neto_vendedor)
 
-            vendedor_id = user_card.telegram_user_id
             carta_nombre = user_card.photocard.name
 
             user_card.telegram_user_id = tg_id

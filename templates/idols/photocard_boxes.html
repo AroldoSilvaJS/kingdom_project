@@ -49,13 +49,49 @@
         </div>
     </div>
 
-    <!-- MENSAJES -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="p-3 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
-                {{ message }}
+    <!-- 🌟 VENTANA DE PRÓXIMO LANZAMIENTO (SI ESTÁ ACTIVA) -->
+    {% if upcoming.is_active %}
+    <div class="relative rounded-3xl overflow-hidden border-2 border-purple-400/80 bg-gradient-to-br from-[#240c38] via-[#0f0418] to-black p-4 shadow-[0_10px_35px_rgba(168,85,247,0.35)] flex flex-col gap-3 group">
+        
+        <!-- Destello neón ambiental -->
+        <div class="absolute -top-10 -right-10 w-40 h-40 bg-fuchsia-600/25 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="flex items-center justify-between relative z-10">
+            <span class="inline-flex items-center gap-1.5 text-[9px] font-mono font-black uppercase tracking-widest bg-purple-950/90 text-purple-200 border border-purple-400 px-3 py-1 rounded-full shadow">
+                <span class="w-2 h-2 rounded-full bg-fuchsia-400 animate-ping"></span>
+                <span>Próximo Lanzamiento ⏳</span>
+            </span>
+            
+            <span class="text-xs font-mono font-bold text-yellow-300 bg-black/70 px-2.5 py-0.5 rounded-full border border-yellow-500/40">
+                {{ upcoming.release_date|default:"Muy pronto" }}
+            </span>
+        </div>
+
+        <div class="flex items-center gap-3.5 relative z-10">
+            <!-- Portada de la Caja Futura -->
+            <div class="w-24 h-24 min-w-[96px] max-w-[96px] rounded-2xl bg-black/90 border-2 border-purple-400/60 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_20px_rgba(168,85,247,0.4)] p-1">
+                {% if upcoming.image_url %}
+                    <img src="{{ upcoming.image_url }}" alt="Próxima Caja" class="w-full h-full object-contain filter drop-shadow">
+                {% else %}
+                    <span class="text-4xl animate-pulse">📦</span>
+                {% endif %}
             </div>
-        {% endfor %}
+
+            <!-- Título y Descripción del Lanzamiento -->
+            <div class="flex flex-col min-w-0 flex-1">
+                <h3 class="font-serif text-sm font-black text-white leading-tight truncate text-gold-gradient">
+                    {{ upcoming.title }}
+                </h3>
+                <p class="text-[11px] text-stone-300 mt-1 line-clamp-2 leading-relaxed">
+                    {{ upcoming.description|default:"Una nueva colección mística se prepara para abrir sus puertas en la corte." }}
+                </p>
+                <div class="mt-2 text-[9.5px] font-mono text-purple-300 flex items-center gap-1">
+                    <span>👑</span> <span>Edición Limitada en camino</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
     {% endif %}
 
     <!-- LISTA DE CAJAS BLINDADAS (CS2 CASE DESIGN) -->
@@ -64,7 +100,7 @@
         <div class="vip-panel p-4 flex flex-col gap-3.5 border border-vip-gold/30 hover:border-yellow-400/70 transition-all duration-300 rounded-3xl shadow-xl bg-gradient-to-br from-[#160824] via-[#0d0416] to-black relative overflow-hidden group max-w-full">
             
             <div class="flex items-center gap-3.5 min-w-0">
-                <!-- Portada Maletín de la Caja con Medidas Fijas (Nunca se desborda) -->
+                <!-- Portada Maletín de la Caja con Medidas Fijas -->
                 <div class="w-24 h-24 min-w-[96px] max-w-[96px] h-24 min-h-[96px] max-h-[96px] rounded-2xl bg-black/90 border-2 border-vip-gold/50 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_18px_rgba(212,175,55,0.25)] relative group-hover:scale-105 transition-transform p-1">
                     {% if box.cover_image %}
                         <img src="{{ box.cover_image.url }}" alt="{{ box.name }}" class="w-full h-full object-contain block drop-shadow">
@@ -122,40 +158,27 @@
 
 </div>
 
-<!-- 🎰 MODAL CINEMATOGRÁFICO DE APERTURA CS2 (SIN SUPERPOSICIÓN) -->
+<!-- 🎰 MODAL CINEMATOGRÁFICO DE APERTURA CS2 -->
 <div id="cs-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 select-none">
-    
     <div class="w-full max-w-sm bg-gradient-to-b from-[#1b0a2c] via-[#0b0314] to-black border-2 border-vip-gold/60 rounded-3xl p-5 shadow-[0_0_50px_rgba(0,0,0,0.95)] flex flex-col items-center relative overflow-hidden">
         
-        <!-- Botón cerrar -->
         <button id="cs-close-btn" onclick="closeCSModal()" class="absolute top-3.5 right-3.5 text-stone-400 hover:text-white text-2xl z-30 transition-transform active:scale-90">&times;</button>
 
         <!-- FASE 1: RULETA HORIZONTAL -->
         <div id="cs-roulette-phase" class="w-full flex flex-col items-center">
-            
-            <h3 id="cs-box-title" class="font-serif text-sm font-black text-gold-gradient uppercase tracking-widest text-center mb-0.5">
-                Abriendo Caja
-            </h3>
+            <h3 id="cs-box-title" class="font-serif text-sm font-black text-gold-gradient uppercase tracking-widest text-center mb-0.5">Abriendo Caja</h3>
             <p class="text-[10px] text-stone-400 mb-3">La aguja central determina tu Photocard</p>
 
-            <!-- Riel Pista CS2 con Viñetas Laterales y Retícula Láser -->
             <div id="cs-viewport" class="w-full h-44 bg-[#08020e] border-2 border-vip-gold/40 rounded-2xl relative overflow-hidden flex items-center shadow-[inset_0_0_25px_rgba(0,0,0,0.9)]">
-                
-                <!-- Viñetas oscuras para desvanecer cartas al entrar y salir -->
                 <div class="absolute inset-y-0 left-0 w-14 bg-gradient-to-r from-black via-black/80 to-transparent z-20 pointer-events-none"></div>
                 <div class="absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-black via-black/80 to-transparent z-20 pointer-events-none"></div>
-
-                <!-- Aguja Láser Central de CS2 -->
                 <div class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-rose-500 z-30 shadow-[0_0_15px_rgba(244,63,94,1)] pointer-events-none">
                     <div class="absolute -top-1 left-1/2 -translate-x-1/2 text-rose-500 text-[10px]">▼</div>
                     <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 text-rose-500 text-[10px]">▲</div>
                 </div>
-
-                <!-- Cinta de cartas -->
                 <div id="cs-reel" class="flex gap-2.5 px-4 will-change-transform" style="transform: translateX(0px);"></div>
             </div>
 
-            <!-- Botón Girar -->
             <div class="w-full mt-4" id="cs-spin-action">
                 <button type="button" id="cs-confirm-btn" onclick="confirmOpenCase()" 
                         class="w-full btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5 active:scale-95 transition-all">
@@ -164,48 +187,30 @@
             </div>
         </div>
 
-        <!-- FASE 2: REVELACIÓN ELEGANTE (Limpia y Centrada) -->
+        <!-- FASE 2: REVELACIÓN ELEGANTE -->
         <div id="cs-reveal-phase" class="hidden w-full flex flex-col items-center py-2 relative">
-            
-            <!-- Resplandor místico de fondo -->
             <div id="cs-reveal-glow" class="absolute inset-0 rounded-full blur-3xl opacity-30 pointer-events-none"></div>
+            <span class="text-[10px] font-mono uppercase font-black px-3 py-0.5 rounded-full border mb-3 shadow z-10" id="cs-winner-rarity">Rareza</span>
 
-            <span class="text-[10px] font-mono uppercase font-black px-3 py-0.5 rounded-full border mb-3 shadow z-10" id="cs-winner-rarity">
-                Rareza
-            </span>
-
-            <!-- Carta Ganadora en Formato Álbum 5/7 con Marco de Rareza -->
             <div id="cs-card-reveal-box" 
                  class="w-44 h-60 rounded-2xl border-3 overflow-hidden shadow-2xl bg-black relative transition-all duration-700 transform scale-95 opacity-0 z-10">
                 <img id="cs-winner-img" src="" class="w-full h-full object-cover">
                 <div class="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent pointer-events-none"></div>
-                
-                <!-- Barra inferior de la carta -->
                 <div class="absolute bottom-2.5 inset-x-2.5 text-center bg-black/75 backdrop-blur-md py-1.5 px-2 rounded-xl border border-white/10">
                     <h4 class="font-serif text-xs font-black text-white leading-tight truncate" id="cs-winner-name">Nombre</h4>
                     <span class="text-[10px] font-bold text-yellow-300 block truncate" id="cs-winner-idol">Musa</span>
                 </div>
             </div>
 
-            <!-- Botones tras obtener la carta -->
             <div class="grid grid-cols-2 gap-2.5 w-full mt-4 z-10">
-                <button type="button" onclick="reopenCurrentBox()" 
-                        class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-                    Abrir Otra
-                </button>
-                <button type="button" onclick="universalNav('{% url 'idols:my_photocards_album' %}')" 
-                        class="bg-purple-950 border border-purple-500 text-purple-200 hover:bg-purple-900 py-3 rounded-xl text-xs font-bold uppercase tracking-wider">
-                    Ver Álbum
-                </button>
+                <button type="button" onclick="reopenCurrentBox()" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow">Abrir Otra</button>
+                <button type="button" onclick="universalNav('{% url 'idols:my_photocards_album' %}')" class="bg-purple-950 border border-purple-500 text-purple-200 hover:bg-purple-900 py-3 rounded-xl text-xs font-bold uppercase tracking-wider">Ver Álbum</button>
             </div>
-
         </div>
 
     </div>
-
 </div>
 
-<!-- SINTETIZADOR DE AUDIO CASINO/CS2 (Ticks progresivos y fanfarria) -->
 <script>
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     let csAudioCtx = null;
@@ -231,10 +236,7 @@
     function playWinFanfare(rarity) {
         try {
             if (!csAudioCtx) csAudioCtx = new AudioCtx();
-            const freqs = (rarity === 'legendary') 
-                ? [523, 659, 783, 1046, 1318] 
-                : (rarity === 'epic' ? [440, 554, 659, 880] : [392, 523, 659]);
-
+            const freqs = (rarity === 'legendary') ? [523, 659, 783, 1046, 1318] : (rarity === 'epic' ? [440, 554, 659, 880] : [392, 523, 659]);
             freqs.forEach((freq, idx) => {
                 const osc = csAudioCtx.createOscillator();
                 const gain = csAudioCtx.createGain();
@@ -249,9 +251,7 @@
             });
         } catch(e) {}
     }
-</script>
 
-<script>
     let activeBoxId = null;
     let activeBoxName = '';
     let activeBoxPrice = 0;
@@ -314,7 +314,9 @@
             const data = await resp.json();
 
             if (!data.success) {
-                alert(data.error);
+                if (window.showVipAlert) showVipAlert(data.error, "Bóveda Insuficiente", "🪙");
+                else alert(data.error);
+
                 btn.disabled = false;
                 btn.innerHTML = `<span>🗝️</span> <span>Girar Ruleta (${activeBoxPrice} 🪙)</span>`;
                 closeBtn.style.display = 'block';
@@ -325,7 +327,6 @@
             const balanceElem = document.getElementById('user-gold-balance');
             if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
 
-            // Renderizar las 35 cartas con proporciones CS2
             reel.style.transition = 'none';
             reel.style.transform = 'translateX(0px)';
             reel.innerHTML = data.reel.map(c => `
@@ -342,9 +343,8 @@
 
             reel.offsetHeight;
 
-            // Cálculo exacto del centro
             const cardPitch = 120;
-            const winningIndex = data.winning_index; // 28
+            const winningIndex = data.winning_index;
             const containerWidth = viewport.offsetWidth;
             const cardCenter = (winningIndex * cardPitch) + 55;
             const targetX = - (cardCenter - (containerWidth / 2) + (Math.random() * 20 - 10));

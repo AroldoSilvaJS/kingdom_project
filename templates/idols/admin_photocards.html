@@ -15,19 +15,11 @@
         </button>
     </div>
 
-    <!-- MENSAJES -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="p-3 rounded-xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/60 border-green-500/60 text-green-200{% else %}bg-red-950/60 border-red-500/60 text-red-200{% endif %}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-
     <!-- PESTAÑAS DEL PANEL -->
-    <div class="grid grid-cols-3 gap-1.5 p-1 bg-black/70 border border-vip-gold/25 rounded-2xl text-[10px] font-bold uppercase text-center shadow-inner">
+    <div class="grid grid-cols-4 gap-1 p-1 bg-black/70 border border-vip-gold/25 rounded-2xl text-[9.5px] font-bold uppercase text-center shadow-inner">
         <button type="button" onclick="switchTab('subir')" id="tab-btn-subir" class="py-2 rounded-xl bg-vip-gold text-black font-black">Subir Carta</button>
         <button type="button" onclick="switchTab('cajas')" id="tab-btn-cajas" class="py-2 rounded-xl text-stone-400 hover:text-white">Cajas ({{ boxes.count }})</button>
+        <button type="button" onclick="switchTab('proxima')" id="tab-btn-proxima" class="py-2 rounded-xl text-stone-400 hover:text-purple-300">📢 Próxima</button>
         <button type="button" onclick="switchTab('cartas')" id="tab-btn-cartas" class="py-2 rounded-xl text-stone-400 hover:text-white">Cartas ({{ all_cards.count }})</button>
     </div>
 
@@ -53,7 +45,6 @@
                 </select>
             </div>
 
-            <!-- LIBRE PARA CUALQUIER IDOL DEL K-POP CON DATALIST DE SUGERENCIAS -->
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Idol de K-Pop / Artista *</label>
                 <input type="text" name="idol_name" list="kpop-suggestions" required placeholder="Ej: Jennie, Karina, Wonyoung, Sana..."
@@ -75,7 +66,6 @@
                         <option value="{{ idol.stage_name }} (Rol)">
                     {% endfor %}
                 </datalist>
-                <span class="text-[9.5px] text-stone-500 mt-0.5 block">Puedes escribir libremente cualquier nombre de Idol del K-Pop.</span>
             </div>
 
             <div>
@@ -106,7 +96,7 @@
         </form>
     </div>
 
-    <!-- SECCIÓN 2: GESTIÓN DE CAJAS (CREAR, EDITAR, PAUSAR, ELIMINAR) -->
+    <!-- SECCIÓN 2: GESTIÓN DE CAJAS EXISTENTES -->
     <div id="tab-cajas" class="hidden flex flex-col gap-3.5">
         <div class="vip-panel p-5 border border-yellow-500/40 rounded-3xl shadow-xl bg-gradient-to-br from-[#1a1005] to-black">
             <h3 class="font-serif text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-yellow-500/20 pb-2 mb-3">
@@ -137,9 +127,8 @@
             </form>
         </div>
 
-        <!-- Lista de Cajas Existentes -->
         <div class="flex flex-col gap-2">
-            <h4 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1">Cajas Existentes</h4>
+            <h4 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1">Cajas Activas</h4>
             {% for b in boxes %}
             <div class="bg-black/60 border border-vip-gold/30 p-3.5 rounded-2xl flex flex-col gap-2 shadow">
                 <div class="flex justify-between items-start">
@@ -184,12 +173,77 @@
         </div>
     </div>
 
-    <!-- SECCIÓN 3: INVENTARIO DE PHOTOCARDS -->
+    <!-- 📢 SECCIÓN 3: CONFIGURAR ANUNCIO DE PRÓXIMA CAJA (NUEVA) -->
+    <div id="tab-proxima" class="hidden vip-panel p-5 border border-purple-500/60 rounded-3xl shadow-xl flex flex-col gap-3 bg-gradient-to-br from-[#1d0b30] to-black">
+        <div class="flex items-center justify-between border-b border-purple-500/30 pb-2">
+            <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                <span>📢</span> Anuncio de Próximo Lanzamiento
+            </h3>
+            <span class="text-[9px] font-mono text-yellow-300 font-bold">Sneak Peek VIP</span>
+        </div>
+
+        <p class="text-[11px] text-stone-300 leading-relaxed">
+            Configura el banner de expectativa que verán los usuarios en la tienda de cajas anunciando la próxima colección y su fecha.
+        </p>
+
+        <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3 mt-1">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_upcoming_box">
+            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+            <!-- Switch Activo / Desactivado -->
+            <div class="p-3 bg-black/60 rounded-2xl border border-white/10 flex items-center justify-between">
+                <div>
+                    <span class="text-xs font-bold text-white block">¿Mostrar Anuncio en la Tienda?</span>
+                    <span class="text-[10px] text-stone-400">Si está activo, aparecerá arriba de las cajas.</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" name="upcoming_active" value="1" class="sr-only peer" {% if upcoming.is_active %}checked{% endif %}>
+                    <div class="w-11 h-6 bg-stone-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Próxima Caja *</label>
+                <input type="text" name="upcoming_title" value="{{ upcoming.title }}" required placeholder="Ej: Colección K-Pop Cyberpunk 2026"
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Fecha o Horario de Estreno *</label>
+                <input type="text" name="upcoming_date" value="{{ upcoming.release_date }}" required placeholder="Ej: Sábado 15 de Octubre • 21:00 hs"
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Descripción / Expectativa</label>
+                <textarea name="upcoming_desc" rows="2" placeholder="Detalla qué Idols o cartas legendarias contendrá..."
+                          class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white resize-none">{{ upcoming.description }}</textarea>
+            </div>
+
+            <div class="bg-black/50 p-3 rounded-2xl border border-white/10 flex flex-col gap-1.5">
+                <label class="block text-[11px] text-purple-300 uppercase font-bold">Imagen Promocional de la Caja</label>
+                {% if upcoming.image_url %}
+                    <div class="flex items-center gap-2 mb-1">
+                        <img src="{{ upcoming.image_url }}" class="w-12 h-12 object-contain bg-black rounded-lg border border-purple-500/40">
+                        <span class="text-[10px] text-stone-400">Imagen actual activa. Sube otra solo para sustituirla.</span>
+                    </div>
+                {% endif %}
+                <input type="file" name="upcoming_image" accept="image/*"
+                       class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-purple-900 file:text-purple-200 cursor-pointer">
+            </div>
+
+            <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
+                💾 Guardar Anuncio Promocional
+            </button>
+        </form>
+    </div>
+
+    <!-- SECCIÓN 4: INVENTARIO DE TODAS LAS CARTAS -->
     <div id="tab-cartas" class="hidden flex flex-col gap-2.5">
-        <h4 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1">Todas las Photocards Subidas</h4>
+        <h4 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1">Todas las Photocards</h4>
         {% for c in all_cards %}
         <div class="bg-black/60 border border-vip-gold/30 p-3 rounded-2xl flex items-center justify-between gap-3 shadow">
-            
             <div class="flex items-center gap-3 min-w-0">
                 <img src="{{ c.image.url }}" class="w-12 h-16 object-cover rounded-xl border flex-shrink-0" style="border-color: {{ c.get_color_hex }};">
                 <div class="flex flex-col min-w-0">
@@ -199,23 +253,17 @@
                 </div>
             </div>
 
-            <!-- Botones de Acción -->
             <div class="flex items-center gap-1.5 flex-shrink-0">
                 <button type="button" onclick="openEditCardModal({{ c.id }}, '{{ c.name|escapejs }}', '{{ c.display_idol_name|escapejs }}', '{{ c.rarity }}', {{ c.box.id }})" 
-                        class="text-xs bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 px-2 py-1 rounded-lg font-bold" title="Editar">
-                    ✏️
-                </button>
+                        class="text-xs bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 px-2 py-1 rounded-lg font-bold" title="Editar">✏️</button>
 
                 <form method="POST" class="m-0" onsubmit="return confirm('¿Eliminar la carta {{ c.name }}?')">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="delete_card">
                     <input type="hidden" name="card_id" value="{{ c.id }}">
-                    <button type="submit" class="text-xs bg-rose-950 border border-rose-500 text-rose-300 px-2 py-1 rounded-lg font-bold" title="Eliminar">
-                        🗑️
-                    </button>
+                    <button type="submit" class="text-xs bg-rose-950 border border-rose-500 text-rose-300 px-2 py-1 rounded-lg font-bold" title="Eliminar">🗑️</button>
                 </form>
             </div>
-
         </div>
         {% empty %}
         <p class="text-center text-xs text-stone-500 py-6">No hay cartas subidas aún.</p>
@@ -276,16 +324,19 @@
 
 <script>
     function switchTab(tab) {
-        document.getElementById('tab-subir').classList.add('hidden');
-        document.getElementById('tab-cajas').classList.add('hidden');
-        document.getElementById('tab-cartas').classList.add('hidden');
-
-        document.getElementById('tab-btn-subir').className = "py-2 rounded-xl text-stone-400 hover:text-white";
-        document.getElementById('tab-btn-cajas').className = "py-2 rounded-xl text-stone-400 hover:text-white";
-        document.getElementById('tab-btn-cartas').className = "py-2 rounded-xl text-stone-400 hover:text-white";
-
-        document.getElementById(`tab-${tab}`).classList.remove('hidden');
-        document.getElementById(`tab-btn-${tab}`).className = "py-2 rounded-xl bg-vip-gold text-black font-black";
+        ['subir', 'cajas', 'proxima', 'cartas'].forEach(t => {
+            const p = document.getElementById(`tab-${t}`);
+            const b = document.getElementById(`tab-btn-${t}`);
+            if (p && b) {
+                if (t === tab) {
+                    p.classList.remove('hidden');
+                    b.className = "py-2 rounded-xl bg-vip-gold text-black font-black";
+                } else {
+                    p.classList.add('hidden');
+                    b.className = "py-2 rounded-xl text-stone-400 hover:text-white";
+                }
+            }
+        });
     }
 
     function openEditCardModal(cardId, name, idolName, rarity, boxId) {
