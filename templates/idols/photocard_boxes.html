@@ -49,45 +49,56 @@
         </div>
     </div>
 
-    <!-- 🌟 VENTANA DE PRÓXIMO LANZAMIENTO (SI ESTÁ ACTIVA) -->
+    <!-- 🌟 BANNER CINEMATOGRÁFICO DE PRÓXIMO LANZAMIENTO (SNEAK PEEK VIP) -->
     {% if upcoming.is_active %}
-    <div class="relative rounded-3xl overflow-hidden border-2 border-purple-400/80 bg-gradient-to-br from-[#240c38] via-[#0f0418] to-black p-4 shadow-[0_10px_35px_rgba(168,85,247,0.35)] flex flex-col gap-3 group">
+    <div class="relative rounded-3xl overflow-hidden border-2 border-purple-500/80 bg-gradient-to-b from-[#1b082e] via-[#0d0417] to-black shadow-[0_12px_35px_rgba(168,85,247,0.35)] flex flex-col group">
         
-        <!-- Destello neón ambiental -->
-        <div class="absolute -top-10 -right-10 w-40 h-40 bg-fuchsia-600/25 rounded-full blur-3xl pointer-events-none"></div>
+        <!-- Orbe Neón de Ambiente -->
+        <div class="absolute -top-12 -right-12 w-48 h-48 bg-fuchsia-600/25 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div class="flex items-center justify-between relative z-10">
-            <span class="inline-flex items-center gap-1.5 text-[9px] font-mono font-black uppercase tracking-widest bg-purple-950/90 text-purple-200 border border-purple-400 px-3 py-1 rounded-full shadow">
+        <!-- 1. Cabecera con Insignia y Fecha de Estreno -->
+        <div class="p-3.5 pb-2.5 flex items-center justify-between relative z-10 bg-black/60 backdrop-blur-md border-b border-white/5">
+            <span class="inline-flex items-center gap-1.5 text-[9.5px] font-mono font-black uppercase tracking-widest bg-gradient-to-r from-purple-950 to-fuchsia-950 text-purple-200 border border-purple-400 px-3 py-1 rounded-full shadow-[0_0_12px_rgba(168,85,247,0.4)]">
                 <span class="w-2 h-2 rounded-full bg-fuchsia-400 animate-ping"></span>
                 <span>Próximo Lanzamiento ⏳</span>
             </span>
-            
-            <span class="text-xs font-mono font-bold text-yellow-300 bg-black/70 px-2.5 py-0.5 rounded-full border border-yellow-500/40">
-                {{ upcoming.release_date|default:"Muy pronto" }}
+
+            <span class="text-xs font-mono font-black text-amber-300 bg-amber-950/80 px-3 py-1 rounded-full border border-yellow-500/50 shadow-inner flex items-center gap-1">
+                <span>🗓️</span> <span>{{ upcoming.release_date|default:"Muy pronto" }}</span>
             </span>
         </div>
 
-        <div class="flex items-center gap-3.5 relative z-10">
-            <!-- Portada de la Caja Futura -->
-            <div class="w-24 h-24 min-w-[96px] max-w-[96px] rounded-2xl bg-black/90 border-2 border-purple-400/60 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_20px_rgba(168,85,247,0.4)] p-1">
-                {% if upcoming.image_url %}
-                    <img src="{{ upcoming.image_url }}" alt="Próxima Caja" class="w-full h-full object-contain filter drop-shadow">
-                {% else %}
-                    <span class="text-4xl animate-pulse">📦</span>
-                {% endif %}
-            </div>
+        <!-- 2. Portada Panorámica en Ancho Completo (Sin recortes ni deformaciones) -->
+        {% if upcoming.image_url %}
+        <div class="w-full bg-black relative overflow-hidden border-b border-purple-500/30">
+            <img src="{{ upcoming.image_url }}" 
+                 alt="{{ upcoming.title }}" 
+                 class="w-full h-auto max-h-56 object-cover object-center group-hover:scale-[1.02] transition-transform duration-500 block">
+            <!-- Degradado sutil para fusionar con el fondo inferior -->
+            <div class="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#0d0417] to-transparent pointer-events-none"></div>
+        </div>
+        {% endif %}
 
-            <!-- Título y Descripción del Lanzamiento -->
-            <div class="flex flex-col min-w-0 flex-1">
-                <h3 class="font-serif text-sm font-black text-white leading-tight truncate text-gold-gradient">
+        <!-- 3. Información del Lanzamiento (Título, Descripción y Tag) -->
+        <div class="p-4 flex flex-col gap-1.5 relative z-10 bg-gradient-to-t from-black via-black/80 to-transparent">
+            <div class="flex items-center justify-between gap-2">
+                <h3 class="font-serif text-base sm:text-lg font-black text-gold-gradient tracking-wide uppercase leading-tight">
                     {{ upcoming.title }}
                 </h3>
-                <p class="text-[11px] text-stone-300 mt-1 line-clamp-2 leading-relaxed">
-                    {{ upcoming.description|default:"Una nueva colección mística se prepara para abrir sus puertas en la corte." }}
-                </p>
-                <div class="mt-2 text-[9.5px] font-mono text-purple-300 flex items-center gap-1">
-                    <span>👑</span> <span>Edición Limitada en camino</span>
-                </div>
+                <span class="text-[9px] font-mono uppercase font-black text-yellow-400 bg-black/80 px-2 py-0.5 rounded-md border border-yellow-500/40 flex-shrink-0">
+                    👑 Edición Limitada
+                </span>
+            </div>
+
+            <p class="text-xs text-stone-300 leading-relaxed font-normal">
+                {{ upcoming.description|default:"Una nueva colección mística se prepara para abrir sus puertas en la corte." }}
+            </p>
+
+            <div class="mt-1 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-purple-300">
+                <span class="flex items-center gap-1">
+                    <span>✨</span> <span>Nuevas Photocards & Cajas temáticas</span>
+                </span>
+                <span class="text-stone-400 font-bold">Reserva tu oro</span>
             </div>
         </div>
 
