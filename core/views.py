@@ -11,7 +11,10 @@ from django.conf import settings
 
 from core.models import UserRole, UserProfile, KingdomSetting, AdminAuditLog
 from economy.models import Wallet
-from idols.models import IdolProfile, Post, PostUnlock, CustomRequest, UserPhotocard, Review, PostComment
+from idols.models import (
+    IdolProfile, Post, PostUnlock, PostLike, CustomRequest, 
+    UserPhotocard, Review, PostComment, Photocard, PhotocardBox
+)
 from pets.models import Pet
 from core.telegram_auth import is_user_in_group
 from core.telegram_notify import send_telegram_msg
@@ -382,7 +385,6 @@ def admin_panel(request, admin_tg_id):
 
         # 9. PURGA DE DATOS DE PRUEBA
         elif accion == 'purge_test_data':
-            from idols.models import PhotocardBox, Photocard
             UserPhotocard.objects.all().delete()
             Photocard.objects.all().delete()
             PhotocardBox.objects.all().delete()
