@@ -263,10 +263,9 @@
             const data = await resp.json();
 
             if (!data.success) {
-                alert(data.error);
-                return;
-            }
-
+            showVipAlert(data.error, "Regla de la Corte", "⚠️");
+            return;
+        }
             // Actualizar Saldo
             const balanceElem = document.getElementById('bj-balance');
             if (balanceElem) balanceElem.innerText = data.nuevo_saldo;

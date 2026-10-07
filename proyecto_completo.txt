@@ -381,11 +381,16 @@ ARCHIVO: .\core\middleware.py
 ==================================================
 
 # core/middleware.py
+from django.shortcuts import render
+from django.conf import settings
+from core.telegram_auth import is_user_in_group
+
+ADMIN_TG_ID = '7474444797'
 
 class TelegramSessionMiddleware:
     """
-    Garantiza que cada usuario de Telegram tenga su propia sesión aislada.
-    Si la petición trae un tg_id diferente al de la sesión actual, la sesión se reinicia.
+    1. Aísla las sesiones por cada tg_id.
+    2. Blindaje de seguridad: Bloquea todo el Reino a usuarios que no pertenezcan al grupo oficial.
     """
     def __init__(self, get_response):
         self.get_response = get_response
@@ -396,12 +401,30 @@ class TelegramSessionMiddleware:
         if incoming_id and str(incoming_id).strip() not in ['', 'None', 'undefined', 'null']:
             try:
                 clean_id = int(incoming_id)
-                # Si cambió de cuenta, sobrescribimos la sesión para aislar los datos
                 if request.session.get('tg_id') != clean_id:
                     request.session['tg_id'] = clean_id
             except (ValueError, TypeError):
                 pass
-        
+
+        # Rutas exentas del filtro de grupo (Admin, Webhooks y Archivos estáticos)
+        exempt_paths = ['/admin/', '/telegram-webhook/', '/static/', '/media/']
+        if any(request.path.startswith(p) for p in exempt_paths):
+            return self.get_response(request)
+
+        # Resolver el ID del usuario
+        tg_id = request.session.get('tg_id') or incoming_id
+        if tg_id and str(tg_id).isdigit():
+            clean_id = int(tg_id)
+            
+            # Si NO es la Corona y NO está en el grupo oficial, expulsar a pantalla de bloqueo
+            if str(clean_id) != ADMIN_TG_ID and not is_user_in_group(clean_id):
+                interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/KingdomOfPleasureOf')
+                return render(request, 'core/access_denied.html', {
+                    'tg_id': clean_id,
+                    'interview_url': interview_link,
+                    'hide_bottom_nav': True
+                }, status=403)
+
         response = self.get_response(request)
         return response
 
@@ -5232,11 +5255,13 @@ ARCHIVO: .\templates\base.html
     <header class="w-full max-w-md pt-2 pb-1 px-3 flex flex-col items-center z-20 relative">
         
         <!-- Botón Flotante del Buzón (Arriba a la derecha) -->
+        {% if not hide_bottom_nav %}
         <button type="button" onclick="universalNav('/buzon/')" 
                 class="absolute right-3 top-3 bg-black/70 hover:bg-black border border-vip-gold/40 text-yellow-300 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-[0_0_12px_rgba(212,175,55,0.3)] active:scale-90 transition-all z-30" 
                 title="Abrir Buzón Real">
             <span>🔔</span>
         </button>
+        {% endif %}
 
         <div class="relative w-full flex justify-center items-center py-1">
             <div class="absolute w-44 h-24 bg-gradient-to-r from-amber-600/25 via-yellow-500/35 to-amber-600/25 rounded-full blur-2xl pointer-events-none"></div>
@@ -5257,6 +5282,7 @@ ARCHIVO: .\templates\base.html
     </main>
 
     <!-- 📱 BARRA DE NAVEGACIÓN INFERIOR DINÁMICA -->
+    {% if not hide_bottom_nav %}
     <div class="fixed bottom-0 inset-x-0 z-[99999] pointer-events-none pb-[max(0.6rem,env(safe-area-inset-bottom))] px-2.5 pt-1.5">
         <nav class="max-w-md mx-auto pointer-events-auto bg-[#0a0514]/95 border border-vip-gold/40 backdrop-blur-xl rounded-2xl p-1.5 px-1 shadow-[0_10px_35px_rgba(0,0,0,0.95),0_0_18px_rgba(212,175,55,0.22)]">
             <div class="grid grid-cols-6 gap-0.5 items-center justify-items-stretch" id="bottom-nav-bar">
@@ -5282,7 +5308,7 @@ ARCHIVO: .\templates\base.html
                     <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Cajas</span>
                 </button>
 
-                <!-- 4. Elenco de Musas (Ahora dinámico) -->
+                <!-- 4. Elenco de Musas -->
                 <button type="button" data-nav="/idols/gallery/" onclick="universalNav('/idols/gallery/')" 
                         class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">🎭</span>
@@ -5306,8 +5332,9 @@ ARCHIVO: .\templates\base.html
             </div>
         </nav>
     </div>
+    {% endif %}
 
-    <!-- MODAL VIP FLOTANTE UNIVERSAL (Reemplaza los alerts nativos) -->
+    <!-- MODAL VIP FLOTANTE UNIVERSAL -->
     <div id="vip-global-modal" class="hidden fixed inset-0 z-[999999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
         <div class="vip-panel p-5 max-w-xs w-full text-center border-2 border-vip-gold/60 rounded-3xl shadow-2xl flex flex-col items-center bg-gradient-to-b from-[#1c0c2e] to-black">
             <span id="vip-modal-icon" class="text-3xl mb-1">👑</span>
@@ -5329,7 +5356,6 @@ ARCHIVO: .\templates\base.html
             } catch(e) {}
         }
 
-        // Obtener el ID y el @ de Telegram del usuario que TIENE LA APP ABIERTA AHORA MISMO
         function getRealTelegramUser() {
             const tgUser = tgApp?.initDataUnsafe?.user;
             if (tgUser && tgUser.id) {
@@ -5356,7 +5382,6 @@ ARCHIVO: .\templates\base.html
             };
         }
 
-        // Sincronizar cuenta al cargar la página
         (function syncAccount() {
             const currentUser = getRealTelegramUser();
             const urlParams = new URLSearchParams(window.location.search);
@@ -5366,15 +5391,12 @@ ARCHIVO: .\templates\base.html
             localStorage.setItem('current_tg_id', currentUser.id);
             localStorage.setItem('current_tg_user', currentUser.username);
 
-            // Si Telegram WebApp reporta un usuario y la URL tiene el fallback (123456789) o ninguno
             if (tgApp?.initDataUnsafe?.user && (currentUrlId !== currentUser.id || !currentUrlName)) {
-                // 👈 Si cayó en choose-role por error de inicio, mandarlo a la raíz '/' con su ID real
                 const targetPath = (window.location.pathname.includes('choose-role') && currentUrlId === '123456789') ? '/' : window.location.pathname;
                 window.location.replace(`${targetPath}?tg_id=${currentUser.id}&tg_username=${encodeURIComponent(currentUser.username)}`);
             }
         })();
 
-        // Navegación universal limpia
         window.universalNav = function(targetPath) {
             try {
                 tgApp?.HapticFeedback?.impactOccurred('light');
@@ -5388,31 +5410,30 @@ ARCHIVO: .\templates\base.html
         window.navGo = window.universalNav;
         window.getGlobalTgId = function() { return getRealTelegramUser().id; };
         window.getGlobalTgUser = function() { return getRealTelegramUser().username; };
-    
-    (function highlightActiveTab() {
-        const path = window.location.pathname;
-        document.querySelectorAll('.nav-tab').forEach(tab => {
-            const tabPath = tab.getAttribute('data-nav');
-            const isActive = (tabPath === '/' && path === '/') || (tabPath !== '/' && path.startsWith(tabPath));
-            
-            if (isActive) {
-                tab.className = "nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-vip-gold active:scale-90 transition-all select-none rounded-xl bg-gradient-to-b from-yellow-500/15 to-transparent border border-vip-gold/30 shadow-[0_0_10px_rgba(212,175,55,0.2)]";
-                tab.querySelector('span:last-child').className = "text-[8px] sm:text-[8.5px] font-black uppercase tracking-tight mt-1 text-vip-gold";
-            }
-        });
-    })();
 
-    // Alerta VIP dentro de la app (Adiós a las ventanas de navegador)
-    window.showVipAlert = function(msg, title = "Aviso de la Corte", icon = "👑") {
-        try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning'); } catch(e) {}
-        document.getElementById('vip-modal-title').innerText = title;
-        document.getElementById('vip-modal-text').innerText = msg;
-        document.getElementById('vip-modal-icon').innerText = icon;
-        document.getElementById('vip-global-modal').classList.remove('hidden');
-    };
-    window.closeVipAlert = function() {
-        document.getElementById('vip-global-modal').classList.add('hidden');
-    };
+        (function highlightActiveTab() {
+            const path = window.location.pathname;
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                const tabPath = tab.getAttribute('data-nav');
+                const isActive = (tabPath === '/' && path === '/') || (tabPath !== '/' && path.startsWith(tabPath));
+                
+                if (isActive) {
+                    tab.className = "nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-vip-gold active:scale-90 transition-all select-none rounded-xl bg-gradient-to-b from-yellow-500/15 to-transparent border border-vip-gold/30 shadow-[0_0_10px_rgba(212,175,55,0.2)]";
+                    tab.querySelector('span:last-child').className = "text-[8px] sm:text-[8.5px] font-black uppercase tracking-tight mt-1 text-vip-gold";
+                }
+            });
+        })();
+
+        window.showVipAlert = function(msg, title = "Aviso de la Corte", icon = "👑") {
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning'); } catch(e) {}
+            document.getElementById('vip-modal-title').innerText = title;
+            document.getElementById('vip-modal-text').innerText = msg;
+            document.getElementById('vip-modal-icon').innerText = icon;
+            document.getElementById('vip-global-modal').classList.remove('hidden');
+        };
+        window.closeVipAlert = function() {
+            document.getElementById('vip-global-modal').classList.add('hidden');
+        };
     </script>
 </body>
 </html>
@@ -5421,30 +5442,75 @@ ARCHIVO: .\templates\base.html
 ARCHIVO: .\templates\core\access_denied.html
 ==================================================
 
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Acceso Restringido | Kingdom of Pleasure</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
 
-{% block content %}
-<div class="vip-panel p-8 mt-12 text-center flex flex-col items-center border border-red-500/40 bg-black/85 shadow-2xl rounded-3xl">
-    <span class="text-6xl my-2 filter drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]">⛔</span>
-    <h2 class="font-serif text-xl font-black text-red-400 uppercase tracking-widest mt-2">
-        Acceso Restringido
-    </h2>
-    <p class="text-xs text-vip-text/70 mt-2 max-w-xs leading-relaxed">
-        El <strong>Kingdom of Pleasure</strong> es un círculo privado y exclusivo. 
-        Para cruzar estas puertas debes ser miembro activo de nuestro grupo principal.
-    </p>
+    <style>
+        body {
+            background: radial-gradient(circle at 50% -20%, #200E38 0%, #08040E 60%, #030106 100%);
+            color: #EAE6F0;
+            min-height: 100vh;
+        }
+        .vip-panel {
+            background: linear-gradient(135deg, rgba(21, 10, 36, 0.95) 0%, rgba(13, 6, 22, 0.98) 100%);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 24px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9), 0 0 25px rgba(239, 68, 68, 0.15);
+        }
+        .btn-gold {
+            background: linear-gradient(135deg, #ECC440 0%, #D4AF37 50%, #9A7B1C 100%);
+            color: #08040E;
+            font-weight: 800;
+            text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.35);
+        }
+    </style>
+</head>
+<body class="font-sans antialiased flex flex-col items-center justify-center min-h-screen p-4">
 
-    <div class="my-3 p-3 bg-red-950/40 border border-red-500/30 rounded-2xl text-[11px] text-red-200">
-        ¿Aún no eres parte de la Corte? Preséntate en nuestro grupo de admisiones para solicitar tu pase de entrada.
+    <!-- Tarjeta Hermética de Bloqueo Imperial (Sin barras ni menú) -->
+    <div class="vip-panel p-7 max-w-sm w-full text-center flex flex-col items-center relative overflow-hidden">
+        
+        <!-- Logo del Reino -->
+        <div class="w-24 h-24 mb-2 flex items-center justify-center">
+            <img src="/media/logo.png" alt="Kingdom of Pleasure" class="w-full h-full object-contain filter drop-shadow">
+        </div>
+
+        <span class="text-5xl my-2 filter drop-shadow-[0_0_15px_rgba(239,68,68,0.6)]">⛔</span>
+        
+        <h1 class="font-serif text-lg font-black text-rose-400 uppercase tracking-widest mt-1">
+            Acceso Restringido
+        </h1>
+
+        <p class="text-xs text-stone-300 mt-2 leading-relaxed">
+            <strong>Kingdom of Pleasure</strong> es un círculo privado y aristocrático. 
+            Las puertas del Reino están reservadas exclusivamente a los miembros de la Corte Oficial.
+        </p>
+
+        <div class="my-4 p-3 bg-rose-950/40 border border-rose-500/30 rounded-2xl text-[11px] text-rose-200">
+            ¿Deseas pertenecer al Reino? Preséntate en nuestro grupo de admisiones para ser evaluado por la Corona.
+        </div>
+
+        <!-- Botón Único de Salida hacia Entrevistas -->
+        <a href="{{ interview_url|default:'https://t.me/KingdomOfPleasureOf' }}" target="_blank"
+           class="w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
+            <span>🏰</span> Solicitar Entrada en Entrevistas
+        </a>
+
+        <span class="text-[9.5px] font-mono text-stone-500 mt-4 block">ID: {{ tg_id }} • No Admitido</span>
     </div>
 
-    <!-- Botón directo al Grupo de Entrevistas -->
-    <a href="{{ interview_url|default:'https://t.me/' }}" target="_blank"
-       class="mt-3 w-full btn-gold py-3.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
-        <span>🏰</span> Solicitar Entrada en Entrevistas
-    </a>
-</div>
-{% endblock %}
+</body>
+</html>
 
 ==================================================
 ARCHIVO: .\templates\core\admin_panel.html
@@ -7286,10 +7352,9 @@ ARCHIVO: .\templates\economy\blackjack.html
             const data = await resp.json();
 
             if (!data.success) {
-                alert(data.error);
-                return;
-            }
-
+            showVipAlert(data.error, "Regla de la Corte", "⚠️");
+            return;
+        }
             // Actualizar Saldo
             const balanceElem = document.getElementById('bj-balance');
             if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
@@ -7762,7 +7827,6 @@ ARCHIVO: .\templates\economy\mines.html
         return minesAudioCtx;
     }
 
-    // Sonido brillante al descubrir Gema
     function playGemSound(pitchStep = 0) {
         try {
             const ctx = getAudioCtx();
@@ -7781,7 +7845,6 @@ ARCHIVO: .\templates\economy\mines.html
         } catch(e) {}
     }
 
-    // Sonido sordo de Explosión / Bomba
     function playBombSound() {
         try {
             const ctx = getAudioCtx();
@@ -7799,7 +7862,6 @@ ARCHIVO: .\templates\economy\mines.html
         } catch(e) {}
     }
 
-    // Tintineo de monedas al cobrar
     function playCoins() {
         try {
             const ctx = getAudioCtx();
@@ -7864,9 +7926,14 @@ ARCHIVO: .\templates\economy\mines.html
             const data = await resp.json();
 
             if (!data.success) {
-            showVipAlert(data.error, "Regla de la Corte", "⚠️");
-            return;
+                if (window.showVipAlert) {
+                    showVipAlert(data.error, "Tope de Apuesta", "🪙");
+                } else {
+                    alert(data.error);
+                }
+                return;
             } 
+            
             isGameRunning = true;
             revealedGems = [];
 
@@ -7893,7 +7960,11 @@ ARCHIVO: .\templates\economy\mines.html
             try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
 
         } catch(e) {
-            alert("Error de conexión al iniciar.");
+            if (window.showVipAlert) {
+                showVipAlert("Error de conexión al iniciar la ronda.", "Conexión", "⚠️");
+            } else {
+                alert("Error de conexión al iniciar.");
+            }
         }
     }
 
@@ -7922,7 +7993,6 @@ ARCHIVO: .\templates\economy\mines.html
             const hiddenCover = tile.querySelector('.tile-hidden');
 
             if (data.status === 'bust') {
-                // EXPLOSIÓN (BOMBA)
                 playBombSound();
                 try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
                 isGameRunning = false;
@@ -7931,7 +8001,6 @@ ARCHIVO: .\templates\economy\mines.html
                 tile.className = "mine-tile relative rounded-xl bg-red-600 border-2 border-red-300 flex items-center justify-center text-2xl shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-bounce";
                 tile.querySelector('.tile-icon').innerText = '💣';
 
-                // Revelar todas las demás minas
                 data.all_mines.forEach(mIdx => {
                     const mTile = document.getElementById(`tile-${mIdx}`);
                     mTile.querySelector('.tile-hidden').classList.add('hidden');
@@ -7950,7 +8019,6 @@ ARCHIVO: .\templates\economy\mines.html
                 document.getElementById('mines-setup-controls').classList.remove('hidden');
 
             } else {
-                // GEMA ENCONTRADA
                 revealedGems.push(index);
                 playGemSound(revealedGems.length);
                 try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
@@ -7963,7 +8031,6 @@ ARCHIVO: .\templates\economy\mines.html
                 document.getElementById('cashout-val').innerText = data.current_cashout;
 
                 if (data.status === 'win_full') {
-                    // Limpió todo el tablero
                     playCoins();
                     isGameRunning = false;
                     document.getElementById('mines-balance').innerText = data.nuevo_saldo;
@@ -7980,7 +8047,7 @@ ARCHIVO: .\templates\economy\mines.html
             }
 
         } catch(e) {
-            alert("Error de conexión al abrir cofre.");
+            console.error(e);
         }
     }
 
@@ -8010,7 +8077,6 @@ ARCHIVO: .\templates\economy\mines.html
 
             document.getElementById('mines-balance').innerText = data.nuevo_saldo;
 
-            // Mostrar dónde estaban las minas restantes
             data.all_mines.forEach(mIdx => {
                 const mTile = document.getElementById(`tile-${mIdx}`);
                 mTile.querySelector('.tile-hidden').classList.add('hidden');
@@ -8030,7 +8096,7 @@ ARCHIVO: .\templates\economy\mines.html
             document.getElementById('mines-setup-controls').classList.remove('hidden');
 
         } catch(e) {
-            alert("Error al cobrar.");
+            console.error(e);
         }
     }
 </script>
@@ -8503,12 +8569,16 @@ ARCHIVO: .\templates\economy\wallet.html
         const degrees = 1800 + Math.floor(Math.random() * 360);
         wheel.style.transform = `rotate(${degrees}deg)`;
 
-        // Dar 4.5 segundos: 3s de giro + 1.5s para apreciar la parada antes del envío
+        // Gira 3s, luego muestra el mensaje de éxito durante 2s para que dé tiempo a leer
         setTimeout(() => {
-            btn.innerHTML = '<span>🎉</span> ¡Destino Concedido! Reclamando...';
+            btn.innerHTML = '<span>🎉</span> ¡Premio Concedido! Guardando oro...';
+            btn.classList.remove('opacity-60');
+            btn.classList.add('bg-emerald-600', 'text-white');
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+            
             setTimeout(() => {
                 document.getElementById('daily-wheel-form')?.submit();
-            }, 1200);
+            }, 1800);
         }, 3000);
     }
 
@@ -10389,20 +10459,20 @@ ARCHIVO: .\templates\idols\photocards_album.html
 <div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
     <!-- TABS DE NAVEGACIÓN -->
-<div class="grid grid-cols-3 gap-1 bg-black/50 p-1 rounded-xl border border-vip-gold/30 mb-6 text-xs font-semibold text-center">
-    <a href="/idols/photocards/?tg_id={{ tg_id }}" 
-       class="py-2.5 rounded-lg transition-all text-gray-400 hover:text-white flex items-center justify-center gap-1">
-        <span>🎁</span> <span>Cajas</span>
-    </a>
-    <a href="/idols/photocards/album/?tg_id={{ tg_id }}" 
-       class="py-2.5 rounded-lg transition-all bg-gradient-to-r from-vip-gold/30 to-amber-600/30 text-vip-gold border border-vip-gold/50 shadow-sm flex items-center justify-center gap-1 font-bold">
-        <span>📖</span> <span>Mi Álbum</span>
-    </a>
-    <a href="/idols/photocards/market/?tg_id={{ tg_id }}" 
-       class="py-2.5 rounded-lg transition-all text-gray-400 hover:text-white flex items-center justify-center gap-1">
-        <span>🏛️</span> <span>Mercado</span>
-    </a>
-</div>
+    <div class="grid grid-cols-3 gap-1 bg-black/50 p-1 rounded-xl border border-vip-gold/30 mb-6 text-xs font-semibold text-center">
+        <a href="/idols/photocards/?tg_id={{ tg_id }}" 
+           class="py-2.5 rounded-lg transition-all text-gray-400 hover:text-white flex items-center justify-center gap-1">
+            <span>🎁</span> <span>Cajas</span>
+        </a>
+        <a href="/idols/photocards/album/?tg_id={{ tg_id }}" 
+           class="py-2.5 rounded-lg transition-all bg-gradient-to-r from-vip-gold/30 to-amber-600/30 text-vip-gold border border-vip-gold/50 shadow-sm flex items-center justify-center gap-1 font-bold">
+            <span>📖</span> <span>Mi Álbum</span>
+        </a>
+        <a href="/idols/photocards/market/?tg_id={{ tg_id }}" 
+           class="py-2.5 rounded-lg transition-all text-gray-400 hover:text-white flex items-center justify-center gap-1">
+            <span>🏛️</span> <span>Mercado</span>
+        </a>
+    </div>
 
     <!-- MENSAJES -->
     {% if messages %}
@@ -10489,15 +10559,15 @@ ARCHIVO: .\templates\idols\photocards_album.html
 
 </div>
 
-<!-- 🔍 MODAL DE ACCIÓN DE CARTA (VENDER O INTERCAMBIAR) -->
+<!-- 🔍 MODAL DE ACCIÓN DE CARTA (CON SCROLL FLUIDO EN MÓVIL) -->
 <div id="card-action-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="vip-panel p-5 max-w-sm w-full border-2 rounded-3xl relative flex flex-col items-center text-center shadow-2xl bg-gradient-to-b from-[#1a0928] to-black" id="modal-card-container">
+    <div class="vip-panel p-5 max-w-sm w-full max-h-[85vh] overflow-y-auto border-2 rounded-3xl relative flex flex-col items-center text-center shadow-2xl bg-gradient-to-b from-[#1a0928] to-black" id="modal-card-container">
         
         <button onclick="closeCardActionModal()" class="absolute top-3.5 right-3.5 text-stone-400 hover:text-white text-2xl">&times;</button>
 
         <span class="text-[10px] font-mono uppercase font-black px-3 py-0.5 rounded-full border mb-2" id="modal-card-rarity"></span>
         
-        <div class="w-36 h-50 rounded-2xl border-2 overflow-hidden shadow-2xl bg-black relative mb-2" id="modal-card-box">
+        <div class="w-36 h-48 rounded-2xl border-2 overflow-hidden shadow-2xl bg-black relative mb-2 flex-shrink-0" id="modal-card-box">
             <img id="modal-card-img" src="" class="w-full h-full object-cover">
         </div>
 
@@ -11329,8 +11399,8 @@ ARCHIVO: .\templates\pets\sanctuary.html
         </div>
     </div>
 
-    <!-- NOTIFICACIONES Y TOASTS EN VIVO -->
-    <div id="pet-toast-box" class="w-full"></div>
+    <!-- NOTIFICACIONES Y TOASTS EN VIVO (Flotante fijo en pantalla) -->
+    <div id="pet-toast-box" class="fixed top-4 inset-x-4 z-[9999] max-w-md mx-auto pointer-events-none"></div>
 
     {% if pet %}
     <!-- 👑 ALTAR ARISTOCRÁTICO DE LA CRIATURA ESPIRITUAL -->
@@ -11365,7 +11435,7 @@ ARCHIVO: .\templates\pets\sanctuary.html
             <!-- Aura brillante de fondo -->
             <div class="absolute w-40 h-40 bg-purple-600/30 rounded-full blur-2xl pointer-events-none group-hover:bg-purple-500/40 transition-colors"></div>
 
-            <!-- Marco Circular de Oro Pulido con Recorte Total (Elimina bordes cuadrados) -->
+            <!-- Marco Circular de Oro Pulido con Recorte Total -->
             <div class="relative z-10 w-36 h-36 sm:w-40 sm:h-40 rounded-full p-[3px] bg-gradient-to-b from-yellow-300 via-vip-gold to-amber-700 shadow-[0_0_25px_rgba(212,175,55,0.45)] flex items-center justify-center">
                 <div class="w-full h-full rounded-full overflow-hidden bg-black flex items-center justify-center relative">
                     <img src="{{ pet.get_image_url }}" 
@@ -11477,7 +11547,7 @@ ARCHIVO: .\templates\pets\sanctuary.html
 
     </div>
 
-    <!-- 🧭 SUB-NAV PRO DEL SANTUARIO: [EXPEDICIONES] | [ESPECIES & RITUAL] -->
+    <!-- 🧭 SUB-NAV PRO DEL SANTUARIO -->
     <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/60 border border-vip-gold/30 rounded-2xl text-xs font-bold uppercase text-center shadow-lg">
         <button type="button" onclick="switchSanctuaryTab('expeditions')" id="tab-btn-expeditions" 
                 class="py-2.5 rounded-xl bg-vip-gold text-black font-black flex items-center justify-center gap-1.5 shadow">
@@ -11656,7 +11726,7 @@ ARCHIVO: .\templates\pets\sanctuary.html
     </div>
 
     {% else %}
-    <!-- 🥚 ALTAR DE DESPERTAR Y ADOPCIÓN (CUANDO NO TIENE MASCOTA) -->
+    <!-- 🥚 ALTAR DE DESPERTAR Y ADOPCIÓN -->
     <div class="vip-panel p-6 text-center flex flex-col items-center rounded-3xl border border-vip-gold/50 shadow-2xl bg-gradient-to-br from-[#1d0b2e] via-[#0b0314] to-black">
         <div class="relative w-24 h-24 my-2 flex items-center justify-center">
             <div class="absolute inset-0 bg-yellow-400/20 rounded-full blur-2xl animate-pulse"></div>
@@ -11899,12 +11969,16 @@ ARCHIVO: .\templates\pets\sanctuary.html
 
             if (!data.success) {
                 try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning'); } catch(e) {}
-                toastBox.innerHTML = `
-                    <div class="p-3 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-bold text-center shadow-lg">
-                        ${data.error}
-                    </div>
-                `;
-                setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
+                if (window.showVipAlert) {
+                    showVipAlert(data.error, "Descanso de Mascota", "💤");
+                } else {
+                    toastBox.innerHTML = `
+                        <div class="p-3 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-bold text-center shadow-lg">
+                            ${data.error}
+                        </div>
+                    `;
+                    setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
+                }
                 return;
             }
 
@@ -11987,13 +12061,11 @@ ARCHIVO: .\templates\pets\sanctuary.html
             const data = await resp.json();
 
             if (!data.success) {
-                const toastBox = document.getElementById('pet-toast-box');
-                toastBox.innerHTML = `
-                    <div class="p-3 rounded-2xl bg-amber-950/90 border border-amber-500/80 text-amber-200 text-xs font-bold text-center shadow-lg">
-                        ${data.error}
-                    </div>
-                `;
-                setTimeout(() => { toastBox.innerHTML = ''; }, 3500);
+                if (window.showVipAlert) {
+                    showVipAlert(data.error, "Mascota en Descanso", "⏳");
+                } else {
+                    alert(data.error);
+                }
                 return;
             }
 
@@ -12006,7 +12078,11 @@ ARCHIVO: .\templates\pets\sanctuary.html
 
             try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
         } catch(e) {
-            alert("Error al iniciar expedición.");
+            if (window.showVipAlert) {
+                showVipAlert("Error al conectar con la expedición.", "Aviso", "⚠️");
+            } else {
+                alert("Error al iniciar expedición.");
+            }
         }
     }
 
