@@ -282,35 +282,36 @@ def idol_detail(request, idol_id):
                 messages.error(request, "Debes escribir un comentario sobre la atención.")
             elif rating_val < 1 or rating_val > 5:
                 messages.error(request, "La calificación debe ser entre 1 y 5 estrellas.")
+            elif tg_id and tg_id == idol.telegram_user_id:
+                messages.error(request, "No puedes calificar a tu propia Idol.")
             else:
-                if tg_id and tg_id == idol.telegram_user_id:
-                    messages.error(request, "No puedes calificar a tu propia Idol.")
-                else:
-                    Review.objects.create(
-                        idol=idol,
-                        client_telegram_id=tg_id if tg_id else 0,
-                        client_username=tg_username,
-                        rating=rating_val,
-                        comment=comment_val
-                    )
-                    grant_user_xp(request, tg_id, 15, reason="Reseña de Idol")
-                    grant_user_xp(None, idol.telegram_user_id, 20 if rating_val == 5 else 10, reason="Calificación Recibida")
-                    
-                    send_telegram_msg(
-                        chat_id=idol.telegram_user_id,
-                        text=(
-                            f"⭐ <b>¡Nueva Reseña para {idol.stage_name}!</b>\n\n"
-                            f"👤 <b>Usuario:</b> {tg_username}\n"
-                            f"✨ <b>Puntuación:</b> {rating_val}★\n"
-                            f"💬 <i>«{comment_val}»</i>"
-                        ),
-                        button_text=f"🌹 Ver Perfil de {idol.stage_name}",
-                        button_url=f"https://kingdom-pleasure-app.onrender.com/idols/{idol.id}/?tg_id={idol.telegram_user_id}"
-                    )
-                    messages.success(request, "¡Tu reseña fue publicada con éxito (+15 EXP)!")
-                    return redirect(f'/idols/{idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+                Review.objects.create(
+                    idol=idol,
+                    client_telegram_id=tg_id if tg_id else 0,
+                    client_username=tg_username,
+                    rating=rating_val,
+                    comment=comment_val
+                )
+                grant_user_xp(request, tg_id, 15, reason="Reseña de Idol")
+                grant_user_xp(None, idol.telegram_user_id, 20 if rating_val == 5 else 10, reason="Calificación Recibida")
+                
+                send_telegram_msg(
+                    chat_id=idol.telegram_user_id,
+                    text=(
+                        f"⭐ <b>¡Nueva Reseña para {idol.stage_name}!</b>\n\n"
+                        f"👤 <b>Usuario:</b> {tg_username}\n"
+                        f"✨ <b>Puntuación:</b> {rating_val}★\n"
+                        f"💬 <i>«{comment_val}»</i>"
+                    ),
+                    button_text=f"🌹 Ver Perfil de {idol.stage_name}",
+                    button_url=f"https://kingdom-pleasure-app.onrender.com/idols/{idol.id}/?tg_id={idol.telegram_user_id}"
+                )
+                messages.success(request, "¡Tu reseña fue publicada con éxito (+15 EXP)!")
         except Exception as e:
             messages.error(request, f"Error al procesar reseña: {str(e)}")
+
+        # Redirigir SIEMPRE para que el mensaje se muestre inmediatamente en la propia ficha de la Musa
+        return redirect(f'/idols/{idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
 
     context = {
         'idol': idol,
