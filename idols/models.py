@@ -1,18 +1,7 @@
-import os
 from django.db import models
 from django.db.models import Avg
 from django.core.exceptions import ValidationError
-from django.conf import settings
-
-# 👈 Usar VideoMediaCloudinaryStorage SOLO si existe CLOUDINARY_URL (en producción / Render)
-# En local (sin credenciales) usa el storage por defecto de Django para no bloquear makemigrations
-video_storage = None
-if getattr(settings, 'CLOUDINARY_URL', None):
-    try:
-        from cloudinary_storage.storage import VideoMediaCloudinaryStorage
-        video_storage = VideoMediaCloudinaryStorage()
-    except Exception:
-        video_storage = None
+import os
 
 class IdolProfile(models.Model):
 
@@ -83,7 +72,6 @@ class IdolProfile(models.Model):
 
     def get_display_owner(self):
         """Muestra el @ o Nombre de usuario real de Telegram, NUNCA 'Noble_ID' ni números"""
-        # 1. Primero consultar en UserProfile del creador
         try:
             from core.models import UserProfile
             prof = UserProfile.objects.filter(telegram_user_id=self.telegram_user_id).first()
@@ -94,13 +82,11 @@ class IdolProfile(models.Model):
         except Exception:
             pass
 
-        # 2. Si no, verificar el owner_username guardado en la Idol
         if self.owner_username:
             o_str = str(self.owner_username).strip()
             if not o_str.isdigit() and not o_str.lower().startswith('noble_') and o_str not in ['None', '', 'undefined']:
                 return o_str if o_str.startswith('@') else f"@{o_str}"
 
-        # 3. Si es el Administrador Supremo
         if str(self.telegram_user_id) == '7474444797':
             return "@CoronaImperial"
 
@@ -143,17 +129,11 @@ class Post(models.Model):
     idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='posts')
     network = models.CharField("Red Social", max_length=10, choices=NETWORK_CHOICES, default='gram')
     
-    # Imagen normal
+    # Campo de Fotografía
     image = models.ImageField("Foto del Post", upload_to='social_posts/', blank=True, null=True)
     
-    # 👈 Campo de Video: si video_storage es None, Django usa automáticamente FileSystemStorage
-    video = models.FileField(
-        "Video del Post", 
-        upload_to='social_videos/', 
-        storage=video_storage, 
-        blank=True, 
-        null=True
-    )
+    # Campo de Video (MP4 / WebM / QuickTime)
+    video = models.FileField("Video del Post", upload_to='social_videos/', blank=True, null=True)
     
     caption = models.TextField("Descripción", max_length=300)
     price = models.PositiveIntegerField("Precio en Oro (0 si es Público)", default=0)
@@ -171,12 +151,10 @@ class Post(models.Model):
 
     @property
     def is_video(self):
-        """Verifica si la publicación contiene un archivo de video"""
         return bool(self.video)
 
     @property
     def media_url(self):
-        """Retorna la URL del archivo multimedia (video o imagen)"""
         if self.video:
             return self.video.url
         elif self.image:
@@ -297,7 +275,7 @@ class Photocard(models.Model):
 
     box = models.ForeignKey(PhotocardBox, on_delete=models.SET_NULL, null=True, blank=True, related_name='cards', verbose_name="Caja a la que pertenece")
     idol = models.ForeignKey(IdolProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='photocards', verbose_name="Musa del Rol (Opcional)")
-    idol_name = models.CharField("Idol de K-Pop / Artista", max_length=100, default='', blank=True) # 👈 LIBRE PARA CUALQUIER IDOL
+    idol_name = models.CharField("Idol de K-Pop / Artista", max_length=100, default='', blank=True)
     name = models.CharField("Nombre de la Carta", max_length=100)
     rarity = models.CharField("Rareza", max_length=20, choices=RARITY_CHOICES, default='common')
     image = models.ImageField("Imagen Photocard (Canva)", upload_to='photocards/')
@@ -335,7 +313,6 @@ class UserPhotocard(models.Model):
     photocard = models.ForeignKey(Photocard, on_delete=models.CASCADE, related_name='owners')
     obtained_at = models.DateTimeField(auto_now_add=True)
 
-    # 👈 Campos para Mercado de Venta
     is_for_sale = models.BooleanField("¿Puesta a la venta?", default=False)
     sale_price = models.PositiveIntegerField("Precio de Venta (🪙)", default=0, blank=True, null=True)
 

@@ -41,9 +41,8 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'cloudinary_storage',         # 👈 AÑADIR (debe ir antes de staticfiles)
     'django.contrib.staticfiles',
-    'cloudinary',                 # 👈 AÑADIR
+    'storages',                   # 👈 Supabase / S3 Storage
     
     # Nuestras Apps
     'core',
@@ -196,17 +195,41 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
 
-# ✅ REEMPLAZAR POR:
-CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
+# ==========================================
+# ALMACENAMIENTO MULTIMEDIA (SUPABASE S3 / LOCAL)
+# ==========================================
+SUPABASE_ACCESS_KEY = os.environ.get('SUPABASE_ACCESS_KEY')
+SUPABASE_SECRET_KEY = os.environ.get('SUPABASE_SECRET_KEY')
+SUPABASE_STORAGE_URL = os.environ.get('SUPABASE_STORAGE_URL')
+SUPABASE_BUCKET_NAME = os.environ.get('SUPABASE_BUCKET_NAME', 'kingdom-media')
 
-STORAGES = {
-    "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage" if CLOUDINARY_URL else "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-    },
-}
+if SUPABASE_ACCESS_KEY and SUPABASE_SECRET_KEY:
+    # 🌟 PRODUCCIÓN: Guardar fotos y videos en Supabase Storage
+    AWS_ACCESS_KEY_ID = SUPABASE_ACCESS_KEY
+    AWS_SECRET_ACCESS_KEY = SUPABASE_SECRET_KEY
+    AWS_STORAGE_BUCKET_NAME = SUPABASE_BUCKET_NAME
+    AWS_S3_ENDPOINT_URL = SUPABASE_STORAGE_URL
+    AWS_S3_REGION_NAME = 'us-east-1'
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = None
+    AWS_QUERYSTRING_AUTH = False
 
-    # Forzar a Django a reconocer el HTTPS detrás del proxy de Render
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3.S3Storage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+else:
+    # 💻 LOCAL: Guardar en disco duro de desarrollo
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
