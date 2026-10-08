@@ -1,7 +1,18 @@
+import os
 from django.db import models
 from django.db.models import Avg
 from django.core.exceptions import ValidationError
-import os
+from django.conf import settings
+
+# 👈 Usar VideoMediaCloudinaryStorage SOLO si existe CLOUDINARY_URL (en producción / Render)
+# En local (sin credenciales) usa el storage por defecto de Django para no bloquear makemigrations
+video_storage = None
+if getattr(settings, 'CLOUDINARY_URL', None):
+    try:
+        from cloudinary_storage.storage import VideoMediaCloudinaryStorage
+        video_storage = VideoMediaCloudinaryStorage()
+    except Exception:
+        video_storage = None
 
 class IdolProfile(models.Model):
 
@@ -132,10 +143,17 @@ class Post(models.Model):
     idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='posts')
     network = models.CharField("Red Social", max_length=10, choices=NETWORK_CHOICES, default='gram')
     
-    # Imagen (opcional si sube video)
+    # Imagen normal
     image = models.ImageField("Foto del Post", upload_to='social_posts/', blank=True, null=True)
-    # 👈 NUEVO: Campo de Video para MP4/WebM
-    video = models.FileField("Video del Post", upload_to='social_videos/', blank=True, null=True)
+    
+    # 👈 Campo de Video: si video_storage es None, Django usa automáticamente FileSystemStorage
+    video = models.FileField(
+        "Video del Post", 
+        upload_to='social_videos/', 
+        storage=video_storage, 
+        blank=True, 
+        null=True
+    )
     
     caption = models.TextField("Descripción", max_length=300)
     price = models.PositiveIntegerField("Precio en Oro (0 si es Público)", default=0)
@@ -166,7 +184,7 @@ class Post(models.Model):
         return ""
 
     def save(self, *args, **kwargs):
-        """Optimización y compresión automática solo si es imagen"""
+        """Optimización y compresión solo si existe imagen y NO es video"""
         super().save(*args, **kwargs)
         if self.image and not self.video:
             try:

@@ -805,7 +805,7 @@ import json
 import threading
 from django.conf import settings
 
-def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None):
+def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None, message_thread_id=None):
     if not chat_id or not getattr(settings, 'TELEGRAM_BOT_TOKEN', None):
         return False
 
@@ -815,6 +815,10 @@ def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None):
         'text': text,
         'parse_mode': 'HTML'
     }
+
+    # Si se envía a un tema/foro específico
+    if message_thread_id:
+        payload['message_thread_id'] = int(message_thread_id)
 
     if button_text and button_url:
         is_group = int(chat_id) < 0
@@ -841,18 +845,17 @@ def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None):
         print(f"⚠️ Error en envío asíncrono Telegram: {e}")
         return False
 
-def send_telegram_msg(chat_id, text, button_text=None, button_url=None, sync=False):
+def send_telegram_msg(chat_id, text, button_text=None, button_url=None, message_thread_id=None, sync=False):
     """
-    Envía mensajes a Telegram. Por defecto lo hace en segundo plano (daemon thread)
-    para no retrasar respuestas HTTP ni congelar el frontend.
+    Envía mensajes a Telegram. Si message_thread_id está presente,
+    el mensaje entra directamente al tema/topic correspondiente.
     """
     if sync:
-        return _do_send_telegram_msg(chat_id, text, button_text, button_url)
+        return _do_send_telegram_msg(chat_id, text, button_text, button_url, message_thread_id)
     
-    # Despachar en hilo secundario no bloqueante
     t = threading.Thread(
         target=_do_send_telegram_msg,
-        args=(chat_id, text, button_text, button_url),
+        args=(chat_id, text, button_text, button_url, message_thread_id),
         daemon=True
     )
     t.start()
@@ -1575,15 +1578,17 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "📢 Decreto público de la app actualizado.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 9. PURGA DE DATOS DE PRUEBA (REINICIO TOTAL A NIVEL 1)
+       # 9. PURGA NUCLEAR DE DATOS (REINICIO TOTAL A CERO ABSOLUTO)
         elif accion == 'purge_test_data':
-            # Limpiar absolutamente todos los datos de juego
+            # 1. Limpieza de tablas de comercio y cartas
             UserInventoryItem.objects.all().delete()
             PhotocardTrade.objects.all().delete()
             IdolTribute.objects.all().delete()
             UserPhotocard.objects.all().delete()
             Photocard.objects.all().delete()
             PhotocardBox.objects.all().delete()
+
+            # 2. Limpieza de interacciones, muro y peticiones
             PostComment.objects.all().delete()
             PostUnlock.objects.all().delete()
             PostLike.objects.all().delete()
@@ -1591,25 +1596,63 @@ def admin_panel(request, admin_tg_id):
             Review.objects.all().delete()
             Post.objects.all().delete()
             IdolProfile.objects.all().delete()
+
+            # 3. Limpieza de Santuario de Mascotas
             Pet.objects.all().delete()
 
-            # Borrar todos los usuarios y perfiles
+            # 4. Limpieza de Auditoría
+            AdminAuditLog.objects.all().delete()
+
+            # 5. RESETEO TOTAL DE ANUNCIOS, TEMÁTICAS Y PRÓXIMAS CAJAS
+            KingdomSetting.objects.all().delete()
+            # Forzamos los valores en blanco y apagados para que no quede nada residual
+            KingdomSetting.set_val('upcoming_box_active', 'false')
+            KingdomSetting.set_val('upcoming_box_title', '')
+            KingdomSetting.set_val('upcoming_box_date', '')
+            KingdomSetting.set_val('upcoming_box_desc', '')
+            KingdomSetting.set_val('upcoming_box_image', '')
+
+            KingdomSetting.set_val('feed_theme_active', 'false')
+            KingdomSetting.set_val('feed_theme_title', '')
+            KingdomSetting.set_val('feed_theme_message', '')
+            KingdomSetting.set_val('feed_theme_banner', '')
+
+            KingdomSetting.set_val('broadcast_active', 'false')
+            KingdomSetting.set_val('broadcast_message', '')
+
+            # 6. Borrado completo de roles, perfiles y billeteras de todos los usuarios
             UserRole.objects.all().delete()
             UserProfile.objects.all().delete()
             Wallet.objects.all().delete()
 
-            # Reiniciar tu cuenta Corona a Nivel 1 limpio con 150 monedas iniciales
-            Wallet.objects.create(telegram_user_id=7474444797, balance=150)
+            # 7. Limpieza de sesión HTTP
+            request.session.flush()
+            request.session['tg_id'] = int(admin_tg_id)
+
+            # 8. Crear tu Bóveda limpia con 150 monedas iniciales
+            Wallet.objects.create(telegram_user_id=int(admin_tg_id), balance=150)
+
+            # 9. Crear tu Perfil limpio a Nivel 1, 0 EXP
             UserProfile.objects.create(
-                telegram_user_id=7474444797,
+                telegram_user_id=int(admin_tg_id),
                 username="@CoronaImperial",
                 level=1,
                 current_xp=0,
                 total_xp=0,
-                title='plebeyo'
+                title='plebeyo',
+                motto='',
+                bio='',
+                profile_theme='velvet',
+                vip_badge='none',
+                avatar_frame='gold',
+                favorite_idol=None,
+                has_vip_badge=False,
+                has_custom_avatar_frame=False,
+                custom_title_text=None,
+                inactivity_shield_until=None
             )
 
-            messages.success(request, "🧹 Purga completada. Reino reseteado al 100%. Elige tu rol inicial.")
+            messages.success(request, "🧹 Purga total completada. Anuncios, temáticas y progreso reseteados al 100%. Elige tu destino.")
             return redirect(f"/choose-role/?tg_id={admin_tg_id}&force=1")
 
         # 10. TEMÁTICA SEMANAL DEL MURO
@@ -1701,7 +1744,6 @@ def admin_panel(request, admin_tg_id):
 
 
 def _process_telegram_update(data):
-    """Procesamiento desacoplado con filtro de grupo y filtro de entrevistas"""
     try:
         msg = data.get('message') or data.get('channel_post') or data.get('edited_message')
         if not msg:
@@ -1710,6 +1752,7 @@ def _process_telegram_update(data):
         text = (msg.get('text') or '').strip().lower()
         chat = msg.get('chat', {})
         chat_id = chat.get('id')
+        message_thread_id = msg.get('message_thread_id')  # 👈 Captura el ID del Tema/Topic
         user = msg.get('from', {})
         user_id = user.get('id')
         first_name = user.get('first_name', 'Noble')
@@ -1766,11 +1809,13 @@ def _process_telegram_update(data):
                 )
                 btn_txt = "✨ Entrar al Kingdom"
             
+            # 👈 Responde en el MISMO tema/topic donde se escribió el comando
             send_telegram_msg(
                 chat_id=chat_id, 
                 text=texto, 
                 button_text=btn_txt, 
-                button_url=app_link
+                button_url=app_link,
+                message_thread_id=message_thread_id
             )
     except Exception as e:
         print(f"⚠️ Error procesando update de webhook: {e}")
@@ -3025,6 +3070,11 @@ from django.db import models
 from django.db.models import Avg
 from django.core.exceptions import ValidationError
 import os
+try:
+    from cloudinary_storage.storage import VideoMediaCloudinaryStorage
+    video_storage = VideoMediaCloudinaryStorage()
+except ImportError:
+    video_storage = None
 
 class IdolProfile(models.Model):
 
@@ -3155,12 +3205,21 @@ class Post(models.Model):
     idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='posts')
     network = models.CharField("Red Social", max_length=10, choices=NETWORK_CHOICES, default='gram')
     
-    image = models.ImageField("Foto del Post", upload_to='social_posts/')
-    caption = models.TextField("Descripción", max_length=300)
+    # Imagen normal
+    image = models.ImageField("Foto del Post", upload_to='social_posts/', blank=True, null=True)
     
+    # 👈 Campo de Video con storage específico para Cloudinary
+    video = models.FileField(
+        "Video del Post", 
+        upload_to='social_videos/', 
+        storage=video_storage, 
+        blank=True, 
+        null=True
+    )
+    
+    caption = models.TextField("Descripción", max_length=300)
     price = models.PositiveIntegerField("Precio en Oro (0 si es Público)", default=0)
     likes = models.PositiveIntegerField("Me Gusta", default=0)
-    
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -3169,12 +3228,27 @@ class Post(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.get_network_display()} de {self.idol.stage_name}"
+        tipo = "Video" if self.is_video else "Foto"
+        return f"{self.get_network_display()} ({tipo}) de {self.idol.stage_name}"
+
+    @property
+    def is_video(self):
+        """Verifica si la publicación contiene un archivo de video"""
+        return bool(self.video)
+
+    @property
+    def media_url(self):
+        """Retorna la URL del archivo multimedia (video o imagen)"""
+        if self.video:
+            return self.video.url
+        elif self.image:
+            return self.image.url
+        return ""
 
     def save(self, *args, **kwargs):
-        """Optimización y compresión automática de fotos para carga instantánea en Telegram"""
+        """Optimización y compresión solo si existe imagen y NO es video"""
         super().save(*args, **kwargs)
-        if self.image:
+        if self.image and not self.video:
             try:
                 from PIL import Image
                 img_path = self.image.path
@@ -3885,6 +3959,10 @@ def edit_post(request, post_id):
 
         if 'image' in request.FILES:
             post.image = optimize_uploaded_image(request.FILES['image'])
+            post.video = None
+        elif 'video' in request.FILES:
+            post.video = request.FILES['video']
+            post.image = None
 
         post.network = network
         if network == 'fans':
@@ -3989,7 +4067,9 @@ def create_post(request):
         idol_id = request.POST.get('idol_id')
         network = request.POST.get('network')
         caption = request.POST.get('caption')
-        image = optimize_uploaded_image(request.FILES.get('image'))
+        media_type = request.POST.get('media_type', 'image')
+        raw_image = request.FILES.get('image')
+        raw_video = request.FILES.get('video')
         price = request.POST.get('price', 50)
 
         if not price or str(price).strip() == '':
@@ -3997,20 +4077,33 @@ def create_post(request):
         
         try:
             idol = mis_idols.get(id=idol_id)
-            if not image:
-                messages.error(request, "Debes adjuntar una foto para el post.")
-            elif network == 'fans' and int(price) > max_price:
-                messages.error(request, f"Tu rango actual solo permite fijar precios de hasta {max_price} 🪙 por foto.")
+
+            if media_type == 'video':
+                if not raw_video:
+                    messages.error(request, "Debes adjuntar un archivo de video (MP4 o WebM).")
+                    return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
+                post_image = None
+                post_video = raw_video  # 👈 Directo sin pasar por optimize_uploaded_image
+            else:
+                if not raw_image:
+                    messages.error(request, "Debes adjuntar una fotografía.")
+                    return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
+                post_image = optimize_uploaded_image(raw_image)
+                post_video = None
+
+            if network == 'fans' and int(price) > max_price:
+                messages.error(request, f"Tu rango actual solo permite fijar precios de hasta {max_price} 🪙 por publicación.")
             else:
                 Post.objects.create(
                     idol=idol,
                     network=network,
                     caption=caption,
-                    image=image,
+                    image=post_image,
+                    video=post_video,
                     price=int(price) if network == 'fans' else 0
                 )
-                grant_user_xp(request, tg_id, 15, reason="Nuevo Post Publicado")
-                messages.success(request, f"¡Post publicado exitosamente como {idol.stage_name}! (+15 EXP)")
+                grant_user_xp(request, tg_id, 20 if media_type == 'video' else 15, reason="Nuevo Post Publicado")
+                messages.success(request, f"¡Publicación realizada exitosamente como {idol.stage_name}!")
                 return redirect(f'/idols/feed/?tg_id={tg_id}')
                 
         except IdolProfile.DoesNotExist:
@@ -4237,9 +4330,9 @@ def photocard_boxes_view(request):
     upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
     upcoming_data = {
         'is_active': upcoming_active,
-        'title': KingdomSetting.get_val('upcoming_box_title', 'Colección Secreta de la Corte'),
-        'release_date': KingdomSetting.get_val('upcoming_box_date', 'Próximamente'),
-        'description': KingdomSetting.get_val('upcoming_box_desc', 'Nuevas Photocards exclusivas de edición limitada.'),
+        'title': KingdomSetting.get_val('upcoming_box_title', ''),
+        'release_date': KingdomSetting.get_val('upcoming_box_date', ''),
+        'description': KingdomSetting.get_val('upcoming_box_desc', ''),
         'image_url': KingdomSetting.get_val('upcoming_box_image', '')
     }
 
@@ -9420,22 +9513,20 @@ ARCHIVO: .\templates\idols\collection.html
     {% endif %}
 
     <!-- SECCIÓN 2: FOTOS DE KINGDOMFANS DESBLOQUEADAS -->
-    {% if posts %}
-        <div class="flex flex-col gap-2.5 mt-2">
-            <h3 class="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
-                <span>🔒</span> Publicaciones VIP Desbloqueadas ({{ posts|length }})
-            </h3>
-            <div class="grid grid-cols-2 gap-3">
-                {% for post in posts %}
+    {% for post in posts %}
                     <div class="relative rounded-2xl overflow-hidden border border-purple-500/40 aspect-[3/4] bg-black shadow-md flex flex-col justify-end group">
-                        {% if post.image %}
+                        {% if post.is_video %}
+                            <video src="{{ post.video.url }}" controls playsinline class="w-full h-full object-cover"></video>
+                        {% elif post.image %}
                             <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
-                             onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
-                             class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
+                                 onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
+                                 class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
                         {% endif %}
-                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
-                        <div class="relative z-10 p-2.5 flex flex-col">
-                            <span class="text-[9px] text-purple-400 font-bold uppercase tracking-wider">KingdomFans</span>
+                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none"></div>
+                        <div class="relative z-10 p-2.5 flex flex-col pointer-events-none">
+                            <span class="text-[9px] text-purple-400 font-bold uppercase tracking-wider">
+                                {% if post.is_video %}🎬 Video VIP{% else %}KingdomFans{% endif %}
+                            </span>
                             <h4 class="text-xs font-bold text-white truncate">{{ post.idol.stage_name }}</h4>
                             <p class="text-[10px] text-stone-300 line-clamp-1 italic">"{{ post.caption }}"</p>
                         </div>
@@ -9559,10 +9650,33 @@ ARCHIVO: .\templates\idols\create_post.html
             </p>
         </div>
 
-        <!-- Fotografía -->
-        <div class="bg-black/40 p-3 rounded-2xl border border-vip-gold/20 flex flex-col gap-1.5">
+        <!-- Selector de Tipo de Contenido (Foto vs Video) -->
+        <div>
+            <label class="block text-xs text-vip-gold mb-1 uppercase font-bold">Tipo de Archivo Multimedia</label>
+            <div class="grid grid-cols-2 gap-2 mb-2">
+                <button type="button" onclick="setMediaType('image')" id="btn-media-image"
+                        class="py-2.5 rounded-xl border-2 border-yellow-400 bg-yellow-500/20 text-yellow-300 font-bold text-xs uppercase flex items-center justify-center gap-1.5 shadow">
+                    <span>📸</span> <span>Fotografía</span>
+                </button>
+                <button type="button" onclick="setMediaType('video')" id="btn-media-video"
+                        class="py-2.5 rounded-xl border border-white/20 bg-black/60 text-stone-400 font-bold text-xs uppercase flex items-center justify-center gap-1.5">
+                    <span>🎬</span> <span>Video (MP4)</span>
+                </button>
+            </div>
+            <input type="hidden" name="media_type" id="media-type-input" value="image">
+        </div>
+
+        <!-- Archivo: Fotografía -->
+        <div id="image-upload-box" class="bg-black/40 p-3 rounded-2xl border border-vip-gold/20 flex flex-col gap-1.5">
             <label class="block text-xs text-vip-gold uppercase font-bold">Fotografía a Publicar</label>
-            <input type="file" name="image" accept="image/*" required class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+            <input type="file" name="image" id="image-file-input" accept="image/*" class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+        </div>
+
+        <!-- Archivo: Video -->
+        <div id="video-upload-box" class="hidden bg-black/40 p-3 rounded-2xl border border-purple-500/30 flex flex-col gap-1.5">
+            <label class="block text-xs text-purple-300 uppercase font-bold">Video a Publicar (MP4 / WebM)</label>
+            <input type="file" name="video" id="video-file-input" accept="video/mp4,video/webm,video/quicktime" class="w-full text-xs text-stone-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-purple-900 file:text-purple-200 hover:file:bg-purple-800 cursor-pointer">
+            <span class="text-[9.5px] text-stone-400">Recomendado: Formato vertical o 1:1, peso menor a 40MB para carga rápida.</span>
         </div>
 
         <!-- Descripción -->
@@ -9586,6 +9700,26 @@ ARCHIVO: .\templates\idols\create_post.html
             cont.classList.remove('hidden');
         } else {
             cont.classList.add('hidden');
+        }
+    }
+
+    function setMediaType(type) {
+        document.getElementById('media-type-input').value = type;
+        const btnImg = document.getElementById('btn-media-image');
+        const btnVid = document.getElementById('btn-media-video');
+        const boxImg = document.getElementById('image-upload-box');
+        const boxVid = document.getElementById('video-upload-box');
+
+        if (type === 'video') {
+            btnVid.className = "py-2.5 rounded-xl border-2 border-purple-400 bg-purple-950/60 text-purple-200 font-bold text-xs uppercase flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(168,85,247,0.4)]";
+            btnImg.className = "py-2.5 rounded-xl border border-white/20 bg-black/60 text-stone-400 font-bold text-xs uppercase flex items-center justify-center gap-1.5";
+            boxVid.classList.remove('hidden');
+            boxImg.classList.add('hidden');
+        } else {
+            btnImg.className = "py-2.5 rounded-xl border-2 border-yellow-400 bg-yellow-500/20 text-yellow-300 font-bold text-xs uppercase flex items-center justify-center gap-1.5 shadow";
+            btnVid.className = "py-2.5 rounded-xl border border-white/20 bg-black/60 text-stone-400 font-bold text-xs uppercase flex items-center justify-center gap-1.5";
+            boxImg.classList.remove('hidden');
+            boxVid.classList.add('hidden');
         }
     }
 </script>
@@ -10209,46 +10343,58 @@ ARCHIVO: .\templates\idols\feed.html
 
             </div>
 
-            <!-- 2. FOTOGRAFÍA PRINCIPAL (DESBLOQUEADA vs VIP CENSURADA DE LUJO) -->
+            <!-- 2. MULTIMEDIA PRINCIPAL: FOTO O VIDEO (DESBLOQUEADO vs VIP BLOQUEADO) -->
             <div class="relative w-full bg-black min-h-[380px] max-h-[580px] flex items-center justify-center overflow-hidden">
                 
                 {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
-                    <!-- FOTO DESBLOQUEADA EN ALTA DEFINICIÓN -->
-                    {% if post.image %}
+                    <!-- CONTENIDO DESBLOQUEADO (VIDEO O FOTO) -->
+                    {% if post.is_video %}
+                        <video src="{{ post.video.url }}" 
+                               controls 
+                               playsinline 
+                               autoplay 
+                               muted 
+                               loop 
+                               class="w-full max-h-[580px] object-contain sm:object-cover bg-black">
+                        </video>
+                    {% elif post.image %}
                         <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
                              onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
                              class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
                     {% endif %}
 
                     {% if post.network == 'fans' and post.id in unlocked_ids %}
-                        <span class="absolute top-3 right-3 bg-emerald-950/95 border border-emerald-400 text-emerald-200 text-[9px] font-mono font-black uppercase px-3 py-1 rounded-full shadow-xl backdrop-blur-md">
+                        <span class="absolute top-3 right-3 bg-emerald-950/95 border border-emerald-400 text-emerald-200 text-[9px] font-mono font-black uppercase px-3 py-1 rounded-full shadow-xl backdrop-blur-md z-20">
                             ✓ Desbloqueada
                         </span>
                     {% endif %}
                 {% else %}
-                    <!-- NIEBLA DE OBSIDIANA: FOTO VIP BLOQUEADA -->
-                    {% if post.image %}
-                        <img src="{{ post.image.url }}" alt="VIP" class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.18] scale-110">
+                    <!-- NIEBLA DE OBSIDIANA: MULTIMEDIA VIP BLOQUEADO -->
+                    {% if post.is_video %}
+                        <!-- Si es video bloqueado, silenciado y con blur extremo de fondo -->
+                        <video src="{{ post.video.url }}" muted loop autoplay playsinline class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.15] scale-110 pointer-events-none"></video>
+                    {% elif post.image %}
+                        <img src="{{ post.image.url }}" alt="VIP" class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.18] scale-110 pointer-events-none">
                     {% endif %}
 
-                    <!-- Tarjeta Flotante de Cristal Templado -->
+                    <!-- Tarjeta Flotante de Desbloqueo VIP -->
                     <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
                         <div class="vip-panel p-6 max-w-xs w-full flex flex-col items-center rounded-3xl border-2 border-purple-500/60 shadow-[0_0_35px_rgba(168,85,247,0.35)] bg-gradient-to-b from-[#1e0a33]/95 to-black/95">
                             
                             <div class="w-16 h-16 rounded-2xl bg-black border-2 border-purple-400 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(168,85,247,0.6)] mb-3 animate-pulse">
-                                🔒
+                                {% if post.is_video %}🎬{% else %}🔒{% endif %}
                             </div>
 
                             <span class="text-[9px] font-mono font-bold uppercase tracking-widest text-purple-300 mb-1">
-                                KingdomFans • Contenido Exclusivo
+                                KingdomFans • {% if post.is_video %}Video Exclusivo{% else %}Foto Exclusiva{% endif %}
                             </span>
 
                             <h4 class="font-serif text-sm font-black text-white uppercase tracking-wider mb-1">
-                                Sesión Privada de {{ post.idol.stage_name }}
+                                Sesión de {{ post.idol.stage_name }}
                             </h4>
                             
                             <p class="text-[11px] text-stone-300 mb-4 leading-relaxed">
-                                Esta fotografía se guardará para siempre en tu Colección Privada.
+                                Este {% if post.is_video %}video privado{% else %}contenido{% endif %} se guardará para siempre en tu Colección Privada.
                             </p>
 
                             <form action="{% url 'idols:unlock_post' post.id %}" method="POST" class="w-full m-0">

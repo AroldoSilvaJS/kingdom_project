@@ -574,7 +574,7 @@ def create_post(request):
                     messages.error(request, "Debes adjuntar un archivo de video (MP4 o WebM).")
                     return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
                 post_image = None
-                post_video = raw_video
+                post_video = raw_video  # 👈 Directo sin pasar por optimize_uploaded_image
             else:
                 if not raw_image:
                     messages.error(request, "Debes adjuntar una fotografía.")
