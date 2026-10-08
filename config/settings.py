@@ -215,6 +215,10 @@ if SUPABASE_ACCESS_KEY and SUPABASE_SECRET_KEY:
     AWS_DEFAULT_ACL = None
     AWS_QUERYSTRING_AUTH = False
 
+    # 👈 ESTA ES LA CLAVE: Construye la URL pública directa de Supabase CDN
+    # Tu Project ID de Supabase es 'btoemzqyzacbjfvjwpgv'
+    AWS_S3_CUSTOM_DOMAIN = f"btoemzqyzacbjfvjwpgv.supabase.co/storage/v1/object/public/{SUPABASE_BUCKET_NAME}"
+
     STORAGES = {
         "default": {
             "BACKEND": "storages.backends.s3.S3Storage",
