@@ -170,46 +170,58 @@
 
             </div>
 
-            <!-- 2. FOTOGRAFÍA PRINCIPAL (DESBLOQUEADA vs VIP CENSURADA DE LUJO) -->
+            <!-- 2. MULTIMEDIA PRINCIPAL: FOTO O VIDEO (DESBLOQUEADO vs VIP BLOQUEADO) -->
             <div class="relative w-full bg-black min-h-[380px] max-h-[580px] flex items-center justify-center overflow-hidden">
                 
                 {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
-                    <!-- FOTO DESBLOQUEADA EN ALTA DEFINICIÓN -->
-                    {% if post.image %}
+                    <!-- CONTENIDO DESBLOQUEADO (VIDEO O FOTO) -->
+                    {% if post.is_video %}
+                        <video src="{{ post.video.url }}" 
+                               controls 
+                               playsinline 
+                               autoplay 
+                               muted 
+                               loop 
+                               class="w-full max-h-[580px] object-contain sm:object-cover bg-black">
+                        </video>
+                    {% elif post.image %}
                         <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
                              onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
                              class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
                     {% endif %}
 
                     {% if post.network == 'fans' and post.id in unlocked_ids %}
-                        <span class="absolute top-3 right-3 bg-emerald-950/95 border border-emerald-400 text-emerald-200 text-[9px] font-mono font-black uppercase px-3 py-1 rounded-full shadow-xl backdrop-blur-md">
+                        <span class="absolute top-3 right-3 bg-emerald-950/95 border border-emerald-400 text-emerald-200 text-[9px] font-mono font-black uppercase px-3 py-1 rounded-full shadow-xl backdrop-blur-md z-20">
                             ✓ Desbloqueada
                         </span>
                     {% endif %}
                 {% else %}
-                    <!-- NIEBLA DE OBSIDIANA: FOTO VIP BLOQUEADA -->
-                    {% if post.image %}
-                        <img src="{{ post.image.url }}" alt="VIP" class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.18] scale-110">
+                    <!-- NIEBLA DE OBSIDIANA: MULTIMEDIA VIP BLOQUEADO -->
+                    {% if post.is_video %}
+                        <!-- Si es video bloqueado, silenciado y con blur extremo de fondo -->
+                        <video src="{{ post.video.url }}" muted loop autoplay playsinline class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.15] scale-110 pointer-events-none"></video>
+                    {% elif post.image %}
+                        <img src="{{ post.image.url }}" alt="VIP" class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.18] scale-110 pointer-events-none">
                     {% endif %}
 
-                    <!-- Tarjeta Flotante de Cristal Templado -->
+                    <!-- Tarjeta Flotante de Desbloqueo VIP -->
                     <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
                         <div class="vip-panel p-6 max-w-xs w-full flex flex-col items-center rounded-3xl border-2 border-purple-500/60 shadow-[0_0_35px_rgba(168,85,247,0.35)] bg-gradient-to-b from-[#1e0a33]/95 to-black/95">
                             
                             <div class="w-16 h-16 rounded-2xl bg-black border-2 border-purple-400 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(168,85,247,0.6)] mb-3 animate-pulse">
-                                🔒
+                                {% if post.is_video %}🎬{% else %}🔒{% endif %}
                             </div>
 
                             <span class="text-[9px] font-mono font-bold uppercase tracking-widest text-purple-300 mb-1">
-                                KingdomFans • Contenido Exclusivo
+                                KingdomFans • {% if post.is_video %}Video Exclusivo{% else %}Foto Exclusiva{% endif %}
                             </span>
 
                             <h4 class="font-serif text-sm font-black text-white uppercase tracking-wider mb-1">
-                                Sesión Privada de {{ post.idol.stage_name }}
+                                Sesión de {{ post.idol.stage_name }}
                             </h4>
                             
                             <p class="text-[11px] text-stone-300 mb-4 leading-relaxed">
-                                Esta fotografía se guardará para siempre en tu Colección Privada.
+                                Este {% if post.is_video %}video privado{% else %}contenido{% endif %} se guardará para siempre en tu Colección Privada.
                             </p>
 
                             <form action="{% url 'idols:unlock_post' post.id %}" method="POST" class="w-full m-0">

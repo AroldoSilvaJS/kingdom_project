@@ -47,22 +47,20 @@
     {% endif %}
 
     <!-- SECCIÓN 2: FOTOS DE KINGDOMFANS DESBLOQUEADAS -->
-    {% if posts %}
-        <div class="flex flex-col gap-2.5 mt-2">
-            <h3 class="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
-                <span>🔒</span> Publicaciones VIP Desbloqueadas ({{ posts|length }})
-            </h3>
-            <div class="grid grid-cols-2 gap-3">
-                {% for post in posts %}
+    {% for post in posts %}
                     <div class="relative rounded-2xl overflow-hidden border border-purple-500/40 aspect-[3/4] bg-black shadow-md flex flex-col justify-end group">
-                        {% if post.image %}
+                        {% if post.is_video %}
+                            <video src="{{ post.video.url }}" controls playsinline class="w-full h-full object-cover"></video>
+                        {% elif post.image %}
                             <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
-                             onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
-                             class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
+                                 onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
+                                 class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
                         {% endif %}
-                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
-                        <div class="relative z-10 p-2.5 flex flex-col">
-                            <span class="text-[9px] text-purple-400 font-bold uppercase tracking-wider">KingdomFans</span>
+                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none"></div>
+                        <div class="relative z-10 p-2.5 flex flex-col pointer-events-none">
+                            <span class="text-[9px] text-purple-400 font-bold uppercase tracking-wider">
+                                {% if post.is_video %}🎬 Video VIP{% else %}KingdomFans{% endif %}
+                            </span>
                             <h4 class="text-xs font-bold text-white truncate">{{ post.idol.stage_name }}</h4>
                             <p class="text-[10px] text-stone-300 line-clamp-1 italic">"{{ post.caption }}"</p>
                         </div>

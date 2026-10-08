@@ -57,10 +57,33 @@
             </p>
         </div>
 
-        <!-- Fotografía -->
-        <div class="bg-black/40 p-3 rounded-2xl border border-vip-gold/20 flex flex-col gap-1.5">
+        <!-- Selector de Tipo de Contenido (Foto vs Video) -->
+        <div>
+            <label class="block text-xs text-vip-gold mb-1 uppercase font-bold">Tipo de Archivo Multimedia</label>
+            <div class="grid grid-cols-2 gap-2 mb-2">
+                <button type="button" onclick="setMediaType('image')" id="btn-media-image"
+                        class="py-2.5 rounded-xl border-2 border-yellow-400 bg-yellow-500/20 text-yellow-300 font-bold text-xs uppercase flex items-center justify-center gap-1.5 shadow">
+                    <span>📸</span> <span>Fotografía</span>
+                </button>
+                <button type="button" onclick="setMediaType('video')" id="btn-media-video"
+                        class="py-2.5 rounded-xl border border-white/20 bg-black/60 text-stone-400 font-bold text-xs uppercase flex items-center justify-center gap-1.5">
+                    <span>🎬</span> <span>Video (MP4)</span>
+                </button>
+            </div>
+            <input type="hidden" name="media_type" id="media-type-input" value="image">
+        </div>
+
+        <!-- Archivo: Fotografía -->
+        <div id="image-upload-box" class="bg-black/40 p-3 rounded-2xl border border-vip-gold/20 flex flex-col gap-1.5">
             <label class="block text-xs text-vip-gold uppercase font-bold">Fotografía a Publicar</label>
-            <input type="file" name="image" accept="image/*" required class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+            <input type="file" name="image" id="image-file-input" accept="image/*" class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+        </div>
+
+        <!-- Archivo: Video -->
+        <div id="video-upload-box" class="hidden bg-black/40 p-3 rounded-2xl border border-purple-500/30 flex flex-col gap-1.5">
+            <label class="block text-xs text-purple-300 uppercase font-bold">Video a Publicar (MP4 / WebM)</label>
+            <input type="file" name="video" id="video-file-input" accept="video/mp4,video/webm,video/quicktime" class="w-full text-xs text-stone-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-purple-900 file:text-purple-200 hover:file:bg-purple-800 cursor-pointer">
+            <span class="text-[9.5px] text-stone-400">Recomendado: Formato vertical o 1:1, peso menor a 40MB para carga rápida.</span>
         </div>
 
         <!-- Descripción -->
@@ -84,6 +107,26 @@
             cont.classList.remove('hidden');
         } else {
             cont.classList.add('hidden');
+        }
+    }
+
+    function setMediaType(type) {
+        document.getElementById('media-type-input').value = type;
+        const btnImg = document.getElementById('btn-media-image');
+        const btnVid = document.getElementById('btn-media-video');
+        const boxImg = document.getElementById('image-upload-box');
+        const boxVid = document.getElementById('video-upload-box');
+
+        if (type === 'video') {
+            btnVid.className = "py-2.5 rounded-xl border-2 border-purple-400 bg-purple-950/60 text-purple-200 font-bold text-xs uppercase flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(168,85,247,0.4)]";
+            btnImg.className = "py-2.5 rounded-xl border border-white/20 bg-black/60 text-stone-400 font-bold text-xs uppercase flex items-center justify-center gap-1.5";
+            boxVid.classList.remove('hidden');
+            boxImg.classList.add('hidden');
+        } else {
+            btnImg.className = "py-2.5 rounded-xl border-2 border-yellow-400 bg-yellow-500/20 text-yellow-300 font-bold text-xs uppercase flex items-center justify-center gap-1.5 shadow";
+            btnVid.className = "py-2.5 rounded-xl border border-white/20 bg-black/60 text-stone-400 font-bold text-xs uppercase flex items-center justify-center gap-1.5";
+            boxImg.classList.remove('hidden');
+            boxVid.classList.add('hidden');
         }
     }
 </script>

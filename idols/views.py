@@ -450,6 +450,10 @@ def edit_post(request, post_id):
 
         if 'image' in request.FILES:
             post.image = optimize_uploaded_image(request.FILES['image'])
+            post.video = None
+        elif 'video' in request.FILES:
+            post.video = request.FILES['video']
+            post.image = None
 
         post.network = network
         if network == 'fans':
@@ -554,7 +558,9 @@ def create_post(request):
         idol_id = request.POST.get('idol_id')
         network = request.POST.get('network')
         caption = request.POST.get('caption')
-        image = optimize_uploaded_image(request.FILES.get('image'))
+        media_type = request.POST.get('media_type', 'image')
+        raw_image = request.FILES.get('image')
+        raw_video = request.FILES.get('video')
         price = request.POST.get('price', 50)
 
         if not price or str(price).strip() == '':
@@ -562,20 +568,33 @@ def create_post(request):
         
         try:
             idol = mis_idols.get(id=idol_id)
-            if not image:
-                messages.error(request, "Debes adjuntar una foto para el post.")
-            elif network == 'fans' and int(price) > max_price:
-                messages.error(request, f"Tu rango actual solo permite fijar precios de hasta {max_price} 🪙 por foto.")
+
+            if media_type == 'video':
+                if not raw_video:
+                    messages.error(request, "Debes adjuntar un archivo de video (MP4 o WebM).")
+                    return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
+                post_image = None
+                post_video = raw_video
+            else:
+                if not raw_image:
+                    messages.error(request, "Debes adjuntar una fotografía.")
+                    return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
+                post_image = optimize_uploaded_image(raw_image)
+                post_video = None
+
+            if network == 'fans' and int(price) > max_price:
+                messages.error(request, f"Tu rango actual solo permite fijar precios de hasta {max_price} 🪙 por publicación.")
             else:
                 Post.objects.create(
                     idol=idol,
                     network=network,
                     caption=caption,
-                    image=image,
+                    image=post_image,
+                    video=post_video,
                     price=int(price) if network == 'fans' else 0
                 )
-                grant_user_xp(request, tg_id, 15, reason="Nuevo Post Publicado")
-                messages.success(request, f"¡Post publicado exitosamente como {idol.stage_name}! (+15 EXP)")
+                grant_user_xp(request, tg_id, 20 if media_type == 'video' else 15, reason="Nuevo Post Publicado")
+                messages.success(request, f"¡Publicación realizada exitosamente como {idol.stage_name}!")
                 return redirect(f'/idols/feed/?tg_id={tg_id}')
                 
         except IdolProfile.DoesNotExist:

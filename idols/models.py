@@ -132,12 +132,14 @@ class Post(models.Model):
     idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='posts')
     network = models.CharField("Red Social", max_length=10, choices=NETWORK_CHOICES, default='gram')
     
-    image = models.ImageField("Foto del Post", upload_to='social_posts/')
-    caption = models.TextField("Descripción", max_length=300)
+    # Imagen (opcional si sube video)
+    image = models.ImageField("Foto del Post", upload_to='social_posts/', blank=True, null=True)
+    # 👈 NUEVO: Campo de Video para MP4/WebM
+    video = models.FileField("Video del Post", upload_to='social_videos/', blank=True, null=True)
     
+    caption = models.TextField("Descripción", max_length=300)
     price = models.PositiveIntegerField("Precio en Oro (0 si es Público)", default=0)
     likes = models.PositiveIntegerField("Me Gusta", default=0)
-    
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -146,12 +148,27 @@ class Post(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.get_network_display()} de {self.idol.stage_name}"
+        tipo = "Video" if self.is_video else "Foto"
+        return f"{self.get_network_display()} ({tipo}) de {self.idol.stage_name}"
+
+    @property
+    def is_video(self):
+        """Verifica si la publicación contiene un archivo de video"""
+        return bool(self.video)
+
+    @property
+    def media_url(self):
+        """Retorna la URL del archivo multimedia (video o imagen)"""
+        if self.video:
+            return self.video.url
+        elif self.image:
+            return self.image.url
+        return ""
 
     def save(self, *args, **kwargs):
-        """Optimización y compresión automática de fotos para carga instantánea en Telegram"""
+        """Optimización y compresión automática solo si es imagen"""
         super().save(*args, **kwargs)
-        if self.image:
+        if self.image and not self.video:
             try:
                 from PIL import Image
                 img_path = self.image.path
