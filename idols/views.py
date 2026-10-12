@@ -22,11 +22,28 @@ from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
 
+ADMIN_CORONA_ID = '7474444797'
+
+
+def check_is_staff_or_admin(tg_id):
+    """Verifica si el usuario es Corona, Admin o Moderador tanto por rol como por staff_role"""
+    if not tg_id:
+        return False
+    if str(tg_id) == ADMIN_CORONA_ID:
+        return True
+    role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+    if not role_obj:
+        return False
+    
+    staff = getattr(role_obj, 'staff_role', 'none')
+    is_staff = (staff in ['admin', 'moderador']) or (role_obj.role in ['admin', 'moderador']) or getattr(role_obj, 'is_moderator', False)
+    return is_staff
+
 
 def optimize_uploaded_image(file_obj, max_dimension=1600, quality=85):
     """
-    Comprime y redimensiona imágenes automáticamente antes de enviarlas a Cloudinary
-    para que nunca excedan el límite de 10MB ni ralenticen Telegram.
+    Comprime y redimensiona imágenes automáticamente antes de subirlas
+    para que nunca excedan el límite de Cloudinary ni ralenticen Telegram.
     """
     if not file_obj:
         return file_obj
@@ -239,9 +256,7 @@ def idol_edit(request, idol_id):
     tg_id = resolve_safe_tg(request)
     idol = get_object_or_404(IdolProfile, id=idol_id)
     
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
-        telegram_id=tg_id, role__in=['admin', 'moderador']
-    ).exists()
+    is_admin = check_is_staff_or_admin(tg_id)
 
     if tg_id != idol.telegram_user_id and not is_admin:
         messages.error(request, "No tienes permiso para editar esta Idol.")
@@ -383,7 +398,7 @@ def social_feed(request):
     posts = Post.objects.all().select_related('idol').prefetch_related('comments')
     unlocked_ids = []
     liked_ids = []
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_admin = check_is_staff_or_admin(tg_id)
     
     if tg_id:
         pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
@@ -407,7 +422,7 @@ def social_feed(request):
         'liked_ids': liked_ids,
         'tg_username': tg_username,
         'is_admin': is_admin,
-        'feed_theme': feed_theme,  # 👈 Añadir esta línea
+        'feed_theme': feed_theme,
     })
 
 
@@ -415,7 +430,7 @@ def delete_post(request, post_id):
     tg_id = resolve_safe_tg(request)
     post = get_object_or_404(Post, id=post_id)
     
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_admin = check_is_staff_or_admin(tg_id)
     is_owner = (tg_id == post.idol.telegram_user_id)
 
     if not (is_admin or is_owner):
@@ -433,7 +448,7 @@ def edit_post(request, post_id):
     tg_id = resolve_safe_tg(request)
     post = get_object_or_404(Post, id=post_id)
     
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_admin = check_is_staff_or_admin(tg_id)
     is_owner = (tg_id == post.idol.telegram_user_id)
 
     if not (is_admin or is_owner):
@@ -574,7 +589,7 @@ def create_post(request):
                     messages.error(request, "Debes adjuntar un archivo de video (MP4 o WebM).")
                     return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
                 post_image = None
-                post_video = raw_video  # 👈 Directo sin pasar por optimize_uploaded_image
+                post_video = raw_video
             else:
                 if not raw_image:
                     messages.error(request, "Debes adjuntar una fotografía.")
@@ -811,10 +826,8 @@ def photocard_boxes_view(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     boxes = PhotocardBox.objects.filter(is_active=True).prefetch_related('cards')
     
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
-        telegram_id=tg_id, 
-        role__in=['admin', 'moderador']
-    ).exists()
+    # Reconoce staff_role y Corona
+    is_admin = check_is_staff_or_admin(tg_id)
 
     my_cards_count = UserPhotocard.objects.filter(telegram_user_id=tg_id).count()
 
@@ -942,10 +955,7 @@ def my_photocards_album(request):
 
 def admin_photocards_manage(request):
     tg_id = resolve_safe_tg(request)
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
-        telegram_id=tg_id, 
-        role__in=['admin', 'moderador']
-    ).exists()
+    is_admin = check_is_staff_or_admin(tg_id)
 
     if not is_admin:
         messages.error(request, "Solo los administradores pueden gestionar Photocards.")
