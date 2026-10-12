@@ -46,7 +46,14 @@ def resolve_secure_tg_id(request):
 def admin_required(view_func):
     def _wrapped_view(request, *args, **kwargs):
         tg_id = resolve_secure_tg_id(request)
-        is_admin = (str(tg_id) == ADMIN_TG_ID) or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+        role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+        is_admin = (str(tg_id) == ADMIN_TG_ID) or (
+            role_obj and (
+                getattr(role_obj, 'staff_role', 'none') == 'admin' or 
+                role_obj.role == 'admin' or 
+                getattr(role_obj, 'is_admin', False)
+            )
+        )
         if not is_admin:
             messages.error(request, "Alto ahí, forastero. Esta sala está reservada a la Corona.")
             return redirect(f'/?tg_id={tg_id}')
@@ -71,8 +78,11 @@ def main_menu(request):
         return redirect(f'/choose-role/?tg_id={tg_id}')
     
     role = role_obj.role
-    is_admin = (str(tg_id) == ADMIN_TG_ID) or (role == 'admin')
+    is_admin = (str(tg_id) == ADMIN_TG_ID) or (getattr(role_obj, 'staff_role', 'none') == 'admin') or (role == 'admin')
+    is_mod = (getattr(role_obj, 'staff_role', 'none') == 'moderador') or (role == 'moderador')
+    
     has_idols_created = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
+    # Si su rol de juego es 'idol', SIEMPRE tiene acceso al Camerino (aunque sea moderadora o admin y tenga 0 fichas)
     is_idol = (role == 'idol') or has_idols_created or (str(tg_id) == ADMIN_TG_ID and has_idols_created)
     
     user_profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
@@ -91,6 +101,7 @@ def main_menu(request):
         'role': role,
         'is_idol': is_idol,
         'is_admin': is_admin,
+        'is_mod': is_mod,
         'user_profile': user_profile,
         'pending_antojos_count': pending_antojos_count,
     })
@@ -107,7 +118,6 @@ def choose_role(request):
             'interview_url': interview_link
         })    
     
-    # Si ya tiene rol y NO es un reseteo intencional, mandar al menú
     force_choose = request.GET.get('force') == '1'
     existing_role = UserRole.objects.filter(telegram_id=tg_id).first()
     if existing_role and not force_choose and request.method != 'POST':
@@ -120,12 +130,13 @@ def choose_role(request):
         
         request.session['tg_id'] = clean_id
 
-        # Si es la Corona, guardamos el rol elegido para que tenga acceso completo de juego
-        # pero NUNCA pierde los privilegios de administración (ADMIN_TG_ID manda siempre)
-        UserRole.objects.update_or_create(
-            telegram_id=clean_id,
-            defaults={'role': selected_role}
-        )
+        # Preserva el staff_role si ya existía para no quitárselo
+        user_role_obj = UserRole.objects.filter(telegram_id=clean_id).first()
+        if user_role_obj:
+            user_role_obj.role = selected_role
+            user_role_obj.save(update_fields=['role'])
+        else:
+            UserRole.objects.create(telegram_id=clean_id, role=selected_role, staff_role='none')
         
         Wallet.objects.get_or_create(telegram_user_id=clean_id, defaults={'balance': 150})
         UserProfile.objects.get_or_create(telegram_user_id=clean_id, defaults={'level': 1, 'current_xp': 0})
@@ -205,7 +216,6 @@ def my_profile(request):
             {'id': 'idol_hot_seller', 'name': 'Musa Cotizada', 'desc': 'Alcanzar 5 ventas de contenido VIP en KingdomFans', 'icon': '💎', 'unlocked': ventas_vip >= 5, 'progress': f"{ventas_vip}/5 Ventas"},
             {'id': 'idol_wealth', 'name': 'Bóveda de Oro', 'desc': 'Acumular al menos 500 🪙 de ganancias en tu Bóveda', 'icon': '🏦', 'unlocked': wallet.balance >= 500, 'progress': f"{wallet.balance}/500 🪙"},
             {'id': 'idol_reviews', 'name': 'Ovación de la Corte', 'desc': 'Recibir tus primeros roles o reseñas de admiradores', 'icon': '🥂', 'unlocked': total_servicios >= 1, 'progress': f"{total_servicios}/1 Rol"},
-            # Corregido: Requiere al menos 1 reseña real de un noble
             {'id': 'idol_first_5star', 'name': 'Estrella Perfecta', 'desc': 'Recibir una calificación real perfecta de 5.0★', 'icon': '⭐', 'unlocked': any(i.rating >= 4.9 and i.services_done >= 1 for i in mis_idols), 'progress': "5.0★ Obtenida" if any(i.rating >= 4.9 and i.services_done >= 1 for i in mis_idols) else "0/1 Pendiente"},
             {'id': 'idol_antojo_delivered', 'name': 'Deseo Satisfecho', 'desc': 'Completar y entregar una petición especial', 'icon': '🔥', 'unlocked': CustomRequest.objects.filter(idol__in=mis_idols, status='accepted').exists(), 'progress': "Completado" if CustomRequest.objects.filter(idol__in=mis_idols, status='accepted').exists() else "0/1 Pendiente"},
             {'id': 'idol_card_collector', 'name': 'Coleccionista de Arte', 'desc': 'Poseer al menos 1 Photocard en tu Álbum', 'icon': '🎴', 'unlocked': user_photocards_count >= 1, 'progress': f"{user_photocards_count}/1 Carta"},
@@ -279,8 +289,6 @@ def leaderboard(request):
     })
 
 
-# core/views.py -> función admin_panel
-
 @admin_required
 def admin_panel(request, admin_tg_id):
     if request.method == "POST":
@@ -308,16 +316,37 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 2. CAMBIO DE RANGO
-        elif accion == 'change_role':
+        # 2. CAMBIO DE ROL DE JUEGO (IDOL vs CLIENTE)
+        elif accion == 'change_game_role':
             target_id = int(request.POST.get('target_id'))
-            new_role = request.POST.get('new_role')
+            new_role = request.POST.get('new_role') # 'cliente' o 'idol'
             UserRole.objects.filter(telegram_id=target_id).update(role=new_role)
-            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='role_change', target_tg_id=target_id, details=f"Rango cambiado a {new_role}")
-            messages.success(request, f"👑 Rango de {target_id} actualizado a {new_role.upper()}.")
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='game_role_change', target_tg_id=target_id, details=f"Rol de juego cambiado a {new_role}")
+            messages.success(request, f"🎭 Rol de juego de {target_id} actualizado a {new_role.upper()}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 3. MAZMORRA (BAN / DESBAN)
+        # 3. CAMBIO DE CARGO DE STAFF (ADMIN / MODERADOR / SIN STAFF)
+        elif accion == 'change_staff_role':
+            target_id = int(request.POST.get('target_id'))
+            new_staff = request.POST.get('new_staff') # 'none', 'moderador', 'admin'
+            UserRole.objects.filter(telegram_id=target_id).update(staff_role=new_staff)
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='staff_role_change', target_tg_id=target_id, details=f"Cargo de staff: {new_staff}")
+            messages.success(request, f"🛡️ Cargo de Staff de {target_id} actualizado a {new_staff.upper()}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # COMPATIBILIDAD CON ACCIONES PREVIAS
+        elif accion == 'change_role':
+            target_id = int(request.POST.get('target_id'))
+            new_val = request.POST.get('new_role')
+            if new_val in ['admin', 'moderador', 'none']:
+                UserRole.objects.filter(telegram_id=target_id).update(staff_role=new_val)
+            else:
+                UserRole.objects.filter(telegram_id=target_id).update(role=new_val)
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='role_change', target_tg_id=target_id, details=f"Rol/Staff cambiado a {new_val}")
+            messages.success(request, f"👑 Asignación de {target_id} actualizada a {new_val.upper()}.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 4. MAZMORRA (BAN / DESBAN)
         elif accion == 'toggle_ban':
             target_id = int(request.POST.get('target_id'))
             user = get_object_or_404(UserRole, telegram_id=target_id)
@@ -330,7 +359,7 @@ def admin_panel(request, admin_tg_id):
             messages.warning(request, f"⚖️ Usuario {target_id}: {estado_txt}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 4. CONCEDER SALVOCONDUCTO MANUAL (INMUNIDAD)
+        # 5. CONCEDER SALVOCONDUCTO MANUAL (INMUNIDAD)
         elif accion == 'grant_shield':
             target_id = int(request.POST.get('target_id'))
             days = int(request.POST.get('shield_days', 15))
@@ -343,7 +372,7 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 5. LLUVIA DE ORO MASIVA
+        # 6. LLUVIA DE ORO MASIVA
         elif accion == 'mass_gold':
             amount = int(request.POST.get('amount', 0))
             if amount > 0:
@@ -354,7 +383,7 @@ def admin_panel(request, admin_tg_id):
                 messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 6. RESETEAR COOLDOWN DE RULETA
+        # 7. RESETEAR COOLDOWN DE RULETA
         elif accion == 'reset_bonus':
             target_id = int(request.POST.get('target_id'))
             Wallet.objects.filter(telegram_user_id=target_id).update(last_bonus_claim=None)
@@ -366,7 +395,7 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🎉 Cooldown de bono reseteado para todo el reino.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 7. ENVIAR MENSAJE AL GRUPO DE TELEGRAM
+        # 8. ENVIAR MENSAJE AL GRUPO DE TELEGRAM
         elif accion == 'telegram_broadcast':
             text = request.POST.get('tg_message_text', '').strip()
             if text:
@@ -380,7 +409,7 @@ def admin_panel(request, admin_tg_id):
                 messages.success(request, "📢 Mensaje enviado exitosamente al grupo oficial de Telegram.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 8. MARQUESINA DE LA APP
+        # 9. MARQUESINA DE LA APP
         elif accion == 'broadcast_message':
             txt = request.POST.get('broadcast_text', '').strip()
             KingdomSetting.set_val('broadcast_message', txt)
@@ -388,9 +417,8 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "📢 Decreto público de la app actualizado.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-       # 9. PURGA NUCLEAR DE DATOS (REINICIO TOTAL A CERO ABSOLUTO)
+        # 10. PURGA NUCLEAR DE DATOS
         elif accion == 'purge_test_data':
-            # 1. Limpieza de tablas de comercio y cartas
             UserInventoryItem.objects.all().delete()
             PhotocardTrade.objects.all().delete()
             IdolTribute.objects.all().delete()
@@ -398,7 +426,6 @@ def admin_panel(request, admin_tg_id):
             Photocard.objects.all().delete()
             PhotocardBox.objects.all().delete()
 
-            # 2. Limpieza de interacciones, muro y peticiones
             PostComment.objects.all().delete()
             PostUnlock.objects.all().delete()
             PostLike.objects.all().delete()
@@ -407,15 +434,10 @@ def admin_panel(request, admin_tg_id):
             Post.objects.all().delete()
             IdolProfile.objects.all().delete()
 
-            # 3. Limpieza de Santuario de Mascotas
             Pet.objects.all().delete()
-
-            # 4. Limpieza de Auditoría
             AdminAuditLog.objects.all().delete()
 
-            # 5. RESETEO TOTAL DE ANUNCIOS, TEMÁTICAS Y PRÓXIMAS CAJAS
             KingdomSetting.objects.all().delete()
-            # Forzamos los valores en blanco y apagados para que no quede nada residual
             KingdomSetting.set_val('upcoming_box_active', 'false')
             KingdomSetting.set_val('upcoming_box_title', '')
             KingdomSetting.set_val('upcoming_box_date', '')
@@ -430,19 +452,15 @@ def admin_panel(request, admin_tg_id):
             KingdomSetting.set_val('broadcast_active', 'false')
             KingdomSetting.set_val('broadcast_message', '')
 
-            # 6. Borrado completo de roles, perfiles y billeteras de todos los usuarios
             UserRole.objects.all().delete()
             UserProfile.objects.all().delete()
             Wallet.objects.all().delete()
 
-            # 7. Limpieza de sesión HTTP
             request.session.flush()
             request.session['tg_id'] = int(admin_tg_id)
 
-            # 8. Crear tu Bóveda limpia con 150 monedas iniciales
             Wallet.objects.create(telegram_user_id=int(admin_tg_id), balance=150)
 
-            # 9. Crear tu Perfil limpio a Nivel 1, 0 EXP
             UserProfile.objects.create(
                 telegram_user_id=int(admin_tg_id),
                 username="@CoronaImperial",
@@ -462,10 +480,10 @@ def admin_panel(request, admin_tg_id):
                 inactivity_shield_until=None
             )
 
-            messages.success(request, "🧹 Purga total completada. Anuncios, temáticas y progreso reseteados al 100%. Elige tu destino.")
+            messages.success(request, "🧹 Purga total completada. Datos reseteados al 100%. Elige tu destino.")
             return redirect(f"/choose-role/?tg_id={admin_tg_id}&force=1")
 
-        # 10. TEMÁTICA SEMANAL DEL MURO
+        # 11. TEMÁTICA SEMANAL DEL MURO
         elif accion == 'save_feed_theme':
             title = request.POST.get('theme_title', '').strip()
             msg = request.POST.get('theme_message', '').strip()
@@ -509,10 +527,15 @@ def admin_panel(request, admin_tg_id):
         u.display_name = prof.username if (prof and prof.username) else f"Noble_{str(u.telegram_id)[-4:]}"
         u.display_username = f"@{prof.username.replace('@','')}" if (prof and prof.username and not str(prof.username).isdigit()) else "Sin @"
         u.user_level = prof.level if prof else 1
-        u.user_rank = prof.get_rank_name(is_idol=(u.role == 'idol' or len(idols_map.get(u.telegram_id, [])) > 0)) if prof else "Curioso"
         u.idol_names = idols_map.get(u.telegram_id, [])
-        u.is_user_admin = (str(u.telegram_id) == ADMIN_TG_ID) or (u.role == 'admin')
+        
+        # Jerarquía limpia y separada
+        staff = getattr(u, 'staff_role', 'none')
+        u.is_user_admin = (str(u.telegram_id) == ADMIN_TG_ID) or (staff == 'admin') or (u.role == 'admin')
+        u.is_user_mod = (staff == 'moderador') or (u.role == 'moderador')
         u.is_user_idol = (u.role == 'idol') or (len(u.idol_names) > 0)
+        
+        u.user_rank = prof.get_rank_name(is_idol=u.is_user_idol) if prof else "Curioso"
         
         # Salvoconducto
         u.is_shield_active = prof.is_shield_active if prof else False
@@ -562,7 +585,7 @@ def _process_telegram_update(data):
         text = (msg.get('text') or '').strip().lower()
         chat = msg.get('chat', {})
         chat_id = chat.get('id')
-        message_thread_id = msg.get('message_thread_id')  # 👈 Captura el ID del Tema/Topic
+        message_thread_id = msg.get('message_thread_id')
         user = msg.get('from', {})
         user_id = user.get('id')
         first_name = user.get('first_name', 'Noble')
@@ -581,7 +604,6 @@ def _process_telegram_update(data):
             is_group = int(chat_id) < 0
             interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/')
 
-            # Si es por privado y NO es admin ni miembro del grupo principal
             if not is_group and str(user_id) != ADMIN_TG_ID and not is_user_in_group(user_id):
                 texto_bloqueo = (
                     f"⛔ <b>Acceso Restringido al Reino</b>\n\n"
@@ -596,7 +618,6 @@ def _process_telegram_update(data):
                 )
                 return
 
-            # Usuario autorizado o mensaje dentro del grupo oficial
             if is_group:
                 app_link = "https://t.me/KingdomPleasure_bot?start=entrar"
             else:
@@ -619,7 +640,6 @@ def _process_telegram_update(data):
                 )
                 btn_txt = "✨ Entrar al Kingdom"
             
-            # 👈 Responde en el MISMO tema/topic donde se escribió el comando
             send_telegram_msg(
                 chat_id=chat_id, 
                 text=texto, 
@@ -630,12 +650,12 @@ def _process_telegram_update(data):
     except Exception as e:
         print(f"⚠️ Error procesando update de webhook: {e}")
 
+
 @csrf_exempt
 def telegram_webhook(request):
     if request.method == "POST":
         try:
             data = json.loads(request.body.decode('utf-8'))
-            # Procesar en segundo plano para liberar la conexión con Telegram en <50ms
             threading.Thread(target=_process_telegram_update, args=(data,), daemon=True).start()
         except Exception as e:
             print(f"⚠️ Error recibiendo webhook: {e}")
@@ -655,7 +675,7 @@ def notifications_inbox(request):
     
     notifications = []
     
-    # 1. Decreto Imperial global (para ambos roles)
+    # 1. Decreto Imperial global
     broadcast_msg = KingdomSetting.get_val('broadcast_message', '')
     broadcast_active = KingdomSetting.get_val('broadcast_active', 'false') == 'true'
     if broadcast_active and broadcast_msg:

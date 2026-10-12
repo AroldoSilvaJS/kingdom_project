@@ -21,6 +21,13 @@
       border: 1px solid rgba(212, 175, 55, 0.3);
       backdrop-filter: blur(12px);
     }
+    .btn-gold {
+      background: linear-gradient(135deg, #ECC440 0%, #D4AF37 50%, #9A7B1C 100%);
+      color: #08040E;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
   </style>
 </head>
 <body class="font-sans antialiased p-3 sm:p-5 max-w-2xl mx-auto pb-28">
@@ -97,14 +104,14 @@
     </button>
   </div>
 
-  <!-- 👥 PESTAÑA 1: CENSO DE SÚBDITOS CON GESTOR DIRECTO -->
+  <!-- 👥 PESTAÑA 1: CENSO DE SÚBDITOS CON DOBLE SELECTOR INDEPENDIENTE (ROL & STAFF) -->
   <div id="adm-panel-censo" class="admin-card p-4 rounded-3xl space-y-3 shadow-xl">
     <div class="flex flex-col sm:flex-row justify-between items-center gap-2 border-b border-white/10 pb-3">
       <div>
         <h2 class="text-sm font-black text-yellow-400 uppercase tracking-wider">
           Censo de Nobles & Musas ({{ total_usuarios }})
         </h2>
-        <p class="text-[10px] text-stone-400">Modifica rangos, ajusta oro o gestiona sanciones</p>
+        <p class="text-[10px] text-stone-400">Modifica roles de juego (Idol/Cliente) y cargos de Staff de forma independiente</p>
       </div>
 
       <!-- Buscador en tiempo real -->
@@ -120,16 +127,20 @@
     <div class="flex flex-col gap-2.5" id="userListContainer">
       {% for u in usuarios %}
       <div class="user-item bg-black/60 border border-white/10 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow hover:border-yellow-500/50 transition-all"
-           data-search="{{ u.display_name|lower }} {{ u.display_username|lower }} {{ u.telegram_id }} {{ u.role }}">
+           data-search="{{ u.display_name|lower }} {{ u.display_username|lower }} {{ u.telegram_id }} {{ u.role }} {{ u.staff_role }}">
         
         <!-- Info Usuario -->
         <div class="flex items-center gap-3">
           <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow flex-shrink-0
             {% if u.is_user_admin and u.is_user_idol %}bg-gradient-to-br from-amber-900 to-purple-900 border-2 border-yellow-400 text-yellow-300
             {% elif u.is_user_admin %}bg-amber-950/80 border border-amber-400 text-yellow-300
-            {% elif u.is_user_idol %}bg-purple-950/80 border border-purple-400 text-purple-300
+            {% elif u.is_user_mod and u.is_user_idol %}bg-gradient-to-br from-purple-950 to-pink-900 border-2 border-purple-400 text-purple-200
+            {% elif u.is_user_mod %}bg-purple-950/80 border border-purple-400 text-purple-300
+            {% elif u.is_user_idol %}bg-rose-950/80 border border-rose-500 text-rose-300
             {% else %}bg-neutral-900 border border-neutral-700 text-stone-300{% endif %}">
-            <span>{% if u.is_user_admin and u.is_user_idol %}👑🌹{% elif u.is_user_admin %}👑{% elif u.is_user_idol %}🌹{% else %}🥂{% endif %}</span>
+            <span>
+              {% if u.is_user_admin %}👑{% elif u.is_user_mod %}🛡️{% elif u.is_user_idol %}🌹{% else %}🥂{% endif %}
+            </span>
           </div>
 
           <div class="flex flex-col min-w-0">
@@ -139,13 +150,19 @@
                 {{ u.display_username }}
               </span>
 
-              <!-- Distintivos -->
+              <!-- Distintivos Visuales -->
               {% if u.is_user_admin %}
                 <span class="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/50 px-1.5 py-0.2 rounded font-black uppercase">Corona</span>
+              {% elif u.is_user_mod %}
+                <span class="text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/50 px-1.5 py-0.2 rounded font-black uppercase">Mod 🛡️</span>
               {% endif %}
+
               {% if u.is_user_idol %}
-                <span class="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/50 px-1.5 py-0.2 rounded font-black uppercase">Musa</span>
+                <span class="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/50 px-1.5 py-0.2 rounded font-black uppercase">Musa 🌹</span>
+              {% else %}
+                <span class="text-[9px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 px-1.5 py-0.2 rounded font-bold uppercase">Noble 🥂</span>
               {% endif %}
+
               {% if u.is_shield_active %}
                 <span class="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-500 px-1.5 py-0.2 rounded font-black">🛡️ Inmune ({{ u.shield_days }}d)</span>
               {% endif %}
@@ -164,33 +181,46 @@
 
             {% if u.idol_names %}
               <div class="flex items-center gap-1 text-[9px] text-rose-300 mt-0.5">
-                <span class="font-bold">Musas:</span>
+                <span class="font-bold">Musas Registradas:</span>
                 <span class="font-mono text-white truncate">{{ u.idol_names|join:", " }}</span>
               </div>
             {% endif %}
           </div>
         </div>
 
-        <!-- Acciones en Vivo -->
-        <div class="flex items-center justify-between sm:justify-end gap-1.5 border-t sm:border-t-0 border-white/10 pt-2 sm:pt-0">
+        <!-- Acciones en Vivo: Dos Selectores Independientes -->
+        <div class="flex items-center justify-between sm:justify-end gap-1.5 border-t sm:border-t-0 border-white/10 pt-2 sm:pt-0 flex-wrap">
           
-          <!-- Rol -->
+          <!-- 1. Rol de Juego (Idol vs Cliente) -->
           <form method="POST" class="m-0">
             {% csrf_token %}
-            <input type="hidden" name="accion" value="change_role">
+            <input type="hidden" name="accion" value="change_game_role">
             <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
             <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
             <select name="new_role" onchange="this.form.submit()"
-                    class="bg-black border border-purple-700 rounded-lg px-2 py-1 text-[10px] font-bold text-yellow-300 cursor-pointer">
-              <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>👑 Admin</option>
+                    class="bg-black border border-pink-700/60 rounded-lg px-2 py-1 text-[10px] font-bold text-pink-300 cursor-pointer shadow-sm"
+                    title="Rol de Juego (Idol o Cliente)">
               <option value="idol" {% if u.role == 'idol' %}selected{% endif %}>🌹 Idol</option>
-              <option value="moderador" {% if u.role == 'moderador' %}selected{% endif %}>🛡️ Mod</option>
-              <option value="vip" {% if u.role == 'vip' %}selected{% endif %}>🥂 VIP</option>
-              <option value="cliente" {% if u.role == 'cliente' %}selected{% endif %}>🍷 Súbdito</option>
+              <option value="cliente" {% if u.role == 'cliente' or u.role == 'vip' %}selected{% endif %}>🥂 Cliente</option>
             </select>
           </form>
 
-          <!-- Dar Oro -->
+          <!-- 2. Cargo de Staff (Admin / Moderador / Súbdito) -->
+          <form method="POST" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="change_staff_role">
+            <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
+            <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+            <select name="new_staff" onchange="this.form.submit()"
+                    class="bg-black border border-purple-700 rounded-lg px-2 py-1 text-[10px] font-bold text-yellow-300 cursor-pointer shadow-sm"
+                    title="Cargo Administrativo">
+              <option value="none" {% if u.staff_role == 'none' or not u.staff_role %}selected{% endif %}>👤 Súbdito</option>
+              <option value="moderador" {% if u.staff_role == 'moderador' or u.role == 'moderador' %}selected{% endif %}>🛡️ Mod</option>
+              <option value="admin" {% if u.staff_role == 'admin' or u.role == 'admin' %}selected{% endif %}>👑 Admin</option>
+            </select>
+          </form>
+
+          <!-- 3. Dar Oro (+100) -->
           <form method="POST" class="m-0">
             {% csrf_token %}
             <input type="hidden" name="accion" value="adjust_gold">
@@ -203,7 +233,7 @@
             </button>
           </form>
 
-          <!-- Conceder Salvoconducto Manual (Inmunidad) -->
+          <!-- 4. Salvoconducto (+15 días) -->
           <form method="POST" class="m-0">
             {% csrf_token %}
             <input type="hidden" name="accion" value="grant_shield">
@@ -216,7 +246,7 @@
             </button>
           </form>
 
-          <!-- Ban / Desban -->
+          <!-- 5. Ban / Desban (Mazmorra) -->
           <form method="POST" class="m-0">
             {% csrf_token %}
             <input type="hidden" name="accion" value="toggle_ban">
@@ -338,7 +368,7 @@
 
         <div>
           <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Título de la Temática *</label>
-          <input type="text" name="theme_title" value="{{ feed_theme.title }}" placeholder="Ej: 🎃 Especial Halloween 2026: Seducción Prohibida"
+          <input type="text" name="theme_title" value="{{ feed_theme.title }}" placeholder="Ej: 🎃 Especial Halloween: Seducción Prohibida"
                  class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
         </div>
 
@@ -462,7 +492,6 @@
   </div>
 
   <script>
-    // Cambio instantáneo de pestañas sin recargar
     function switchAdminTab(tabName) {
       ['censo', 'decretos', 'purgas', 'auditoria'].forEach(t => {
         const panel = document.getElementById(`adm-panel-${t}`);
@@ -479,7 +508,6 @@
       });
     }
 
-    // Buscador instantáneo sin recargar
     function filtrarUsuarios() {
       const q = document.getElementById('searchInput').value.toLowerCase().trim();
       const items = document.querySelectorAll('.user-item');

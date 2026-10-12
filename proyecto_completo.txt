@@ -96,9 +96,8 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'cloudinary_storage',         # 👈 AÑADIR (debe ir antes de staticfiles)
     'django.contrib.staticfiles',
-    'cloudinary',                 # 👈 AÑADIR
+    'storages',                   # 👈 Supabase / S3 Storage
     
     # Nuestras Apps
     'core',
@@ -236,7 +235,7 @@ MAILERS = {
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8966798192:AAHTaCsfbW9Mlzrkoa8PiZJT-DrlryD4dP8')
 
 # ID de tu grupo privado de rol en Telegram
-TELEGRAM_GROUP_ID = int(os.environ.get('TELEGRAM_GROUP_ID', -1004393120413))
+TELEGRAM_GROUP_ID = int(os.environ.get('TELEGRAM_GROUP_ID', -1003743374036))
 
 TELEGRAM_INTERVIEW_GROUP_URL = os.environ.get(
     'TELEGRAM_INTERVIEW_GROUP_URL', 
@@ -251,20 +250,48 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
 
-# ✅ REEMPLAZAR POR:
-CLOUDINARY_URL = os.environ.get('CLOUDINARY_URL')
+# ==========================================
+# ALMACENAMIENTO MULTIMEDIA (SUPABASE S3 / LOCAL)
+# ==========================================
+SUPABASE_ACCESS_KEY = os.environ.get('SUPABASE_ACCESS_KEY')
+SUPABASE_SECRET_KEY = os.environ.get('SUPABASE_SECRET_KEY')
+SUPABASE_STORAGE_URL = os.environ.get('SUPABASE_STORAGE_URL')
+SUPABASE_BUCKET_NAME = os.environ.get('SUPABASE_BUCKET_NAME', 'kingdom-media')
 
-STORAGES = {
-    "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage" if CLOUDINARY_URL else "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-    },
-}
+if SUPABASE_ACCESS_KEY and SUPABASE_SECRET_KEY:
+    # 🌟 PRODUCCIÓN: Guardar fotos y videos en Supabase Storage
+    AWS_ACCESS_KEY_ID = SUPABASE_ACCESS_KEY
+    AWS_SECRET_ACCESS_KEY = SUPABASE_SECRET_KEY
+    AWS_STORAGE_BUCKET_NAME = SUPABASE_BUCKET_NAME
+    AWS_S3_ENDPOINT_URL = SUPABASE_STORAGE_URL
+    AWS_S3_REGION_NAME = 'us-east-1'
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = None
+    AWS_QUERYSTRING_AUTH = False
 
-    # Forzar a Django a reconocer el HTTPS detrás del proxy de Render
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # 👈 ESTA ES LA CLAVE: Construye la URL pública directa de Supabase CDN
+    # Tu Project ID de Supabase es 'btoemzqyzacbjfvjwpgv'
+    AWS_S3_CUSTOM_DOMAIN = f"btoemzqyzacbjfvjwpgv.supabase.co/storage/v1/object/public/{SUPABASE_BUCKET_NAME}"
+
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3.S3Storage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+else:
+    # 💻 LOCAL: Guardar en disco duro de desarrollo
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
 
 ==================================================
 ARCHIVO: .\config\urls.py
@@ -3070,11 +3097,6 @@ from django.db import models
 from django.db.models import Avg
 from django.core.exceptions import ValidationError
 import os
-try:
-    from cloudinary_storage.storage import VideoMediaCloudinaryStorage
-    video_storage = VideoMediaCloudinaryStorage()
-except ImportError:
-    video_storage = None
 
 class IdolProfile(models.Model):
 
@@ -3145,7 +3167,6 @@ class IdolProfile(models.Model):
 
     def get_display_owner(self):
         """Muestra el @ o Nombre de usuario real de Telegram, NUNCA 'Noble_ID' ni números"""
-        # 1. Primero consultar en UserProfile del creador
         try:
             from core.models import UserProfile
             prof = UserProfile.objects.filter(telegram_user_id=self.telegram_user_id).first()
@@ -3156,13 +3177,11 @@ class IdolProfile(models.Model):
         except Exception:
             pass
 
-        # 2. Si no, verificar el owner_username guardado en la Idol
         if self.owner_username:
             o_str = str(self.owner_username).strip()
             if not o_str.isdigit() and not o_str.lower().startswith('noble_') and o_str not in ['None', '', 'undefined']:
                 return o_str if o_str.startswith('@') else f"@{o_str}"
 
-        # 3. Si es el Administrador Supremo
         if str(self.telegram_user_id) == '7474444797':
             return "@CoronaImperial"
 
@@ -3205,17 +3224,11 @@ class Post(models.Model):
     idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='posts')
     network = models.CharField("Red Social", max_length=10, choices=NETWORK_CHOICES, default='gram')
     
-    # Imagen normal
+    # Campo de Fotografía
     image = models.ImageField("Foto del Post", upload_to='social_posts/', blank=True, null=True)
     
-    # 👈 Campo de Video con storage específico para Cloudinary
-    video = models.FileField(
-        "Video del Post", 
-        upload_to='social_videos/', 
-        storage=video_storage, 
-        blank=True, 
-        null=True
-    )
+    # Campo de Video (MP4 / WebM / QuickTime)
+    video = models.FileField("Video del Post", upload_to='social_videos/', blank=True, null=True)
     
     caption = models.TextField("Descripción", max_length=300)
     price = models.PositiveIntegerField("Precio en Oro (0 si es Público)", default=0)
@@ -3233,12 +3246,10 @@ class Post(models.Model):
 
     @property
     def is_video(self):
-        """Verifica si la publicación contiene un archivo de video"""
         return bool(self.video)
 
     @property
     def media_url(self):
-        """Retorna la URL del archivo multimedia (video o imagen)"""
         if self.video:
             return self.video.url
         elif self.image:
@@ -3359,7 +3370,7 @@ class Photocard(models.Model):
 
     box = models.ForeignKey(PhotocardBox, on_delete=models.SET_NULL, null=True, blank=True, related_name='cards', verbose_name="Caja a la que pertenece")
     idol = models.ForeignKey(IdolProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='photocards', verbose_name="Musa del Rol (Opcional)")
-    idol_name = models.CharField("Idol de K-Pop / Artista", max_length=100, default='', blank=True) # 👈 LIBRE PARA CUALQUIER IDOL
+    idol_name = models.CharField("Idol de K-Pop / Artista", max_length=100, default='', blank=True)
     name = models.CharField("Nombre de la Carta", max_length=100)
     rarity = models.CharField("Rareza", max_length=20, choices=RARITY_CHOICES, default='common')
     image = models.ImageField("Imagen Photocard (Canva)", upload_to='photocards/')
@@ -3397,7 +3408,6 @@ class UserPhotocard(models.Model):
     photocard = models.ForeignKey(Photocard, on_delete=models.CASCADE, related_name='owners')
     obtained_at = models.DateTimeField(auto_now_add=True)
 
-    # 👈 Campos para Mercado de Venta
     is_for_sale = models.BooleanField("¿Puesta a la venta?", default=False)
     sale_price = models.PositiveIntegerField("Precio de Venta (🪙)", default=0, blank=True, null=True)
 

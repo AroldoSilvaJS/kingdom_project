@@ -5,11 +5,6 @@ from core.models import UserRole
 ADMIN_TG_ID = '7474444797'
 
 def kingdom_notifications(request):
-    """
-    Calcula el badge de la campanita en tiempo real:
-    - Para Idols: Antojos pendientes por atender.
-    - Para Clientes: Antojos entregados listos para ver en su colección.
-    """
     raw_id = (
         request.GET.get('tg_id') or 
         request.POST.get('tg_id') or 
@@ -25,7 +20,8 @@ def kingdom_notifications(request):
         return {'unread_notifications_count': 0}
 
     role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
-    is_idol = (role_obj and role_obj.role == 'idol')
+    has_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
+    is_idol = (role_obj and role_obj.role == 'idol') or has_idols
 
     count = 0
     if is_idol:

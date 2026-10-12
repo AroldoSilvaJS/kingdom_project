@@ -211,20 +211,33 @@ class UserProfile(models.Model):
 
 class UserRole(models.Model):
     ROLES = [
-        ('admin', 'Administrador Supremo 👑'),
-        ('moderador', 'Moderador Imperial 🛡️'),
+        ('cliente', 'Noble / Cliente 🥂'),
         ('idol', 'Musa / Creadora VIP 🌹'),
-        ('vip', 'Noble VIP 🥂'),
-        ('cliente', 'Súbdito Ordinario 🍷'),
     ]
+    STAFF_ROLES = [
+        ('none', 'Súbdito Sin Cargo Ordinario'),
+        ('moderador', 'Moderador Imperial 🛡️'),
+        ('admin', 'Administrador Imperial 👑'),
+    ]
+    
     telegram_id = models.BigIntegerField(unique=True, verbose_name="ID de Telegram")
-    role = models.CharField(max_length=20, choices=ROLES, default='cliente')
+    role = models.CharField(max_length=20, choices=ROLES, default='cliente', verbose_name="Rol de Juego")
+    staff_role = models.CharField(max_length=20, choices=STAFF_ROLES, default='none', verbose_name="Cargo de Staff")
+    
     is_banned = models.BooleanField(default=False, verbose_name="¿Baneado?")
     ban_reason = models.CharField(max_length=255, blank=True, null=True, verbose_name="Motivo de Suspensión")
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def is_admin(self):
+        return str(self.telegram_id) == '7474444797' or self.staff_role == 'admin' or self.role == 'admin'
+
+    @property
+    def is_moderator(self):
+        return self.is_admin or self.staff_role == 'moderador' or self.role == 'moderador'
+
     def __str__(self):
-        return f"{self.telegram_id} - {self.role}"
+        return f"{self.telegram_id} - Rol: {self.role} | Staff: {self.staff_role}"
 
 
 class KingdomSetting(models.Model):
