@@ -1,5 +1,5 @@
 # core/context_processors.py
-from idols.models import CustomRequest
+from idols.models import CustomRequest, IdolProfile
 from core.models import UserRole
 
 ADMIN_TG_ID = '7474444797'
