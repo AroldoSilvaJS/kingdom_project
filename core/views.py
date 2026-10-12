@@ -319,7 +319,7 @@ def admin_panel(request, admin_tg_id):
         # 2. CAMBIO DE ROL DE JUEGO (IDOL vs CLIENTE)
         elif accion == 'change_game_role':
             target_id = int(request.POST.get('target_id'))
-            new_role = request.POST.get('new_role') # 'cliente' o 'idol'
+            new_role = request.POST.get('new_role')
             UserRole.objects.filter(telegram_id=target_id).update(role=new_role)
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='game_role_change', target_tg_id=target_id, details=f"Rol de juego cambiado a {new_role}")
             messages.success(request, f"🎭 Rol de juego de {target_id} actualizado a {new_role.upper()}.")
@@ -328,7 +328,7 @@ def admin_panel(request, admin_tg_id):
         # 3. CAMBIO DE CARGO DE STAFF (ADMIN / MODERADOR / SIN STAFF)
         elif accion == 'change_staff_role':
             target_id = int(request.POST.get('target_id'))
-            new_staff = request.POST.get('new_staff') # 'none', 'moderador', 'admin'
+            new_staff = request.POST.get('new_staff')
             UserRole.objects.filter(telegram_id=target_id).update(staff_role=new_staff)
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='staff_role_change', target_tg_id=target_id, details=f"Cargo de staff: {new_staff}")
             messages.success(request, f"🛡️ Cargo de Staff de {target_id} actualizado a {new_staff.upper()}.")
@@ -504,6 +504,25 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🎭 ¡Temática semanal del Muro actualizada con éxito!")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
+    # 🔄 AUTO-SINCRONIZACIÓN GARANTIZADA:
+    # Si un usuario tiene Idol, Bóveda o Perfil pero no estaba en UserRole, se sincroniza al Censo de inmediato
+    all_known_ids = set(UserProfile.objects.values_list('telegram_user_id', flat=True)).union(
+        set(IdolProfile.objects.values_list('telegram_user_id', flat=True)),
+        set(Wallet.objects.values_list('telegram_user_id', flat=True))
+    )
+    existing_role_ids = set(UserRole.objects.values_list('telegram_id', flat=True))
+    missing_ids = all_known_ids - existing_role_ids
+
+    for m_id in missing_ids:
+        has_idol = IdolProfile.objects.filter(telegram_user_id=m_id).exists()
+        UserRole.objects.create(
+            telegram_id=m_id,
+            role='idol' if has_idol else 'cliente',
+            staff_role='none'
+        )
+        UserProfile.objects.get_or_create(telegram_user_id=m_id, defaults={'username': f'Noble_{str(m_id)[-4:]}'})
+        Wallet.objects.get_or_create(telegram_user_id=m_id, defaults={'balance': 150})
+
     # Consultas optimizadas para el Dashboard
     usuarios_roles = list(UserRole.objects.all().order_by('-id'))
     user_ids = [u.telegram_id for u in usuarios_roles]
@@ -675,7 +694,6 @@ def notifications_inbox(request):
     
     notifications = []
     
-    # 1. Decreto Imperial global
     broadcast_msg = KingdomSetting.get_val('broadcast_message', '')
     broadcast_active = KingdomSetting.get_val('broadcast_active', 'false') == 'true'
     if broadcast_active and broadcast_msg:
@@ -692,7 +710,6 @@ def notifications_inbox(request):
         })
 
     if is_idol:
-        # --- BUZÓN DE LA MUSA / IDOL ---
         antojos = CustomRequest.objects.filter(idol__telegram_user_id=tg_id).select_related('idol').order_by('-created_at')[:20]
         for ant in antojos:
             if ant.status == 'pending':
@@ -774,7 +791,6 @@ def notifications_inbox(request):
             })
 
     else:
-        # --- BUZÓN DEL NOBLE / CLIENTE ---
         mis_antojos = CustomRequest.objects.filter(client_telegram_id=tg_id).select_related('idol').order_by('-created_at')[:20]
         for ant in mis_antojos:
             if ant.status == 'accepted':

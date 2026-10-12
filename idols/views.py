@@ -127,6 +127,9 @@ def idol_list(request):
 
     sync_user_profile(tg_id, tg_username)
 
+    # Asegura que quien acceda al Camerino tenga UserRole con rol 'idol'
+    UserRole.objects.get_or_create(telegram_id=tg_id, defaults={'role': 'idol', 'staff_role': 'none'})
+
     if request.method == 'POST':
         action = request.POST.get('action')
         
@@ -243,6 +246,10 @@ def idol_create(request):
                 photo=photo,
                 banner=banner
             )
+            # Asegura que quede registrada en UserRole como 'idol' sin perder staff_role
+            UserRole.objects.get_or_create(telegram_id=tg_id, defaults={'role': 'idol', 'staff_role': 'none'})
+            UserRole.objects.filter(telegram_id=tg_id).update(role='idol')
+
             grant_user_xp(request, tg_id, 30, reason="Creación de Idol")
             messages.success(request, f"✨ ¡{stage_name} ha sido registrada con éxito! (+30 EXP)")
             return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
@@ -406,7 +413,6 @@ def social_feed(request):
         unlocked_ids = set(pagados + propios)
         liked_ids = list(PostLike.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
 
-    # 🎭 Temática Semanal del Muro
     theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
     feed_theme = {
         'is_active': theme_active,
@@ -826,7 +832,6 @@ def photocard_boxes_view(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     boxes = PhotocardBox.objects.filter(is_active=True).prefetch_related('cards')
     
-    # Reconoce staff_role y Corona
     is_admin = check_is_staff_or_admin(tg_id)
 
     my_cards_count = UserPhotocard.objects.filter(telegram_user_id=tg_id).count()
