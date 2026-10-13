@@ -82,7 +82,6 @@ def main_menu(request):
     is_mod = (getattr(role_obj, 'staff_role', 'none') == 'moderador') or (role == 'moderador')
     
     has_idols_created = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
-    # Si su rol de juego es 'idol', SIEMPRE tiene acceso al Camerino (aunque sea moderadora o admin y tenga 0 fichas)
     is_idol = (role == 'idol') or has_idols_created or (str(tg_id) == ADMIN_TG_ID and has_idols_created)
     
     user_profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
@@ -130,7 +129,6 @@ def choose_role(request):
         
         request.session['tg_id'] = clean_id
 
-        # Preserva el staff_role si ya existía para no quitárselo
         user_role_obj = UserRole.objects.filter(telegram_id=clean_id).first()
         if user_role_obj:
             user_role_obj.role = selected_role
@@ -138,7 +136,7 @@ def choose_role(request):
         else:
             UserRole.objects.create(telegram_id=clean_id, role=selected_role, staff_role='none')
         
-        Wallet.objects.get_or_create(telegram_user_id=clean_id, defaults={'balance': 150})
+        Wallet.objects.get_or_create(telegram_user_id=clean_id, defaults={'balance': 100})
         UserProfile.objects.get_or_create(telegram_user_id=clean_id, defaults={'level': 1, 'current_xp': 0})
         
         tipo_nombre = "Idol Real 🌹" if selected_role == 'idol' else "Cliente VIP 🥂"
@@ -294,7 +292,7 @@ def admin_panel(request, admin_tg_id):
     if request.method == "POST":
         accion = request.POST.get('accion')
 
-        # 1. AJUSTAR ORO
+        # 1. AJUSTAR ORO MANUALMENTE
         if accion == 'adjust_gold':
             target_id = int(request.POST.get('target_id'))
             mode = request.POST.get('mode', 'add')
@@ -313,6 +311,28 @@ def admin_panel(request, admin_tg_id):
                 msg = f"Saldo fijado en {amount} 🪙 para {target_id}"
             
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='gold_adjust', target_tg_id=target_id, details=msg)
+            messages.success(request, msg)
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 🌟 NUEVA ACCIÓN: RESETEAR DINERO Y EXPERIENCIA A UN USUARIO ESPECÍFICO
+        elif accion == 'reset_user_progress':
+            target_id = int(request.POST.get('target_id'))
+            custom_gold = int(request.POST.get('custom_gold', 100))
+            custom_level = int(request.POST.get('custom_level', 1))
+
+            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=target_id)
+            wallet.balance = max(0, custom_gold)
+            wallet.last_bonus_claim = None
+            wallet.save()
+
+            prof, _ = UserProfile.objects.get_or_create(telegram_user_id=target_id)
+            prof.level = max(1, custom_level)
+            prof.current_xp = 0
+            prof.total_xp = 0
+            prof.save(update_fields=['level', 'current_xp', 'total_xp'])
+
+            msg = f"🔄 Progreso de {target_id} restablecido a {wallet.balance} 🪙 y Nivel {prof.level} (0 EXP)."
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='reset_user_progress', target_tg_id=target_id, details=msg)
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -459,7 +479,7 @@ def admin_panel(request, admin_tg_id):
             request.session.flush()
             request.session['tg_id'] = int(admin_tg_id)
 
-            Wallet.objects.create(telegram_user_id=int(admin_tg_id), balance=150)
+            Wallet.objects.create(telegram_user_id=int(admin_tg_id), balance=100)
 
             UserProfile.objects.create(
                 telegram_user_id=int(admin_tg_id),
@@ -505,7 +525,6 @@ def admin_panel(request, admin_tg_id):
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
     # 🔄 AUTO-SINCRONIZACIÓN GARANTIZADA:
-    # Si un usuario tiene Idol, Bóveda o Perfil pero no estaba en UserRole, se sincroniza al Censo de inmediato
     all_known_ids = set(UserProfile.objects.values_list('telegram_user_id', flat=True)).union(
         set(IdolProfile.objects.values_list('telegram_user_id', flat=True)),
         set(Wallet.objects.values_list('telegram_user_id', flat=True))
@@ -521,7 +540,7 @@ def admin_panel(request, admin_tg_id):
             staff_role='none'
         )
         UserProfile.objects.get_or_create(telegram_user_id=m_id, defaults={'username': f'Noble_{str(m_id)[-4:]}'})
-        Wallet.objects.get_or_create(telegram_user_id=m_id, defaults={'balance': 150})
+        Wallet.objects.get_or_create(telegram_user_id=m_id, defaults={'balance': 100})
 
     # Consultas optimizadas para el Dashboard
     usuarios_roles = list(UserRole.objects.all().order_by('-id'))
@@ -548,7 +567,6 @@ def admin_panel(request, admin_tg_id):
         u.user_level = prof.level if prof else 1
         u.idol_names = idols_map.get(u.telegram_id, [])
         
-        # Jerarquía limpia y separada
         staff = getattr(u, 'staff_role', 'none')
         u.is_user_admin = (str(u.telegram_id) == ADMIN_TG_ID) or (staff == 'admin') or (u.role == 'admin')
         u.is_user_mod = (staff == 'moderador') or (u.role == 'moderador')
@@ -556,7 +574,6 @@ def admin_panel(request, admin_tg_id):
         
         u.user_rank = prof.get_rank_name(is_idol=u.is_user_idol) if prof else "Curioso"
         
-        # Salvoconducto
         u.is_shield_active = prof.is_shield_active if prof else False
         u.shield_days = prof.days_of_shield_remaining if prof else 0
         if u.is_shield_active:
