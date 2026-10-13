@@ -409,7 +409,7 @@ ARCHIVO: .\core\context_processors.py
 ==================================================
 
 # core/context_processors.py
-from idols.models import CustomRequest
+from idols.models import CustomRequest, IdolProfile
 from core.models import UserRole
 
 ADMIN_TG_ID = '7474444797'
@@ -1545,7 +1545,7 @@ def admin_panel(request, admin_tg_id):
         # 2. CAMBIO DE ROL DE JUEGO (IDOL vs CLIENTE)
         elif accion == 'change_game_role':
             target_id = int(request.POST.get('target_id'))
-            new_role = request.POST.get('new_role') # 'cliente' o 'idol'
+            new_role = request.POST.get('new_role')
             UserRole.objects.filter(telegram_id=target_id).update(role=new_role)
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='game_role_change', target_tg_id=target_id, details=f"Rol de juego cambiado a {new_role}")
             messages.success(request, f"🎭 Rol de juego de {target_id} actualizado a {new_role.upper()}.")
@@ -1554,7 +1554,7 @@ def admin_panel(request, admin_tg_id):
         # 3. CAMBIO DE CARGO DE STAFF (ADMIN / MODERADOR / SIN STAFF)
         elif accion == 'change_staff_role':
             target_id = int(request.POST.get('target_id'))
-            new_staff = request.POST.get('new_staff') # 'none', 'moderador', 'admin'
+            new_staff = request.POST.get('new_staff')
             UserRole.objects.filter(telegram_id=target_id).update(staff_role=new_staff)
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='staff_role_change', target_tg_id=target_id, details=f"Cargo de staff: {new_staff}")
             messages.success(request, f"🛡️ Cargo de Staff de {target_id} actualizado a {new_staff.upper()}.")
@@ -1730,6 +1730,25 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🎭 ¡Temática semanal del Muro actualizada con éxito!")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
+    # 🔄 AUTO-SINCRONIZACIÓN GARANTIZADA:
+    # Si un usuario tiene Idol, Bóveda o Perfil pero no estaba en UserRole, se sincroniza al Censo de inmediato
+    all_known_ids = set(UserProfile.objects.values_list('telegram_user_id', flat=True)).union(
+        set(IdolProfile.objects.values_list('telegram_user_id', flat=True)),
+        set(Wallet.objects.values_list('telegram_user_id', flat=True))
+    )
+    existing_role_ids = set(UserRole.objects.values_list('telegram_id', flat=True))
+    missing_ids = all_known_ids - existing_role_ids
+
+    for m_id in missing_ids:
+        has_idol = IdolProfile.objects.filter(telegram_user_id=m_id).exists()
+        UserRole.objects.create(
+            telegram_id=m_id,
+            role='idol' if has_idol else 'cliente',
+            staff_role='none'
+        )
+        UserProfile.objects.get_or_create(telegram_user_id=m_id, defaults={'username': f'Noble_{str(m_id)[-4:]}'})
+        Wallet.objects.get_or_create(telegram_user_id=m_id, defaults={'balance': 150})
+
     # Consultas optimizadas para el Dashboard
     usuarios_roles = list(UserRole.objects.all().order_by('-id'))
     user_ids = [u.telegram_id for u in usuarios_roles]
@@ -1901,7 +1920,6 @@ def notifications_inbox(request):
     
     notifications = []
     
-    # 1. Decreto Imperial global
     broadcast_msg = KingdomSetting.get_val('broadcast_message', '')
     broadcast_active = KingdomSetting.get_val('broadcast_active', 'false') == 'true'
     if broadcast_active and broadcast_msg:
@@ -1918,7 +1936,6 @@ def notifications_inbox(request):
         })
 
     if is_idol:
-        # --- BUZÓN DE LA MUSA / IDOL ---
         antojos = CustomRequest.objects.filter(idol__telegram_user_id=tg_id).select_related('idol').order_by('-created_at')[:20]
         for ant in antojos:
             if ant.status == 'pending':
@@ -2000,7 +2017,6 @@ def notifications_inbox(request):
             })
 
     else:
-        # --- BUZÓN DEL NOBLE / CLIENTE ---
         mis_antojos = CustomRequest.objects.filter(client_telegram_id=tg_id).select_related('idol').order_by('-created_at')[:20]
         for ant in mis_antojos:
             if ant.status == 'accepted':
@@ -3570,11 +3586,28 @@ from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
 
+ADMIN_CORONA_ID = '7474444797'
+
+
+def check_is_staff_or_admin(tg_id):
+    """Verifica si el usuario es Corona, Admin o Moderador tanto por rol como por staff_role"""
+    if not tg_id:
+        return False
+    if str(tg_id) == ADMIN_CORONA_ID:
+        return True
+    role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+    if not role_obj:
+        return False
+    
+    staff = getattr(role_obj, 'staff_role', 'none')
+    is_staff = (staff in ['admin', 'moderador']) or (role_obj.role in ['admin', 'moderador']) or getattr(role_obj, 'is_moderator', False)
+    return is_staff
+
 
 def optimize_uploaded_image(file_obj, max_dimension=1600, quality=85):
     """
-    Comprime y redimensiona imágenes automáticamente antes de enviarlas a Cloudinary
-    para que nunca excedan el límite de 10MB ni ralenticen Telegram.
+    Comprime y redimensiona imágenes automáticamente antes de subirlas
+    para que nunca excedan el límite de Cloudinary ni ralenticen Telegram.
     """
     if not file_obj:
         return file_obj
@@ -3657,6 +3690,9 @@ def idol_list(request):
         return redirect('/')
 
     sync_user_profile(tg_id, tg_username)
+
+    # Asegura que quien acceda al Camerino tenga UserRole con rol 'idol'
+    UserRole.objects.get_or_create(telegram_id=tg_id, defaults={'role': 'idol', 'staff_role': 'none'})
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -3774,6 +3810,10 @@ def idol_create(request):
                 photo=photo,
                 banner=banner
             )
+            # Asegura que quede registrada en UserRole como 'idol' sin perder staff_role
+            UserRole.objects.get_or_create(telegram_id=tg_id, defaults={'role': 'idol', 'staff_role': 'none'})
+            UserRole.objects.filter(telegram_id=tg_id).update(role='idol')
+
             grant_user_xp(request, tg_id, 30, reason="Creación de Idol")
             messages.success(request, f"✨ ¡{stage_name} ha sido registrada con éxito! (+30 EXP)")
             return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
@@ -3787,9 +3827,7 @@ def idol_edit(request, idol_id):
     tg_id = resolve_safe_tg(request)
     idol = get_object_or_404(IdolProfile, id=idol_id)
     
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
-        telegram_id=tg_id, role__in=['admin', 'moderador']
-    ).exists()
+    is_admin = check_is_staff_or_admin(tg_id)
 
     if tg_id != idol.telegram_user_id and not is_admin:
         messages.error(request, "No tienes permiso para editar esta Idol.")
@@ -3931,7 +3969,7 @@ def social_feed(request):
     posts = Post.objects.all().select_related('idol').prefetch_related('comments')
     unlocked_ids = []
     liked_ids = []
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_admin = check_is_staff_or_admin(tg_id)
     
     if tg_id:
         pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
@@ -3939,7 +3977,6 @@ def social_feed(request):
         unlocked_ids = set(pagados + propios)
         liked_ids = list(PostLike.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
 
-    # 🎭 Temática Semanal del Muro
     theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
     feed_theme = {
         'is_active': theme_active,
@@ -3955,7 +3992,7 @@ def social_feed(request):
         'liked_ids': liked_ids,
         'tg_username': tg_username,
         'is_admin': is_admin,
-        'feed_theme': feed_theme,  # 👈 Añadir esta línea
+        'feed_theme': feed_theme,
     })
 
 
@@ -3963,7 +4000,7 @@ def delete_post(request, post_id):
     tg_id = resolve_safe_tg(request)
     post = get_object_or_404(Post, id=post_id)
     
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_admin = check_is_staff_or_admin(tg_id)
     is_owner = (tg_id == post.idol.telegram_user_id)
 
     if not (is_admin or is_owner):
@@ -3981,7 +4018,7 @@ def edit_post(request, post_id):
     tg_id = resolve_safe_tg(request)
     post = get_object_or_404(Post, id=post_id)
     
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(telegram_id=tg_id, role='admin').exists()
+    is_admin = check_is_staff_or_admin(tg_id)
     is_owner = (tg_id == post.idol.telegram_user_id)
 
     if not (is_admin or is_owner):
@@ -4122,7 +4159,7 @@ def create_post(request):
                     messages.error(request, "Debes adjuntar un archivo de video (MP4 o WebM).")
                     return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
                 post_image = None
-                post_video = raw_video  # 👈 Directo sin pasar por optimize_uploaded_image
+                post_video = raw_video
             else:
                 if not raw_image:
                     messages.error(request, "Debes adjuntar una fotografía.")
@@ -4359,10 +4396,7 @@ def photocard_boxes_view(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     boxes = PhotocardBox.objects.filter(is_active=True).prefetch_related('cards')
     
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
-        telegram_id=tg_id, 
-        role__in=['admin', 'moderador']
-    ).exists()
+    is_admin = check_is_staff_or_admin(tg_id)
 
     my_cards_count = UserPhotocard.objects.filter(telegram_user_id=tg_id).count()
 
@@ -4490,10 +4524,7 @@ def my_photocards_album(request):
 
 def admin_photocards_manage(request):
     tg_id = resolve_safe_tg(request)
-    is_admin = (str(tg_id) == '7474444797') or UserRole.objects.filter(
-        telegram_id=tg_id, 
-        role__in=['admin', 'moderador']
-    ).exists()
+    is_admin = check_is_staff_or_admin(tg_id)
 
     if not is_admin:
         messages.error(request, "Solo los administradores pueden gestionar Photocards.")

@@ -74,9 +74,9 @@ def interact_pet(request):
                 messages.info(request, msg)
                 return redirect(f'/pets/?tg_id={tg_id}')
 
-            if wallet.remove_funds(15):
+            if wallet.remove_funds(25): # 👈 Rebalanceado a 25 🪙
                 pet.feed()
-                grant_user_xp(request, tg_id, 8, reason="Alimentar Mascota")
+                grant_user_xp(request, tg_id, 4, reason="Alimentar Mascota")
                 
                 new_stage = pet.evolution_stage_number
                 did_evolve = (new_stage > old_stage)
@@ -194,20 +194,19 @@ def expedition_pet(request):
         card_dropped = None
 
         if zone == 'forest':
-            gold_found = random.randint(15, 35) + pet.level
+            gold_found = random.randint(10, 20) + min(10, pet.level)
             xp_mascota = 25
             if random.random() < 0.30:
                 food_found = True
                 pet.energy = min(100, pet.energy + 20)
 
         elif zone == 'crypts':
-            gold_found = random.randint(45, 85) + (pet.level * 2)
-            xp_mascota = 50
+            gold_found = random.randint(25, 45) + min(15, pet.level)
+            xp_mascota = 45
             if random.random() < 0.20:
                 food_found = True
                 pet.energy = min(100, pet.energy + 20)
 
-            # Buff Conejo Lunar aumenta probabilidad
             chance_card = 0.25 if pet.species == 'rabbit' else 0.15
             if random.random() < chance_card:
                 pool = Photocard.objects.filter(rarity__in=['common', 'rare'])
@@ -223,8 +222,8 @@ def expedition_pet(request):
                     }
 
         else: # cavern
-            gold_found = random.randint(100, 200) + (pet.level * 3)
-            xp_mascota = 85
+            gold_found = random.randint(50, 90) + min(25, pet.level * 2)
+            xp_mascota = 70
 
             chance_card = 0.40 if pet.species == 'rabbit' else 0.25
             if random.random() < chance_card:
@@ -300,7 +299,7 @@ def change_pet(request):
         tg_id = resolve_tg_id(request)
         new_species = request.POST.get('new_species') or request.POST.get('species')
         new_name = request.POST.get('new_name', '').strip()
-        cost = 300
+        cost = 500  # 👈 Rebalanceado a 500 🪙
         
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)

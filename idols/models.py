@@ -232,6 +232,7 @@ class CustomRequest(models.Model):
 
 class PostComment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies', verbose_name="Respuesta a") # 👈 NUEVO CAMPO
     author_telegram_id = models.BigIntegerField("ID del Autor", db_index=True)
     author_name = models.CharField("Nombre o @ de Usuario", max_length=100)
     text = models.TextField("Comentario", max_length=250)

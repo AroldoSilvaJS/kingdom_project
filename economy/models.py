@@ -3,13 +3,11 @@ from django.utils import timezone
 from datetime import timedelta
 
 class Wallet(models.Model):
-    # Cada usuario solo debe tener una billetera asociada a su ID de Telegram
     telegram_user_id = models.BigIntegerField(unique=True, db_index=True)
     
-    # Saldo del usuario (150 monedas de oro como regalo inicial)
-    balance = models.IntegerField("Monedas de Oro", default=150)
+    # Saldo de regalo inicial noble pero cuidado (100 monedas de oro)
+    balance = models.IntegerField("Monedas de Oro", default=100)
     
-    # Marca temporal del último bono diario reclamado
     last_bonus_claim = models.DateTimeField("Último bono", null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -23,24 +21,17 @@ class Wallet(models.Model):
         return f"Wallet {self.telegram_user_id} - Saldo: {self.balance}"
     
     def add_funds(self, amount):
-        """Suma oro a la billetera"""
         self.balance += amount
         self.save()
         
     def remove_funds(self, amount):
-        """Resta oro verificando que no quede en saldo negativo"""
         if self.balance >= amount:
             self.balance -= amount
             self.save()
             return True
         return False
 
-    # --- LÓGICA DE COOLDOWN DINÁMICA (BUFF DE MASCOTA: KITSUNE EN SUS 3 FASES) ---
     def get_cooldown_hours(self):
-        """
-        Calcula el cooldown dinámico del bono diario:
-        Kitsune Etapa 1: 22h | Etapa 2: 20h | Etapa 3: 18h | Por defecto: 24h
-        """
         try:
             from pets.models import Pet
             pet = Pet.objects.filter(telegram_user_id=self.telegram_user_id).first()
@@ -56,14 +47,12 @@ class Wallet(models.Model):
         return 24
 
     def can_claim_bonus(self):
-        """Verifica si ya transcurrieron las horas necesarias para volver a reclamar"""
         if not self.last_bonus_claim:
-            return True # Primer reclamo siempre disponible
+            return True
         hours = self.get_cooldown_hours()
         return timezone.now() >= self.last_bonus_claim + timedelta(hours=hours)
     
     def seconds_until_next_bonus(self):
-        """Calcula los segundos exactos restantes para el temporizador en frontend"""
         if self.can_claim_bonus():
             return 0
         hours = self.get_cooldown_hours()
@@ -71,7 +60,6 @@ class Wallet(models.Model):
         restante = (proximo_reclamo - timezone.now()).total_seconds()
         return max(0, int(restante))
 
-    # economy/models.py
 
 class UserInventoryItem(models.Model):
     telegram_user_id = models.BigIntegerField("ID del Usuario", db_index=True)

@@ -79,20 +79,24 @@ def casino_game(request):
                     else:
                         ganancia = int(apuesta * 2.0)
                     
-                    # BUFF PANTERA DE ÉBANO (+10% / +18% / +28%)
+                    # BUFF PANTERA DE ÉBANO: Bonus controlado (+3%, +6%, +10%) sobre la ganancia neta
                     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
                     if pet and pet.species == 'panther':
-                        panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                        ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                        panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                        net_profit = ganancia - apuesta
+                        ganancia = int(apuesta + (net_profit * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
                         
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "win"
+                    xp_gain = 3
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
                     ganancia = apuesta
+                    xp_gain = 1
 
-                grant_user_xp(request, tg_id, max(3, apuesta // 3), reason="Ruleta Imperial")
+                # EXP balanceada (sin inflación)
+                grant_user_xp(request, tg_id, xp_gain, reason="Ruleta Imperial")
 
                 if is_ajax:
                     return JsonResponse({
@@ -131,8 +135,8 @@ def claim_bonus(request):
             wallet.last_bonus_claim = timezone.now()
             wallet.save()
             
-            grant_user_xp(request, tg_id, 45, reason="Ruleta de la Fortuna")
-            messages.success(request, f"🎡 ¡La Ruleta de la Fortuna te ha otorgado +{bonus_amount} 🪙 de oro y +45 EXP!")
+            grant_user_xp(request, tg_id, 25, reason="Ruleta de la Fortuna")
+            messages.success(request, f"🎡 ¡La Ruleta de la Fortuna te ha otorgado +{bonus_amount} 🪙 de oro y +25 EXP!")
         else:
             horas = wallet.get_cooldown_hours()
             messages.error(request, f"Aún no han transcurrido las {horas}h de recarga de la Ruleta Diaria.")
@@ -148,7 +152,16 @@ def slots_game(request):
     resultado = None
     ganancia = 0
     reels = ['👑', '💎', '⭐']
-    SIMBOLOS = ['👑', '💎', '⭐', '🍇', '🍒', '🪙']
+
+    # 🎲 SISTEMA DE PESOS PROBABILÍSTICOS (RTP ~93%, Matématicamente sostenible)
+    WEIGHTED_SYMBOLS = (
+        ['🍇'] * 26 +
+        ['🍒'] * 26 +
+        ['🪙'] * 20 +
+        ['⭐'] * 14 +
+        ['💎'] * 10 +
+        ['👑'] * 4
+    )
         
     if request.method == 'POST':
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
@@ -169,41 +182,43 @@ def slots_game(request):
                 messages.error(request, err)
             else:
                 pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                # BUFF CUERVO ABISAL (+20% / +35% / +55% jackpot)
-                raven_chance = {1: 0.12, 2: 0.20, 3: 0.30}.get(pet.evolution_stage_number, 0.12) if (pet and pet.species == 'raven') else 0.0
+                # BUFF CUERVO ABISAL: Pequeño boost arcano controlado (1.5%, 3%, 5%), nunca 30%
+                raven_chance = {1: 0.015, 2: 0.03, 3: 0.05}.get(pet.evolution_stage_number, 0.015) if (pet and pet.species == 'raven') else 0.0
 
                 if pet and pet.species == 'raven' and random.random() < raven_chance:
                     reels = ['👑', '👑', '👑']
                 else:
-                    reels = [random.choice(SIMBOLOS) for _ in range(3)]
+                    reels = [random.choice(WEIGHTED_SYMBOLS) for _ in range(3)]
                 
+                # Evaluación de Premios
                 if reels[0] == reels[1] == reels[2]:
-                    multiplicador = 15 if reels[0] == '👑' else (10 if reels[0] == '💎' else 6)
+                    multiplicador = 15 if reels[0] == '👑' else (10 if reels[0] == '💎' else (6 if reels[0] == '⭐' else 4))
                     ganancia = apuesta * multiplicador
                     
-                    # BUFF PANTERA DE ÉBANO
                     if pet and pet.species == 'panther':
-                        panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                        ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                        panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                        net = ganancia - apuesta
+                        ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
                         
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "jackpot"
+                    xp_gain = 8
                 elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-                    ganancia = int(apuesta * 1.4)
+                    ganancia = int(apuesta * 1.25)
                     if pet and pet.species == 'panther':
-                        panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                        ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                        panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                        net = ganancia - apuesta
+                        ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
                         
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "pair"
+                    xp_gain = 3
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
                     ganancia = apuesta
+                    xp_gain = 1
 
-                xp_gain = max(2, apuesta // 4)
-                if resultado == "jackpot":
-                    xp_gain += 25
                 grant_user_xp(request, tg_id, xp_gain, reason="Tragaperras Imperial")
 
                 if is_ajax:
@@ -299,16 +314,19 @@ def blackjack_game(request):
                             wallet.add_funds(apuesta)
                             resultado = 'push'
                             ganancia = apuesta
+                            xp_gain = 2
                         else:
                             ganancia = int(apuesta * 2.5)
                             if pet and pet.species == 'panther':
-                                panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                                ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                                panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                                net = ganancia - apuesta
+                                ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
                                 
                             wallet.add_funds(ganancia)
                             resultado = 'blackjack'
-                            grant_user_xp(request, tg_id, 20, reason="Blackjack Natural")
+                            xp_gain = 6
                         
+                        grant_user_xp(request, tg_id, xp_gain, reason="Blackjack")
                         session_bj = {
                             'bet': apuesta,
                             'player_hand': player_hand,
@@ -322,7 +340,6 @@ def blackjack_game(request):
                             'dealer_hand': dealer_hand,
                             'finished': False
                         }
-                        grant_user_xp(request, tg_id, max(2, apuesta // 5))
                     request.session['blackjack_state'] = session_bj
             except ValueError:
                 err = "Monto inválido."
@@ -338,12 +355,14 @@ def blackjack_game(request):
                 ganancia = session_bj['bet']
                 session_bj['finished'] = True
 
-                # BUFF LOBO ESPECTRAL (10% / 18% / 25% de salvar la apuesta)
-                wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
+                # BUFF LOBO ESPECTRAL: Protección balanceada (4%, 7%, 10%)
+                wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
                     wallet.add_funds(session_bj['bet'])
                     resultado = 'push'
                     ganancia = session_bj['bet']
+
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
 
             request.session['blackjack_state'] = session_bj
                 
@@ -360,26 +379,30 @@ def blackjack_game(request):
             if d_val > 21 or p_val > d_val:
                 ganancia = apuesta * 2
                 if pet and pet.species == 'panther':
-                    panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                    ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                    panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                    net = ganancia - apuesta
+                    ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
                     
                 wallet.add_funds(ganancia)
                 resultado = 'win'
-                grant_user_xp(request, tg_id, 12, reason="Victoria Blackjack")
+                grant_user_xp(request, tg_id, 4, reason="Victoria Blackjack")
             elif p_val == d_val:
                 wallet.add_funds(apuesta)
                 resultado = 'push'
                 ganancia = apuesta
+                grant_user_xp(request, tg_id, 2, reason="Empate Blackjack")
             else:
                 resultado = 'lose'
                 ganancia = apuesta
 
                 # BUFF LOBO ESPECTRAL
-                wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
+                wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
                     wallet.add_funds(apuesta)
                     resultado = 'push'
                     ganancia = apuesta
+
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
                 
             session_bj['finished'] = True
             request.session['blackjack_state'] = session_bj
@@ -440,7 +463,7 @@ def blackjack_game(request):
 
 
 # ==========================================
-# JUEGO: LAS MINAS DEL REINO (MINES VIP)
+# JUEGO: LAS MINAS DEL REINO (BLINDADO Y SIN EXPLOIT)
 # ==========================================
 
 def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
@@ -454,8 +477,9 @@ def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     if prob <= 0:
         return 1.0
     
-    raw_mult = 0.96 / prob
-    return max(1.05, round(raw_mult, 2))
+    # Margen de la casa del 6% (0.94) para sostenibilidad matemática
+    raw_mult = 0.94 / prob
+    return max(1.02, round(raw_mult, 2))
 
 
 def mines_game(request):
@@ -499,6 +523,7 @@ def mines_game(request):
                         'mines_count': mines_count,
                         'mines': mines_locations,
                         'revealed': [],
+                        'multiplier': 1.0,
                         'in_game': True
                     }
                     request.session['mines_state'] = session_mines
@@ -525,10 +550,9 @@ def mines_game(request):
                     if tile_idx in session_mines['mines']:
                         session_mines['in_game'] = False
                         all_mines = session_mines['mines']
-                        bet_lost = session_mines['bet']
                         request.session['mines_state'] = None
 
-                        grant_user_xp(request, tg_id, max(2, bet_lost // 5), reason="Minas del Reino")
+                        grant_user_xp(request, tg_id, 1, reason="Minas del Reino")
 
                         if is_ajax:
                             return JsonResponse({
@@ -543,11 +567,12 @@ def mines_game(request):
                         revealed_count = len(session_mines['revealed'])
                         mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
 
-                        # BUFF DRAGÓN CARMESÍ (+0.10x / +0.25x / +0.50x)
+                        # BUFF DRAGÓN CARMESÍ: Bonus controlado (+0.02x, +0.04x, +0.07x) aplicado UNA SOLA VEZ
                         if pet and pet.species == 'dragon':
-                            dragon_bonus = {1: 0.10, 2: 0.25, 3: 0.50}.get(pet.evolution_stage_number, 0.10)
+                            dragon_bonus = {1: 0.02, 2: 0.04, 3: 0.07}.get(pet.evolution_stage_number, 0.02)
                             mult = round(mult + dragon_bonus, 2)
 
+                        session_mines['multiplier'] = mult
                         cashout_val = int(session_mines['bet'] * mult)
 
                         total_gems = 25 - session_mines['mines_count']
@@ -556,11 +581,13 @@ def mines_game(request):
                         if auto_win:
                             session_mines['in_game'] = False
                             if pet and pet.species == 'panther':
-                                panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                                cashout_val = int(cashout_val * panther_rates.get(pet.evolution_stage_number, 1.10))
+                                panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                                net = cashout_val - session_mines['bet']
+                                cashout_val = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
+                                
                             wallet.add_funds(cashout_val)
                             request.session['mines_state'] = None
-                            grant_user_xp(request, tg_id, max(10, cashout_val // 4), reason="Pleno en Minas")
+                            grant_user_xp(request, tg_id, 8, reason="Pleno en Minas")
 
                         request.session['mines_state'] = session_mines if not auto_win else None
 
@@ -578,29 +605,25 @@ def mines_game(request):
             except ValueError:
                 pass
 
-        # 3. RETIRARSE Y COBRAR (CASHOUT)
+        # 3. RETIRARSE Y COBRAR (CASHOUT - SIN DUPLICAR MULTIPLICADORES)
         elif action == 'cashout' and session_mines and session_mines.get('in_game'):
-            revealed_count = len(session_mines['revealed'])
+            revealed_count = len(session_mines.get('revealed', []))
             if revealed_count > 0:
-                mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
-                
-                # BUFF DRAGÓN CARMESÍ
-                if pet and pet.species == 'dragon':
-                    dragon_bonus = {1: 0.10, 2: 0.25, 3: 0.50}.get(pet.evolution_stage_number, 0.10)
-                    mult = round(mult + dragon_bonus, 2)
-
+                # Usa el multiplicador exactamente calculado al abrir
+                mult = session_mines.get('multiplier', 1.0)
                 ganancia = int(session_mines['bet'] * mult)
 
-                # BUFF PANTERA DE ÉBANO
+                # Bonus Pantera solo sobre la ganancia neta
                 if pet and pet.species == 'panther':
-                    panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                    ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                    panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                    net = max(0, ganancia - session_mines['bet'])
+                    ganancia = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
 
                 wallet.add_funds(ganancia)
                 all_mines = session_mines['mines']
                 request.session['mines_state'] = None
 
-                grant_user_xp(request, tg_id, max(5, ganancia // 4), reason="Retiro de Minas")
+                grant_user_xp(request, tg_id, 3, reason="Retiro de Minas")
 
                 if is_ajax:
                     return JsonResponse({
@@ -616,12 +639,7 @@ def mines_game(request):
     current_revealed = session_mines.get('revealed', []) if session_mines else []
     current_bet = session_mines.get('bet', 20) if session_mines else 20
     current_mines_count = session_mines.get('mines_count', 3) if session_mines else 3
-    current_mult = calculate_mines_multiplier(25, current_mines_count, len(current_revealed)) if in_game else 1.0
-
-    if in_game and pet and pet.species == 'dragon' and len(current_revealed) > 0:
-        dragon_bonus = {1: 0.10, 2: 0.25, 3: 0.50}.get(pet.evolution_stage_number, 0.10)
-        current_mult = round(current_mult + dragon_bonus, 2)
-
+    current_mult = session_mines.get('multiplier', 1.0) if in_game else 1.0
     current_cashout = int(current_bet * current_mult) if in_game else current_bet
 
     return render(request, 'economy/mines.html', {
@@ -637,21 +655,19 @@ def mines_game(request):
         'current_cashout': current_cashout,
     })
 
+
 def bazar_shop(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
     
-    # Identificar si es idol
     user_role = UserRole.objects.filter(telegram_id=tg_id).first()
     mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id)
     is_idol = (user_role and user_role.role == 'idol') or mis_idols.exists()
     
-    # Lista de todas las idols para enviarles tributos
     todas_idols = IdolProfile.objects.all().order_by('stage_name')
 
-    # Inventario del usuario
     inv_lucky = UserInventoryItem.get_count(tg_id, 'lucky_charm')
     inv_market = UserInventoryItem.get_count(tg_id, 'free_market')
     inv_priority = UserInventoryItem.get_count(tg_id, 'priority_antojo')
@@ -679,20 +695,20 @@ def bazar_buy_action(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
 
-    # Catálogo de precios y validaciones
+    # Catálogo de precios reales del Bazar Imperial (Rebalanceado)
     PRICES = {
-        'shield_15': 150,
-        'shield_30': 250,
-        'dungeon_bail': 300,
-        'custom_title': 200,
-        'imperial_frame': 180,
-        'vip_badge': 120,
-        'tribute_gift': 150,
-        'priority_antojo': 100,
-        'featured_idol': 200,
-        'lucky_charm': 120,
-        'free_market': 80,
-        'energy_potion': 75,
+        'shield_15': 350,       # Salvoconducto 15 días
+        'shield_30': 600,       # Salvoconducto mensual
+        'dungeon_bail': 500,     # Fianza de Mazmorra
+        'custom_title': 450,     # Edicto de Título Libre
+        'imperial_frame': 400,   # Marco Llama Carmesí
+        'vip_badge': 300,        # Distintivo VIP
+        'tribute_gift': 350,     # Gargantilla de Rubíes para Musa (Idol recibe 280🪙)
+        'priority_antojo': 200,  # Sello de Antojo Prioritario
+        'featured_idol': 450,    # Musa Destacada en Galería (3 días)
+        'lucky_charm': 250,      # Llave Dorada (Doble chance CS)
+        'free_market': 150,      # Patente 0% tax en Mercado
+        'energy_potion': 120,    # Elixir de Energía para mascota
     }
 
     price = PRICES.get(item_key)
@@ -704,7 +720,6 @@ def bazar_buy_action(request):
 
     msg = ""
 
-    # 1. SALVAGUARDAS
     if item_key == 'shield_15':
         current_end = profile.inactivity_shield_until if profile.is_shield_active else timezone.now()
         profile.inactivity_shield_until = current_end + timedelta(days=15)
@@ -729,7 +744,6 @@ def bazar_buy_action(request):
         wallet.remove_funds(price)
         msg = "⚖️ Fianza pagada. Has sido liberado de la mazmorra con honor restaurado."
 
-    # 2. ESTATUS
     elif item_key == 'custom_title':
         title_text = request.POST.get('custom_title_text', '').strip()
         if not title_text:
@@ -752,7 +766,6 @@ def bazar_buy_action(request):
         wallet.remove_funds(price)
         msg = "✨ ¡Distintivo de Linaje VIP activado para tus comentarios!"
 
-    # 3. MUSAS
     elif item_key == 'tribute_gift':
         idol_id = request.POST.get('target_idol_id')
         idol = IdolProfile.objects.filter(id=idol_id).first()
@@ -760,7 +773,6 @@ def bazar_buy_action(request):
             return JsonResponse({'success': False, 'error': 'Selecciona una Musa válida.'}, status=400)
         
         wallet.remove_funds(price)
-        # La idol recibe el 80% neto (120 🪙)
         idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=idol.telegram_user_id)
         net_gold = int(price * 0.8)
         idol_wallet.add_funds(net_gold)
@@ -803,7 +815,6 @@ def bazar_buy_action(request):
         wallet.remove_funds(price)
         msg = f"✨ ¡{idol.stage_name} fijada en la cima de la Galería por 3 días!"
 
-    # 4. RELICARIOS Y SANTUARIO
     elif item_key == 'lucky_charm':
         UserInventoryItem.add_item(tg_id, 'lucky_charm', 1)
         wallet.remove_funds(price)

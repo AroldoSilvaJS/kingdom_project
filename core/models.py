@@ -76,13 +76,9 @@ class UserProfile(models.Model):
     def __str__(self):
         return f"{self.username or self.telegram_user_id} - Nivel {self.level}"
 
-    # --- MATEMÁTICA Y CURVA DE PROGRESIÓN PROFUNDA (REBALANCEADA) ---
+    # --- CURVA DE PROGRESIÓN FIRME ---
     @property
     def xp_needed_for_next_level(self):
-        """
-        Curva RPG firme y progresiva:
-        Nivel 1: 235 EXP | Nivel 5: 550 EXP | Nivel 10: 1,250 EXP | Nivel 25: 4,500 EXP
-        """
         lvl = max(1, self.level)
         return int(180 + (lvl * 40) + (lvl ** 1.6 * 15))
 
@@ -96,14 +92,14 @@ class UserProfile(models.Model):
 
     @property
     def max_bet_allowed(self):
-        """Tope de apuesta en Casino según rango"""
+        """Tope de apuesta en Casino según rango (Rebalanceado)"""
         if self.level >= 30:
             return 150
         elif self.level >= 15:
-            return 80
+            return 75
         elif self.level >= 5:
-            return 40
-        return 20
+            return 35
+        return 15
 
     @property
     def idol_rank_name(self):
@@ -133,12 +129,12 @@ class UserProfile(models.Model):
 
     @property
     def max_post_price_allowed(self):
-        """Tope de precio de venta en KingdomFans según nivel"""
+        """Tope de precio de venta en KingdomFans según nivel (Ampliados)"""
         if self.level >= 21:
-            return 500
+            return 800
         elif self.level >= 10:
-            return 200
-        return 80
+            return 300
+        return 100
 
     @property
     def noble_rank_name(self):
@@ -161,13 +157,13 @@ class UserProfile(models.Model):
         return self.idol_rank_name if is_idol else self.noble_rank_name
 
     def get_daily_bonus_amount(self):
-        """Bono diario noble y controlado (25 a 65 🪙 máximo)"""
-        base = 25
-        incremento = min(40, self.level)
+        """Bono diario noble y controlado (20 a 40 🪙)"""
+        base = 20
+        incremento = min(20, self.level)
         return base + incremento
 
     def add_xp(self, amount):
-        """Controla el ascenso con recompensa nobiliaria equilibrada (sin bucle infinito)"""
+        """Ascenso equilibrado con recompensa controlada de +10 🪙 por nivel"""
         if amount <= 0:
             return (False, self.level, 0)
 
@@ -182,7 +178,7 @@ class UserProfile(models.Model):
                 self.current_xp -= costo
                 self.level += 1
                 leveled_up = True
-                gold_reward += 15  # Premio fijo y prestigioso de 15 🪙 por ascenso
+                gold_reward += 10  # Premio noble de 10 🪙
             else:
                 break
 

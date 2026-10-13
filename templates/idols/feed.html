@@ -281,11 +281,13 @@
                     </p>
                 {% endif %}
 
-                <!-- SECCIÓN DE COMENTARIOS DESPLEGABLE -->
+                <!-- SECCIÓN DE COMENTARIOS DESPLEGABLE CON HILOS DE RESPUESTA -->
                 <div id="comments-section-{{ post.id }}" class="hidden mt-2 pt-3 border-t border-white/10 flex flex-col gap-3">
                     
-                    <div class="flex flex-col gap-2 max-h-52 overflow-y-auto pr-1">
+                    <div class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
                         {% for c in post.comments.all %}
+                            {% if not c.parent %}
+                            <!-- Comentario Principal -->
                             <div class="bg-black/70 border border-white/10 p-3 rounded-2xl text-xs flex flex-col gap-1 shadow">
                                 <div class="flex justify-between items-center text-[10px]">
                                     <span class="font-bold text-yellow-300 flex items-center gap-1">
@@ -294,21 +296,53 @@
                                     <span class="text-stone-500 font-mono text-[9px]">{{ c.created_at|timesince }} atrás</span>
                                 </div>
                                 <p class="text-stone-200 leading-relaxed pl-1">{{ c.text }}</p>
+
+                                <div class="flex justify-end pt-1">
+                                    <button type="button" onclick="setReplyTarget({{ post.id }}, {{ c.id }}, '{{ c.author_name|escapejs }}')"
+                                            class="text-[9.5px] font-bold text-purple-300 hover:text-yellow-300 flex items-center gap-1 active:scale-95 transition-all">
+                                        <span>↩️</span> <span>Responder</span>
+                                    </button>
+                                </div>
+
+                                <!-- Respuestas Anidadas (Hilo) -->
+                                {% if c.replies.all %}
+                                <div class="flex flex-col gap-1.5 mt-1.5 pl-3 border-l-2 border-purple-500/40">
+                                    {% for rep in c.replies.all %}
+                                    <div class="bg-purple-950/20 border border-purple-500/20 p-2 rounded-xl flex flex-col gap-0.5">
+                                        <div class="flex justify-between items-center text-[9px]">
+                                            <span class="font-bold {% if '(Idol)' in rep.author_name %}text-yellow-300{% else %}text-purple-200{% endif %}">
+                                                {% if '(Idol)' in rep.author_name %}👑 {{ rep.author_name }}{% else %}↳ {{ rep.author_name }}{% endif %}
+                                            </span>
+                                            <span class="text-stone-500 font-mono">{{ rep.created_at|timesince }}</span>
+                                        </div>
+                                        <p class="text-stone-300 text-[11px] leading-relaxed">{{ rep.text }}</p>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
                             </div>
+                            {% endif %}
                         {% empty %}
                             <p class="text-center text-[11px] text-stone-500 py-2 italic">
-                                Sé el primero en dejar un elogio para la Musa...
+                                Sé el primero en dejar un halago para la Musa...
                             </p>
                         {% endfor %}
                     </div>
 
-                    <!-- Input para Comentar -->
-                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 m-0 mt-1">
+                    <!-- Indicador Flotante de Respuesta -->
+                    <div id="reply-indicator-{{ post.id }}" class="hidden items-center justify-between bg-purple-950/80 border border-purple-500/50 px-3 py-1 rounded-xl text-[10px] text-purple-200">
+                        <span id="reply-text-{{ post.id }}">Respondiendo a: </span>
+                        <button type="button" onclick="cancelReply({{ post.id }})" class="text-rose-400 font-bold hover:text-white">&times; Cancelar</button>
+                    </div>
+
+                    <!-- Input para Comentar o Responder -->
+                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 m-0 mt-0.5">
                         {% csrf_token %}
                         <input type="hidden" name="tg_id" value="{{ tg_id }}">
                         <input type="hidden" name="tg_username" value="{{ tg_username }}">
+                        <input type="hidden" name="parent_id" id="parent-input-{{ post.id }}" value="">
                         
-                        <input type="text" name="text" required placeholder="Escribe tu halago para {{ post.idol.stage_name }}..." 
+                        <input type="text" name="text" id="comment-input-{{ post.id }}" required placeholder="Escribe tu comentario..." 
                                class="flex-1 bg-black border border-vip-gold/30 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
                         
                         <button type="submit" 
@@ -436,6 +470,29 @@
     
     function setTipAmount(val) { 
         document.getElementById('tip-amount-input').value = val; 
+    }
+
+    function setReplyTarget(postId, commentId, authorName) {
+        document.getElementById(`parent-input-${postId}`).value = commentId;
+        const ind = document.getElementById(`reply-indicator-${postId}`);
+        const txt = document.getElementById(`reply-text-${postId}`);
+        const input = document.getElementById(`comment-input-${postId}`);
+
+        txt.innerText = `Respondiendo a: ${authorName}`;
+        ind.classList.remove('hidden');
+        ind.classList.add('flex');
+        input.placeholder = `Escribe tu respuesta para ${authorName}...`;
+        input.focus();
+    }
+
+    function cancelReply(postId) {
+        document.getElementById(`parent-input-${postId}`).value = '';
+        const ind = document.getElementById(`reply-indicator-${postId}`);
+        const input = document.getElementById(`comment-input-${postId}`);
+
+        ind.classList.add('hidden');
+        ind.classList.remove('flex');
+        input.placeholder = "Escribe tu comentario...";
     }
 </script>
 {% endblock %}
