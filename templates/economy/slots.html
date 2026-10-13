@@ -75,14 +75,22 @@
             </button>
         </div>
 
-        <!-- TABLA DE PREMIOS -->
-        <div class="w-full mt-4 bg-black/40 border border-vip-gold/20 p-3 rounded-xl text-left">
-            <h4 class="text-[10px] font-bold text-vip-gold uppercase tracking-wider mb-1.5">📜 Tabla de Pagos</h4>
-            <div class="grid grid-cols-2 gap-1.5 text-[10px] text-vip-text/70">
-                <span>👑👑👑 Triple Corona: <strong class="text-yellow-400">x15</strong></span>
-                <span>💎💎💎 Triple Diamante: <strong class="text-purple-300">x10</strong></span>
-                <span>⭐⭐⭐ Triple Estrella: <strong class="text-yellow-200">x6</strong></span>
-                <span>✨ Par de cualquier gema: <strong class="text-white">x1.4</strong></span>
+        <!-- TABLA DE PREMIOS REBALANCEADA -->
+        <div class="w-full mt-4 bg-black/50 border border-vip-gold/30 p-3.5 rounded-2xl text-left shadow-inner">
+            <h4 class="text-[10px] font-black text-vip-gold uppercase tracking-wider mb-2 flex items-center justify-between border-b border-white/5 pb-1">
+                <span>📜 Tabla de Pagos Imperial</span>
+                <span class="text-[9px] text-yellow-300 font-mono">RTP Equilibrado</span>
+            </h4>
+            <div class="grid grid-cols-2 gap-2 text-[10px] text-stone-300 font-medium">
+                <span class="flex items-center justify-between">👑👑👑 Triple Corona: <strong class="text-yellow-400 font-mono font-black">x25</strong></span>
+                <span class="flex items-center justify-between">💎💎💎 Triplete Diamante: <strong class="text-purple-300 font-mono font-black">x15</strong></span>
+                <span class="flex items-center justify-between">⭐⭐⭐ Triplete Estrella: <strong class="text-amber-300 font-mono font-bold">x8</strong></span>
+                <span class="flex items-center justify-between">🪙🪙🪙 Monedas de Oro: <strong class="text-yellow-300 font-mono font-bold">x5</strong></span>
+                <span class="flex items-center justify-between">🍇/🍒 Trío de Frutas: <strong class="text-white font-mono">x3.5</strong></span>
+                <span class="flex items-center justify-between">👑/💎/⭐ Par Noble: <strong class="text-emerald-300 font-mono font-bold">x1.6</strong></span>
+            </div>
+            <div class="text-[9px] text-stone-500 font-mono mt-2 text-center pt-1 border-t border-white/5">
+                Cualquier Par Básico (Fruta o Moneda) devuelve tu apuesta: <strong class="text-stone-300">x1.2</strong>
             </div>
         </div>
 
@@ -266,15 +274,26 @@
                     playCoins();
                     try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
                     resultBox.innerHTML = `
-                        <div class="p-3 bg-gradient-to-r from-yellow-950 via-yellow-600 to-yellow-950 border border-yellow-300 rounded-xl text-black text-xs font-black uppercase tracking-wider w-full animate-bounce shadow-lg">
+                        <div class="p-3 bg-gradient-to-r from-yellow-500 via-amber-300 to-yellow-500 border border-yellow-200 rounded-xl text-stone-950 text-xs font-black uppercase tracking-wider w-full animate-bounce shadow-[0_0_20px_rgba(234,179,8,0.7)]">
                             👑 ¡JACKPOT IMPERIAL! Has ganado +${data.ganancia} 🪙 de oro.
                         </div>`;
-                } else if (data.resultado === 'pair') {
+                } else if (data.resultado === 'trio') {
                     playCoins();
                     try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
                     resultBox.innerHTML = `
-                        <div class="p-2.5 bg-purple-950/80 border border-purple-500 rounded-xl text-purple-200 text-xs font-bold w-full">
-                            ✨ ¡Par conseguido! Recuperas tu apuesta con ganancia (+${data.ganancia} 🪙).
+                        <div class="p-2.5 bg-purple-950/90 border border-purple-400 rounded-xl text-purple-200 text-xs font-bold w-full shadow">
+                            ✨ ¡Trío Conseguido! Cobras +${data.ganancia} 🪙.
+                        </div>`;
+                } else if (data.resultado === 'pair_premium') {
+                    playCoins();
+                    resultBox.innerHTML = `
+                        <div class="p-2.5 bg-emerald-950/80 border border-emerald-500 rounded-xl text-emerald-200 text-xs font-bold w-full">
+                            💎 ¡Par Noble! Ganancia neta (+${data.ganancia} 🪙).
+                        </div>`;
+                } else if (data.resultado === 'pair') {
+                    resultBox.innerHTML = `
+                        <div class="p-2.5 bg-amber-950/80 border border-amber-500/60 rounded-xl text-amber-200 text-xs font-bold w-full">
+                            🍒 ¡Par conseguido! Recuperas tu apuesta (+${data.ganancia} 🪙).
                         </div>`;
                 } else {
                     try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}

@@ -1304,7 +1304,6 @@ def main_menu(request):
     is_mod = (getattr(role_obj, 'staff_role', 'none') == 'moderador') or (role == 'moderador')
     
     has_idols_created = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
-    # Si su rol de juego es 'idol', SIEMPRE tiene acceso al Camerino (aunque sea moderadora o admin y tenga 0 fichas)
     is_idol = (role == 'idol') or has_idols_created or (str(tg_id) == ADMIN_TG_ID and has_idols_created)
     
     user_profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
@@ -1352,7 +1351,6 @@ def choose_role(request):
         
         request.session['tg_id'] = clean_id
 
-        # Preserva el staff_role si ya existía para no quitárselo
         user_role_obj = UserRole.objects.filter(telegram_id=clean_id).first()
         if user_role_obj:
             user_role_obj.role = selected_role
@@ -1360,7 +1358,7 @@ def choose_role(request):
         else:
             UserRole.objects.create(telegram_id=clean_id, role=selected_role, staff_role='none')
         
-        Wallet.objects.get_or_create(telegram_user_id=clean_id, defaults={'balance': 150})
+        Wallet.objects.get_or_create(telegram_user_id=clean_id, defaults={'balance': 100})
         UserProfile.objects.get_or_create(telegram_user_id=clean_id, defaults={'level': 1, 'current_xp': 0})
         
         tipo_nombre = "Idol Real 🌹" if selected_role == 'idol' else "Cliente VIP 🥂"
@@ -1516,7 +1514,7 @@ def admin_panel(request, admin_tg_id):
     if request.method == "POST":
         accion = request.POST.get('accion')
 
-        # 1. AJUSTAR ORO
+        # 1. AJUSTAR ORO MANUALMENTE
         if accion == 'adjust_gold':
             target_id = int(request.POST.get('target_id'))
             mode = request.POST.get('mode', 'add')
@@ -1535,6 +1533,28 @@ def admin_panel(request, admin_tg_id):
                 msg = f"Saldo fijado en {amount} 🪙 para {target_id}"
             
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='gold_adjust', target_tg_id=target_id, details=msg)
+            messages.success(request, msg)
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 🌟 NUEVA ACCIÓN: RESETEAR DINERO Y EXPERIENCIA A UN USUARIO ESPECÍFICO
+        elif accion == 'reset_user_progress':
+            target_id = int(request.POST.get('target_id'))
+            custom_gold = int(request.POST.get('custom_gold', 100))
+            custom_level = int(request.POST.get('custom_level', 1))
+
+            wallet, _ = Wallet.objects.get_or_create(telegram_user_id=target_id)
+            wallet.balance = max(0, custom_gold)
+            wallet.last_bonus_claim = None
+            wallet.save()
+
+            prof, _ = UserProfile.objects.get_or_create(telegram_user_id=target_id)
+            prof.level = max(1, custom_level)
+            prof.current_xp = 0
+            prof.total_xp = 0
+            prof.save(update_fields=['level', 'current_xp', 'total_xp'])
+
+            msg = f"🔄 Progreso de {target_id} restablecido a {wallet.balance} 🪙 y Nivel {prof.level} (0 EXP)."
+            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='reset_user_progress', target_tg_id=target_id, details=msg)
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -1681,7 +1701,7 @@ def admin_panel(request, admin_tg_id):
             request.session.flush()
             request.session['tg_id'] = int(admin_tg_id)
 
-            Wallet.objects.create(telegram_user_id=int(admin_tg_id), balance=150)
+            Wallet.objects.create(telegram_user_id=int(admin_tg_id), balance=100)
 
             UserProfile.objects.create(
                 telegram_user_id=int(admin_tg_id),
@@ -1727,7 +1747,6 @@ def admin_panel(request, admin_tg_id):
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
     # 🔄 AUTO-SINCRONIZACIÓN GARANTIZADA:
-    # Si un usuario tiene Idol, Bóveda o Perfil pero no estaba en UserRole, se sincroniza al Censo de inmediato
     all_known_ids = set(UserProfile.objects.values_list('telegram_user_id', flat=True)).union(
         set(IdolProfile.objects.values_list('telegram_user_id', flat=True)),
         set(Wallet.objects.values_list('telegram_user_id', flat=True))
@@ -1743,7 +1762,7 @@ def admin_panel(request, admin_tg_id):
             staff_role='none'
         )
         UserProfile.objects.get_or_create(telegram_user_id=m_id, defaults={'username': f'Noble_{str(m_id)[-4:]}'})
-        Wallet.objects.get_or_create(telegram_user_id=m_id, defaults={'balance': 150})
+        Wallet.objects.get_or_create(telegram_user_id=m_id, defaults={'balance': 100})
 
     # Consultas optimizadas para el Dashboard
     usuarios_roles = list(UserRole.objects.all().order_by('-id'))
@@ -1770,7 +1789,6 @@ def admin_panel(request, admin_tg_id):
         u.user_level = prof.level if prof else 1
         u.idol_names = idols_map.get(u.telegram_id, [])
         
-        # Jerarquía limpia y separada
         staff = getattr(u, 'staff_role', 'none')
         u.is_user_admin = (str(u.telegram_id) == ADMIN_TG_ID) or (staff == 'admin') or (u.role == 'admin')
         u.is_user_mod = (staff == 'moderador') or (u.role == 'moderador')
@@ -1778,7 +1796,6 @@ def admin_panel(request, admin_tg_id):
         
         u.user_rank = prof.get_rank_name(is_idol=u.is_user_idol) if prof else "Curioso"
         
-        # Salvoconducto
         u.is_shield_active = prof.is_shield_active if prof else False
         u.shield_days = prof.days_of_shield_remaining if prof else 0
         if u.is_shield_active:
@@ -6165,14 +6182,16 @@ ARCHIVO: .\templates\core\admin_panel.html
     </button>
   </div>
 
-  <!-- 👥 PESTAÑA 1: CENSO DE SÚBDITOS CON DOBLE SELECTOR INDEPENDIENTE (ROL & STAFF) -->
-  <div id="adm-panel-censo" class="admin-card p-4 rounded-3xl space-y-3 shadow-xl">
+  <!-- 👥 PESTAÑA 1: CENSO DE SÚBDITOS CON RESET DE PROGRESO INDIVIDUAL -->
+  <div id="adm-panel-censo" class="admin-card p-4 rounded-3xl space-y-3.5 shadow-xl">
+    
+    <!-- ENCABEZADO Y BUSCADOR -->
     <div class="flex flex-col sm:flex-row justify-between items-center gap-2 border-b border-white/10 pb-3">
       <div>
         <h2 class="text-sm font-black text-yellow-400 uppercase tracking-wider">
           Censo de Nobles & Musas ({{ total_usuarios }})
         </h2>
-        <p class="text-[10px] text-stone-400">Modifica roles de juego (Idol/Cliente) y cargos de Staff de forma independiente</p>
+        <p class="text-[10px] text-stone-400">Control de roles, permisos y reseteo individual de saldo/nivel</p>
       </div>
 
       <!-- Buscador en tiempo real -->
@@ -6183,6 +6202,39 @@ ARCHIVO: .\templates\core\admin_panel.html
                class="w-full bg-black/80 border border-yellow-500/40 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
       </div>
     </div>
+
+    <!-- 🎯 HERRAMIENTA RÁPIDA: RESETEO O CALIBRACIÓN EXACTA POR TELEGRAM ID -->
+    <details class="bg-black/60 border border-purple-500/40 p-3 rounded-2xl text-xs">
+      <summary class="font-bold text-purple-300 uppercase cursor-pointer flex items-center justify-between">
+        <span>🎯 Ajuste Quirúrgico / Reset de Progreso por ID</span>
+        <span class="text-[10px] text-yellow-400">Abrir ▾</span>
+      </summary>
+      <form method="POST" class="mt-3 flex flex-col gap-2.5 pt-2 border-t border-white/10">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="reset_user_progress">
+        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+        
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div>
+            <label class="block text-[9.5px] uppercase font-bold text-stone-400 mb-1">Telegram ID del Usuario *</label>
+            <input type="number" name="target_id" required placeholder="Ej: 123456789" class="w-full bg-black border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono">
+          </div>
+          <div>
+            <label class="block text-[9.5px] uppercase font-bold text-yellow-400 mb-1">Fijar Oro (🪙)</label>
+            <input type="number" name="custom_gold" value="100" min="0" class="w-full bg-black border border-yellow-500/40 rounded-xl px-2.5 py-1.5 text-xs text-yellow-300 font-mono font-bold">
+          </div>
+          <div>
+            <label class="block text-[9.5px] uppercase font-bold text-purple-300 mb-1">Fijar Nivel (1 a 100)</label>
+            <input type="number" name="custom_level" value="1" min="1" max="100" class="w-full bg-black border border-purple-500/40 rounded-xl px-2.5 py-1.5 text-xs text-purple-200 font-mono font-bold">
+          </div>
+        </div>
+
+        <button type="submit" onclick="return confirm('¿Confirmas aplicar este ajuste de saldo y nivel a este usuario?')"
+                class="btn-gold py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+          Aplicar Ajuste de Saldo & Nivel
+        </button>
+      </form>
+    </details>
 
     <!-- Lista de Usuarios -->
     <div class="flex flex-col gap-2.5" id="userListContainer">
@@ -6249,7 +6301,7 @@ ARCHIVO: .\templates\core\admin_panel.html
           </div>
         </div>
 
-        <!-- Acciones en Vivo: Dos Selectores Independientes -->
+        <!-- Acciones en Vivo -->
         <div class="flex items-center justify-between sm:justify-end gap-1.5 border-t sm:border-t-0 border-white/10 pt-2 sm:pt-0 flex-wrap">
           
           <!-- 1. Rol de Juego (Idol vs Cliente) -->
@@ -6289,12 +6341,28 @@ ARCHIVO: .\templates\core\admin_panel.html
             <input type="hidden" name="amount" value="100">
             <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
             <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-            <button type="submit" class="px-2 py-1 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/40 text-[10px] font-black">
+            <button type="submit" class="px-2 py-1 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/40 text-[10px] font-black" title="Otorgar +100 oro">
               +100🪙
             </button>
           </form>
 
-          <!-- 4. Salvoconducto (+15 días) -->
+          <!-- 🌟 4. RESETEAR PROGRESO (Oro a 100 🪙, Lvl 1, 0 EXP) -->
+          <form method="POST" class="m-0">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="reset_user_progress">
+            <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
+            <input type="hidden" name="custom_gold" value="100">
+            <input type="hidden" name="custom_level" value="1">
+            <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
+            <button type="submit" 
+                    onclick="return confirm('⚠️ ¿Resetear el oro a 100 🪙 y el nivel a Nivel 1 (0 EXP) para {{ u.display_name|escapejs }} (ID: {{ u.telegram_id }})? Sus fichas de Idol, cartas y mascotas NO se borrarán.')"
+                    class="px-2 py-1 rounded-lg bg-red-950/70 hover:bg-red-900 border border-red-500/50 text-red-200 text-[10px] font-black"
+                    title="Restablecer a 100 🪙, Nivel 1, 0 EXP">
+              🔄 Reset
+            </button>
+          </form>
+
+          <!-- 5. Salvoconducto (+15 días) -->
           <form method="POST" class="m-0">
             {% csrf_token %}
             <input type="hidden" name="accion" value="grant_shield">
@@ -6307,7 +6375,7 @@ ARCHIVO: .\templates\core\admin_panel.html
             </button>
           </form>
 
-          <!-- 5. Ban / Desban (Mazmorra) -->
+          <!-- 6. Ban / Desban (Mazmorra) -->
           <form method="POST" class="m-0">
             {% csrf_token %}
             <input type="hidden" name="accion" value="toggle_ban">
@@ -11174,7 +11242,7 @@ ARCHIVO: .\templates\idols\gallery.html
         </div>
     </div>
 
-    <!-- 🔍 BARRA DE BÚSQUEDA Y FILTRADO POR USUARIO CREADOR (PUNTO 5) -->
+    <!-- 🔍 BARRA DE BÚSQUEDA Y FILTRADO POR USUARIO CREADOR (EN VIVO SIN RECARGA) -->
     <div class="bg-black/70 border border-vip-gold/30 rounded-2xl p-2.5 flex flex-col gap-2 shadow-lg">
         
         <!-- Buscador en tiempo real por Musa o por @Creadora -->
@@ -11188,21 +11256,21 @@ ARCHIVO: .\templates\idols\gallery.html
         <!-- Selectores de Orden y Filtro por Creadora -->
         <div class="grid grid-cols-2 gap-2">
             
-            <!-- Selector de Orden -->
-            <select id="gallerySortSelect" onchange="applyGallerySort(this.value)"
+            <!-- Selector de Orden Instantáneo -->
+            <select id="gallerySortSelect" onchange="applySortLive(this.value)"
                     class="bg-black border border-vip-gold/40 rounded-xl px-2.5 py-1.5 text-[10.5px] font-bold text-yellow-300 cursor-pointer focus:outline-none">
-                <option value="rating" {% if sort_by == 'rating' %}selected{% endif %}>⭐ Mejor Calificadas</option>
-                <option value="owner" {% if sort_by == 'owner' %}selected{% endif %}>👑 Ordenar por Creadora</option>
-                <option value="services" {% if sort_by == 'services' %}selected{% endif %}>🥂 Más Atenciones</option>
-                <option value="recent" {% if sort_by == 'recent' %}selected{% endif %}>✨ Recién Llegadas</option>
+                <option value="rating">⭐ Mejor Calificadas</option>
+                <option value="owner">👑 Ordenar por Creadora</option>
+                <option value="services">🥂 Más Atenciones</option>
+                <option value="recent">✨ Recién Llegadas</option>
             </select>
 
             <!-- Filtro Directo por Creadora Específica -->
-            <select id="galleryOwnerFilter" onchange="filterByOwner(this.value)"
+            <select id="galleryOwnerFilter" onchange="filterGalleryLive()"
                     class="bg-black border border-purple-500/40 rounded-xl px-2.5 py-1.5 text-[10.5px] font-bold text-purple-200 cursor-pointer focus:outline-none truncate">
                 <option value="">👤 Todas las Creadoras</option>
                 {% for o in all_owners %}
-                    <option value="{{ o|lower }}" {% if owner_filter|lower == o|lower %}selected{% endif %}>{{ o }}</option>
+                    <option value="{{ o|lower }}">{{ o }}</option>
                 {% endfor %}
             </select>
 
@@ -11236,6 +11304,9 @@ ARCHIVO: .\templates\idols\gallery.html
              class="idol-card relative rounded-[26px] overflow-hidden border-2 aspect-[3/4.4] group cursor-pointer active:scale-95 transition-all duration-300 bg-black shadow-[0_12px_35px_rgba(0,0,0,0.85)] flex flex-col justify-end"
              data-name="{{ idol.stage_name|lower }}"
              data-owner="{{ idol.get_display_owner|lower }}"
+             data-rating="{{ idol.rating }}"
+             data-services="{{ idol.services_done }}"
+             data-created="{{ idol.created_at|date:'U' }}"
              data-status="{{ idol.status }}"
              data-top="{% if idol.is_top_rated %}1{% else %}0{% endif %}"
              data-trending="{% if idol.is_trending %}1{% else %}0{% endif %}"
@@ -11336,7 +11407,36 @@ ARCHIVO: .\templates\idols\gallery.html
         filterGalleryLive();
     }
 
-    // Filtrado interactivo instantáneo sin recarga
+    // ⚡ REORDENAMIENTO INSTANTÁNEO EN EL DOM (SIN RECARGA NI PARPADEO)
+    function applySortLive(sortMode) {
+        const grid = document.getElementById('gallery-grid');
+        const cards = Array.from(grid.querySelectorAll('.idol-card'));
+
+        cards.sort((a, b) => {
+            if (sortMode === 'owner') {
+                const ownerA = a.getAttribute('data-owner') || '';
+                const ownerB = b.getAttribute('data-owner') || '';
+                return ownerA.localeCompare(ownerB);
+            } else if (sortMode === 'services') {
+                const sA = parseInt(a.getAttribute('data-services') || '0', 10);
+                const sB = parseInt(b.getAttribute('data-services') || '0', 10);
+                return sB - sA;
+            } else if (sortMode === 'recent') {
+                const dA = parseInt(a.getAttribute('data-created') || '0', 10);
+                const dB = parseInt(b.getAttribute('data-created') || '0', 10);
+                return dB - dA;
+            } else { // 'rating'
+                const rA = parseFloat(a.getAttribute('data-rating') || '0');
+                const rB = parseFloat(b.getAttribute('data-rating') || '0');
+                return rB - rA;
+            }
+        });
+
+        cards.forEach(card => grid.appendChild(card));
+        filterGalleryLive();
+    }
+
+    // ⚡ FILTRADO INTERACTIVO INSTANTÁNEO
     function filterGalleryLive() {
         const query = (document.getElementById('gallerySearchInput')?.value || '').toLowerCase().trim();
         const selectedOwner = (document.getElementById('galleryOwnerFilter')?.value || '').toLowerCase().trim();
@@ -11352,7 +11452,7 @@ ARCHIVO: .\templates\idols\gallery.html
             const isTrending = card.getAttribute('data-trending') === '1';
 
             const matchesText = name.includes(query) || owner.includes(query);
-            const matchesOwner = !selectedOwner || owner.includes(selectedOwner);
+            const matchesOwner = !selectedOwner || owner === selectedOwner || owner.includes(selectedOwner);
 
             let matchesQuick = true;
             if (currentQuickFilter === 'online') matchesQuick = (status === 'online' || status === 'antojos');
@@ -11369,18 +11469,6 @@ ARCHIVO: .\templates\idols\gallery.html
 
         const badge = document.getElementById('idols-count-badge');
         if (badge) badge.innerText = visibleCount;
-    }
-
-    function filterByOwner(ownerVal) {
-        filterGalleryLive();
-    }
-
-    function applyGallerySort(sortMode) {
-        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
-        const ownerVal = document.getElementById('galleryOwnerFilter')?.value || '';
-        let url = `/idols/gallery/?tg_id=${tgId}&sort=${sortMode}`;
-        if (ownerVal) url += `&owner=${encodeURIComponent(ownerVal)}`;
-        window.location.href = url;
     }
 </script>
 {% endblock %}

@@ -64,7 +64,7 @@ def interact_pet(request):
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-        old_stage = pet.evolution_stage_number
+        FEED_COST = 15  # Sincronizado exactamente con el template
 
         if action == 'feed':
             if pet.energy >= 100:
@@ -74,12 +74,9 @@ def interact_pet(request):
                 messages.info(request, msg)
                 return redirect(f'/pets/?tg_id={tg_id}')
 
-            if wallet.remove_funds(25): # 👈 Rebalanceado a 25 🪙
-                pet.feed()
+            if wallet.remove_funds(FEED_COST):
+                did_evolve = pet.feed()
                 grant_user_xp(request, tg_id, 4, reason="Alimentar Mascota")
-                
-                new_stage = pet.evolution_stage_number
-                did_evolve = (new_stage > old_stage)
 
                 if is_ajax:
                     return JsonResponse({
@@ -94,7 +91,7 @@ def interact_pet(request):
                         'pet_level': pet.level,
                         'nuevo_saldo': wallet.balance,
                         'evolved': did_evolve,
-                        'new_stage': new_stage,
+                        'new_stage': pet.evolution_stage_number,
                         'new_name': pet.evolved_name,
                         'new_title': pet.stage_info.get('title', ''),
                         'new_sprite': pet.get_image_url(),
@@ -102,7 +99,7 @@ def interact_pet(request):
                     })
                 messages.success(request, f"🍖 ¡Alimentaste a {pet.name}!")
             else:
-                msg = f"No tienes suficientes monedas (15 🪙)."
+                msg = f"No tienes suficiente oro ({FEED_COST} 🪙 necesarios)."
                 if is_ajax:
                     return JsonResponse({'success': False, 'error': msg}, status=400)
                 messages.error(request, msg)
@@ -116,11 +113,8 @@ def interact_pet(request):
                 messages.info(request, msg)
                 return redirect(f'/pets/?tg_id={tg_id}')
 
-            pet.pet_action()
+            did_evolve = pet.pet_action()
             grant_user_xp(request, tg_id, 5, reason="Acariciar Mascota")
-
-            new_stage = pet.evolution_stage_number
-            did_evolve = (new_stage > old_stage)
 
             if is_ajax:
                 return JsonResponse({
@@ -135,7 +129,7 @@ def interact_pet(request):
                     'pet_level': pet.level,
                     'cooldown_minutes': 30,
                     'evolved': did_evolve,
-                    'new_stage': new_stage,
+                    'new_stage': pet.evolution_stage_number,
                     'new_name': pet.evolved_name,
                     'new_title': pet.stage_info.get('title', ''),
                     'new_sprite': pet.get_image_url(),
@@ -147,7 +141,7 @@ def interact_pet(request):
 
 
 def expedition_pet(request):
-    """Envía a la mascota a explorar una de las 3 zonas con probabilidad de Photocards reales"""
+    """Envía a la mascota a explorar con balance de oro, buffs escalados y cartas seguras."""
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
@@ -194,14 +188,14 @@ def expedition_pet(request):
         card_dropped = None
 
         if zone == 'forest':
-            gold_found = random.randint(10, 20) + min(10, pet.level)
+            gold_found = random.randint(12, 22) + min(10, pet.level)
             xp_mascota = 25
             if random.random() < 0.30:
                 food_found = True
                 pet.energy = min(100, pet.energy + 20)
 
         elif zone == 'crypts':
-            gold_found = random.randint(25, 45) + min(15, pet.level)
+            gold_found = random.randint(28, 48) + min(15, pet.level)
             xp_mascota = 45
             if random.random() < 0.20:
                 food_found = True
@@ -222,7 +216,7 @@ def expedition_pet(request):
                     }
 
         else: # cavern
-            gold_found = random.randint(50, 90) + min(25, pet.level * 2)
+            gold_found = random.randint(55, 95) + min(25, pet.level * 2)
             xp_mascota = 70
 
             chance_card = 0.40 if pet.species == 'rabbit' else 0.25
@@ -241,27 +235,19 @@ def expedition_pet(request):
                         'image_url': c.image.url if c.image else ''
                     }
 
-        # Buff Ciervo de Jade: Probabilidad de duplicar oro
-        if pet.species == 'deer' and random.random() < 0.25:
-            gold_found *= 2
-
-        old_stage = pet.evolution_stage_number
-        leveled_up = False
-        pet.xp += xp_mascota
-        if pet.xp >= pet.xp_to_next_level:
-            pet.xp -= pet.xp_to_next_level
-            pet.level += 1
-            leveled_up = True
+        # Buff Ciervo de Jade calibrado por fase (15% / 25% / 40%)
+        if pet.species == 'deer':
+            deer_rates = {1: 0.15, 2: 0.25, 3: 0.40}
+            if random.random() < deer_rates.get(pet.evolution_stage_number, 0.15):
+                gold_found *= 2
 
         pet.save()
-
-        new_stage = pet.evolution_stage_number
-        did_evolve = (new_stage > old_stage)
+        leveled_up, _, did_evolve = pet.add_xp(xp_mascota)
 
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         wallet.add_funds(gold_found)
         
-        # Buff Búho Cronos: EXP aumentada para el noble
+        # Buff Búho Cronos
         xp_gain_player = max(10, gold_found // 4)
         if pet.species == 'owl':
             xp_gain_player = int(xp_gain_player * 1.30)
@@ -281,7 +267,7 @@ def expedition_pet(request):
                 'pet_energy': pet.energy,
                 'nuevo_saldo': wallet.balance,
                 'evolved': did_evolve,
-                'new_stage': new_stage,
+                'new_stage': pet.evolution_stage_number,
                 'new_name': pet.evolved_name,
                 'new_title': pet.stage_info.get('title', ''),
                 'new_sprite': pet.get_image_url(),
@@ -299,7 +285,7 @@ def change_pet(request):
         tg_id = resolve_tg_id(request)
         new_species = request.POST.get('new_species') or request.POST.get('species')
         new_name = request.POST.get('new_name', '').strip()
-        cost = 500  # 👈 Rebalanceado a 500 🪙
+        cost = 300  # Sincronizado a 300 🪙 con el template de forma exacta
         
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
@@ -319,6 +305,6 @@ def change_pet(request):
             grant_user_xp(request, tg_id, 30, reason="Ritual de Transmutación")
             messages.success(request, f"✨ ¡Ritual completado! Has transmutado tu mascota a {new_name} ({pet.evolved_name}) por {cost} 🪙.")
         else:
-            messages.error(request, f"No tienes suficiente oro ({cost} 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
+            messages.error(request, f"No tienes suficiente oro ({cost} 🪙 necesarios). Tu saldo actual es de {wallet.balance} 🪙.")
             
     return redirect(f'/pets/?tg_id={tg_id}')

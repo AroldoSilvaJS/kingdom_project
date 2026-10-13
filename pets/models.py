@@ -58,31 +58,40 @@ class Pet(models.Model):
         if self.can_be_petted(): return 0
         return max(1, int(((self.last_petted + timedelta(minutes=30)) - timezone.now()).total_seconds() // 60))
 
-    def can_go_expedition(self):
-        return not self.last_expedition or timezone.now() >= self.last_expedition + timedelta(minutes=90)
+    def add_xp(self, amount):
+        """Maneja la experiencia y subidas de nivel en cascada de forma segura."""
+        if amount <= 0:
+            return (False, self.level, self.evolution_stage_number)
 
-    def minutes_until_next_expedition(self):
-        if self.can_go_expedition(): return 0
-        return max(1, int(((self.last_expedition + timedelta(minutes=90)) - timezone.now()).total_seconds() // 60))
+        old_stage = self.evolution_stage_number
+        self.xp += int(amount)
+        leveled_up = False
+
+        while True:
+            needed = self.xp_to_next_level
+            if self.xp >= needed:
+                self.xp -= needed
+                self.level += 1
+                leveled_up = True
+            else:
+                break
+
+        new_stage = self.evolution_stage_number
+        self.save()
+        return (leveled_up, self.level, new_stage > old_stage)
 
     def feed(self):
         self.energy = min(100, self.energy + 25)
         self.happiness = min(100, self.happiness + 10)
-        self.xp += 20
-        if self.xp >= self.xp_to_next_level:
-            self.xp -= self.xp_to_next_level
-            self.level += 1
         self.last_fed = timezone.now()
-        self.save()
+        leveled_up, _, did_evolve = self.add_xp(20)
+        return did_evolve
 
     def pet_action(self):
         self.happiness = min(100, self.happiness + 20)
-        self.xp += 15
-        if self.xp >= self.xp_to_next_level:
-            self.xp -= self.xp_to_next_level
-            self.level += 1
         self.last_petted = timezone.now()
-        self.save()
+        leveled_up, _, did_evolve = self.add_xp(15)
+        return did_evolve
 
     def get_image_url(self):
         return f"/media/pets/{self.stage_info['sprite']}"

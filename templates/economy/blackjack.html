@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-44">
+<div class="flex flex-col gap-4 mt-2 pb-44 max-w-md mx-auto">
     
     <!-- ENCABEZADO Y VOLVER -->
     <div class="flex justify-between items-center px-1">
@@ -12,6 +12,7 @@
         <div class="flex items-center gap-1.5 bg-black/70 border border-vip-gold/40 px-3.5 py-1.5 rounded-full shadow-inner">
             <span class="text-xs">🪙</span>
             <span class="text-xs font-mono font-bold text-gold-gradient" id="bj-balance">{{ wallet.balance }}</span>
+            <span class="text-[9px] uppercase font-bold text-yellow-400">Oro</span>
         </div>
     </div>
 
@@ -57,7 +58,7 @@
                     </div>
                     {% endwith %}
 
-                    <!-- Carta Oculta -->
+                    <!-- Carta Oculta con Sello Real -->
                     <div class="card-deal w-14 h-20 rounded-xl shadow-2xl border-2 border-yellow-500/70 bg-gradient-to-br from-[#4a0815] via-[#850d24] to-[#2b040b] flex flex-col items-center justify-center relative select-none animate-pulse">
                         <div class="w-10 h-16 border border-yellow-500/40 rounded-lg flex items-center justify-center">
                             <span class="text-base text-yellow-300 drop-shadow">👑</span>
@@ -263,9 +264,14 @@
             const data = await resp.json();
 
             if (!data.success) {
-            showVipAlert(data.error, "Regla de la Corte", "⚠️");
-            return;
-        }
+                if (window.showVipAlert) {
+                    showVipAlert(data.error, "Regla de la Corte", "⚠️");
+                } else {
+                    alert(data.error);
+                }
+                return;
+            }
+
             // Actualizar Saldo
             const balanceElem = document.getElementById('bj-balance');
             if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
@@ -295,7 +301,7 @@
                 inGameControls.classList.add('hidden');
                 betControls.classList.remove('hidden');
 
-                // Resultado
+                // ─── EVALUACIÓN VISUAL DE RESULTADOS ───
                 if (data.resultado === 'blackjack') {
                     playCoins();
                     try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
@@ -309,6 +315,13 @@
                     resultBox.innerHTML = `
                     <div class="p-2.5 bg-emerald-950/90 border-2 border-emerald-500 text-emerald-200 text-xs font-bold rounded-xl text-center shadow-[0_0_15px_rgba(16,185,129,0.5)]">
                         🎉 ¡Victoria Noble! Superaste al Croupier (+${data.ganancia} 🪙).
+                    </div>`;
+                } else if (data.resultado === 'wolf_saved') {
+                    playCoins();
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                    resultBox.innerHTML = `
+                    <div class="p-2.5 bg-cyan-950/95 border-2 border-cyan-400 text-cyan-200 text-xs font-bold rounded-xl text-center shadow-[0_0_20px_rgba(34,211,238,0.6)] animate-pulse">
+                        🐺 ¡Tu Lobo Espectral intervino en las sombras! Recuperas tu apuesta de ${data.ganancia} 🪙.
                     </div>`;
                 } else if (data.resultado === 'push') {
                     resultBox.innerHTML = `
