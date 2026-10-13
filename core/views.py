@@ -503,7 +503,7 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🧹 Purga total completada. Datos reseteados al 100%. Elige tu destino.")
             return redirect(f"/choose-role/?tg_id={admin_tg_id}&force=1")
 
-        # 11. TEMÁTICA SEMANAL DEL MURO
+        # 11. TEMÁTICA SEMANAL DEL MURO (GUARDAR O DESACTIVAR)
         elif accion == 'save_feed_theme':
             title = request.POST.get('theme_title', '').strip()
             msg = request.POST.get('theme_message', '').strip()
@@ -522,6 +522,15 @@ def admin_panel(request, admin_tg_id):
                 KingdomSetting.set_val('feed_theme_banner', image_url)
 
             messages.success(request, "🎭 ¡Temática semanal del Muro actualizada con éxito!")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 👈 AÑADIR ESTA NUEVA ACCIÓN: DESACTIVAR Y BORRAR DE UN CLIC
+        elif accion == 'delete_feed_theme':
+            KingdomSetting.set_val('feed_theme_active', 'false')
+            KingdomSetting.set_val('feed_theme_title', '')
+            KingdomSetting.set_val('feed_theme_message', '')
+            KingdomSetting.set_val('feed_theme_banner', '')
+            messages.success(request, "🗑️ Temática del Muro desactivada y eliminada con éxito.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
     # 🔄 AUTO-SINCRONIZACIÓN GARANTIZADA:

@@ -137,6 +137,26 @@
         <div class="w-48 h-[1px] bg-gradient-to-r from-transparent via-vip-gold/70 to-transparent mt-0.5"></div>
     </header>
 
+    <!-- 📢 DECRETO IMPERIAL PÚBLICO DE LA CORONA -->
+    {% if broadcast_active and broadcast_message %}
+    <div class="w-full max-w-md px-3 mb-2.5 z-20">
+        <div class="p-3.5 rounded-2xl border-2 border-yellow-500/80 bg-gradient-to-r from-amber-950/95 via-black to-[#1a0c28] shadow-[0_0_25px_rgba(234,179,8,0.35)] flex items-start gap-3 relative overflow-hidden">
+            <span class="text-xl flex-shrink-0 animate-bounce">📢</span>
+            <div class="flex flex-col min-w-0">
+                <span class="text-[9.5px] font-mono font-black uppercase tracking-widest text-yellow-400">
+                    Decreto de la Corona Imperial 👑
+                </span>
+                <p class="text-xs text-stone-200 font-medium leading-relaxed mt-0.5">
+                    {{ broadcast_message }}
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Contenedor Dinámico de Vistas -->
+    <main class="w-full max-w-md flex-1 px-4 z-10">
+
     <!-- Contenedor Dinámico de Vistas -->
     <main class="w-full max-w-md flex-1 px-4 z-10">
         {% block content %}

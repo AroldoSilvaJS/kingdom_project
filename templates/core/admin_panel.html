@@ -440,9 +440,16 @@
           <input type="file" name="theme_banner" accept="image/*" class="text-xs text-stone-400">
         </div>
 
-        <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-          💾 Guardar Temática Semanal
-        </button>
+        <div class="grid grid-cols-2 gap-2 mt-1">
+          <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+            💾 Guardar Temática
+          </button>
+          
+          <button type="submit" name="accion" value="delete_feed_theme" onclick="return confirm('¿Retirar y borrar la temática del Muro ahora mismo?')"
+                  class="bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider active:scale-95 transition-all">
+            🚫 Retirar del Muro
+          </button>
+        </div>
       </form>
     </div>
 
