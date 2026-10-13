@@ -286,9 +286,14 @@
                 </span>
             </div>
             
-            <p class="text-[11px] text-stone-300 leading-relaxed mb-3">
-                Transmuta la esencia de tu compañero hacia cualquiera de las 10 bestias míticas del Reino conservando la afinidad espiritual.
-            </p>
+            <!-- ⚠️ AVISO VISUAL CLARO DE PÉRDIDA DE NIVEL -->
+            <div class="p-3 mb-3 rounded-2xl bg-rose-950/70 border border-rose-500/60 text-rose-200 text-xs flex items-start gap-2.5 shadow">
+                <span class="text-base flex-shrink-0">⚠️</span>
+                <div class="leading-relaxed text-[11px]">
+                    <strong>Decreto de Renacimiento:</strong> Al cambiar de especie, tu compañero renace en su forma inicial: 
+                    <strong class="text-white">Fase 1 (Nivel 1 con 0 XP)</strong>. Sus evoluciones y niveles anteriores se reiniciarán.
+                </div>
+            </div>
 
             <form action="{% url 'pets:change_pet' %}" method="POST" class="flex flex-col gap-3">
                 {% csrf_token %}
@@ -311,7 +316,8 @@
                            class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
                 </div>
 
-                <button type="submit" onclick="return confirm('¿Confirmas transmutar a tu mascota por 300 🪙?')"
+                <button type="submit" 
+                        onclick="return confirm('⚠️ ATENCIÓN: Tu mascota renacerá en Nivel 1 (Fase 1) y perderá su nivel actual. ¿Seguro que deseas pagar 300 🪙 para transmutarla?')"
                         class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
                     Consagrar Transmutación (300 🪙)
                 </button>

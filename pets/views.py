@@ -185,21 +185,16 @@ def expedition_pet(request):
         pet.last_expedition = timezone.now()
 
         food_found = False
+        # Recompensas de Expedición: Oro, XP y Photocards (Sin regalar comida/energía)
         card_dropped = None
 
         if zone == 'forest':
             gold_found = random.randint(12, 22) + min(10, pet.level)
             xp_mascota = 25
-            if random.random() < 0.30:
-                food_found = True
-                pet.energy = min(100, pet.energy + 20)
 
         elif zone == 'crypts':
             gold_found = random.randint(28, 48) + min(15, pet.level)
             xp_mascota = 45
-            if random.random() < 0.20:
-                food_found = True
-                pet.energy = min(100, pet.energy + 20)
 
             chance_card = 0.25 if pet.species == 'rabbit' else 0.15
             if random.random() < chance_card:
@@ -260,7 +255,6 @@ def expedition_pet(request):
                 'zone_name': z_data['name'],
                 'gold': gold_found,
                 'xp': xp_mascota,
-                'food_found': food_found,
                 'card_dropped': card_dropped,
                 'leveled_up': leveled_up,
                 'pet_level': pet.level,
