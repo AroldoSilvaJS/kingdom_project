@@ -19,7 +19,7 @@
         </div>
     </div>
 
-    <!-- 🔍 BARRA DE BÚSQUEDA Y FILTRADO POR USUARIO CREADOR (PUNTO 5) -->
+    <!-- 🔍 BARRA DE BÚSQUEDA Y FILTRADO POR USUARIO CREADOR (EN VIVO SIN RECARGA) -->
     <div class="bg-black/70 border border-vip-gold/30 rounded-2xl p-2.5 flex flex-col gap-2 shadow-lg">
         
         <!-- Buscador en tiempo real por Musa o por @Creadora -->
@@ -33,21 +33,21 @@
         <!-- Selectores de Orden y Filtro por Creadora -->
         <div class="grid grid-cols-2 gap-2">
             
-            <!-- Selector de Orden -->
-            <select id="gallerySortSelect" onchange="applyGallerySort(this.value)"
+            <!-- Selector de Orden Instantáneo -->
+            <select id="gallerySortSelect" onchange="applySortLive(this.value)"
                     class="bg-black border border-vip-gold/40 rounded-xl px-2.5 py-1.5 text-[10.5px] font-bold text-yellow-300 cursor-pointer focus:outline-none">
-                <option value="rating" {% if sort_by == 'rating' %}selected{% endif %}>⭐ Mejor Calificadas</option>
-                <option value="owner" {% if sort_by == 'owner' %}selected{% endif %}>👑 Ordenar por Creadora</option>
-                <option value="services" {% if sort_by == 'services' %}selected{% endif %}>🥂 Más Atenciones</option>
-                <option value="recent" {% if sort_by == 'recent' %}selected{% endif %}>✨ Recién Llegadas</option>
+                <option value="rating">⭐ Mejor Calificadas</option>
+                <option value="owner">👑 Ordenar por Creadora</option>
+                <option value="services">🥂 Más Atenciones</option>
+                <option value="recent">✨ Recién Llegadas</option>
             </select>
 
             <!-- Filtro Directo por Creadora Específica -->
-            <select id="galleryOwnerFilter" onchange="filterByOwner(this.value)"
+            <select id="galleryOwnerFilter" onchange="filterGalleryLive()"
                     class="bg-black border border-purple-500/40 rounded-xl px-2.5 py-1.5 text-[10.5px] font-bold text-purple-200 cursor-pointer focus:outline-none truncate">
                 <option value="">👤 Todas las Creadoras</option>
                 {% for o in all_owners %}
-                    <option value="{{ o|lower }}" {% if owner_filter|lower == o|lower %}selected{% endif %}>{{ o }}</option>
+                    <option value="{{ o|lower }}">{{ o }}</option>
                 {% endfor %}
             </select>
 
@@ -81,6 +81,9 @@
              class="idol-card relative rounded-[26px] overflow-hidden border-2 aspect-[3/4.4] group cursor-pointer active:scale-95 transition-all duration-300 bg-black shadow-[0_12px_35px_rgba(0,0,0,0.85)] flex flex-col justify-end"
              data-name="{{ idol.stage_name|lower }}"
              data-owner="{{ idol.get_display_owner|lower }}"
+             data-rating="{{ idol.rating }}"
+             data-services="{{ idol.services_done }}"
+             data-created="{{ idol.created_at|date:'U' }}"
              data-status="{{ idol.status }}"
              data-top="{% if idol.is_top_rated %}1{% else %}0{% endif %}"
              data-trending="{% if idol.is_trending %}1{% else %}0{% endif %}"
@@ -181,7 +184,36 @@
         filterGalleryLive();
     }
 
-    // Filtrado interactivo instantáneo sin recarga
+    // ⚡ REORDENAMIENTO INSTANTÁNEO EN EL DOM (SIN RECARGA NI PARPADEO)
+    function applySortLive(sortMode) {
+        const grid = document.getElementById('gallery-grid');
+        const cards = Array.from(grid.querySelectorAll('.idol-card'));
+
+        cards.sort((a, b) => {
+            if (sortMode === 'owner') {
+                const ownerA = a.getAttribute('data-owner') || '';
+                const ownerB = b.getAttribute('data-owner') || '';
+                return ownerA.localeCompare(ownerB);
+            } else if (sortMode === 'services') {
+                const sA = parseInt(a.getAttribute('data-services') || '0', 10);
+                const sB = parseInt(b.getAttribute('data-services') || '0', 10);
+                return sB - sA;
+            } else if (sortMode === 'recent') {
+                const dA = parseInt(a.getAttribute('data-created') || '0', 10);
+                const dB = parseInt(b.getAttribute('data-created') || '0', 10);
+                return dB - dA;
+            } else { // 'rating'
+                const rA = parseFloat(a.getAttribute('data-rating') || '0');
+                const rB = parseFloat(b.getAttribute('data-rating') || '0');
+                return rB - rA;
+            }
+        });
+
+        cards.forEach(card => grid.appendChild(card));
+        filterGalleryLive();
+    }
+
+    // ⚡ FILTRADO INTERACTIVO INSTANTÁNEO
     function filterGalleryLive() {
         const query = (document.getElementById('gallerySearchInput')?.value || '').toLowerCase().trim();
         const selectedOwner = (document.getElementById('galleryOwnerFilter')?.value || '').toLowerCase().trim();
@@ -197,7 +229,7 @@
             const isTrending = card.getAttribute('data-trending') === '1';
 
             const matchesText = name.includes(query) || owner.includes(query);
-            const matchesOwner = !selectedOwner || owner.includes(selectedOwner);
+            const matchesOwner = !selectedOwner || owner === selectedOwner || owner.includes(selectedOwner);
 
             let matchesQuick = true;
             if (currentQuickFilter === 'online') matchesQuick = (status === 'online' || status === 'antojos');
@@ -214,18 +246,6 @@
 
         const badge = document.getElementById('idols-count-badge');
         if (badge) badge.innerText = visibleCount;
-    }
-
-    function filterByOwner(ownerVal) {
-        filterGalleryLive();
-    }
-
-    function applyGallerySort(sortMode) {
-        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
-        const ownerVal = document.getElementById('galleryOwnerFilter')?.value || '';
-        let url = `/idols/gallery/?tg_id=${tgId}&sort=${sortMode}`;
-        if (ownerVal) url += `&owner=${encodeURIComponent(ownerVal)}`;
-        window.location.href = url;
     }
 </script>
 {% endblock %}

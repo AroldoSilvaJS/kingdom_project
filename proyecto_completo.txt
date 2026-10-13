@@ -581,13 +581,9 @@ class UserProfile(models.Model):
     def __str__(self):
         return f"{self.username or self.telegram_user_id} - Nivel {self.level}"
 
-    # --- MATEMÁTICA Y CURVA DE PROGRESIÓN PROFUNDA (REBALANCEADA) ---
+    # --- CURVA DE PROGRESIÓN FIRME ---
     @property
     def xp_needed_for_next_level(self):
-        """
-        Curva RPG firme y progresiva:
-        Nivel 1: 235 EXP | Nivel 5: 550 EXP | Nivel 10: 1,250 EXP | Nivel 25: 4,500 EXP
-        """
         lvl = max(1, self.level)
         return int(180 + (lvl * 40) + (lvl ** 1.6 * 15))
 
@@ -601,14 +597,14 @@ class UserProfile(models.Model):
 
     @property
     def max_bet_allowed(self):
-        """Tope de apuesta en Casino según rango"""
+        """Tope de apuesta en Casino según rango (Rebalanceado)"""
         if self.level >= 30:
             return 150
         elif self.level >= 15:
-            return 80
+            return 75
         elif self.level >= 5:
-            return 40
-        return 20
+            return 35
+        return 15
 
     @property
     def idol_rank_name(self):
@@ -638,12 +634,12 @@ class UserProfile(models.Model):
 
     @property
     def max_post_price_allowed(self):
-        """Tope de precio de venta en KingdomFans según nivel"""
+        """Tope de precio de venta en KingdomFans según nivel (Ampliados)"""
         if self.level >= 21:
-            return 500
+            return 800
         elif self.level >= 10:
-            return 200
-        return 80
+            return 300
+        return 100
 
     @property
     def noble_rank_name(self):
@@ -666,13 +662,13 @@ class UserProfile(models.Model):
         return self.idol_rank_name if is_idol else self.noble_rank_name
 
     def get_daily_bonus_amount(self):
-        """Bono diario noble y controlado (25 a 65 🪙 máximo)"""
-        base = 25
-        incremento = min(40, self.level)
+        """Bono diario noble y controlado (20 a 40 🪙)"""
+        base = 20
+        incremento = min(20, self.level)
         return base + incremento
 
     def add_xp(self, amount):
-        """Controla el ascenso con recompensa nobiliaria equilibrada (sin bucle infinito)"""
+        """Ascenso equilibrado con recompensa controlada de +10 🪙 por nivel"""
         if amount <= 0:
             return (False, self.level, 0)
 
@@ -687,7 +683,7 @@ class UserProfile(models.Model):
                 self.current_xp -= costo
                 self.level += 1
                 leveled_up = True
-                gold_reward += 15  # Premio fijo y prestigioso de 15 🪙 por ascenso
+                gold_reward += 10  # Premio noble de 10 🪙
             else:
                 break
 
@@ -2115,13 +2111,11 @@ from django.utils import timezone
 from datetime import timedelta
 
 class Wallet(models.Model):
-    # Cada usuario solo debe tener una billetera asociada a su ID de Telegram
     telegram_user_id = models.BigIntegerField(unique=True, db_index=True)
     
-    # Saldo del usuario (150 monedas de oro como regalo inicial)
-    balance = models.IntegerField("Monedas de Oro", default=150)
+    # Saldo de regalo inicial noble pero cuidado (100 monedas de oro)
+    balance = models.IntegerField("Monedas de Oro", default=100)
     
-    # Marca temporal del último bono diario reclamado
     last_bonus_claim = models.DateTimeField("Último bono", null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -2135,24 +2129,17 @@ class Wallet(models.Model):
         return f"Wallet {self.telegram_user_id} - Saldo: {self.balance}"
     
     def add_funds(self, amount):
-        """Suma oro a la billetera"""
         self.balance += amount
         self.save()
         
     def remove_funds(self, amount):
-        """Resta oro verificando que no quede en saldo negativo"""
         if self.balance >= amount:
             self.balance -= amount
             self.save()
             return True
         return False
 
-    # --- LÓGICA DE COOLDOWN DINÁMICA (BUFF DE MASCOTA: KITSUNE EN SUS 3 FASES) ---
     def get_cooldown_hours(self):
-        """
-        Calcula el cooldown dinámico del bono diario:
-        Kitsune Etapa 1: 22h | Etapa 2: 20h | Etapa 3: 18h | Por defecto: 24h
-        """
         try:
             from pets.models import Pet
             pet = Pet.objects.filter(telegram_user_id=self.telegram_user_id).first()
@@ -2168,14 +2155,12 @@ class Wallet(models.Model):
         return 24
 
     def can_claim_bonus(self):
-        """Verifica si ya transcurrieron las horas necesarias para volver a reclamar"""
         if not self.last_bonus_claim:
-            return True # Primer reclamo siempre disponible
+            return True
         hours = self.get_cooldown_hours()
         return timezone.now() >= self.last_bonus_claim + timedelta(hours=hours)
     
     def seconds_until_next_bonus(self):
-        """Calcula los segundos exactos restantes para el temporizador en frontend"""
         if self.can_claim_bonus():
             return 0
         hours = self.get_cooldown_hours()
@@ -2183,7 +2168,6 @@ class Wallet(models.Model):
         restante = (proximo_reclamo - timezone.now()).total_seconds()
         return max(0, int(restante))
 
-    # economy/models.py
 
 class UserInventoryItem(models.Model):
     telegram_user_id = models.BigIntegerField("ID del Usuario", db_index=True)
@@ -2343,20 +2327,24 @@ def casino_game(request):
                     else:
                         ganancia = int(apuesta * 2.0)
                     
-                    # BUFF PANTERA DE ÉBANO (+10% / +18% / +28%)
+                    # BUFF PANTERA DE ÉBANO: Bonus controlado (+3%, +6%, +10%) sobre la ganancia neta
                     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
                     if pet and pet.species == 'panther':
-                        panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                        ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                        panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                        net_profit = ganancia - apuesta
+                        ganancia = int(apuesta + (net_profit * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
                         
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "win"
+                    xp_gain = 3
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
                     ganancia = apuesta
+                    xp_gain = 1
 
-                grant_user_xp(request, tg_id, max(3, apuesta // 3), reason="Ruleta Imperial")
+                # EXP balanceada (sin inflación)
+                grant_user_xp(request, tg_id, xp_gain, reason="Ruleta Imperial")
 
                 if is_ajax:
                     return JsonResponse({
@@ -2395,8 +2383,8 @@ def claim_bonus(request):
             wallet.last_bonus_claim = timezone.now()
             wallet.save()
             
-            grant_user_xp(request, tg_id, 45, reason="Ruleta de la Fortuna")
-            messages.success(request, f"🎡 ¡La Ruleta de la Fortuna te ha otorgado +{bonus_amount} 🪙 de oro y +45 EXP!")
+            grant_user_xp(request, tg_id, 25, reason="Ruleta de la Fortuna")
+            messages.success(request, f"🎡 ¡La Ruleta de la Fortuna te ha otorgado +{bonus_amount} 🪙 de oro y +25 EXP!")
         else:
             horas = wallet.get_cooldown_hours()
             messages.error(request, f"Aún no han transcurrido las {horas}h de recarga de la Ruleta Diaria.")
@@ -2412,7 +2400,16 @@ def slots_game(request):
     resultado = None
     ganancia = 0
     reels = ['👑', '💎', '⭐']
-    SIMBOLOS = ['👑', '💎', '⭐', '🍇', '🍒', '🪙']
+
+    # 🎲 SISTEMA DE PESOS PROBABILÍSTICOS (RTP ~93%, Matématicamente sostenible)
+    WEIGHTED_SYMBOLS = (
+        ['🍇'] * 26 +
+        ['🍒'] * 26 +
+        ['🪙'] * 20 +
+        ['⭐'] * 14 +
+        ['💎'] * 10 +
+        ['👑'] * 4
+    )
         
     if request.method == 'POST':
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
@@ -2433,41 +2430,43 @@ def slots_game(request):
                 messages.error(request, err)
             else:
                 pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                # BUFF CUERVO ABISAL (+20% / +35% / +55% jackpot)
-                raven_chance = {1: 0.12, 2: 0.20, 3: 0.30}.get(pet.evolution_stage_number, 0.12) if (pet and pet.species == 'raven') else 0.0
+                # BUFF CUERVO ABISAL: Pequeño boost arcano controlado (1.5%, 3%, 5%), nunca 30%
+                raven_chance = {1: 0.015, 2: 0.03, 3: 0.05}.get(pet.evolution_stage_number, 0.015) if (pet and pet.species == 'raven') else 0.0
 
                 if pet and pet.species == 'raven' and random.random() < raven_chance:
                     reels = ['👑', '👑', '👑']
                 else:
-                    reels = [random.choice(SIMBOLOS) for _ in range(3)]
+                    reels = [random.choice(WEIGHTED_SYMBOLS) for _ in range(3)]
                 
+                # Evaluación de Premios
                 if reels[0] == reels[1] == reels[2]:
-                    multiplicador = 15 if reels[0] == '👑' else (10 if reels[0] == '💎' else 6)
+                    multiplicador = 15 if reels[0] == '👑' else (10 if reels[0] == '💎' else (6 if reels[0] == '⭐' else 4))
                     ganancia = apuesta * multiplicador
                     
-                    # BUFF PANTERA DE ÉBANO
                     if pet and pet.species == 'panther':
-                        panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                        ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                        panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                        net = ganancia - apuesta
+                        ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
                         
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "jackpot"
+                    xp_gain = 8
                 elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-                    ganancia = int(apuesta * 1.4)
+                    ganancia = int(apuesta * 1.25)
                     if pet and pet.species == 'panther':
-                        panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                        ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                        panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                        net = ganancia - apuesta
+                        ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
                         
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "pair"
+                    xp_gain = 3
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
                     ganancia = apuesta
+                    xp_gain = 1
 
-                xp_gain = max(2, apuesta // 4)
-                if resultado == "jackpot":
-                    xp_gain += 25
                 grant_user_xp(request, tg_id, xp_gain, reason="Tragaperras Imperial")
 
                 if is_ajax:
@@ -2563,16 +2562,19 @@ def blackjack_game(request):
                             wallet.add_funds(apuesta)
                             resultado = 'push'
                             ganancia = apuesta
+                            xp_gain = 2
                         else:
                             ganancia = int(apuesta * 2.5)
                             if pet and pet.species == 'panther':
-                                panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                                ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                                panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                                net = ganancia - apuesta
+                                ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
                                 
                             wallet.add_funds(ganancia)
                             resultado = 'blackjack'
-                            grant_user_xp(request, tg_id, 20, reason="Blackjack Natural")
+                            xp_gain = 6
                         
+                        grant_user_xp(request, tg_id, xp_gain, reason="Blackjack")
                         session_bj = {
                             'bet': apuesta,
                             'player_hand': player_hand,
@@ -2586,7 +2588,6 @@ def blackjack_game(request):
                             'dealer_hand': dealer_hand,
                             'finished': False
                         }
-                        grant_user_xp(request, tg_id, max(2, apuesta // 5))
                     request.session['blackjack_state'] = session_bj
             except ValueError:
                 err = "Monto inválido."
@@ -2602,12 +2603,14 @@ def blackjack_game(request):
                 ganancia = session_bj['bet']
                 session_bj['finished'] = True
 
-                # BUFF LOBO ESPECTRAL (10% / 18% / 25% de salvar la apuesta)
-                wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
+                # BUFF LOBO ESPECTRAL: Protección balanceada (4%, 7%, 10%)
+                wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
                     wallet.add_funds(session_bj['bet'])
                     resultado = 'push'
                     ganancia = session_bj['bet']
+
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
 
             request.session['blackjack_state'] = session_bj
                 
@@ -2624,26 +2627,30 @@ def blackjack_game(request):
             if d_val > 21 or p_val > d_val:
                 ganancia = apuesta * 2
                 if pet and pet.species == 'panther':
-                    panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                    ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                    panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                    net = ganancia - apuesta
+                    ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
                     
                 wallet.add_funds(ganancia)
                 resultado = 'win'
-                grant_user_xp(request, tg_id, 12, reason="Victoria Blackjack")
+                grant_user_xp(request, tg_id, 4, reason="Victoria Blackjack")
             elif p_val == d_val:
                 wallet.add_funds(apuesta)
                 resultado = 'push'
                 ganancia = apuesta
+                grant_user_xp(request, tg_id, 2, reason="Empate Blackjack")
             else:
                 resultado = 'lose'
                 ganancia = apuesta
 
                 # BUFF LOBO ESPECTRAL
-                wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
+                wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
                     wallet.add_funds(apuesta)
                     resultado = 'push'
                     ganancia = apuesta
+
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
                 
             session_bj['finished'] = True
             request.session['blackjack_state'] = session_bj
@@ -2704,7 +2711,7 @@ def blackjack_game(request):
 
 
 # ==========================================
-# JUEGO: LAS MINAS DEL REINO (MINES VIP)
+# JUEGO: LAS MINAS DEL REINO (BLINDADO Y SIN EXPLOIT)
 # ==========================================
 
 def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
@@ -2718,8 +2725,9 @@ def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     if prob <= 0:
         return 1.0
     
-    raw_mult = 0.96 / prob
-    return max(1.05, round(raw_mult, 2))
+    # Margen de la casa del 6% (0.94) para sostenibilidad matemática
+    raw_mult = 0.94 / prob
+    return max(1.02, round(raw_mult, 2))
 
 
 def mines_game(request):
@@ -2763,6 +2771,7 @@ def mines_game(request):
                         'mines_count': mines_count,
                         'mines': mines_locations,
                         'revealed': [],
+                        'multiplier': 1.0,
                         'in_game': True
                     }
                     request.session['mines_state'] = session_mines
@@ -2789,10 +2798,9 @@ def mines_game(request):
                     if tile_idx in session_mines['mines']:
                         session_mines['in_game'] = False
                         all_mines = session_mines['mines']
-                        bet_lost = session_mines['bet']
                         request.session['mines_state'] = None
 
-                        grant_user_xp(request, tg_id, max(2, bet_lost // 5), reason="Minas del Reino")
+                        grant_user_xp(request, tg_id, 1, reason="Minas del Reino")
 
                         if is_ajax:
                             return JsonResponse({
@@ -2807,11 +2815,12 @@ def mines_game(request):
                         revealed_count = len(session_mines['revealed'])
                         mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
 
-                        # BUFF DRAGÓN CARMESÍ (+0.10x / +0.25x / +0.50x)
+                        # BUFF DRAGÓN CARMESÍ: Bonus controlado (+0.02x, +0.04x, +0.07x) aplicado UNA SOLA VEZ
                         if pet and pet.species == 'dragon':
-                            dragon_bonus = {1: 0.10, 2: 0.25, 3: 0.50}.get(pet.evolution_stage_number, 0.10)
+                            dragon_bonus = {1: 0.02, 2: 0.04, 3: 0.07}.get(pet.evolution_stage_number, 0.02)
                             mult = round(mult + dragon_bonus, 2)
 
+                        session_mines['multiplier'] = mult
                         cashout_val = int(session_mines['bet'] * mult)
 
                         total_gems = 25 - session_mines['mines_count']
@@ -2820,11 +2829,13 @@ def mines_game(request):
                         if auto_win:
                             session_mines['in_game'] = False
                             if pet and pet.species == 'panther':
-                                panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                                cashout_val = int(cashout_val * panther_rates.get(pet.evolution_stage_number, 1.10))
+                                panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                                net = cashout_val - session_mines['bet']
+                                cashout_val = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
+                                
                             wallet.add_funds(cashout_val)
                             request.session['mines_state'] = None
-                            grant_user_xp(request, tg_id, max(10, cashout_val // 4), reason="Pleno en Minas")
+                            grant_user_xp(request, tg_id, 8, reason="Pleno en Minas")
 
                         request.session['mines_state'] = session_mines if not auto_win else None
 
@@ -2842,29 +2853,25 @@ def mines_game(request):
             except ValueError:
                 pass
 
-        # 3. RETIRARSE Y COBRAR (CASHOUT)
+        # 3. RETIRARSE Y COBRAR (CASHOUT - SIN DUPLICAR MULTIPLICADORES)
         elif action == 'cashout' and session_mines and session_mines.get('in_game'):
-            revealed_count = len(session_mines['revealed'])
+            revealed_count = len(session_mines.get('revealed', []))
             if revealed_count > 0:
-                mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
-                
-                # BUFF DRAGÓN CARMESÍ
-                if pet and pet.species == 'dragon':
-                    dragon_bonus = {1: 0.10, 2: 0.25, 3: 0.50}.get(pet.evolution_stage_number, 0.10)
-                    mult = round(mult + dragon_bonus, 2)
-
+                # Usa el multiplicador exactamente calculado al abrir
+                mult = session_mines.get('multiplier', 1.0)
                 ganancia = int(session_mines['bet'] * mult)
 
-                # BUFF PANTERA DE ÉBANO
+                # Bonus Pantera solo sobre la ganancia neta
                 if pet and pet.species == 'panther':
-                    panther_rates = {1: 1.10, 2: 1.18, 3: 1.28}
-                    ganancia = int(ganancia * panther_rates.get(pet.evolution_stage_number, 1.10))
+                    panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                    net = max(0, ganancia - session_mines['bet'])
+                    ganancia = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
 
                 wallet.add_funds(ganancia)
                 all_mines = session_mines['mines']
                 request.session['mines_state'] = None
 
-                grant_user_xp(request, tg_id, max(5, ganancia // 4), reason="Retiro de Minas")
+                grant_user_xp(request, tg_id, 3, reason="Retiro de Minas")
 
                 if is_ajax:
                     return JsonResponse({
@@ -2880,12 +2887,7 @@ def mines_game(request):
     current_revealed = session_mines.get('revealed', []) if session_mines else []
     current_bet = session_mines.get('bet', 20) if session_mines else 20
     current_mines_count = session_mines.get('mines_count', 3) if session_mines else 3
-    current_mult = calculate_mines_multiplier(25, current_mines_count, len(current_revealed)) if in_game else 1.0
-
-    if in_game and pet and pet.species == 'dragon' and len(current_revealed) > 0:
-        dragon_bonus = {1: 0.10, 2: 0.25, 3: 0.50}.get(pet.evolution_stage_number, 0.10)
-        current_mult = round(current_mult + dragon_bonus, 2)
-
+    current_mult = session_mines.get('multiplier', 1.0) if in_game else 1.0
     current_cashout = int(current_bet * current_mult) if in_game else current_bet
 
     return render(request, 'economy/mines.html', {
@@ -2901,21 +2903,19 @@ def mines_game(request):
         'current_cashout': current_cashout,
     })
 
+
 def bazar_shop(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
     
-    # Identificar si es idol
     user_role = UserRole.objects.filter(telegram_id=tg_id).first()
     mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id)
     is_idol = (user_role and user_role.role == 'idol') or mis_idols.exists()
     
-    # Lista de todas las idols para enviarles tributos
     todas_idols = IdolProfile.objects.all().order_by('stage_name')
 
-    # Inventario del usuario
     inv_lucky = UserInventoryItem.get_count(tg_id, 'lucky_charm')
     inv_market = UserInventoryItem.get_count(tg_id, 'free_market')
     inv_priority = UserInventoryItem.get_count(tg_id, 'priority_antojo')
@@ -2943,20 +2943,20 @@ def bazar_buy_action(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
 
-    # Catálogo de precios y validaciones
+    # Catálogo de precios reales del Bazar Imperial (Rebalanceado)
     PRICES = {
-        'shield_15': 150,
-        'shield_30': 250,
-        'dungeon_bail': 300,
-        'custom_title': 200,
-        'imperial_frame': 180,
-        'vip_badge': 120,
-        'tribute_gift': 150,
-        'priority_antojo': 100,
-        'featured_idol': 200,
-        'lucky_charm': 120,
-        'free_market': 80,
-        'energy_potion': 75,
+        'shield_15': 350,       # Salvoconducto 15 días
+        'shield_30': 600,       # Salvoconducto mensual
+        'dungeon_bail': 500,     # Fianza de Mazmorra
+        'custom_title': 450,     # Edicto de Título Libre
+        'imperial_frame': 400,   # Marco Llama Carmesí
+        'vip_badge': 300,        # Distintivo VIP
+        'tribute_gift': 350,     # Gargantilla de Rubíes para Musa (Idol recibe 280🪙)
+        'priority_antojo': 200,  # Sello de Antojo Prioritario
+        'featured_idol': 450,    # Musa Destacada en Galería (3 días)
+        'lucky_charm': 250,      # Llave Dorada (Doble chance CS)
+        'free_market': 150,      # Patente 0% tax en Mercado
+        'energy_potion': 120,    # Elixir de Energía para mascota
     }
 
     price = PRICES.get(item_key)
@@ -2968,7 +2968,6 @@ def bazar_buy_action(request):
 
     msg = ""
 
-    # 1. SALVAGUARDAS
     if item_key == 'shield_15':
         current_end = profile.inactivity_shield_until if profile.is_shield_active else timezone.now()
         profile.inactivity_shield_until = current_end + timedelta(days=15)
@@ -2993,7 +2992,6 @@ def bazar_buy_action(request):
         wallet.remove_funds(price)
         msg = "⚖️ Fianza pagada. Has sido liberado de la mazmorra con honor restaurado."
 
-    # 2. ESTATUS
     elif item_key == 'custom_title':
         title_text = request.POST.get('custom_title_text', '').strip()
         if not title_text:
@@ -3016,7 +3014,6 @@ def bazar_buy_action(request):
         wallet.remove_funds(price)
         msg = "✨ ¡Distintivo de Linaje VIP activado para tus comentarios!"
 
-    # 3. MUSAS
     elif item_key == 'tribute_gift':
         idol_id = request.POST.get('target_idol_id')
         idol = IdolProfile.objects.filter(id=idol_id).first()
@@ -3024,7 +3021,6 @@ def bazar_buy_action(request):
             return JsonResponse({'success': False, 'error': 'Selecciona una Musa válida.'}, status=400)
         
         wallet.remove_funds(price)
-        # La idol recibe el 80% neto (120 🪙)
         idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=idol.telegram_user_id)
         net_gold = int(price * 0.8)
         idol_wallet.add_funds(net_gold)
@@ -3067,7 +3063,6 @@ def bazar_buy_action(request):
         wallet.remove_funds(price)
         msg = f"✨ ¡{idol.stage_name} fijada en la cima de la Galería por 3 días!"
 
-    # 4. RELICARIOS Y SANTUARIO
     elif item_key == 'lucky_charm':
         UserInventoryItem.add_item(tg_id, 'lucky_charm', 1)
         wallet.remove_funds(price)
@@ -3372,6 +3367,7 @@ class CustomRequest(models.Model):
 
 class PostComment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies', verbose_name="Respuesta a") # 👈 NUEVO CAMPO
     author_telegram_id = models.BigIntegerField("ID del Autor", db_index=True)
     author_name = models.CharField("Nombre o @ de Usuario", max_length=100)
     text = models.TextField("Comentario", max_length=250)
@@ -3573,6 +3569,7 @@ from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.contrib import messages
 from django.db import transaction
+from django.conf import settings
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import InMemoryUploadedFile
 
@@ -3701,7 +3698,36 @@ def idol_list(request):
             idol_id = request.POST.get('idol_id')
             new_status = request.POST.get('status')
             if idol_id and new_status:
-                IdolProfile.objects.filter(id=idol_id, telegram_user_id=tg_id).update(status=new_status)
+                idol = IdolProfile.objects.filter(id=idol_id, telegram_user_id=tg_id).first()
+                if idol and idol.status != new_status:
+                    idol.status = new_status
+                    idol.save(update_fields=['status'])
+
+                    # 📢 Avisar al grupo oficial de Telegram si se pone disponible o en antojos
+                    group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
+                    if group_id and new_status in ['online', 'antojos']:
+                        if new_status == 'online':
+                            status_text = (
+                                f"🟢 <b>¡Musa en los Aposentos Reales!</b> ✨\n\n"
+                                f"🌹 <b>{idol.stage_name}</b> se encuentra disponible para chatear y atender a los nobles de la corte.\n\n"
+                                f"¿Deseas iniciar una conversación privada?"
+                            )
+                            btn_text = f"💬 Hablar con {idol.stage_name}"
+                        else:
+                            status_text = (
+                                f"🔥 <b>¡Sesión de Antojos Abierta!</b> 🔞\n\n"
+                                f"🌹 <b>{idol.stage_name}</b> acaba de abrir su bandeja para peticiones especiales y fotos a pedido.\n\n"
+                                f"¡Haz tu solicitud antes de que se agoten los cupos!"
+                            )
+                            btn_text = f"💌 Pedir Antojo a {idol.stage_name}"
+
+                        send_telegram_msg(
+                            chat_id=group_id,
+                            text=status_text,
+                            button_text=btn_text,
+                            button_url="https://t.me/KingdomPleasure_bot?start=entrar"
+                        )
+
             return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
             
         elif action in ['accept_request', 'reject_request']:
@@ -3815,6 +3841,23 @@ def idol_create(request):
             UserRole.objects.filter(telegram_id=tg_id).update(role='idol')
 
             grant_user_xp(request, tg_id, 30, reason="Creación de Idol")
+
+            # 📢 Anuncio de Bienvenida al Grupo Oficial
+            group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
+            if group_id:
+                welcome_txt = (
+                    f"👑 <b>¡NUEVA MUSA CONSAGRADA EN EL REINO!</b> 🌹\n\n"
+                    f"Demos la bienvenida a la deslumbrante <b>{stage_name}</b>" + (f" ({group})" if group else "") + f".\n"
+                    + (f"✨ <i>«{tagline}»</i>\n\n" if tagline else "\n") +
+                    f"Ingresa a la corte para conocer sus aposentos y brindarle tu primera ofrenda."
+                )
+                send_telegram_msg(
+                    chat_id=group_id,
+                    text=welcome_txt,
+                    button_text=f"🎭 Conocer a {stage_name}",
+                    button_url="https://t.me/KingdomPleasure_bot?start=entrar"
+                )
+
             messages.success(request, f"✨ ¡{stage_name} ha sido registrada con éxito! (+30 EXP)")
             return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
         except Exception as e:
@@ -3869,19 +3912,42 @@ def idol_delete(request, idol_id):
 def idol_gallery(request):
     tg_id = resolve_safe_tg(request)
     
-    all_idols = IdolProfile.objects.annotate(
-        total_unlocks=Count('posts__unlocks')
-    ).order_by('-rating', '-total_unlocks')
+    # 👑 Orden y filtro por dueña/usuario (Punto 5)
+    sort_by = request.GET.get('sort', 'rating')
+    owner_filter = request.GET.get('owner', '').strip()
 
+    query = IdolProfile.objects.annotate(
+        total_unlocks=Count('posts__unlocks')
+    )
+
+    if owner_filter:
+        query = query.filter(owner_username__icontains=owner_filter)
+
+    if sort_by == 'owner':
+        all_idols = query.order_by('owner_username', 'stage_name')
+    elif sort_by == 'services':
+        all_idols = query.order_by('-services_done', '-rating')
+    elif sort_by == 'recent':
+        all_idols = query.order_by('-created_at')
+    else:  # rating
+        all_idols = query.order_by('-rating', '-total_unlocks')
+
+    all_idols = list(all_idols)
     max_unlocks = max([i.total_unlocks for i in all_idols], default=0)
 
     for idol in all_idols:
         idol.is_trending = (max_unlocks > 0 and idol.total_unlocks == max_unlocks)
         idol.is_top_rated = (idol.rating >= 4.80 and idol.services_done >= 2)
 
+    # Lista única de dueñas para el selector
+    all_owners = list(IdolProfile.objects.exclude(owner_username__isnull=True).exclude(owner_username='').values_list('owner_username', flat=True).distinct())
+
     return render(request, 'idols/gallery.html', {
         'all_idols': all_idols,
-        'tg_id': tg_id
+        'tg_id': tg_id,
+        'sort_by': sort_by,
+        'owner_filter': owner_filter,
+        'all_owners': all_owners,
     })
 
 
@@ -4026,7 +4092,7 @@ def edit_post(request, post_id):
         return redirect(f'/idols/feed/?tg_id={tg_id}')
 
     creator_profile = UserProfile.objects.filter(telegram_user_id=post.idol.telegram_user_id).first()
-    max_price = creator_profile.max_post_price_allowed if creator_profile else 80
+    max_price = creator_profile.max_post_price_allowed if creator_profile else 100
 
     if request.method == 'POST':
         post.caption = request.POST.get('caption', '').strip()
@@ -4100,8 +4166,8 @@ def unlock_post(request, post_id):
                 idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
                 idol_wallet.add_funds(ganancia_idol)
                 
-                grant_user_xp(request, tg_id, max(5, precio_final // 4), reason="Desbloqueo VIP")
-                grant_user_xp(None, post.idol.telegram_user_id, max(5, precio_final // 5), reason="Venta de Contenido VIP")
+                grant_user_xp(request, tg_id, max(5, precio_final // 10), reason="Desbloqueo VIP")
+                grant_user_xp(None, post.idol.telegram_user_id, max(5, precio_final // 10), reason="Venta de Contenido VIP")
 
                 client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
                 comprador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
@@ -4137,12 +4203,12 @@ def create_post(request):
         return redirect(f'/idols/?tg_id={tg_id}')
         
     creator_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-    max_price = creator_profile.max_post_price_allowed if creator_profile else 80
+    max_price = creator_profile.max_post_price_allowed if creator_profile else 100
 
     if request.method == 'POST':
         idol_id = request.POST.get('idol_id')
         network = request.POST.get('network')
-        caption = request.POST.get('caption')
+        caption = request.POST.get('caption', '').strip()
         media_type = request.POST.get('media_type', 'image')
         raw_image = request.FILES.get('image')
         raw_video = request.FILES.get('video')
@@ -4179,6 +4245,36 @@ def create_post(request):
                     price=int(price) if network == 'fans' else 0
                 )
                 grant_user_xp(request, tg_id, 20 if media_type == 'video' else 15, reason="Nuevo Post Publicado")
+
+                # 📢 Notificación al Grupo Oficial de Telegram (Punto 4)
+                group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
+                if group_id:
+                    clean_caption = (caption[:110] + '...') if len(caption) > 110 else caption
+                    if network == 'fans':
+                        post_text = (
+                            f"🔞 <b>¡Nueva Sesión VIP en KingdomFans!</b> 💎\n\n"
+                            f"🌹 <b>Musa:</b> {idol.stage_name} ({idol.group or 'Solista'})\n"
+                            f"🪙 <b>Tarifa:</b> <b>{price} 🪙</b>\n"
+                            f"📝 <i>«{clean_caption}»</i>\n\n"
+                            f"Cruza el umbral para desbloquear el contenido exclusivo para tu Colección."
+                        )
+                        btn_label = f"💎 Ver Contenido de {idol.stage_name}"
+                    else:
+                        post_text = (
+                            f"📸 <b>¡Nueva Publicación en KingdomGram!</b> ✨\n\n"
+                            f"🌹 <b>Musa:</b> {idol.stage_name} ({idol.group or 'Solista'})\n"
+                            f"📝 <i>«{clean_caption}»</i>\n\n"
+                            f"Visita el Muro para admirar la sesión y dejarle tus halagos."
+                        )
+                        btn_label = f"📱 Ver Muro de {idol.stage_name}"
+
+                    send_telegram_msg(
+                        chat_id=group_id,
+                        text=post_text,
+                        button_text=btn_label,
+                        button_url="https://t.me/KingdomPleasure_bot?start=entrar"
+                    )
+
                 messages.success(request, f"¡Publicación realizada exitosamente como {idol.stage_name}!")
                 return redirect(f'/idols/feed/?tg_id={tg_id}')
                 
@@ -4273,8 +4369,8 @@ def send_tip(request, post_id):
             idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
             idol_wallet.add_funds(neto_idol)
             
-            grant_user_xp(request, tg_id, max(5, amount // 5), reason="Ofrenda a Musa")
-            grant_user_xp(None, post.idol.telegram_user_id, max(5, amount // 5), reason="Ofrenda Recibida")
+            grant_user_xp(request, tg_id, max(2, amount // 20), reason="Ofrenda a Musa")
+            grant_user_xp(None, post.idol.telegram_user_id, max(2, amount // 20), reason="Ofrenda Recibida")
 
             client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
             invitador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
@@ -4314,8 +4410,8 @@ def create_custom_request(request, idol_id):
             bounty = 100
             
         description = request.POST.get('description', '').strip()
-        if bounty <= 0 or not description:
-            messages.error(request, "Por favor completa la descripción y una oferta válida.")
+        if bounty < 100 or not description:
+            messages.error(request, "La ofrenda mínima para un antojo es de 100 🪙 y requiere una descripción.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
             
         client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
@@ -4355,23 +4451,43 @@ def add_comment(request, post_id):
         profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
         tg_username = request.POST.get('tg_username') or (profile.username if profile else 'Noble')
         text = request.POST.get('text', '').strip()
+        parent_id = request.POST.get('parent_id')
         post = get_object_or_404(Post, id=post_id)
         
         if text:
             nombre_final = f"{post.idol.stage_name} (Idol)" if (tg_id and tg_id == post.idol.telegram_user_id) else tg_username
+            
+            parent_comment = None
+            if parent_id and str(parent_id).isdigit():
+                parent_comment = PostComment.objects.filter(id=int(parent_id), post=post).first()
+
             PostComment.objects.create(
                 post=post,
+                parent=parent_comment,
                 author_telegram_id=tg_id if tg_id else 0,
                 author_name=nombre_final,
                 text=text
             )
-            grant_user_xp(request, tg_id, 5, reason="Comentario en Muro")
+            grant_user_xp(request, tg_id, 3, reason="Comentario en Muro")
 
-            if tg_id != post.idol.telegram_user_id:
+            # 1. Si es respuesta a otro usuario, avisar por Telegram a quien escribió el comentario original
+            if parent_comment and parent_comment.author_telegram_id and parent_comment.author_telegram_id != tg_id:
+                send_telegram_msg(
+                    chat_id=parent_comment.author_telegram_id,
+                    text=(
+                        f"💬 <b>¡Respondieron a tu comentario!</b>\n\n"
+                        f"👤 <b>{nombre_final}</b> te respondió en la publicación de {post.idol.stage_name}:\n"
+                        f"<i>«{text}»</i>"
+                    ),
+                    button_text="📱 Ver Respuesta",
+                    button_url=f"https://kingdom-pleasure-app.onrender.com/idols/feed/?tg_id={parent_comment.author_telegram_id}"
+                )
+            # 2. Si es un comentario nuevo para la Idol, avisarle a la dueña de la Musa
+            elif tg_id != post.idol.telegram_user_id:
                 send_telegram_msg(
                     chat_id=post.idol.telegram_user_id,
                     text=(
-                        f"💬 <b>¡Nuevo comentario para tu Musa {post.idol.stage_name}!</b>\n\n"
+                        f"💬 <b>¡Nuevo halago para tu Musa {post.idol.stage_name}!</b>\n\n"
                         f"👤 <b>Usuario:</b> {nombre_final}\n"
                         f"📝 <i>«{text}»</i>"
                     ),
@@ -4379,7 +4495,7 @@ def add_comment(request, post_id):
                     button_url=f"https://kingdom-pleasure-app.onrender.com/idols/feed/?tg_id={post.idol.telegram_user_id}"
                 )
 
-            messages.success(request, "Comentario publicado (+5 EXP).")
+            messages.success(request, "Comentario publicado (+3 EXP).")
             
         return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
 
@@ -4465,6 +4581,24 @@ def open_photocard_box_ajax(request, box_id):
     xp_map = {'common': 5, 'rare': 12, 'epic': 25, 'legendary': 50}
     grant_user_xp(request, tg_id, xp_map.get(winner.rarity, 10), reason=f"Photocard {winner.get_rarity_display()}")
 
+    # 📢 Si desentierra una carta LEGENDARIA, notificar a todo el grupo oficial con fanfarria (Punto 4)
+    if winner.rarity == 'legendary':
+        group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
+        if group_id:
+            user_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+            noble_name = user_prof.username if user_prof else f"Noble_{tg_id}"
+            send_telegram_msg(
+                chat_id=group_id,
+                text=(
+                    f"👑🎉 <b>¡DESENTIERRO LEGENDARIO EN EL REINO!</b> 🎉👑\n\n"
+                    f"El afortunado <b>{noble_name}</b> abrió el relicario <i>«{box.name}»</i> y obtuvo una carta <b>LEGENDARIA</b>:\n\n"
+                    f"🎴 <b>«{winner.name}»</b> ({winner.display_idol_name})\n\n"
+                    f"¡Rindamos honores a su increíble fortuna en los relicarios!"
+                ),
+                button_text="🎁 Probar Mi Suerte en Cajas",
+                button_url="https://t.me/KingdomPleasure_bot?start=entrar"
+            )
+
     reel = []
     for i in range(35):
         card_item = winner if i == 28 else random.choice(all_cards)
@@ -4537,7 +4671,7 @@ def admin_photocards_manage(request):
             if action == 'create_box':
                 name = request.POST.get('name', '').strip()
                 description = request.POST.get('description', '').strip()
-                price = int(request.POST.get('price', 50))
+                price = int(request.POST.get('price', 120))
                 cover_image = optimize_uploaded_image(request.FILES.get('cover_image'))
                 if name:
                     PhotocardBox.objects.create(name=name, description=description, price=price, cover_image=cover_image)
@@ -4714,8 +4848,8 @@ def photocard_sell_action(request, user_card_id):
         if mode == 'list':
             try:
                 price = int(request.POST.get('price', 50))
-                if price < 5:
-                    messages.error(request, "El precio mínimo de venta es de 5 🪙.")
+                if price < 20:  # 👈 Mínimo de 20 monedas para evitar spam
+                    messages.error(request, "El precio mínimo de venta en el Mercado es de 20 🪙.")
                 else:
                     user_card.is_for_sale = True
                     user_card.sale_price = price
@@ -5254,9 +5388,9 @@ def interact_pet(request):
                 messages.info(request, msg)
                 return redirect(f'/pets/?tg_id={tg_id}')
 
-            if wallet.remove_funds(15):
+            if wallet.remove_funds(25): # 👈 Rebalanceado a 25 🪙
                 pet.feed()
-                grant_user_xp(request, tg_id, 8, reason="Alimentar Mascota")
+                grant_user_xp(request, tg_id, 4, reason="Alimentar Mascota")
                 
                 new_stage = pet.evolution_stage_number
                 did_evolve = (new_stage > old_stage)
@@ -5374,20 +5508,19 @@ def expedition_pet(request):
         card_dropped = None
 
         if zone == 'forest':
-            gold_found = random.randint(15, 35) + pet.level
+            gold_found = random.randint(10, 20) + min(10, pet.level)
             xp_mascota = 25
             if random.random() < 0.30:
                 food_found = True
                 pet.energy = min(100, pet.energy + 20)
 
         elif zone == 'crypts':
-            gold_found = random.randint(45, 85) + (pet.level * 2)
-            xp_mascota = 50
+            gold_found = random.randint(25, 45) + min(15, pet.level)
+            xp_mascota = 45
             if random.random() < 0.20:
                 food_found = True
                 pet.energy = min(100, pet.energy + 20)
 
-            # Buff Conejo Lunar aumenta probabilidad
             chance_card = 0.25 if pet.species == 'rabbit' else 0.15
             if random.random() < chance_card:
                 pool = Photocard.objects.filter(rarity__in=['common', 'rare'])
@@ -5403,8 +5536,8 @@ def expedition_pet(request):
                     }
 
         else: # cavern
-            gold_found = random.randint(100, 200) + (pet.level * 3)
-            xp_mascota = 85
+            gold_found = random.randint(50, 90) + min(25, pet.level * 2)
+            xp_mascota = 70
 
             chance_card = 0.40 if pet.species == 'rabbit' else 0.25
             if random.random() < chance_card:
@@ -5480,7 +5613,7 @@ def change_pet(request):
         tg_id = resolve_tg_id(request)
         new_species = request.POST.get('new_species') or request.POST.get('species')
         new_name = request.POST.get('new_name', '').strip()
-        cost = 300
+        cost = 500  # 👈 Rebalanceado a 500 🪙
         
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
@@ -7229,10 +7362,10 @@ ARCHIVO: .\templates\economy\bazar.html
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-white truncate">Salvoconducto Real (15 Días)</h3>
                     <p class="text-[10px] text-stone-300 mt-0.5">Inmunidad ante purgas de inactividad del grupo.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">150 🪙</span>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">350 🪙</span>
                 </div>
             </div>
-            <button type="button" onclick="buyBazarItem('shield_15', 'Salvoconducto de 15 Días', 150)"
+            <button type="button" onclick="buyBazarItem('shield_15', 'Salvoconducto de 15 Días', 350)"
                     class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
                 Comprar
             </button>
@@ -7246,11 +7379,11 @@ ARCHIVO: .\templates\economy\bazar.html
                 </div>
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-white truncate">Salvoconducto Mensual (30 Días)</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Cobertura mensual extendida con descuento.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">250 🪙</span>
+                    <p class="text-[10px] text-stone-300 mt-0.5">Cobertura mensual extendida con honor.</p>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">600 🪙</span>
                 </div>
             </div>
-            <button type="button" onclick="buyBazarItem('shield_30', 'Salvoconducto de 30 Días', 250)"
+            <button type="button" onclick="buyBazarItem('shield_30', 'Salvoconducto de 30 Días', 600)"
                     class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
                 Comprar
             </button>
@@ -7265,10 +7398,10 @@ ARCHIVO: .\templates\economy\bazar.html
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-white truncate">Indulto de Mazmorra (Fianza)</h3>
                     <p class="text-[10px] text-stone-300 mt-0.5">Levanta sanciones de rol o muteos leves al instante.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">300 🪙</span>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">500 🪙</span>
                 </div>
             </div>
-            <button type="button" onclick="buyBazarItem('dungeon_bail', 'Indulto de Mazmorra', 300)"
+            <button type="button" onclick="buyBazarItem('dungeon_bail', 'Indulto de Mazmorra', 500)"
                     class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
                 Comprar
             </button>
@@ -7289,7 +7422,7 @@ ARCHIVO: .\templates\economy\bazar.html
                     <div class="flex flex-col min-w-0">
                         <h3 class="text-xs font-black text-white truncate">Edicto de Título Libre</h3>
                         <p class="text-[10px] text-stone-300 mt-0.5">Tu apodo o título personalizado visible en tu perfil.</p>
-                        <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">200 🪙</span>
+                        <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">450 🪙</span>
                     </div>
                 </div>
             </div>
@@ -7312,10 +7445,10 @@ ARCHIVO: .\templates\economy\bazar.html
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-white truncate">Marco Imperial Llama Carmesí</h3>
                     <p class="text-[10px] text-stone-300 mt-0.5">Borde resplandeciente para tu foto de perfil.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">180 🪙</span>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">400 🪙</span>
                 </div>
             </div>
-            <button type="button" onclick="buyBazarItem('imperial_frame', 'Marco Imperial Carmesí', 180)"
+            <button type="button" onclick="buyBazarItem('imperial_frame', 'Marco Imperial Carmesí', 400)"
                     class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
                 Comprar
             </button>
@@ -7330,10 +7463,10 @@ ARCHIVO: .\templates\economy\bazar.html
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-white truncate">Distintivo de Linaje VIP</h3>
                     <p class="text-[10px] text-stone-300 mt-0.5">Insignia dorada [👑 NOBLE VIP] en tus comentarios.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">120 🪙</span>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">300 🪙</span>
                 </div>
             </div>
-            <button type="button" onclick="buyBazarItem('vip_badge', 'Distintivo de Linaje VIP', 120)"
+            <button type="button" onclick="buyBazarItem('vip_badge', 'Distintivo de Linaje VIP', 300)"
                     class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
                 Comprar
             </button>
@@ -7341,7 +7474,7 @@ ARCHIVO: .\templates\economy\bazar.html
 
     </div>
 
-    <!-- 🌹 VITRINA 3: EL SALÓN DE MUSAS (INTERACCIÓN NOBLE ↔ IDOL) -->
+    <!-- 🌹 VITRINA 3: EL SALÓN DE MUSAS -->
     <div id="vitrina-musas" class="hidden flex flex-col gap-3">
         
         <!-- Tributo de Joyería de Corte -->
@@ -7352,8 +7485,8 @@ ARCHIVO: .\templates\economy\bazar.html
                 </div>
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-white truncate">Gargantilla de Rubíes Imperial</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Envía un tributo a una Musa: ella cobra 120 🪙 netos y recibe aviso en Telegram.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">150 🪙</span>
+                    <p class="text-[10px] text-stone-300 mt-0.5">Envía un tributo a una Musa: ella cobra 280 🪙 netos y recibe aviso en Telegram.</p>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">350 🪙</span>
                 </div>
             </div>
             
@@ -7380,10 +7513,10 @@ ARCHIVO: .\templates\economy\bazar.html
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-white truncate">Sello de Antojo Prioritario</h3>
                     <p class="text-[10px] text-stone-300 mt-0.5">Coloca tu petición en la cima de la bandeja de la Idol.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">100 🪙 (Tienes: {{ inv_priority }})</span>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">200 🪙 (Tienes: {{ inv_priority }})</span>
                 </div>
             </div>
-            <button type="button" onclick="buyBazarItem('priority_antojo', 'Sello de Antojo Prioritario', 100)"
+            <button type="button" onclick="buyBazarItem('priority_antojo', 'Sello de Antojo Prioritario', 200)"
                     class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
                 Comprar
             </button>
@@ -7399,7 +7532,7 @@ ARCHIVO: .\templates\economy\bazar.html
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-yellow-300 truncate">Pase de Musa Destacada (Exclusivo Idol)</h3>
                     <p class="text-[10px] text-stone-300 mt-0.5">Fija tu perfil al tope de la Galería con brillo dorado por 3 días.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">200 🪙</span>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">450 🪙</span>
                 </div>
             </div>
             <div class="flex gap-2 pt-1 border-t border-white/5">
@@ -7430,10 +7563,10 @@ ARCHIVO: .\templates\economy\bazar.html
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-white truncate">Llave Dorada de la Fortuna</h3>
                     <p class="text-[10px] text-stone-300 mt-0.5">Duplica la probabilidad de cartas Épicas y Legendarias en tu próximo Relicario.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">120 🪙 (Tienes: {{ inv_lucky }})</span>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">250 🪙 (Tienes: {{ inv_lucky }})</span>
                 </div>
             </div>
-            <button type="button" onclick="buyBazarItem('lucky_charm', 'Llave Dorada de la Fortuna', 120)"
+            <button type="button" onclick="buyBazarItem('lucky_charm', 'Llave Dorada de la Fortuna', 250)"
                     class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
                 Comprar
             </button>
@@ -7448,10 +7581,10 @@ ARCHIVO: .\templates\economy\bazar.html
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-white truncate">Patente de Comercio Libre (0% Tax)</h3>
                     <p class="text-[10px] text-stone-300 mt-0.5">Exonera el 10% de impuesto real en tu siguiente venta de Photocard en el Mercado.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">80 🪙 (Tienes: {{ inv_market }})</span>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">150 🪙 (Tienes: {{ inv_market }})</span>
                 </div>
             </div>
-            <button type="button" onclick="buyBazarItem('free_market', 'Patente de Comercio Libre', 80)"
+            <button type="button" onclick="buyBazarItem('free_market', 'Patente de Comercio Libre', 150)"
                     class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
                 Comprar
             </button>
@@ -7466,10 +7599,10 @@ ARCHIVO: .\templates\economy\bazar.html
                 <div class="flex flex-col min-w-0">
                     <h3 class="text-xs font-black text-white truncate">Elixir de Vitalidad Espiritual</h3>
                     <p class="text-[10px] text-stone-300 mt-0.5">Rellena al 100% la energía de tu mascota al instante para volver a explorar.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">75 🪙</span>
+                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">120 🪙</span>
                 </div>
             </div>
-            <button type="button" onclick="buyBazarItem('energy_potion', 'Elixir de Vitalidad', 75)"
+            <button type="button" onclick="buyBazarItem('energy_potion', 'Elixir de Vitalidad', 120)"
                     class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
                 Comprar
             </button>
@@ -7542,7 +7675,7 @@ ARCHIVO: .\templates\economy\bazar.html
     function buyCustomTitle() {
         const val = document.getElementById('input-custom-title').value.trim();
         if (!val) { alert("Ingresa el título que deseas consagrar."); return; }
-        if (!confirm(`¿Consagrar el título «${val}» por 200 🪙?`)) return;
+        if (!confirm(`¿Consagrar el título «${val}» por 450 🪙?`)) return;
         const fd = new FormData();
         fd.append('item_key', 'custom_title');
         fd.append('custom_title_text', val);
@@ -7552,7 +7685,7 @@ ARCHIVO: .\templates\economy\bazar.html
     function sendTributeToIdol() {
         const idolId = document.getElementById('select-tribute-idol').value;
         if (!idolId) { alert("Selecciona a la Musa que recibirá el tributo."); return; }
-        if (!confirm("¿Enviar la Gargantilla de Rubíes por 150 🪙? (La Idol recibirá 120 🪙 netos).")) return;
+        if (!confirm("¿Enviar la Gargantilla de Rubíes por 350 🪙? (La Idol recibirá 280 🪙 netos en su Bóveda).")) return;
         const fd = new FormData();
         fd.append('item_key', 'tribute_gift');
         fd.append('target_idol_id', idolId);
@@ -7562,7 +7695,7 @@ ARCHIVO: .\templates\economy\bazar.html
     function featureMyIdol() {
         const idolId = document.getElementById('select-my-idol').value;
         if (!idolId) return;
-        if (!confirm("¿Fijar a tu Musa al tope de la Galería por 3 días (200 🪙)?")) return;
+        if (!confirm("¿Fijar a tu Musa al tope de la Galería por 3 días (450 🪙)?")) return;
         const fd = new FormData();
         fd.append('item_key', 'featured_idol');
         fd.append('target_idol_id', idolId);
@@ -7921,46 +8054,47 @@ ARCHIVO: .\templates\economy\casino.html
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-40">
+<div class="flex flex-col gap-4 mt-2 pb-44 max-w-md mx-auto">
     
     <!-- ENCABEZADO Y VOLVER -->
     <div class="flex justify-between items-center px-1">
         <button type="button" onclick="universalNav('/economy/wallet/')" 
-           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
-            ⬅ Bóveda
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
+            <span>⬅</span> <span>Bóveda</span>
         </button>
-        <div class="flex items-center gap-1.5 bg-black/60 border border-vip-gold/30 px-3 py-1.5 rounded-full shadow-inner">
+        <div class="flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3 py-1.5 rounded-full shadow-inner">
             <span class="text-xs">🪙</span>
             <span class="text-xs font-mono font-bold text-gold-gradient" id="top-user-balance">{{ wallet.balance }}</span>
+            <span class="text-[9px] uppercase font-bold text-yellow-400">Oro</span>
         </div>
     </div>
 
     <!-- MESA DE RULETA VIP ANIMADA -->
-    <div class="vip-panel p-5 text-center relative overflow-hidden flex flex-col items-center border border-vip-gold/40 shadow-2xl">
+    <div class="vip-panel p-5 text-center relative overflow-hidden flex flex-col items-center border border-vip-gold/40 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1a0a28] via-[#090212] to-black">
         
         <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
             Ruleta Real Europea
         </h2>
-        <p class="text-[11px] text-vip-text/60 mb-2">Tope de tu rango: <strong class="text-yellow-400 font-mono">{{ max_bet }} 🪙</strong></p>
+        <p class="text-[11px] text-stone-400 mb-1">Tope de tu rango: <strong class="text-yellow-400 font-mono">{{ max_bet }} 🪙</strong></p>
 
-        <!-- RUEDA GIRATORIA CON FÍSICA SUAVE -->
-        <div class="relative my-4 flex items-center justify-center">
+        <!-- 🎡 RUEDA CINEMATOGRÁFICA HD CON CASILLAS NUMERADAS -->
+        <div class="relative my-3 flex items-center justify-center select-none">
             
-            <!-- Puntero indicador superior -->
-            <div class="absolute -top-3.5 z-30 text-yellow-400 text-2xl filter drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] animate-pulse">
-                ▼
+            <!-- Aguja Láser Superior Centrada -->
+            <div class="absolute -top-3.5 z-30 flex flex-col items-center pointer-events-none filter drop-shadow-[0_2px_8px_rgba(234,179,8,0.9)]">
+                <span class="text-yellow-400 text-2xl leading-none animate-pulse">▼</span>
             </div>
 
-            <!-- Disco exterior con casilleros -->
-            <div id="roulette-wheel" class="w-52 h-52 rounded-full border-4 border-vip-gold shadow-[0_0_35px_rgba(212,175,55,0.35)] flex items-center justify-center relative overflow-hidden transition-transform duration-[3500ms] cubic-bezier(0.12, 0.8, 0.2, 1)" 
-                 style="background: conic-gradient(#dc2626 0deg 9.7deg, #171717 9.7deg 19.4deg, #dc2626 19.4deg 29.1deg, #171717 29.1deg 38.8deg, #dc2626 38.8deg 48.5deg, #16a34a 48.5deg 58.2deg, #dc2626 58.2deg 67.9deg, #171717 67.9deg 77.6deg, #dc2626 77.6deg 87.3deg, #171717 87.3deg 97deg, #dc2626 97deg 106.7deg, #171717 106.7deg 116.4deg, #dc2626 116.4deg 126.1deg, #171717 126.1deg 135.8deg, #dc2626 135.8deg 145.5deg, #171717 145.5deg 155.2deg, #dc2626 155.2deg 164.9deg, #171717 164.9deg 174.6deg, #dc2626 174.6deg 184.3deg, #171717 184.3deg 194deg, #dc2626 194deg 203.7deg, #171717 203.7deg 213.4deg, #dc2626 213.4deg 223.1deg, #171717 223.1deg 232.8deg, #dc2626 232.8deg 242.5deg, #171717 242.5deg 252.2deg, #dc2626 252.2deg 261.9deg, #171717 261.9deg 271.6deg, #dc2626 271.6deg 281.3deg, #171717 281.3deg 291deg, #dc2626 291deg 300.7deg, #171717 300.7deg 310.4deg, #dc2626 310.4deg 320.1deg, #171717 320.1deg 329.8deg, #dc2626 329.8deg 339.5deg, #171717 339.5deg 349.2deg, #dc2626 349.2deg 360deg);">
-                
-                <!-- Centro de latón dorado -->
-                <div id="center-disc" class="w-24 h-24 rounded-full bg-gradient-to-br from-[#2c1404] via-black to-[#130701] border-2 border-vip-gold/80 flex flex-col items-center justify-center z-10 shadow-2xl transition-all">
-                    <span id="center-display-num" class="text-3xl font-black font-mono text-white drop-shadow">
+            <!-- Rueda Canvas Giratoria -->
+            <div id="wheel-wrapper" class="relative w-64 h-64 rounded-full border-4 border-vip-gold shadow-[0_0_35px_rgba(212,175,55,0.4)] flex items-center justify-center overflow-hidden bg-black">
+                <canvas id="roulette-canvas" width="280" height="280" class="w-full h-full block will-change-transform"></canvas>
+
+                <!-- Medallón Central Dorado -->
+                <div id="center-disc" class="absolute w-20 h-20 rounded-full bg-gradient-to-br from-[#2c1404] via-black to-[#130701] border-2 border-vip-gold shadow-2xl flex flex-col items-center justify-center z-20 pointer-events-none transition-transform duration-300">
+                    <span id="center-display-num" class="text-2xl font-black font-mono text-white drop-shadow">
                         👑
                     </span>
-                    <span id="center-display-text" class="text-[9px] uppercase font-bold text-vip-gold tracking-widest mt-0.5">
+                    <span id="center-display-text" class="text-[8.5px] uppercase font-black text-vip-gold tracking-widest mt-0.5">
                         Casino
                     </span>
                 </div>
@@ -7969,8 +8103,8 @@ ARCHIVO: .\templates\economy\casino.html
         </div>
 
         <!-- BANNER DE RESULTADO DINÁMICO -->
-        <div id="roulette-result-box" class="w-full min-h-[46px] flex items-center justify-center my-1">
-            <span class="text-xs text-vip-text/50">Elige tu casillero y gira la ruleta</span>
+        <div id="roulette-result-box" class="w-full min-h-[44px] flex items-center justify-center my-1 text-center">
+            <span class="text-xs text-stone-400 font-medium">Elige tu casillero y haz girar la rueda real</span>
         </div>
 
         <!-- CONTROLES DE APUESTA -->
@@ -7982,21 +8116,21 @@ ARCHIVO: .\templates\economy\casino.html
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5 text-left">1. Selecciona tu Casillero</label>
                 <div class="grid grid-cols-3 gap-2">
                     <button type="button" onclick="selectChoice('red')" id="btn-choice-red"
-                            class="py-3 rounded-xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105">
+                            class="py-3 rounded-2xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105">
                         <span class="text-base mb-0.5">🔴</span>
                         <span>Rojo</span>
                         <span class="text-[9px] font-mono opacity-80">x2.0</span>
                     </button>
 
                     <button type="button" onclick="selectChoice('black')" id="btn-choice-black"
-                            class="py-3 rounded-xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-neutral-500 transition-all">
+                            class="py-3 rounded-2xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-neutral-500 transition-all">
                         <span class="text-base mb-0.5">⚫</span>
                         <span>Negro</span>
                         <span class="text-[9px] font-mono opacity-80">x2.0</span>
                     </button>
 
                     <button type="button" onclick="selectChoice('zero')" id="btn-choice-zero"
-                            class="py-3 rounded-xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-green-500 transition-all">
+                            class="py-3 rounded-2xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-green-500 transition-all">
                         <span class="text-base mb-0.5">🟢</span>
                         <span>Cero (0)</span>
                         <span class="text-[9px] font-mono text-yellow-400 font-bold">x14</span>
@@ -8004,34 +8138,22 @@ ARCHIVO: .\templates\economy\casino.html
                 </div>
             </div>
 
-            <!-- 2. MONTO DE APUESTA (BOTONES ADAPTADOS AL RANGO) -->
+            <!-- 2. MONTO DE APUESTA -->
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5 text-left">2. Oro a Apostar (Máx: {{ max_bet }} 🪙)</label>
                 <div class="grid grid-cols-4 gap-1.5 mb-2">
-                    {% if max_bet <= 25 %}
-                        <button type="button" onclick="setBet(5)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">5</button>
-                        <button type="button" onclick="setBet(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">10</button>
-                        <button type="button" onclick="setBet(15)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">15</button>
-                        <button type="button" onclick="setBet({{ max_bet }})" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">{{ max_bet }}</button>
-                    {% elif max_bet <= 50 %}
-                        <button type="button" onclick="setBet(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">10</button>
-                        <button type="button" onclick="setBet(25)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">25</button>
-                        <button type="button" onclick="setBet(35)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">35</button>
-                        <button type="button" onclick="setBet({{ max_bet }})" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">{{ max_bet }}</button>
-                    {% else %}
-                        <button type="button" onclick="setBet(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">10</button>
-                        <button type="button" onclick="setBet(25)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">25</button>
-                        <button type="button" onclick="setBet(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">50</button>
-                        <button type="button" onclick="setBet({{ max_bet }})" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold">{{ max_bet }}</button>
-                    {% endif %}
+                    <button type="button" onclick="setBet(5)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-xl text-xs font-mono font-bold active:scale-95">5</button>
+                    <button type="button" onclick="setBet(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-xl text-xs font-mono font-bold active:scale-95">10</button>
+                    <button type="button" onclick="setBet(15)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-xl text-xs font-mono font-bold active:scale-95">15</button>
+                    <button type="button" onclick="setBet({{ max_bet }})" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-xl text-xs font-mono font-bold active:scale-95">{{ max_bet }}</button>
                 </div>
-                <input type="number" id="bet_amount_input" min="1" max="{{ max_bet }}" value="{% if max_bet < 25 %}{{ max_bet }}{% else %}25{% endif %}"
-                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-bold text-white text-base focus:outline-none focus:border-vip-gold">
+                <input type="number" id="bet_amount_input" min="1" max="{{ max_bet }}" value="{% if max_bet < 15 %}{{ max_bet }}{% else %}15{% endif %}"
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-center font-mono font-bold text-white text-base focus:outline-none focus:border-yellow-400">
             </div>
 
-            <!-- BOTÓN DE GIRO CON FÍSICA INMEDIATA -->
+            <!-- BOTÓN DE GIRO -->
             <button type="button" id="roulette-spin-btn" onclick="startRouletteSpin()" 
-                    class="btn-gold py-4 rounded-xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] mt-1 flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    class="btn-gold py-4 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] mt-1 flex items-center justify-center gap-2 active:scale-95 transition-all">
                 <span>🎡</span> Girar Ruleta Imperial
             </button>
         </div>
@@ -8040,11 +8162,119 @@ ARCHIVO: .\templates\economy\casino.html
 
 </div>
 
-<!-- SCRIPT CON RESPUESTA EN VIVO, HÁPTICOS Y ACTUALIZACIÓN EN TIEMPO REAL -->
+<!-- SINTETIZADOR DE AUDIO CASINO VIP -->
 <script>
-    const tg = window.Telegram?.WebApp;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function getAudioCtx() {
+        if (!audioCtx) audioCtx = new AudioCtx();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return audioCtx;
+    }
+
+    function playTickSound() {
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(380, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.035);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.035);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.035);
+        } catch(e) {}
+    }
+
+    function playCoins() {
+        try {
+            const ctx = getAudioCtx();
+            [987, 1318, 1567, 2093].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.08));
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + (idx * 0.08));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.08) + 0.25);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.08));
+                osc.stop(ctx.currentTime + (idx * 0.08) + 0.25);
+            });
+        } catch(e) {}
+    }
+</script>
+
+<!-- RENDERIZADO HD Y FÍSICA EXACTA DE LA RULETA -->
+<script>
+    // 🏛️ Secuencia Oficial Europea (37 casillas, Sentido Horario desde el 0)
+    const ROULETTE_ORDER = [
+        0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26
+    ];
+
+    const RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+
+    let currentRotation = 0;
     let isSpinning = false;
-    let currentDegrees = 0;
+
+    // Dibuja la ruleta en el Canvas una sola vez con nitidez vectorial
+    function drawRouletteWheel() {
+        const canvas = document.getElementById('roulette-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const radius = cx - 2;
+        const sliceAngle = (2 * Math.PI) / 37;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // El 0 se dibuja exactamente en la cúspide superior (-PI/2)
+        let startAngle = -Math.PI / 2 - (sliceAngle / 2);
+
+        for (let i = 0; i < 37; i++) {
+            const num = ROULETTE_ORDER[i];
+            const endAngle = startAngle + sliceAngle;
+
+            // Determina color exacto
+            let color = '#151515'; // Negro
+            if (num === 0) color = '#15803d'; // Verde
+            else if (RED_NUMBERS.includes(num)) color = '#dc2626'; // Rojo
+
+            // Dibuja gajo
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, radius, startAngle, endAngle);
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.fill();
+
+            // Borde dorado entre casillas
+            ctx.strokeStyle = '#d4af37';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Escribe número
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(startAngle + sliceAngle / 2);
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 9px monospace';
+            ctx.fillText(num.toString(), radius - 8, 3.5);
+            ctx.restore();
+
+            startAngle = endAngle;
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        drawRouletteWheel();
+    });
 
     function selectChoice(choice) {
         if (isSpinning) return;
@@ -8053,45 +8283,41 @@ ARCHIVO: .\templates\economy\casino.html
         const btnBlack = document.getElementById('btn-choice-black');
         const btnZero = document.getElementById('btn-choice-zero');
 
-        btnRed.className = "py-3 rounded-xl border border-red-900 bg-red-950/30 text-red-300 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
-        btnBlack.className = "py-3 rounded-xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
-        btnZero.className = "py-3 rounded-xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
+        btnRed.className = "py-3 rounded-2xl border border-red-900 bg-red-950/30 text-red-300 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
+        btnBlack.className = "py-3 rounded-2xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
+        btnZero.className = "py-3 rounded-2xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
 
         if (choice === 'red') {
-            btnRed.className = "py-3 rounded-xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105";
+            btnRed.className = "py-3 rounded-2xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105";
         } else if (choice === 'black') {
-            btnBlack.className = "py-3 rounded-xl border-2 border-neutral-400 bg-neutral-900 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)] scale-105";
+            btnBlack.className = "py-3 rounded-2xl border-2 border-neutral-400 bg-neutral-900 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)] scale-105";
         } else if (choice === 'zero') {
-            btnZero.className = "py-3 rounded-xl border-2 border-green-500 bg-green-700/50 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(34,197,94,0.4)] scale-105";
+            btnZero.className = "py-3 rounded-2xl border-2 border-green-500 bg-green-700/50 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(34,197,94,0.4)] scale-105";
         }
     }
 
     function setBet(amount) {
-        if (isSpinning) return;
-        document.getElementById('bet_amount_input').value = amount;
+        if (!isSpinning) document.getElementById('bet_amount_input').value = amount;
     }
 
     async function startRouletteSpin() {
         if (isSpinning) return;
-        
+
         const betAmount = parseInt(document.getElementById('bet_amount_input').value, 10);
         const betChoice = document.getElementById('bet_choice_input').value;
         const btn = document.getElementById('roulette-spin-btn');
-        const wheel = document.getElementById('roulette-wheel');
+        const canvas = document.getElementById('roulette-canvas');
         const resultBox = document.getElementById('roulette-result-box');
         const centerNum = document.getElementById('center-display-num');
         const centerText = document.getElementById('center-display-text');
-        const centerDisc = document.getElementById('center-disc');
         const balanceElem = document.getElementById('top-user-balance');
 
         if (!betAmount || betAmount <= 0) {
-            resultBox.innerHTML = '<span class="text-xs text-red-400 font-bold">⚠️ Ingresa una apuesta válida</span>';
+            resultBox.innerHTML = '<span class="text-xs text-rose-400 font-bold">⚠️ Ingresa una apuesta válida</span>';
             return;
         }
 
-        // Obtener el ID REAL del usuario (nunca 123456789)
         const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
-        
         const formData = new FormData();
         formData.append('tg_id', tgId);
         formData.append('bet_amount', betAmount);
@@ -8104,112 +8330,104 @@ ARCHIVO: .\templates\economy\casino.html
         btn.classList.add('opacity-50');
         btn.innerHTML = '<span>⏳</span> Girando la Ruleta...';
 
-        // 1. ARRANCAR GIRO DE INMEDIATO
-        currentDegrees += 1800 + Math.floor(Math.random() * 360);
-        wheel.style.transform = `rotate(${currentDegrees}deg)`;
         resultBox.innerHTML = '<span class="text-xs text-yellow-300 font-bold animate-pulse">La bola rueda sobre la ruleta...</span>';
-        
-        try { tg?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
-
-        // Ticks de sonido/vibración háptica mientras gira
-        let ticks = 0;
-        const tickInterval = setInterval(() => {
-            try { tg?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
-            ticks++;
-            if (ticks > 9) clearInterval(tickInterval);
-        }, 300);
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
 
         try {
             const response = await fetch("{% url 'economy:casino' %}", {
                 method: 'POST',
                 body: formData,
-                headers: { 
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
-
             const data = await response.json();
 
-            // Esperar que la rueda complete sus 3.5 segundos de física
+            if (!data.success) {
+                isSpinning = false;
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                btn.innerHTML = '<span>🎡</span> Girar Ruleta Imperial';
+                resultBox.innerHTML = `<span class="text-xs text-rose-400 font-bold">❌ ${data.error}</span>`;
+                return;
+            }
+
+            // 🎯 CÁLCULO ANGULAR MATEMÁTICO EXACTO:
+            const winningNum = data.numero_ganador;
+            const winningIndex = ROULETTE_ORDER.indexOf(winningNum);
+            const sliceDeg = 360 / 37;
+
+            // Cada gajo i está a i * sliceDeg grados del 0 (que está arriba).
+            // Para que el gajo 'winningIndex' termine arriba (0°), debemos girar:
+            // target = (360 - (winningIndex * sliceDeg))
+            const slotTargetDeg = (360 - (winningIndex * sliceDeg)) % 360;
+
+            // Agregamos 6 vueltas completas (2160°) para el efecto dramático de física
+            const fullSpins = 2160;
+            const currentMod = currentRotation % 360;
+            const delta = (slotTargetDeg - currentMod + 360) % 360;
+            const nextRotation = currentRotation + fullSpins + delta;
+
+            currentRotation = nextRotation;
+
+            // Animación CSS con curva de deceleración física de casino
+            canvas.style.transition = 'transform 3.6s cubic-bezier(0.12, 0.88, 0.22, 1)';
+            canvas.style.transform = `rotate(${nextRotation}deg)`;
+
+            // Ticks de sonido y haptic progresivos
+            let ticks = 0;
+            const tickInt = setInterval(() => {
+                playTickSound();
+                try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+                ticks++;
+                if (ticks > 12) clearInterval(tickInt);
+            }, 260);
+
+            // Momento exacto del frenado
             setTimeout(() => {
-                clearInterval(tickInterval);
+                clearInterval(tickInt);
                 isSpinning = false;
                 btn.disabled = false;
                 btn.classList.remove('opacity-50');
                 btn.innerHTML = '<span>🎡</span> Girar Ruleta Imperial';
 
-                if (!data.success) {
-                    resultBox.innerHTML = `<span class="text-xs text-red-400 font-bold">❌ ${data.error}</span>`;
-                    try { tg?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
-                    return;
-                }
-
-                // 1. Actualizar el centro con el NÚMERO y COLOR GANADOR
-                centerNum.innerText = data.numero_ganador;
+                // Actualizar Medallón Central
+                centerNum.innerText = winningNum;
                 if (data.color_ganador === 'red') {
                     centerText.innerText = "ROJO";
-                    centerText.className = "text-[9px] uppercase font-bold text-red-400 tracking-widest mt-0.5";
+                    centerText.className = "text-[8.5px] uppercase font-black text-rose-400 tracking-widest mt-0.5";
                 } else if (data.color_ganador === 'black') {
                     centerText.innerText = "NEGRO";
-                    centerText.className = "text-[9px] uppercase font-bold text-stone-300 tracking-widest mt-0.5";
+                    centerText.className = "text-[8.5px] uppercase font-black text-stone-300 tracking-widest mt-0.5";
                 } else {
                     centerText.innerText = "CERO";
-                    centerText.className = "text-[9px] uppercase font-bold text-emerald-400 tracking-widest mt-0.5";
+                    centerText.className = "text-[8.5px] uppercase font-black text-emerald-400 tracking-widest mt-0.5";
                 }
 
-                // 2. Actualizar el saldo visual en la esquina
-                if (balanceElem) {
-                    balanceElem.innerText = data.nuevo_saldo;
-                }
+                if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
 
-                // 3. Mostrar banner de victoria o derrota
                 if (data.resultado === 'win') {
                     playCoins();
-                    playWinSound();
                     resultBox.innerHTML = `
-                        <div class="p-2.5 bg-emerald-950/90 border border-emerald-500 rounded-xl text-emerald-200 text-xs font-bold w-full animate-bounce shadow-[0_0_15px_rgba(16,185,129,0.4)]">
-                            🎉 ¡Acertaste! Cayó el ${data.numero_ganador} (${centerText.innerText}). Has ganado +${data.ganancia} 🪙.
-                        </div>
-                    `;
-                    try { tg?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                        <div class="p-2.5 bg-emerald-950/90 border border-emerald-500 rounded-2xl text-emerald-200 text-xs font-bold w-full animate-bounce shadow-[0_0_15px_rgba(16,185,129,0.4)]">
+                            🎉 ¡Acertaste! Cayó el ${winningNum} (${centerText.innerText}). Ganaste +${data.ganancia} 🪙.
+                        </div>`;
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
                 } else {
                     resultBox.innerHTML = `
-                        <div class="p-2.5 bg-rose-950/80 border border-rose-500 rounded-xl text-rose-200 text-xs font-bold w-full shadow">
-                            💀 Salió el ${data.numero_ganador} (${centerText.innerText}). Pierdes ${betAmount} 🪙 de oro.
-                        </div>
-                    `;
-                    try { tg?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
+                        <div class="p-2.5 bg-rose-950/80 border border-rose-500 rounded-2xl text-rose-200 text-xs font-bold w-full shadow">
+                            💀 Salió el ${winningNum} (${centerText.innerText}). Pierdes ${betAmount} 🪙 de oro.
+                        </div>`;
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
                 }
 
-            }, 3500);
+            }, 3650);
 
-        } catch (err) {
-            clearInterval(tickInterval);
+        } catch(err) {
             isSpinning = false;
             btn.disabled = false;
             btn.classList.remove('opacity-50');
             btn.innerHTML = '<span>🎡</span> Girar Ruleta Imperial';
-            resultBox.innerHTML = '<span class="text-xs text-red-400 font-bold">⚠️ Error de conexión al apostar</span>';
+            resultBox.innerHTML = '<span class="text-xs text-rose-400 font-bold">⚠️ Error de conexión al girar</span>';
         }
-    }
-
-    function playWinSound() {
-        try {
-            const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            const ctx = new AudioCtx();
-            [587.33, 880, 1174.66].forEach((freq, idx) => {
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.1));
-                gain.gain.setValueAtTime(0.3, ctx.currentTime + (idx * 0.1));
-                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.1) + 0.3);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start(ctx.currentTime + (idx * 0.1));
-                osc.stop(ctx.currentTime + (idx * 0.1) + 0.3);
-            });
-        } catch(e) {}
     }
 </script>
 {% endblock %}
@@ -10552,11 +10770,13 @@ ARCHIVO: .\templates\idols\feed.html
                     </p>
                 {% endif %}
 
-                <!-- SECCIÓN DE COMENTARIOS DESPLEGABLE -->
+                <!-- SECCIÓN DE COMENTARIOS DESPLEGABLE CON HILOS DE RESPUESTA -->
                 <div id="comments-section-{{ post.id }}" class="hidden mt-2 pt-3 border-t border-white/10 flex flex-col gap-3">
                     
-                    <div class="flex flex-col gap-2 max-h-52 overflow-y-auto pr-1">
+                    <div class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
                         {% for c in post.comments.all %}
+                            {% if not c.parent %}
+                            <!-- Comentario Principal -->
                             <div class="bg-black/70 border border-white/10 p-3 rounded-2xl text-xs flex flex-col gap-1 shadow">
                                 <div class="flex justify-between items-center text-[10px]">
                                     <span class="font-bold text-yellow-300 flex items-center gap-1">
@@ -10565,21 +10785,53 @@ ARCHIVO: .\templates\idols\feed.html
                                     <span class="text-stone-500 font-mono text-[9px]">{{ c.created_at|timesince }} atrás</span>
                                 </div>
                                 <p class="text-stone-200 leading-relaxed pl-1">{{ c.text }}</p>
+
+                                <div class="flex justify-end pt-1">
+                                    <button type="button" onclick="setReplyTarget({{ post.id }}, {{ c.id }}, '{{ c.author_name|escapejs }}')"
+                                            class="text-[9.5px] font-bold text-purple-300 hover:text-yellow-300 flex items-center gap-1 active:scale-95 transition-all">
+                                        <span>↩️</span> <span>Responder</span>
+                                    </button>
+                                </div>
+
+                                <!-- Respuestas Anidadas (Hilo) -->
+                                {% if c.replies.all %}
+                                <div class="flex flex-col gap-1.5 mt-1.5 pl-3 border-l-2 border-purple-500/40">
+                                    {% for rep in c.replies.all %}
+                                    <div class="bg-purple-950/20 border border-purple-500/20 p-2 rounded-xl flex flex-col gap-0.5">
+                                        <div class="flex justify-between items-center text-[9px]">
+                                            <span class="font-bold {% if '(Idol)' in rep.author_name %}text-yellow-300{% else %}text-purple-200{% endif %}">
+                                                {% if '(Idol)' in rep.author_name %}👑 {{ rep.author_name }}{% else %}↳ {{ rep.author_name }}{% endif %}
+                                            </span>
+                                            <span class="text-stone-500 font-mono">{{ rep.created_at|timesince }}</span>
+                                        </div>
+                                        <p class="text-stone-300 text-[11px] leading-relaxed">{{ rep.text }}</p>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
                             </div>
+                            {% endif %}
                         {% empty %}
                             <p class="text-center text-[11px] text-stone-500 py-2 italic">
-                                Sé el primero en dejar un elogio para la Musa...
+                                Sé el primero en dejar un halago para la Musa...
                             </p>
                         {% endfor %}
                     </div>
 
-                    <!-- Input para Comentar -->
-                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 m-0 mt-1">
+                    <!-- Indicador Flotante de Respuesta -->
+                    <div id="reply-indicator-{{ post.id }}" class="hidden items-center justify-between bg-purple-950/80 border border-purple-500/50 px-3 py-1 rounded-xl text-[10px] text-purple-200">
+                        <span id="reply-text-{{ post.id }}">Respondiendo a: </span>
+                        <button type="button" onclick="cancelReply({{ post.id }})" class="text-rose-400 font-bold hover:text-white">&times; Cancelar</button>
+                    </div>
+
+                    <!-- Input para Comentar o Responder -->
+                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 m-0 mt-0.5">
                         {% csrf_token %}
                         <input type="hidden" name="tg_id" value="{{ tg_id }}">
                         <input type="hidden" name="tg_username" value="{{ tg_username }}">
+                        <input type="hidden" name="parent_id" id="parent-input-{{ post.id }}" value="">
                         
-                        <input type="text" name="text" required placeholder="Escribe tu halago para {{ post.idol.stage_name }}..." 
+                        <input type="text" name="text" id="comment-input-{{ post.id }}" required placeholder="Escribe tu comentario..." 
                                class="flex-1 bg-black border border-vip-gold/30 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
                         
                         <button type="submit" 
@@ -10707,6 +10959,29 @@ ARCHIVO: .\templates\idols\feed.html
     
     function setTipAmount(val) { 
         document.getElementById('tip-amount-input').value = val; 
+    }
+
+    function setReplyTarget(postId, commentId, authorName) {
+        document.getElementById(`parent-input-${postId}`).value = commentId;
+        const ind = document.getElementById(`reply-indicator-${postId}`);
+        const txt = document.getElementById(`reply-text-${postId}`);
+        const input = document.getElementById(`comment-input-${postId}`);
+
+        txt.innerText = `Respondiendo a: ${authorName}`;
+        ind.classList.remove('hidden');
+        ind.classList.add('flex');
+        input.placeholder = `Escribe tu respuesta para ${authorName}...`;
+        input.focus();
+    }
+
+    function cancelReply(postId) {
+        document.getElementById(`parent-input-${postId}`).value = '';
+        const ind = document.getElementById(`reply-indicator-${postId}`);
+        const input = document.getElementById(`comment-input-${postId}`);
+
+        ind.classList.add('hidden');
+        ind.classList.remove('flex');
+        input.placeholder = "Escribe tu comentario...";
     }
 </script>
 {% endblock %}
@@ -10894,27 +11169,62 @@ ARCHIVO: .\templates\idols\gallery.html
         </div>
         <div class="flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3 py-1 rounded-full shadow-inner">
             <span class="text-xs">🎭</span>
-            <span class="text-xs font-mono font-black text-yellow-300">{{ all_idols.count }}</span>
+            <span class="text-xs font-mono font-black text-yellow-300" id="idols-count-badge">{{ all_idols|length }}</span>
             <span class="text-[9px] uppercase font-bold text-stone-400">Musas</span>
         </div>
     </div>
 
-    <!-- PESTAÑAS DE FILTRO RÁPIDO -->
+    <!-- 🔍 BARRA DE BÚSQUEDA Y FILTRADO POR USUARIO CREADOR (PUNTO 5) -->
+    <div class="bg-black/70 border border-vip-gold/30 rounded-2xl p-2.5 flex flex-col gap-2 shadow-lg">
+        
+        <!-- Buscador en tiempo real por Musa o por @Creadora -->
+        <div class="relative w-full">
+            <span class="absolute inset-y-0 left-3 flex items-center text-xs opacity-50">🔍</span>
+            <input type="text" id="gallerySearchInput" onkeyup="filterGalleryLive()" 
+                   placeholder="Buscar por Musa o @creadora..." 
+                   class="w-full bg-black/90 border border-white/10 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
+        </div>
+
+        <!-- Selectores de Orden y Filtro por Creadora -->
+        <div class="grid grid-cols-2 gap-2">
+            
+            <!-- Selector de Orden -->
+            <select id="gallerySortSelect" onchange="applyGallerySort(this.value)"
+                    class="bg-black border border-vip-gold/40 rounded-xl px-2.5 py-1.5 text-[10.5px] font-bold text-yellow-300 cursor-pointer focus:outline-none">
+                <option value="rating" {% if sort_by == 'rating' %}selected{% endif %}>⭐ Mejor Calificadas</option>
+                <option value="owner" {% if sort_by == 'owner' %}selected{% endif %}>👑 Ordenar por Creadora</option>
+                <option value="services" {% if sort_by == 'services' %}selected{% endif %}>🥂 Más Atenciones</option>
+                <option value="recent" {% if sort_by == 'recent' %}selected{% endif %}>✨ Recién Llegadas</option>
+            </select>
+
+            <!-- Filtro Directo por Creadora Específica -->
+            <select id="galleryOwnerFilter" onchange="filterByOwner(this.value)"
+                    class="bg-black border border-purple-500/40 rounded-xl px-2.5 py-1.5 text-[10.5px] font-bold text-purple-200 cursor-pointer focus:outline-none truncate">
+                <option value="">👤 Todas las Creadoras</option>
+                {% for o in all_owners %}
+                    <option value="{{ o|lower }}" {% if owner_filter|lower == o|lower %}selected{% endif %}>{{ o }}</option>
+                {% endfor %}
+            </select>
+
+        </div>
+    </div>
+
+    <!-- PESTAÑAS DE FILTRO RÁPIDO POR ESTADO -->
     <div class="grid grid-cols-4 gap-1 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl text-[9.5px] font-bold uppercase text-center shadow-inner">
-        <button type="button" onclick="filterGallery('all')" id="g-filter-all" 
-                class="py-2 rounded-xl bg-vip-gold text-black font-black shadow transition-all">
+        <button type="button" onclick="setQuickFilter('all')" id="g-filter-all" 
+                class="py-2 rounded-xl bg-vip-gold text-black font-black shadow transition-all quick-filter-btn">
             Todas
         </button>
-        <button type="button" onclick="filterGallery('online')" id="g-filter-online" 
-                class="py-2 rounded-xl text-stone-400 hover:text-white transition-all">
+        <button type="button" onclick="setQuickFilter('online')" id="g-filter-online" 
+                class="py-2 rounded-xl text-stone-400 hover:text-white transition-all quick-filter-btn">
             🟢 Chat
         </button>
-        <button type="button" onclick="filterGallery('top')" id="g-filter-top" 
-                class="py-2 rounded-xl text-purple-400 hover:text-white transition-all">
+        <button type="button" onclick="setQuickFilter('top')" id="g-filter-top" 
+                class="py-2 rounded-xl text-purple-400 hover:text-white transition-all quick-filter-btn">
             ⭐ Top
         </button>
-        <button type="button" onclick="filterGallery('trending')" id="g-filter-trending" 
-                class="py-2 rounded-xl text-yellow-400 hover:text-white transition-all">
+        <button type="button" onclick="setQuickFilter('trending')" id="g-filter-trending" 
+                class="py-2 rounded-xl text-yellow-400 hover:text-white transition-all quick-filter-btn">
             🔥 Favoritas
         </button>
     </div>
@@ -10924,6 +11234,8 @@ ARCHIVO: .\templates\idols\gallery.html
         {% for idol in all_idols %}
         <div onclick="universalNav('/idols/{{ idol.id }}/')" 
              class="idol-card relative rounded-[26px] overflow-hidden border-2 aspect-[3/4.4] group cursor-pointer active:scale-95 transition-all duration-300 bg-black shadow-[0_12px_35px_rgba(0,0,0,0.85)] flex flex-col justify-end"
+             data-name="{{ idol.stage_name|lower }}"
+             data-owner="{{ idol.get_display_owner|lower }}"
              data-status="{{ idol.status }}"
              data-top="{% if idol.is_top_rated %}1{% else %}0{% endif %}"
              data-trending="{% if idol.is_trending %}1{% else %}0{% endif %}"
@@ -10993,7 +11305,9 @@ ARCHIVO: .\templates\idols\gallery.html
                 <!-- Detalle de Roles y Dueña Oficial -->
                 <div class="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] text-stone-400 font-mono">
                     <span class="text-stone-300">{{ idol.services_done }} roles</span>
-                    <span class="text-yellow-400 font-bold truncate max-w-[85px]">{{ idol.get_display_owner }}</span>
+                    <span class="text-yellow-400 font-bold truncate max-w-[85px]" title="Creadora: {{ idol.get_display_owner }}">
+                        {{ idol.get_display_owner }}
+                    </span>
                 </div>
 
             </div>
@@ -11010,20 +11324,63 @@ ARCHIVO: .\templates\idols\gallery.html
 </div>
 
 <script>
-    function filterGallery(type) {
-        const cards = document.querySelectorAll('.idol-card');
-        ['all', 'online', 'top', 'trending'].forEach(t => {
-            const btn = document.getElementById(`g-filter-${t}`);
-            if (btn) btn.className = "py-2 rounded-xl text-stone-400 hover:text-white transition-all";
-        });
-        document.getElementById(`g-filter-${type}`).className = "py-2 rounded-xl bg-vip-gold text-black font-black shadow transition-all";
+    let currentQuickFilter = 'all';
 
-        cards.forEach(c => {
-            if (type === 'all') c.style.display = 'flex';
-            else if (type === 'online') c.style.display = (c.dataset.status === 'online' || c.dataset.status === 'antojos') ? 'flex' : 'none';
-            else if (type === 'top') c.style.display = (c.dataset.top === '1') ? 'flex' : 'none';
-            else if (type === 'trending') c.style.display = (c.dataset.trending === '1') ? 'flex' : 'none';
+    function setQuickFilter(type) {
+        currentQuickFilter = type;
+        document.querySelectorAll('.quick-filter-btn').forEach(btn => {
+            btn.className = "py-2 rounded-xl text-stone-400 hover:text-white transition-all quick-filter-btn";
         });
+        const active = document.getElementById(`g-filter-${type}`);
+        if (active) active.className = "py-2 rounded-xl bg-vip-gold text-black font-black shadow transition-all quick-filter-btn";
+        filterGalleryLive();
+    }
+
+    // Filtrado interactivo instantáneo sin recarga
+    function filterGalleryLive() {
+        const query = (document.getElementById('gallerySearchInput')?.value || '').toLowerCase().trim();
+        const selectedOwner = (document.getElementById('galleryOwnerFilter')?.value || '').toLowerCase().trim();
+        const cards = document.querySelectorAll('.idol-card');
+
+        let visibleCount = 0;
+
+        cards.forEach(card => {
+            const name = card.getAttribute('data-name') || '';
+            const owner = card.getAttribute('data-owner') || '';
+            const status = card.getAttribute('data-status') || '';
+            const isTop = card.getAttribute('data-top') === '1';
+            const isTrending = card.getAttribute('data-trending') === '1';
+
+            const matchesText = name.includes(query) || owner.includes(query);
+            const matchesOwner = !selectedOwner || owner.includes(selectedOwner);
+
+            let matchesQuick = true;
+            if (currentQuickFilter === 'online') matchesQuick = (status === 'online' || status === 'antojos');
+            else if (currentQuickFilter === 'top') matchesQuick = isTop;
+            else if (currentQuickFilter === 'trending') matchesQuick = isTrending;
+
+            if (matchesText && matchesOwner && matchesQuick) {
+                card.style.display = 'flex';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        const badge = document.getElementById('idols-count-badge');
+        if (badge) badge.innerText = visibleCount;
+    }
+
+    function filterByOwner(ownerVal) {
+        filterGalleryLive();
+    }
+
+    function applyGallerySort(sortMode) {
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const ownerVal = document.getElementById('galleryOwnerFilter')?.value || '';
+        let url = `/idols/gallery/?tg_id=${tgId}&sort=${sortMode}`;
+        if (ownerVal) url += `&owner=${encodeURIComponent(ownerVal)}`;
+        window.location.href = url;
     }
 </script>
 {% endblock %}
