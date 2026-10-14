@@ -141,7 +141,7 @@ def interact_pet(request):
 
 
 def expedition_pet(request):
-    """Envía a la mascota a explorar con balance de oro, buffs escalados y cartas seguras."""
+    """Envía a la mascota a explorar con balance de oro, buffs escalados y descanso justo."""
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
@@ -156,36 +156,39 @@ def expedition_pet(request):
 
         z_data = ZONES.get(zone, ZONES['forest'])
 
+        # 1. Validar Nivel
         if pet.level < z_data['min_lvl']:
             err = f"⚠️ {pet.evolved_name} necesita ser Nivel {z_data['min_lvl']} para entrar a {z_data['name']}."
             if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
             messages.error(request, err)
             return redirect(f'/pets/?tg_id={tg_id}')
 
+        # 2. Validar Energía
         if pet.energy < z_data['energy']:
             err = f"⚠️ {pet.evolved_name} no tiene suficiente energía ({pet.energy}%). Necesita al menos {z_data['energy']}%."
             if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
             messages.error(request, err)
             return redirect(f'/pets/?tg_id={tg_id}')
 
+        # 3. Validar Descanso Justo de la Expedición Anterior
+        # Si todavía no se cumple la hora de liberación, no puede viajar
+        if pet.last_expedition and timezone.now() < pet.last_expedition:
+            restante = int((pet.last_expedition - timezone.now()).total_seconds() // 60)
+            err = f"⏳ {pet.evolved_name} aún está descansando de su viaje anterior. Podrá volver a explorar en {max(1, restante)} minutos."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.info(request, err)
+            return redirect(f'/pets/?tg_id={tg_id}')
+
+        # Calcular cooldown de ESTA nueva expedición (con buff del Zorro)
         cooldown_min = z_data['cooldown']
         if pet.species == 'fox':
             cooldown_min = int(cooldown_min * 0.8)
 
-        if pet.last_expedition:
-            tiempo_pasado = timezone.now() - pet.last_expedition
-            if tiempo_pasado < timedelta(minutes=cooldown_min):
-                restante = int((timedelta(minutes=cooldown_min) - tiempo_pasado).total_seconds() // 60)
-                err = f"⏳ {pet.evolved_name} aún está descansando. Podrá explorar en {max(1, restante)} minutos."
-                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                messages.info(request, err)
-                return redirect(f'/pets/?tg_id={tg_id}')
-
+        # Descontar energía y fijar la hora de regreso/descanso
         pet.energy = max(0, pet.energy - z_data['energy'])
-        pet.last_expedition = timezone.now()
+        pet.last_expedition = timezone.now() + timedelta(minutes=cooldown_min)
 
         food_found = False
-        # Recompensas de Expedición: Oro, XP y Photocards (Sin regalar comida/energía)
         card_dropped = None
 
         if zone == 'forest':
@@ -255,6 +258,7 @@ def expedition_pet(request):
                 'zone_name': z_data['name'],
                 'gold': gold_found,
                 'xp': xp_mascota,
+                'food_found': food_found,
                 'card_dropped': card_dropped,
                 'leveled_up': leveled_up,
                 'pet_level': pet.level,
@@ -272,7 +276,6 @@ def expedition_pet(request):
         return redirect(f'/pets/?tg_id={tg_id}')
 
     return redirect('/pets/')
-
 
 def change_pet(request):
     if request.method == 'POST':

@@ -1484,6 +1484,10 @@ def handle_trade_offer(request, trade_id, action):
 # EL CALDERO REAL: FUSIÓN DE PHOTOCARDS
 # ==========================================
 
+# ==========================================
+# EL CALDERO REAL: FUSIÓN DE PHOTOCARDS
+# ==========================================
+
 def photocard_fusion(request):
     tg_id = resolve_safe_tg(request)
     if not tg_id:
@@ -1592,8 +1596,9 @@ def photocard_fusion(request):
                     }
                 })
 
+            # ✅ AHORA SÍ: Fuera del "if is_ajax" para peticiones estándar
             messages.success(request, f"✨ ¡Alquimia completada! Obtuviste «{new_card.name}» ({new_card.get_rarity_display()}).")
-            return redirect(f'/idols/photocards/album/?tg_id={tg_id}')
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
     # GET: Listado de cartas del usuario agrupadas por rareza (sin incluir las que están a la venta)
     available_cards = UserPhotocard.objects.filter(

@@ -153,10 +153,17 @@
             <img id="f-modal-img" src="" class="w-full h-full object-cover">
         </div>
 
-        <button type="button" onclick="closeFusionModal()" 
-                class="btn-gold w-full py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-            Guardar en mi Álbum
-        </button>
+        <!-- ❌ REEMPLAZA EL BOTÓN VIEJO POR ESTOS DOS: -->
+        <div class="grid grid-cols-2 gap-2 w-full mt-2">
+            <button type="button" onclick="stayInFusion()" 
+                    class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                🔮 Seguir Fundiendo
+            </button>
+            <button type="button" onclick="goToAlbum()" 
+                    class="bg-purple-950 border border-purple-500 text-purple-200 hover:bg-purple-900 py-3 rounded-xl text-xs font-bold uppercase tracking-wider active:scale-95 transition-all">
+                📖 Ver Álbum
+            </button>
+        </div>
     </div>
 </div>
 
@@ -302,7 +309,13 @@
         }
     }
 
-    function closeFusionModal() {
+    // 👈 Reemplazar closeFusionModal por estas:
+    function stayInFusion() {
+        // Recarga el caldero con el oro actualizado y las cartas restantes
+        universalNav('/idols/photocards/fusion/');
+    }
+
+    function goToAlbum() {
         universalNav('/idols/photocards/album/');
     }
 </script>
