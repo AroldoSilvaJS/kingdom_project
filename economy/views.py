@@ -651,7 +651,7 @@ def mines_game(request):
                 ganancia = int(session_mines['bet'] * mult)
 
                 if pet and pet.species == 'panther':
-                    panther_profit_bonus = {1: 0.03, 2: 0.06, 0.10}.get(pet.evolution_stage_number, 0.03)
+                    panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
                     net = max(0, ganancia - session_mines['bet'])
                     ganancia = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
 
