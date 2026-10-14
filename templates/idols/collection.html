@@ -32,8 +32,8 @@
                 {% for ant in antojos %}
                     <div class="relative rounded-2xl overflow-hidden border border-yellow-500/50 aspect-[3/4] bg-black shadow-lg flex flex-col justify-end group">
                         <img src="{{ ant.delivered_photo.url }}" alt="{{ ant.description }}" 
-                        onclick="openImageLightbox('{{ ant.delivered_photo.url }}', '{{ ant.description|escapejs }}')"
-                        class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
+                             onclick="openImageLightbox('{{ ant.delivered_photo.url }}', '{{ ant.description|escapejs }}')"
+                             class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
                         <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
                         <div class="relative z-10 p-2.5 flex flex-col">
                             <span class="text-[9px] bg-yellow-500 text-black font-black uppercase px-1.5 py-0.2 rounded w-fit mb-1">Antojo Exclusivo</span>
@@ -46,11 +46,24 @@
         </div>
     {% endif %}
 
-    <!-- SECCIÓN 2: FOTOS DE KINGDOMFANS DESBLOQUEADAS -->
-    {% for post in posts %}
+    <!-- SECCIÓN 2: FOTOS Y VIDEOS DE KINGDOMFANS DESBLOQUEADOS -->
+    {% if posts %}
+        <div class="flex flex-col gap-2.5 mt-2">
+            <h3 class="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span>💎</span> Contenido VIP Desbloqueado ({{ posts|length }})
+            </h3>
+            <div class="grid grid-cols-2 gap-3">
+                {% for post in posts %}
                     <div class="relative rounded-2xl overflow-hidden border border-purple-500/40 aspect-[3/4] bg-black shadow-md flex flex-col justify-end group">
                         {% if post.is_video %}
-                            <video src="{{ post.video.url }}" controls playsinline class="w-full h-full object-cover"></video>
+                            <video controls 
+                                   playsinline 
+                                   preload="metadata" 
+                                   class="w-full h-full object-cover bg-black">
+                                <source src="{{ post.video.url }}" type="video/mp4">
+                                <source src="{{ post.video.url }}" type="video/webm">
+                                <source src="{{ post.video.url }}" type="video/quicktime">
+                            </video>
                         {% elif post.image %}
                             <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
                                  onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
