@@ -1475,3 +1475,138 @@ def handle_trade_offer(request, trade_id, action):
         messages.info(request, "Propuesta de intercambio cancelada.")
 
     return redirect('/idols/photocards/market/')
+
+# ==========================================
+# EL CALDERO REAL: FUSIÓN DE PHOTOCARDS
+# ==========================================
+
+def photocard_fusion(request):
+    tg_id = resolve_safe_tg(request)
+    if not tg_id:
+        return redirect('/')
+
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+
+    RECIPES = {
+        'common': {'required_count': 4, 'cost': 35, 'source_rarity': 'common', 'target_rarity': 'rare', 'luck_target': 'epic', 'luck_chance': 0.12},
+        'rare':   {'required_count': 3, 'cost': 75, 'source_rarity': 'rare',   'target_rarity': 'epic', 'luck_target': 'legendary', 'luck_chance': 0.15},
+        'epic':   {'required_count': 3, 'cost': 150, 'source_rarity': 'epic',  'target_rarity': 'epic', 'luck_target': 'legendary', 'luck_chance': 0.25},
+    }
+
+    if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+        tier = request.POST.get('tier', 'common')
+        raw_card_ids = request.POST.getlist('card_ids')
+
+        recipe = RECIPES.get(tier)
+        if not recipe:
+            err = "Receta de fusión no válida."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
+        if wallet.balance < recipe['cost']:
+            err = f"No tienes suficiente oro ({recipe['cost']} 🪙 necesarios)."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
+        try:
+            card_ids = [int(cid) for cid in raw_card_ids if str(cid).isdigit()]
+        except ValueError:
+            card_ids = []
+
+        if len(card_ids) != recipe['required_count']:
+            err = f"Debes seleccionar exactamente {recipe['required_count']} cartas para esta transmutación."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
+        with transaction.atomic():
+            selected_cards = list(UserPhotocard.objects.select_for_update().filter(
+                id__in=card_ids,
+                telegram_user_id=tg_id,
+                is_for_sale=False,
+                photocard__rarity=recipe['source_rarity']
+            ).select_related('photocard'))
+
+            if len(selected_cards) != recipe['required_count']:
+                err = "Algunas cartas seleccionadas ya no están disponibles, están a la venta o no coinciden en rareza."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
+                return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
+            # Descontar costo en oro
+            wallet.remove_funds(recipe['cost'])
+
+            # Eliminar cartas sacrificadas y cancelar trades activos
+            consumed_ids = [c.id for c in selected_cards]
+            PhotocardTrade.objects.filter(sender_card_id__in=consumed_ids, status='pending').update(status='cancelled')
+            PhotocardTrade.objects.filter(receiver_card_id__in=consumed_ids, status='pending').update(status='cancelled')
+            UserPhotocard.objects.filter(id__in=consumed_ids).delete()
+
+            # Probabilidad de resultado con buff de Conejo Lunar
+            luck_prob = recipe['luck_chance']
+            if pet and pet.species == 'rabbit':
+                rabbit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                luck_prob += rabbit_bonus
+
+            roll = random.random()
+            if roll < luck_prob:
+                awarded_rarity = recipe['luck_target']
+                is_lucky_jump = True
+            else:
+                awarded_rarity = recipe['target_rarity']
+                is_lucky_jump = False
+
+            # Buscar cartas en el catálogo
+            pool = list(Photocard.objects.filter(rarity=awarded_rarity))
+            if not pool:
+                pool = list(Photocard.objects.all())
+
+            new_card = random.choice(pool)
+            new_user_card = UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=new_card)
+
+            xp_map = {'rare': 15, 'epic': 30, 'legendary': 60}
+            grant_user_xp(request, tg_id, xp_map.get(new_card.rarity, 20), reason="Alquimia de Photocards")
+
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'is_lucky': is_lucky_jump,
+                    'nuevo_saldo': wallet.balance,
+                    'card': {
+                        'id': new_user_card.id,
+                        'name': new_card.name,
+                        'idol_name': new_card.display_idol_name,
+                        'rarity': new_card.rarity,
+                        'rarity_display': new_card.get_rarity_display(),
+                        'color': new_card.get_color_hex(),
+                        'image_url': new_card.image.url if new_card.image else ''
+                    }
+                })
+
+            messages.success(request, f"✨ ¡Alquimia completada! Obtuviste «{new_card.name}» ({new_card.get_rarity_display()}).")
+            return redirect(f'/idols/photocards/album/?tg_id={tg_id}')
+
+    # GET: Listado de cartas del usuario agrupadas por rareza (sin incluir las que están a la venta)
+    available_cards = UserPhotocard.objects.filter(
+        telegram_user_id=tg_id,
+        is_for_sale=False
+    ).exclude(photocard__rarity='legendary').select_related('photocard').order_by('-obtained_at')
+
+    commons = [c for c in available_cards if c.photocard.rarity == 'common']
+    rares   = [c for c in available_cards if c.photocard.rarity == 'rare']
+    epics   = [c for c in available_cards if c.photocard.rarity == 'epic']
+
+    return render(request, 'idols/photocard_fusion.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'pet': pet,
+        'commons': commons,
+        'rares': rares,
+        'epics': epics,
+    })
