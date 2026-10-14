@@ -48,34 +48,48 @@ class Wallet(models.Model):
             return amount
         return 0
 
-    def get_cooldown_hours(self):
+    # 🕛 RESET FIJO AL MEDIODÍA (12:00 PM HORA SERVIDOR / CHILE)
+    def get_current_cycle_start(self):
+        """Calcula el inicio del ciclo diario actual (12:00 PM)."""
+        now = timezone.now().astimezone(timezone.get_current_timezone())
+        if now.hour >= 12:
+            return now.replace(hour=12, minute=0, second=0, microsecond=0)
+        yesterday = now - timedelta(days=1)
+        return yesterday.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    def can_claim_bonus(self):
+        """Permite girar una vez por ciclo diario (resetea cada día a las 12:00 PM)."""
+        if not self.last_bonus_claim:
+            return True
+        cycle_start = self.get_current_cycle_start()
+        return self.last_bonus_claim < cycle_start
+    
+    def seconds_until_next_bonus(self):
+        """Segundos restantes hasta las próximas 12:00 PM."""
+        if self.can_claim_bonus():
+            return 0
+        now = timezone.now().astimezone(timezone.get_current_timezone())
+        if now.hour >= 12:
+            next_reset = (now + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+        else:
+            next_reset = now.replace(hour=12, minute=0, second=0, microsecond=0)
+        return max(0, int((next_reset - now).total_seconds()))
+
+    def get_kitsune_gold_multiplier(self):
+        """El Zorro Kitsune bendice con un bono masivo de oro al mediodía (+25% / +45% / +70%)."""
         try:
             from pets.models import Pet
             pet = Pet.objects.filter(telegram_user_id=self.telegram_user_id).first()
             if pet and pet.species == 'fox':
                 stage = pet.evolution_stage_number
-                if stage >= 3:
-                    return 18
-                elif stage == 2:
-                    return 20
-                return 22
+                return {1: 1.25, 2: 1.45, 3: 1.70}.get(stage, 1.25)
         except Exception:
             pass
-        return 24
+        return 1.0
 
-    def can_claim_bonus(self):
-        if not self.last_bonus_claim:
-            return True
-        hours = self.get_cooldown_hours()
-        return timezone.now() >= self.last_bonus_claim + timedelta(hours=hours)
-    
-    def seconds_until_next_bonus(self):
-        if self.can_claim_bonus():
-            return 0
-        hours = self.get_cooldown_hours()
-        proximo_reclamo = self.last_bonus_claim + timedelta(hours=hours)
-        restante = (proximo_reclamo - timezone.now()).total_seconds()
-        return max(0, int(restante))
+    # Mantenido por compatibilidad
+    def get_cooldown_hours(self):
+        return 24
 
 
 class UserInventoryItem(models.Model):
@@ -121,3 +135,27 @@ class UserInventoryItem(models.Model):
     def get_count(cls, tg_id, item_code):
         obj = cls.objects.filter(telegram_user_id=tg_id, item_code=item_code).first()
         return obj.quantity if obj else 0
+
+
+class CourtJob(models.Model):
+    telegram_user_id = models.BigIntegerField("ID del Trabajador", db_index=True)
+    job_key = models.CharField("Código de Labor", max_length=50)
+    title = models.CharField("Título de la Labor", max_length=100)
+    role_type = models.CharField("Rol (cliente/idol)", max_length=20, default='cliente')
+    duration_minutes = models.PositiveIntegerField("Duración en Minutos", default=20)
+    finishes_at = models.DateTimeField("Termina a las")
+    gold_reward = models.PositiveIntegerField("Paga en Oro", default=15)
+    xp_reward = models.PositiveIntegerField("EXP Recompensa", default=5)
+    is_claimed = models.BooleanField("¿Cobrado?", default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def is_finished(self):
+        return timezone.now() >= self.finishes_at
+
+    def seconds_remaining(self):
+        if self.is_finished():
+            return 0
+        return max(0, int((self.finishes_at - timezone.now()).total_seconds()))

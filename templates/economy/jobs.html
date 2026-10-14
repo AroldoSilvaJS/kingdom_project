@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    
+    <div class="flex justify-between items-center px-1">
+        <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
+            <span>⬅</span> <span>Menú</span>
+        </button>
+        <span class="text-[10px] font-mono font-bold uppercase tracking-widest text-yellow-400 bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full">
+            {% if is_idol %}🌹 Oficios de Musa{% else %}🥂 Labores Nobiliarias{% endif %}
+        </span>
+    </div>
+
+    <!-- BANNER HERO -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden border border-vip-gold/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1a0c28] via-[#090212] to-black">
+        <span class="text-3xl mb-1 filter drop-shadow">🏛️</span>
+        <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
+            Labores de la Corte
+        </h1>
+        <p class="text-[11px] text-stone-300 mt-1 max-w-[280px]">
+            {% if is_idol %}
+                Perfecciona tu arte y recibe la asignación real para tu Bóveda.
+            {% else %}
+                Sirve a la Corona para obtener oro limpio y sustentar tus deleites.
+            {% endif %}
+        </p>
+    </div>
+
+    <!-- ⏳ LABOR EN CURSO (SI TIENE UNA ACTIVA) -->
+    {% if active_job %}
+    <div class="p-4 rounded-3xl border-2 {% if active_job.is_finished %}border-emerald-500 bg-emerald-950/40 animate-pulse{% else %}border-yellow-500/60 bg-black/70{% endif %} shadow-xl flex flex-col gap-2.5">
+        <div class="flex justify-between items-start">
+            <div>
+                <span class="text-[9px] font-mono uppercase font-black text-yellow-400">Labor Activa</span>
+                <h3 class="text-xs font-black text-white mt-0.5">{{ active_job.title }}</h3>
+            </div>
+            <span class="text-xs font-mono font-black text-amber-300 bg-black/80 border border-yellow-500/40 px-2.5 py-1 rounded-xl">
+                +{{ active_job.gold_reward }} 🪙
+            </span>
+        </div>
+
+        {% if active_job.is_finished %}
+            <form action="{% url 'economy:claim_job' %}" method="POST" class="m-0 mt-1">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <button type="submit" class="w-full btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.6)] animate-bounce">
+                    🪙 ¡Reclamar Paga (+{{ active_job.gold_reward }} 🪙)!
+                </button>
+            </form>
+        {% else %}
+            <div class="bg-black/60 p-2.5 rounded-xl border border-white/5 flex items-center justify-between text-xs font-mono">
+                <span class="text-stone-400">Tiempo restante:</span>
+                <span id="job-timer" class="font-bold text-yellow-300 text-sm">Calculando...</span>
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- CATÁLOGO DE LABORES DISPONIBLES -->
+    <div class="flex flex-col gap-2.5">
+        <h4 class="text-xs font-bold text-stone-300 uppercase tracking-wider px-1">Labores Disponibles</h4>
+
+        {% for job in available_jobs %}
+        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex flex-col gap-2.5 shadow">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h5 class="text-xs font-black text-white">{{ job.title }}</h5>
+                    <p class="text-[10px] text-stone-300 mt-0.5">{{ job.desc }}</p>
+                </div>
+                <div class="text-right flex flex-col items-end flex-shrink-0">
+                    <span class="text-xs font-mono font-black text-yellow-300">+{{ job.gold }} 🪙</span>
+                    <span class="text-[9px] font-mono text-purple-300">+{{ job.xp }} EXP</span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between border-t border-white/5 pt-2">
+                <span class="text-[9.5px] font-mono text-stone-400">⏳ Turno: {{ job.duration }} min</span>
+                
+                <form action="{% url 'economy:start_job' %}" method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="job_key" value="{{ job.key }}">
+                    <button type="submit" {% if active_job %}disabled{% endif %}
+                            class="btn-gold text-[10px] font-black uppercase px-4 py-1.5 rounded-xl shadow active:scale-95 transition-all {% if active_job %}opacity-30 cursor-not-allowed{% endif %}">
+                        Iniciar Labor
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        let seconds = {{ active_job.seconds_remaining|default:0 }};
+        const timerElem = document.getElementById('job-timer');
+        if (timerElem && seconds > 0) {
+            function updateTimer() {
+                if (seconds <= 0) {
+                    location.reload();
+                    return;
+                }
+                const m = Math.floor(seconds / 60);
+                const s = seconds % 60;
+                timerElem.innerText = `${m}m ${s < 10 ? '0' : ''}${s}s`;
+                seconds--;
+            }
+            updateTimer();
+            setInterval(updateTimer, 1000);
+        }
+    });
+</script>
+{% endblock %}

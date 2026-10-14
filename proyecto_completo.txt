@@ -678,7 +678,7 @@ class UserProfile(models.Model):
         return base + incremento
 
     def add_xp(self, amount):
-        """Ascenso equilibrado con recompensa controlada de +10 🪙 por nivel"""
+        """Ascenso equilibrado con recompensa de oro real escalonada por nivel."""
         if amount <= 0:
             return (False, self.level, 0)
 
@@ -693,7 +693,8 @@ class UserProfile(models.Model):
                 self.current_xp -= costo
                 self.level += 1
                 leveled_up = True
-                gold_reward += 10  # Premio noble de 10 🪙
+                # 👑 PILAR 3: Premio noble escalonado por nivel (35 🪙 a 125 🪙)
+                gold_reward += 25 + (self.level * 5)
             else:
                 break
 
@@ -2148,12 +2149,12 @@ from datetime import timedelta
 
 class Wallet(models.Model):
     telegram_user_id = models.BigIntegerField(unique=True, db_index=True)
-    
-    # Saldo de regalo inicial noble pero cuidado (100 monedas de oro)
     balance = models.IntegerField("Monedas de Oro", default=100)
-    
     last_bonus_claim = models.DateTimeField("Último bono", null=True, blank=True)
     
+    # 👑 PILAR 1: COFRE DEL MECENAS (RAKEBACK ACUMULATIVO DEL 8%)
+    patron_vault = models.PositiveIntegerField("Cofre del Mecenas", default=0)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -2174,6 +2175,23 @@ class Wallet(models.Model):
             self.save()
             return True
         return False
+
+    def accumulate_patron_vault(self, bet_amount):
+        """Acumula automáticamente el 8% de cada apuesta en el Cofre del Mecenas."""
+        rebate = max(1, int(round(bet_amount * 0.08)))
+        self.patron_vault += rebate
+        self.save(update_fields=['patron_vault'])
+        return rebate
+
+    def claim_patron_vault(self):
+        """Transfiere el oro acumulado en el Cofre a su saldo disponible."""
+        amount = self.patron_vault
+        if amount > 0:
+            self.balance += amount
+            self.patron_vault = 0
+            self.save(update_fields=['balance', 'patron_vault'])
+            return amount
+        return 0
 
     def get_cooldown_hours(self):
         try:
@@ -2249,6 +2267,30 @@ class UserInventoryItem(models.Model):
         obj = cls.objects.filter(telegram_user_id=tg_id, item_code=item_code).first()
         return obj.quantity if obj else 0
 
+
+    class CourtJob(models.Model):
+    telegram_user_id = models.BigIntegerField("ID del Trabajador", db_index=True)
+    job_key = models.CharField("Código de Labor", max_length=50)
+    title = models.CharField("Título de la Labor", max_length=100)
+    role_type = models.CharField("Rol (cliente/idol)", max_length=20, default='cliente')
+    duration_minutes = models.PositiveIntegerField("Duración en Minutos", default=20)
+    finishes_at = models.DateTimeField("Termina a las")
+    gold_reward = models.PositiveIntegerField("Paga en Oro", default=15)
+    xp_reward = models.PositiveIntegerField("EXP Recompensa", default=5)
+    is_claimed = models.BooleanField("¿Cobrado?", default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def is_finished(self):
+        return timezone.now() >= self.finishes_at
+
+    def seconds_remaining(self):
+        if self.is_finished():
+            return 0
+        return max(0, int((self.finishes_at - timezone.now()).total_seconds()))
+
 ==================================================
 ARCHIVO: .\economy\tests.py
 ==================================================
@@ -2271,11 +2313,15 @@ urlpatterns = [
     path('wallet/', views.wallet_dashboard, name='wallet'),
     path('casino/', views.casino_game, name='casino'),
     path('claim-bonus/', views.claim_bonus, name='claim_bonus'),
+    path('claim-vault/', views.claim_patron_vault, name='claim_vault'),  # 👈 RUTA DEL COFRE DEL MECENAS
     path('slots/', views.slots_game, name='slots'),
-    path('blackjack/', views.blackjack_game, name='blackjack'), # <- AÑADIR AQUÍ
+    path('blackjack/', views.blackjack_game, name='blackjack'),
     path('mines/', views.mines_game, name='mines'),
     path('bazar/', views.bazar_shop, name='bazar'),
     path('bazar/buy/', views.bazar_buy_action, name='bazar_buy'),
+    path('jobs/', views.court_jobs_view, name='jobs'),
+    path('jobs/start/', views.start_court_job, name='start_job'),
+    path('jobs/claim/', views.claim_court_job, name='claim_job'),
 ]
 
 ==================================================
@@ -2321,6 +2367,28 @@ def wallet_dashboard(request):
     })
 
 
+def claim_patron_vault(request):
+    """Permite al usuario retirar su 8% acumulado en el Cofre del Mecenas."""
+    tg_id = get_safe_tg_id(request)
+    if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        claimed = wallet.claim_patron_vault()
+
+        if claimed > 0:
+            msg = f"🏛️ ¡Has retirado +{claimed} 🪙 de tu Cofre del Mecenas a tu Bóveda!"
+            if is_ajax:
+                return JsonResponse({'success': True, 'claimed': claimed, 'nuevo_saldo': wallet.balance, 'message': msg})
+            messages.success(request, msg)
+        else:
+            err = "Tu Cofre del Mecenas está vacío actualmente. Juega en el casino para acumular retorno."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.info(request, err)
+
+    return redirect(f'/economy/wallet/?tg_id={tg_id}')
+
+
 def casino_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
@@ -2348,38 +2416,65 @@ def casino_game(request):
                 if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
                 messages.error(request, err_msg)
             else:
-                numero_ganador = random.randint(0, 36)
-                
-                if numero_ganador == 0:
-                    color_ganador = 'zero'
-                elif numero_ganador in ROJOS:
-                    color_ganador = 'red'
-                else:
-                    color_ganador = 'black'
-                    
-                if eleccion == color_ganador:
-                    if eleccion == 'zero':
-                        ganancia = int(apuesta * 22)
-                    else:
-                        ganancia = int(apuesta * 2.0)
-                    
-                    # BUFF PANTERA DE ÉBANO: Bonus controlado (+3%, +6%, +10%) sobre la ganancia neta
-                    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                    if pet and pet.species == 'panther':
-                        panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
-                        net_profit = ganancia - apuesta
-                        ganancia = int(apuesta + (net_profit * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
-                        
-                    wallet.add_funds(ganancia - apuesta)
-                    resultado = "win"
-                    xp_gain = 3
-                else:
-                    wallet.remove_funds(apuesta)
-                    resultado = "lose"
-                    ganancia = apuesta
-                    xp_gain = 1
+                # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
+                wallet.accumulate_patron_vault(apuesta)
 
-                # EXP balanceada (sin inflación)
+                # Evaluación de la apuesta
+            numero_ganador = random.randint(0, 36)
+            
+            if numero_ganador == 0:
+                color_ganador = 'zero'
+            elif numero_ganador in ROJOS:
+                color_ganador = 'red'
+            else:
+                color_ganador = 'black'
+
+            gano = False
+            multiplicador = 0.0
+
+            # 1. Apuesta a Color
+            if eleccion in ['red', 'black', 'zero']:
+                if eleccion == color_ganador:
+                    gano = True
+                    multiplicador = 22.0 if eleccion == 'zero' else 2.0
+
+            # 2. Apuesta a Par / Impar
+            elif eleccion in ['even', 'odd']:
+                if numero_ganador != 0:
+                    es_par = (numero_ganador % 2 == 0)
+                    if (eleccion == 'even' and es_par) or (eleccion == 'odd' and not es_par):
+                        gano = True
+                        multiplicador = 2.0
+
+            # 3. Apuesta a Número Específico (Pleno del 0 al 36)
+            elif eleccion == 'number':
+                try:
+                    num_apostado = int(request.POST.get('target_number', -1))
+                    if num_apostado == numero_ganador:
+                        gano = True
+                        multiplicador = 30.0  # 🎯 ¡Pleno de la Suerte x30!
+                except ValueError:
+                    pass
+
+            if gano:
+                ganancia = int(round(apuesta * multiplicador))
+                # Buff Pantera
+                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                if pet and pet.species == 'panther':
+                    panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
+                    net_profit = ganancia - apuesta
+                    ganancia = int(apuesta + (net_profit * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
+                    
+                wallet.add_funds(ganancia - apuesta)
+                resultado = "win"
+                xp_gain = 8 if multiplicador >= 20.0 else 3
+            else:
+                wallet.remove_funds(apuesta)
+                resultado = "lose"
+                ganancia = apuesta
+                xp_gain = 1
+
+                # EXP balanceada
                 grant_user_xp(request, tg_id, xp_gain, reason="Ruleta Imperial")
 
                 if is_ajax:
@@ -2390,6 +2485,7 @@ def casino_game(request):
                         'numero_ganador': numero_ganador,
                         'color_ganador': color_ganador,
                         'nuevo_saldo': wallet.balance,
+                        'patron_vault': wallet.patron_vault,
                         'current_xp': profile.current_xp,
                         'level': profile.level
                     })
@@ -2414,16 +2510,20 @@ def claim_bonus(request):
         profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
         
         if wallet.can_claim_bonus():
-            bonus_amount = profile.get_daily_bonus_amount()
+            base_bonus = profile.get_daily_bonus_amount()
+            # Multiplicador del Zorro Kitsune (+25% / +45% / +70%)
+            multiplier = wallet.get_kitsune_gold_multiplier()
+            bonus_amount = int(round(base_bonus * multiplier))
+
             wallet.add_funds(bonus_amount)
             wallet.last_bonus_claim = timezone.now()
             wallet.save()
             
             grant_user_xp(request, tg_id, 25, reason="Ruleta de la Fortuna")
-            messages.success(request, f"🎡 ¡La Ruleta de la Fortuna te ha otorgado +{bonus_amount} 🪙 de oro y +25 EXP!")
+            extra_msg = f" (¡+{int((multiplier-1)*100)}% por tu Zorro Kitsune!)" if multiplier > 1.0 else ""
+            messages.success(request, f"🎡 ¡La Ruleta te ha otorgado +{bonus_amount} 🪙 de oro{extra_msg} y +25 EXP!")
         else:
-            horas = wallet.get_cooldown_hours()
-            messages.error(request, f"Aún no han transcurrido las {horas}h de recarga de la Ruleta Diaria.")
+            messages.error(request, "Ya has reclamado tu ofrenda de hoy. La Ruleta se reinicia cada día a las 12:00 PM.")
             
     return redirect(f'/economy/wallet/?tg_id={tg_id}')
 
@@ -2437,7 +2537,6 @@ def slots_game(request):
     ganancia = 0
     reels = ['👑', '💎', '⭐']
 
-    # 🎲 BOLSA DE PESOS CALIBRADA (~94.5% RTP - EQUILIBRIO PERFECTO)
     WEIGHTED_SYMBOLS = (
         ['🍇'] * 24 +
         ['🍒'] * 24 +
@@ -2465,12 +2564,13 @@ def slots_game(request):
                 if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
                 messages.error(request, err)
             else:
-                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
+                wallet.accumulate_patron_vault(apuesta)
 
+                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
                 reels = [random.choice(WEIGHTED_SYMBOLS) for _ in range(3)]
 
-                # 🪶 BUFF CUERVO ABISAL: Si salen 2 gemas iguales de alto valor,
-                # el Cuervo puede completar la tercera gema mágica
+                # Buff Cuervo Abisal
                 if pet and pet.species == 'raven':
                     raven_boost = {1: 0.05, 2: 0.10, 3: 0.18}.get(pet.evolution_stage_number, 0.05)
                     if (reels[0] == reels[1] in ['👑', '💎', '⭐']) and random.random() < raven_boost:
@@ -2478,29 +2578,27 @@ def slots_game(request):
                     elif (reels[1] == reels[2] in ['👑', '💎', '⭐']) and random.random() < raven_boost:
                         reels[0] = reels[1]
                 
-                # ─── EVALUACIÓN ESCALONADA DE PREMIOS ───
-                # 1. TRÍOS (3 IGUALES)
+                # 1. TRÍOS
                 if reels[0] == reels[1] == reels[2]:
                     symbol = reels[0]
                     if symbol == '👑':
-                        multiplicador = 25.0  # JACKPOT SUPREMO REAL
+                        multiplicador = 25.0
                         xp_gain = 12
                     elif symbol == '💎':
-                        multiplicador = 15.0  # Triple Diamante
+                        multiplicador = 15.0
                         xp_gain = 8
                     elif symbol == '⭐':
-                        multiplicador = 8.0   # Triple Estrella
+                        multiplicador = 8.0
                         xp_gain = 6
                     elif symbol == '🪙':
-                        multiplicador = 5.0   # Triple Moneda
+                        multiplicador = 5.0
                         xp_gain = 4
                     else:
-                        multiplicador = 3.5   # Frutas (🍇 o 🍒)
+                        multiplicador = 3.5
                         xp_gain = 3
 
                     ganancia = int(apuesta * multiplicador)
                     
-                    # Buff Pantera de Ébano (+4% / +8% / +12% sobre la ganancia neta)
                     if pet and pet.species == 'panther':
                         panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
                         net = ganancia - apuesta
@@ -2509,18 +2607,15 @@ def slots_game(request):
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "jackpot" if symbol in ['👑', '💎'] else "trio"
 
-                # 2. PARES (2 IGUALES)
+                # 2. PARES
                 elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-                    # Detectar qué símbolo formó el par
                     pair_sym = reels[1] if (reels[0] == reels[1] or reels[1] == reels[2]) else reels[0]
-
-                    # Par Premium vs Par Común
                     if pair_sym in ['👑', '💎', '⭐']:
-                        multiplicador = 1.6  # Ganancia neta agradable
+                        multiplicador = 1.6
                         xp_gain = 3
                         resultado = "pair_premium"
                     else:
-                        multiplicador = 1.2  # Reintegro amortiguador
+                        multiplicador = 1.2
                         xp_gain = 2
                         resultado = "pair"
 
@@ -2533,7 +2628,15 @@ def slots_game(request):
 
                     wallet.add_funds(ganancia - apuesta)
 
-                # 3. DERROTA
+                # 👑 PILAR 2: TIRO DE AMORTIGUACIÓN (Si sale Corona o Diamante solitaria)
+                elif '👑' in reels or '💎' in reels:
+                    reintegro = max(1, int(round(apuesta * 0.5)))
+                    wallet.remove_funds(apuesta - reintegro)
+                    resultado = "cushion"
+                    ganancia = reintegro
+                    xp_gain = 2
+
+                # 3. DERROTA TOTAL
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
@@ -2549,6 +2652,7 @@ def slots_game(request):
                         'resultado': resultado,
                         'ganancia': ganancia,
                         'nuevo_saldo': wallet.balance,
+                        'patron_vault': wallet.patron_vault,
                         'current_xp': profile.current_xp,
                         'level': profile.level
                     })
@@ -2625,6 +2729,9 @@ def blackjack_game(request):
                     messages.error(request, err)
                 else:
                     wallet.remove_funds(apuesta)
+                    # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
+                    wallet.accumulate_patron_vault(apuesta)
+
                     player_hand = [draw_card(), draw_card()]
                     dealer_hand = [draw_card(), draw_card()]
                     p_val = calculate_hand_value(player_hand)
@@ -2639,9 +2746,9 @@ def blackjack_game(request):
                         else:
                             ganancia = int(apuesta * 2.5)
                             if pet and pet.species == 'panther':
-                                panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                                panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
                                 net = ganancia - apuesta
-                                ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
+                                ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
                                 
                             wallet.add_funds(ganancia)
                             resultado = 'blackjack'
@@ -2676,12 +2783,11 @@ def blackjack_game(request):
                 ganancia = session_bj['bet']
                 session_bj['finished'] = True
 
-                # BUFF LOBO ESPECTRAL: Protección balanceada (4%, 7%, 10%)
+                # BUFF LOBO ESPECTRAL
                 wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
-                # Indicar si la protección del lobo intervino:
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
                     wallet.add_funds(session_bj['bet'])
-                    resultado = 'wolf_saved'  # 👈 Diferenciado para mostrar aviso especial
+                    resultado = 'wolf_saved'
                     ganancia = session_bj['bet']
 
                 grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
@@ -2701,9 +2807,9 @@ def blackjack_game(request):
             if d_val > 21 or p_val > d_val:
                 ganancia = apuesta * 2
                 if pet and pet.species == 'panther':
-                    panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                    panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
                     net = ganancia - apuesta
-                    ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
+                    ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
                     
                 wallet.add_funds(ganancia)
                 resultado = 'win'
@@ -2720,9 +2826,9 @@ def blackjack_game(request):
                 # BUFF LOBO ESPECTRAL
                 wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
-                   wallet.add_funds(apuesta)
-                   resultado = 'wolf_saved'  # 👈 Aquí
-                   ganancia = apuesta
+                    wallet.add_funds(apuesta)
+                    resultado = 'wolf_saved'
+                    ganancia = apuesta
 
                 grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
                 
@@ -2750,6 +2856,7 @@ def blackjack_game(request):
                 'player_score': calculate_hand_value(p_cards) if p_cards else 0,
                 'dealer_score': dealer_score_visible,
                 'nuevo_saldo': wallet.balance,
+                'patron_vault': wallet.patron_vault,
                 'current_bet': session_bj['bet'] if session_bj else 25,
             }
 
@@ -2799,7 +2906,6 @@ def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     if prob <= 0:
         return 1.0
     
-    # Margen de la casa del 6% (0.94) para sostenibilidad matemática
     raw_mult = 0.94 / prob
     return max(1.02, round(raw_mult, 2))
 
@@ -2836,6 +2942,8 @@ def mines_game(request):
                     mines_count = 3
                 else:
                     wallet.remove_funds(bet)
+                    # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
+                    wallet.accumulate_patron_vault(bet)
 
                     all_indices = list(range(25))
                     mines_locations = random.sample(all_indices, mines_count)
@@ -2855,6 +2963,7 @@ def mines_game(request):
                             'success': True,
                             'in_game': True,
                             'nuevo_saldo': wallet.balance,
+                            'patron_vault': wallet.patron_vault,
                             'bet': bet,
                             'mines_count': mines_count,
                             'revealed': [],
@@ -2882,14 +2991,14 @@ def mines_game(request):
                                 'status': 'bust',
                                 'hit_tile': tile_idx,
                                 'all_mines': all_mines,
-                                'nuevo_saldo': wallet.balance
+                                'nuevo_saldo': wallet.balance,
+                                'patron_vault': wallet.patron_vault
                             })
                     else:
                         session_mines['revealed'].append(tile_idx)
                         revealed_count = len(session_mines['revealed'])
                         mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
 
-                        # BUFF DRAGÓN CARMESÍ: Bonus controlado (+0.02x, +0.04x, +0.07x) aplicado UNA SOLA VEZ
                         if pet and pet.species == 'dragon':
                             dragon_bonus = {1: 0.02, 2: 0.04, 3: 0.07}.get(pet.evolution_stage_number, 0.02)
                             mult = round(mult + dragon_bonus, 2)
@@ -2922,6 +3031,7 @@ def mines_game(request):
                                 'multiplier': mult,
                                 'current_cashout': cashout_val,
                                 'nuevo_saldo': wallet.balance,
+                                'patron_vault': wallet.patron_vault,
                                 'all_mines': session_mines['mines'] if auto_win else []
                             })
             except ValueError:
@@ -2935,7 +3045,7 @@ def mines_game(request):
                 ganancia = int(session_mines['bet'] * mult)
 
                 if pet and pet.species == 'panther':
-                    panther_profit_bonus = {1: 0.03, 2: 0.06, 0.10}.get(pet.evolution_stage_number, 0.03)
+                    panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
                     net = max(0, ganancia - session_mines['bet'])
                     ganancia = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
 
@@ -2952,10 +3062,10 @@ def mines_game(request):
                         'ganancia': ganancia,
                         'multiplier': mult,
                         'all_mines': all_mines,
-                        'nuevo_saldo': wallet.balance
+                        'nuevo_saldo': wallet.balance,
+                        'patron_vault': wallet.patron_vault
                     })
             else:
-                # 👈 AÑADIR ESTE ELSE PARA QUE NO DE ERROR 500
                 if is_ajax:
                     return JsonResponse({'success': False, 'error': 'Debes destapar al menos un cofre antes de retirarte.'}, status=400)
 
@@ -3019,20 +3129,19 @@ def bazar_buy_action(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
 
-    # Catálogo de precios reales del Bazar Imperial (Rebalanceado)
     PRICES = {
-        'shield_15': 350,       # Salvoconducto 15 días
-        'shield_30': 600,       # Salvoconducto mensual
-        'dungeon_bail': 500,     # Fianza de Mazmorra
-        'custom_title': 450,     # Edicto de Título Libre
-        'imperial_frame': 400,   # Marco Llama Carmesí
-        'vip_badge': 300,        # Distintivo VIP
-        'tribute_gift': 350,     # Gargantilla de Rubíes para Musa (Idol recibe 280🪙)
-        'priority_antojo': 200,  # Sello de Antojo Prioritario
-        'featured_idol': 450,    # Musa Destacada en Galería (3 días)
-        'lucky_charm': 250,      # Llave Dorada (Doble chance CS)
-        'free_market': 150,      # Patente 0% tax en Mercado
-        'energy_potion': 120,    # Elixir de Energía para mascota
+        'shield_15': 350,
+        'shield_30': 600,
+        'dungeon_bail': 500,
+        'custom_title': 450,
+        'imperial_frame': 400,
+        'vip_badge': 300,
+        'tribute_gift': 350,
+        'priority_antojo': 200,
+        'featured_idol': 450,
+        'lucky_charm': 250,
+        'free_market': 150,
+        'energy_potion': 120,
     }
 
     price = PRICES.get(item_key)
@@ -3164,6 +3273,102 @@ def bazar_buy_action(request):
         'nuevo_saldo': wallet.balance,
         'shield_days': profile.days_of_shield_remaining
     })
+
+# ==========================================
+# LABORES DE LA CORTE (TRABAJOS ACTIVOS)
+# ==========================================
+
+JOBS_CATALOG = {
+    'cliente': [
+        {'key': 'c_guard', 'title': 'Vigilancia de los Pasadizos 🍷', 'duration': 20, 'gold': 15, 'xp': 6, 'desc': 'Ronda de seguridad por los salones clandestinos.'},
+        {'key': 'c_trade', 'title': 'Contrabando de Vinos & Especias 🍾', 'duration': 120, 'gold': 45, 'xp': 20, 'desc': 'Gestión de mercancías secretas para los aposentos reales.'},
+        {'key': 'c_audit', 'title': 'Inspección Nocturna de Bóvedas 🏦', 'duration': 360, 'gold': 95, 'xp': 45, 'desc': 'Custodia de las arcas imperiales durante la noche.'},
+    ],
+    'idol': [
+        {'key': 'i_glam',  'title': 'Sesión de Maquillaje & Glamour 💄', 'duration': 20, 'gold': 18, 'xp': 8, 'desc': 'Preparación estética para recibir a los nobles.'},
+        {'key': 'i_dance', 'title': 'Ensayo de Danza en la Corte 💃', 'duration': 120, 'gold': 50, 'xp': 22, 'desc': 'Perfeccionamiento artístico en los salones de ensayo.'},
+        {'key': 'i_gala',  'title': 'Anfitriona de Gala en el Salón Imperial 🌹', 'duration': 360, 'gold': 110, 'xp': 50, 'desc': 'Presidir el banquete principal de la noche.'},
+    ]
+}
+
+def court_jobs_view(request):
+    tg_id = get_safe_tg_id(request)
+    if not tg_id:
+        return redirect('/')
+
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+
+    has_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
+    is_idol = (role_obj and role_obj.role == 'idol') or has_idols
+    role_key = 'idol' if is_idol else 'cliente'
+
+    active_job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+    available_jobs = JOBS_CATALOG.get(role_key, JOBS_CATALOG['cliente'])
+
+    return render(request, 'economy/jobs.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'is_idol': is_idol,
+        'active_job': active_job,
+        'available_jobs': available_jobs,
+    })
+
+def start_court_job(request):
+    if request.method == 'POST':
+        tg_id = get_safe_tg_id(request)
+        role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+        has_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
+        is_idol = (role_obj and role_obj.role == 'idol') or has_idols
+        role_key = 'idol' if is_idol else 'cliente'
+
+        if CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).exists():
+            messages.error(request, "Ya tienes una labor en curso en el Reino.")
+            return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+        job_key = request.POST.get('job_key')
+        catalog = {j['key']: j for j in JOBS_CATALOG.get(role_key, [])}
+        job_info = catalog.get(job_key)
+
+        if not job_info:
+            messages.error(request, "Labor no válida.")
+            return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+        CourtJob.objects.create(
+            telegram_user_id=tg_id,
+            job_key=job_info['key'],
+            title=job_info['title'],
+            role_type=role_key,
+            duration_minutes=job_info['duration'],
+            finishes_at=timezone.now() + timedelta(minutes=job_info['duration']),
+            gold_reward=job_info['gold'],
+            xp_reward=job_info['xp']
+        )
+        messages.success(request, f"⏳ Has comenzado la labor: «{job_info['title']}».")
+
+    return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+def claim_court_job(request):
+    if request.method == 'POST':
+        tg_id = get_safe_tg_id(request)
+        job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+
+        if not job or not job.is_finished():
+            messages.error(request, "Esta labor aún no ha finalizado.")
+            return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        wallet.add_funds(job.gold_reward)
+        grant_user_xp(request, tg_id, job.xp_reward, reason="Paga de Labor de Corte")
+
+        job.is_claimed = True
+        job.save(update_fields=['is_claimed'])
+
+        messages.success(request, f"🪙 ¡Labor cumplida con honor! Has cobrado +{job.gold_reward} 🪙 y +{job.xp_reward} EXP.")
+
+    return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
 ==================================================
 ARCHIVO: .\economy\__init__.py
@@ -5122,6 +5327,10 @@ def handle_trade_offer(request, trade_id, action):
 # EL CALDERO REAL: FUSIÓN DE PHOTOCARDS
 # ==========================================
 
+# ==========================================
+# EL CALDERO REAL: FUSIÓN DE PHOTOCARDS
+# ==========================================
+
 def photocard_fusion(request):
     tg_id = resolve_safe_tg(request)
     if not tg_id:
@@ -5230,8 +5439,9 @@ def photocard_fusion(request):
                     }
                 })
 
+            # ✅ AHORA SÍ: Fuera del "if is_ajax" para peticiones estándar
             messages.success(request, f"✨ ¡Alquimia completada! Obtuviste «{new_card.name}» ({new_card.get_rarity_display()}).")
-            return redirect(f'/idols/photocards/album/?tg_id={tg_id}')
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
     # GET: Listado de cartas del usuario agrupadas por rareza (sin incluir las que están a la venta)
     available_cards = UserPhotocard.objects.filter(
@@ -5399,9 +5609,9 @@ PET_SPECIES_REGISTRY = {
         'family_name': 'Zorro Kitsune Astral',
         'element': 'Luz & Fortuna',
         'stages': [
-            {'stage': 1, 'name': 'Kitling', 'min_lvl': 1, 'title': 'Cachorro Solar ✨', 'sprite': 'Kitling.png', 'buff_desc': 'Bono diario cada 22h y expedición rápida (+10%)'},
-            {'stage': 2, 'name': 'Kitsuray', 'min_lvl': 10, 'title': 'Zorro de Tres Colas 🦊', 'sprite': 'Kitsuray.png', 'buff_desc': 'Bono diario cada 20h y expedición rápida (+20%)'},
-            {'stage': 3, 'name': 'Kitsunami Imperial', 'min_lvl': 25, 'title': 'Soberano de Nueve Colas ⚜️', 'sprite': 'Kitsunami.png', 'buff_desc': 'Bono diario cada 18h y expedición rápida (+35%)'},
+            {'stage': 1, 'name': 'Kitling', 'min_lvl': 1, 'title': 'Cachorro Solar ✨', 'sprite': 'Kitling.png', 'buff_desc': '+25% Oro en Ruleta Diaria y expedición rápida (-20%)'},
+            {'stage': 2, 'name': 'Kitsuray', 'min_lvl': 10, 'title': 'Zorro de Tres Colas 🦊', 'sprite': 'Kitsuray.png', 'buff_desc': '+45% Oro en Ruleta Diaria y expedición rápida (-20%)'},
+            {'stage': 3, 'name': 'Kitsunami Imperial', 'min_lvl': 25, 'title': 'Soberano de Nueve Colas ⚜️', 'sprite': 'Kitsunami.png', 'buff_desc': '+70% Oro en Ruleta Diaria y expedición rápida (-20%)'},
         ]
     },
     'panther': {
@@ -5681,7 +5891,7 @@ def interact_pet(request):
 
 
 def expedition_pet(request):
-    """Envía a la mascota a explorar con balance de oro, buffs escalados y cartas seguras."""
+    """Envía a la mascota a explorar con balance de oro, buffs escalados y descanso justo."""
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
@@ -5696,36 +5906,39 @@ def expedition_pet(request):
 
         z_data = ZONES.get(zone, ZONES['forest'])
 
+        # 1. Validar Nivel
         if pet.level < z_data['min_lvl']:
             err = f"⚠️ {pet.evolved_name} necesita ser Nivel {z_data['min_lvl']} para entrar a {z_data['name']}."
             if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
             messages.error(request, err)
             return redirect(f'/pets/?tg_id={tg_id}')
 
+        # 2. Validar Energía
         if pet.energy < z_data['energy']:
             err = f"⚠️ {pet.evolved_name} no tiene suficiente energía ({pet.energy}%). Necesita al menos {z_data['energy']}%."
             if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
             messages.error(request, err)
             return redirect(f'/pets/?tg_id={tg_id}')
 
+        # 3. Validar Descanso Justo de la Expedición Anterior
+        # Si todavía no se cumple la hora de liberación, no puede viajar
+        if pet.last_expedition and timezone.now() < pet.last_expedition:
+            restante = int((pet.last_expedition - timezone.now()).total_seconds() // 60)
+            err = f"⏳ {pet.evolved_name} aún está descansando de su viaje anterior. Podrá volver a explorar en {max(1, restante)} minutos."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.info(request, err)
+            return redirect(f'/pets/?tg_id={tg_id}')
+
+        # Calcular cooldown de ESTA nueva expedición (con buff del Zorro)
         cooldown_min = z_data['cooldown']
         if pet.species == 'fox':
             cooldown_min = int(cooldown_min * 0.8)
 
-        if pet.last_expedition:
-            tiempo_pasado = timezone.now() - pet.last_expedition
-            if tiempo_pasado < timedelta(minutes=cooldown_min):
-                restante = int((timedelta(minutes=cooldown_min) - tiempo_pasado).total_seconds() // 60)
-                err = f"⏳ {pet.evolved_name} aún está descansando. Podrá explorar en {max(1, restante)} minutos."
-                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                messages.info(request, err)
-                return redirect(f'/pets/?tg_id={tg_id}')
-
+        # Descontar energía y fijar la hora de regreso/descanso
         pet.energy = max(0, pet.energy - z_data['energy'])
-        pet.last_expedition = timezone.now()
+        pet.last_expedition = timezone.now() + timedelta(minutes=cooldown_min)
 
         food_found = False
-        # Recompensas de Expedición: Oro, XP y Photocards (Sin regalar comida/energía)
         card_dropped = None
 
         if zone == 'forest':
@@ -5795,6 +6008,7 @@ def expedition_pet(request):
                 'zone_name': z_data['name'],
                 'gold': gold_found,
                 'xp': xp_mascota,
+                'food_found': food_found,
                 'card_dropped': card_dropped,
                 'leveled_up': leveled_up,
                 'pet_level': pet.level,
@@ -5812,7 +6026,6 @@ def expedition_pet(request):
         return redirect(f'/pets/?tg_id={tg_id}')
 
     return redirect('/pets/')
-
 
 def change_pet(request):
     if request.method == 'POST':
@@ -7201,6 +7414,19 @@ ARCHIVO: .\templates\core\menu.html
             </div>
         </button>
 
+        <!-- LABORES DE LA CORTE -->
+    <button type="button" onclick="universalNav('/economy/jobs/')" 
+            class="vip-panel p-3.5 rounded-2xl border border-yellow-500/40 hover:border-yellow-300 bg-gradient-to-r from-yellow-950/40 via-black to-[#1a0a28] flex items-center justify-between shadow active:scale-98 transition-all">
+        <div class="flex items-center gap-3">
+            <span class="text-xl">💼</span>
+            <div class="text-left">
+                <h4 class="text-xs font-black text-white uppercase tracking-wider">Labores de la Corte</h4>
+                <p class="text-[10px] text-stone-400">Trabaja y gana oro noble para tus compras</p>
+            </div>
+        </div>
+        <span class="text-yellow-400 text-xs font-bold">Trabajar ➔</span>
+    </button>
+
         <!-- 6. Santuario de Mascotas -->
         <button type="button" onclick="universalNav('{% url 'pets:sanctuary' %}')" 
                 class="vip-panel p-4 flex flex-col justify-between text-left border border-emerald-500/40 hover:border-emerald-400 active:scale-95 transition-all group min-h-[120px] rounded-3xl bg-gradient-to-b from-[#06180e] via-[#020a05] to-black shadow-lg">
@@ -8405,30 +8631,52 @@ ARCHIVO: .\templates\economy\casino.html
         <div class="w-full flex flex-col gap-3 mt-1">
             <input type="hidden" id="bet_choice_input" value="red">
 
-            <!-- 1. SELECCIÓN DE CASILLERO -->
+            <!-- 1. SELECCIÓN DE APUESTA -->
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5 text-left">1. Selecciona tu Casillero</label>
-                <div class="grid grid-cols-3 gap-2">
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5 text-left">1. Selecciona tu Apuesta</label>
+                
+                <!-- Fila 1: Colores -->
+                <div class="grid grid-cols-3 gap-2 mb-2">
                     <button type="button" onclick="selectChoice('red')" id="btn-choice-red"
-                            class="py-3 rounded-2xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105">
-                        <span class="text-base mb-0.5">🔴</span>
-                        <span>Rojo</span>
-                        <span class="text-[9px] font-mono opacity-80">x2.0</span>
+                            class="py-2.5 rounded-2xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105 choice-btn">
+                        <span>🔴 Rojo (x2.0)</span>
                     </button>
-
                     <button type="button" onclick="selectChoice('black')" id="btn-choice-black"
-                            class="py-3 rounded-2xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-neutral-500 transition-all">
-                        <span class="text-base mb-0.5">⚫</span>
-                        <span>Negro</span>
-                        <span class="text-[9px] font-mono opacity-80">x2.0</span>
+                            class="py-2.5 rounded-2xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-neutral-500 transition-all choice-btn">
+                        <span>⚫ Negro (x2.0)</span>
                     </button>
-
                     <button type="button" onclick="selectChoice('zero')" id="btn-choice-zero"
-                            class="py-3 rounded-2xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-green-500 transition-all">
-                        <span class="text-base mb-0.5">🟢</span>
-                        <span>Cero (0)</span>
-                        <span class="text-[9px] font-mono text-yellow-400 font-bold">x22</span>
+                            class="py-2.5 rounded-2xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-green-500 transition-all choice-btn">
+                        <span>🟢 Cero (x22)</span>
                     </button>
+                </div>
+
+                <!-- Fila 2: Par / Impar -->
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <button type="button" onclick="selectChoice('even')" id="btn-choice-even"
+                            class="py-2 rounded-xl border border-purple-500/40 bg-black/60 text-purple-200 text-xs font-black uppercase flex items-center justify-center gap-1 hover:border-purple-300 transition-all choice-btn">
+                        <span>⚖️ Par (x2.0)</span>
+                    </button>
+                    <button type="button" onclick="selectChoice('odd')" id="btn-choice-odd"
+                            class="py-2 rounded-xl border border-purple-500/40 bg-black/60 text-purple-200 text-xs font-black uppercase flex items-center justify-center gap-1 hover:border-purple-300 transition-all choice-btn">
+                        <span>⚡ Impar (x2.0)</span>
+                    </button>
+                </div>
+
+                <!-- Fila 3: Número Específico (Pleno x30) -->
+                <div class="p-2.5 rounded-2xl bg-black/70 border border-yellow-500/40 flex items-center justify-between gap-2">
+                    <div class="text-left">
+                        <span class="text-[10px] text-yellow-300 font-bold uppercase block">🎯 Número Específico</span>
+                        <span class="text-[9px] text-stone-400 font-mono">Paga x30 tu apuesta</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="target_number_input" min="0" max="36" placeholder="0-36"
+                               class="w-16 bg-black border border-yellow-500/50 rounded-xl py-1 text-center font-mono font-bold text-white text-xs">
+                        <button type="button" onclick="selectNumberChoice()" id="btn-choice-number"
+                                class="btn-gold px-3 py-1.5 rounded-xl text-[10px] font-black uppercase shadow choice-btn">
+                            Fijar
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -8573,21 +8821,20 @@ ARCHIVO: .\templates\economy\casino.html
     function selectChoice(choice) {
         if (isSpinning) return;
         document.getElementById('bet_choice_input').value = choice;
-        const btnRed = document.getElementById('btn-choice-red');
-        const btnBlack = document.getElementById('btn-choice-black');
-        const btnZero = document.getElementById('btn-choice-zero');
+        document.querySelectorAll('.choice-btn').forEach(b => {
+            b.classList.remove('border-2', 'border-yellow-400', 'scale-105', 'shadow-lg');
+        });
+        const active = document.getElementById(`btn-choice-${choice}`);
+        if (active) active.classList.add('border-2', 'border-yellow-400', 'scale-105', 'shadow-lg');
+    }
 
-        btnRed.className = "py-3 rounded-2xl border border-red-900 bg-red-950/30 text-red-300 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
-        btnBlack.className = "py-3 rounded-2xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
-        btnZero.className = "py-3 rounded-2xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
-
-        if (choice === 'red') {
-            btnRed.className = "py-3 rounded-2xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105";
-        } else if (choice === 'black') {
-            btnBlack.className = "py-3 rounded-2xl border-2 border-neutral-400 bg-neutral-900 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)] scale-105";
-        } else if (choice === 'zero') {
-            btnZero.className = "py-3 rounded-2xl border-2 border-green-500 bg-green-700/50 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(34,197,94,0.4)] scale-105";
+    function selectNumberChoice() {
+        const val = document.getElementById('target_number_input').value;
+        if (val === '' || val < 0 || val > 36) {
+            alert("Ingresa un número entre 0 y 36.");
+            return;
         }
+        selectChoice('number');
     }
 
     function setBet(amount) {
@@ -8723,6 +8970,127 @@ ARCHIVO: .\templates\economy\casino.html
             resultBox.innerHTML = '<span class="text-xs text-rose-400 font-bold">⚠️ Error de conexión al girar</span>';
         }
     }
+</script>
+{% endblock %}
+
+==================================================
+ARCHIVO: .\templates\economy\jobs.html
+==================================================
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    
+    <div class="flex justify-between items-center px-1">
+        <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
+            <span>⬅</span> <span>Menú</span>
+        </button>
+        <span class="text-[10px] font-mono font-bold uppercase tracking-widest text-yellow-400 bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full">
+            {% if is_idol %}🌹 Oficios de Musa{% else %}🥂 Labores Nobiliarias{% endif %}
+        </span>
+    </div>
+
+    <!-- BANNER HERO -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden border border-vip-gold/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1a0c28] via-[#090212] to-black">
+        <span class="text-3xl mb-1 filter drop-shadow">🏛️</span>
+        <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
+            Labores de la Corte
+        </h1>
+        <p class="text-[11px] text-stone-300 mt-1 max-w-[280px]">
+            {% if is_idol %}
+                Perfecciona tu arte y recibe la asignación real para tu Bóveda.
+            {% else %}
+                Sirve a la Corona para obtener oro limpio y sustentar tus deleites.
+            {% endif %}
+        </p>
+    </div>
+
+    <!-- ⏳ LABOR EN CURSO (SI TIENE UNA ACTIVA) -->
+    {% if active_job %}
+    <div class="p-4 rounded-3xl border-2 {% if active_job.is_finished %}border-emerald-500 bg-emerald-950/40 animate-pulse{% else %}border-yellow-500/60 bg-black/70{% endif %} shadow-xl flex flex-col gap-2.5">
+        <div class="flex justify-between items-start">
+            <div>
+                <span class="text-[9px] font-mono uppercase font-black text-yellow-400">Labor Activa</span>
+                <h3 class="text-xs font-black text-white mt-0.5">{{ active_job.title }}</h3>
+            </div>
+            <span class="text-xs font-mono font-black text-amber-300 bg-black/80 border border-yellow-500/40 px-2.5 py-1 rounded-xl">
+                +{{ active_job.gold_reward }} 🪙
+            </span>
+        </div>
+
+        {% if active_job.is_finished %}
+            <form action="{% url 'economy:claim_job' %}" method="POST" class="m-0 mt-1">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <button type="submit" class="w-full btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.6)] animate-bounce">
+                    🪙 ¡Reclamar Paga (+{{ active_job.gold_reward }} 🪙)!
+                </button>
+            </form>
+        {% else %}
+            <div class="bg-black/60 p-2.5 rounded-xl border border-white/5 flex items-center justify-between text-xs font-mono">
+                <span class="text-stone-400">Tiempo restante:</span>
+                <span id="job-timer" class="font-bold text-yellow-300 text-sm">Calculando...</span>
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- CATÁLOGO DE LABORES DISPONIBLES -->
+    <div class="flex flex-col gap-2.5">
+        <h4 class="text-xs font-bold text-stone-300 uppercase tracking-wider px-1">Labores Disponibles</h4>
+
+        {% for job in available_jobs %}
+        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex flex-col gap-2.5 shadow">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h5 class="text-xs font-black text-white">{{ job.title }}</h5>
+                    <p class="text-[10px] text-stone-300 mt-0.5">{{ job.desc }}</p>
+                </div>
+                <div class="text-right flex flex-col items-end flex-shrink-0">
+                    <span class="text-xs font-mono font-black text-yellow-300">+{{ job.gold }} 🪙</span>
+                    <span class="text-[9px] font-mono text-purple-300">+{{ job.xp }} EXP</span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between border-t border-white/5 pt-2">
+                <span class="text-[9.5px] font-mono text-stone-400">⏳ Turno: {{ job.duration }} min</span>
+                
+                <form action="{% url 'economy:start_job' %}" method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="job_key" value="{{ job.key }}">
+                    <button type="submit" {% if active_job %}disabled{% endif %}
+                            class="btn-gold text-[10px] font-black uppercase px-4 py-1.5 rounded-xl shadow active:scale-95 transition-all {% if active_job %}opacity-30 cursor-not-allowed{% endif %}">
+                        Iniciar Labor
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        let seconds = {{ active_job.seconds_remaining|default:0 }};
+        const timerElem = document.getElementById('job-timer');
+        if (timerElem && seconds > 0) {
+            function updateTimer() {
+                if (seconds <= 0) {
+                    location.reload();
+                    return;
+                }
+                const m = Math.floor(seconds / 60);
+                const s = seconds % 60;
+                timerElem.innerText = `${m}m ${s < 10 ? '0' : ''}${s}s`;
+                seconds--;
+            }
+            updateTimer();
+            setInterval(updateTimer, 1000);
+        }
+    });
 </script>
 {% endblock %}
 
@@ -9485,7 +9853,6 @@ ARCHIVO: .\templates\economy\wallet.html
                 <span class="text-[9.5px] uppercase tracking-[0.25em] text-vip-gold font-bold">Bóveda Imperial VIP</span>
                 <p class="text-[11px] text-stone-400 font-mono mt-0.5">Titular: <span>{{ wallet.telegram_user_id }}</span></p>
             </div>
-            <!-- Chip metálico aristocrático -->
             <div class="w-10 h-7 rounded-lg bg-gradient-to-br from-yellow-300 via-amber-500 to-yellow-600 border border-yellow-200/60 shadow flex items-center justify-center text-xs">
                 🪙
             </div>
@@ -9494,7 +9861,7 @@ ARCHIVO: .\templates\economy\wallet.html
         <div class="my-4 relative z-10">
             <span class="text-[11px] text-stone-400 uppercase tracking-wider font-semibold">Fortuna Disponible</span>
             <div class="flex items-baseline gap-2 mt-1">
-                <span class="font-serif text-4xl sm:text-5xl font-black text-gold-gradient tracking-tight">
+                <span class="font-serif text-4xl sm:text-5xl font-black text-gold-gradient tracking-tight" id="main-balance-text">
                     {{ wallet.balance }}
                 </span>
                 <span class="text-xs font-bold text-yellow-400 tracking-widest uppercase font-mono">Monedas de Oro</span>
@@ -9506,6 +9873,37 @@ ARCHIVO: .\templates\economy\wallet.html
                 <span>🦊</span> Bendición Kitsune Activa: Recarga de bono cada {{ wallet.get_cooldown_hours }}h
             </div>
         {% endif %}
+    </div>
+
+    <!-- 👑 PILAR 1: COFRE DEL MECENAS (RAKEBACK VIP DEL 8%) -->
+    <div class="vip-panel p-4 rounded-3xl border-2 border-yellow-500/60 bg-gradient-to-r from-amber-950/70 via-black to-[#1a0a28] flex items-center justify-between shadow-[0_0_20px_rgba(212,175,55,0.25)] relative overflow-hidden">
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-yellow-500/20 border border-yellow-400 flex items-center justify-center text-2xl shadow flex-shrink-0 animate-bounce">
+                🏺
+            </div>
+            <div class="flex flex-col">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-black text-white uppercase tracking-wider">Cofre del Mecenas</span>
+                    <span class="text-[8.5px] bg-yellow-500 text-black px-1.5 py-0.2 rounded font-black uppercase font-mono">8% Retorno</span>
+                </div>
+                <p class="text-[10px] text-stone-300 mt-0.5 leading-tight">
+                    Acumulas oro automáticamente en cada tirada del casino.
+                </p>
+                <div class="flex items-center gap-1 text-xs font-mono font-black text-yellow-300 mt-1">
+                    <span id="vault-amount">{{ wallet.patron_vault|default:0 }}</span> 🪙 acumuladas
+                </div>
+            </div>
+        </div>
+
+        <form action="{% url 'economy:claim_vault' %}" method="POST" class="m-0 flex-shrink-0" id="claim-vault-form">
+            {% csrf_token %}
+            <input type="hidden" name="tg_id" value="{{ wallet.telegram_user_id }}">
+            <input type="hidden" name="ajax" value="1">
+            <button type="button" onclick="claimPatronVault()" id="btn-claim-vault" {% if wallet.patron_vault <= 0 %}disabled{% endif %}
+                    class="btn-gold py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all {% if wallet.patron_vault <= 0 %}opacity-40 cursor-not-allowed{% endif %}">
+                Cobrar
+            </button>
+        </form>
     </div>
 
     <!-- MENSAJES -->
@@ -9572,7 +9970,7 @@ ARCHIVO: .\templates\economy\wallet.html
                 <span class="text-3xl">🎡</span>
                 <div>
                     <h4 class="font-bold text-white text-xs uppercase tracking-wider">Ruleta Real</h4>
-                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">x2.0 / x14</span>
+                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">x2.0 / x22</span>
                 </div>
             </button>
 
@@ -9592,7 +9990,7 @@ ARCHIVO: .\templates\economy\wallet.html
                 <span class="text-3xl">🍒</span>
                 <div>
                     <h4 class="font-bold text-white text-xs uppercase tracking-wider">Tragaperras</h4>
-                    <span class="text-[9.5px] text-purple-300 font-mono font-bold">Jackpot x15</span>
+                    <span class="text-[9.5px] text-purple-300 font-mono font-bold">Jackpot x25</span>
                 </div>
             </button>
 
@@ -9617,6 +10015,45 @@ ARCHIVO: .\templates\economy\wallet.html
 </div>
 
 <script>
+    async function claimPatronVault() {
+        const btn = document.getElementById('btn-claim-vault');
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ wallet.telegram_user_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span>';
+
+        try {
+            const resp = await fetch("{% url 'economy:claim_vault' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                document.getElementById('main-balance-text').innerText = data.nuevo_saldo;
+                document.getElementById('vault-amount').innerText = '0';
+                btn.className = "btn-gold py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider shadow opacity-40 cursor-not-allowed";
+                btn.innerHTML = 'Cobrado';
+                if (window.showVipAlert) {
+                    showVipAlert(`¡Retiraste +${data.claimed} 🪙 de retorno a tu Bóveda!`, "Cofre del Mecenas", "🏺");
+                }
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = 'Cobrar';
+                alert(data.error);
+            }
+        } catch(e) {
+            btn.disabled = false;
+            btn.innerHTML = 'Cobrar';
+        }
+    }
+
     function spinDailyWheel() {
         const btn = document.getElementById('btn-spin-daily');
         const wheel = document.getElementById('daily-wheel');
@@ -9629,7 +10066,6 @@ ARCHIVO: .\templates\economy\wallet.html
         const degrees = 1800 + Math.floor(Math.random() * 360);
         wheel.style.transform = `rotate(${degrees}deg)`;
 
-        // Gira 3s, luego muestra el mensaje de éxito durante 2s para que dé tiempo a leer
         setTimeout(() => {
             btn.innerHTML = '<span>🎉</span> ¡Premio Concedido! Guardando oro...';
             btn.classList.remove('opacity-60');
@@ -13069,10 +13505,17 @@ ARCHIVO: .\templates\idols\photocard_fusion.html
             <img id="f-modal-img" src="" class="w-full h-full object-cover">
         </div>
 
-        <button type="button" onclick="closeFusionModal()" 
-                class="btn-gold w-full py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-            Guardar en mi Álbum
-        </button>
+        <!-- ❌ REEMPLAZA EL BOTÓN VIEJO POR ESTOS DOS: -->
+        <div class="grid grid-cols-2 gap-2 w-full mt-2">
+            <button type="button" onclick="stayInFusion()" 
+                    class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                🔮 Seguir Fundiendo
+            </button>
+            <button type="button" onclick="goToAlbum()" 
+                    class="bg-purple-950 border border-purple-500 text-purple-200 hover:bg-purple-900 py-3 rounded-xl text-xs font-bold uppercase tracking-wider active:scale-95 transition-all">
+                📖 Ver Álbum
+            </button>
+        </div>
     </div>
 </div>
 
@@ -13218,7 +13661,13 @@ ARCHIVO: .\templates\idols\photocard_fusion.html
         }
     }
 
-    function closeFusionModal() {
+    // 👈 Reemplazar closeFusionModal por estas:
+    function stayInFusion() {
+        // Recarga el caldero con el oro actualizado y las cartas restantes
+        universalNav('/idols/photocards/fusion/');
+    }
+
+    function goToAlbum() {
         universalNav('/idols/photocards/album/');
     }
 </script>

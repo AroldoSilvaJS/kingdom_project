@@ -30,7 +30,7 @@
 
         {% if pet and pet.species == 'fox' %}
             <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/70 border border-amber-500/50 text-[10px] text-amber-300 font-bold relative z-10">
-                <span>🦊</span> Bendición Kitsune Activa: Recarga de bono cada {{ wallet.get_cooldown_hours }}h
+                <span>🦊</span> Bendición Kitsune Activa: Bono masivo de oro al mediodía (12:00 PM)
             </div>
         {% endif %}
     </div>
@@ -81,7 +81,7 @@
             <h3 class="font-serif text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
                 <span>🎡</span> Ruleta de la Fortuna
             </h3>
-            <span class="text-[10px] text-purple-300 font-bold uppercase font-mono">Ofrenda Diaria</span>
+            <span class="text-[10px] text-purple-300 font-bold uppercase font-mono">Reinicio 12:00 PM</span>
         </div>
         <p class="text-[11px] text-stone-400 mb-2">Gira el disco sagrado para recibir oro y EXP gratis</p>
 
@@ -107,7 +107,7 @@
                 </button>
             {% else %}
                 <div class="w-full bg-black/80 border border-vip-gold/30 py-3 px-4 rounded-2xl flex items-center justify-between text-xs shadow-inner">
-                    <span class="text-stone-400 font-medium">⏳ Próximo giro en:</span>
+                    <span class="text-stone-400 font-medium">⏳ Próximo reinicio (12:00 PM):</span>
                     <span id="countdown-timer" class="font-mono font-bold text-yellow-400 text-sm">Calculando...</span>
                 </div>
             {% endif %}
@@ -130,7 +130,7 @@
                 <span class="text-3xl">🎡</span>
                 <div>
                     <h4 class="font-bold text-white text-xs uppercase tracking-wider">Ruleta Real</h4>
-                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">x2.0 / x22</span>
+                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">x2.0 / x30</span>
                 </div>
             </button>
 

@@ -58,30 +58,52 @@
         <div class="w-full flex flex-col gap-3 mt-1">
             <input type="hidden" id="bet_choice_input" value="red">
 
-            <!-- 1. SELECCIÓN DE CASILLERO -->
+            <!-- 1. SELECCIÓN DE APUESTA -->
             <div>
-                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5 text-left">1. Selecciona tu Casillero</label>
-                <div class="grid grid-cols-3 gap-2">
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5 text-left">1. Selecciona tu Apuesta</label>
+                
+                <!-- Fila 1: Colores -->
+                <div class="grid grid-cols-3 gap-2 mb-2">
                     <button type="button" onclick="selectChoice('red')" id="btn-choice-red"
-                            class="py-3 rounded-2xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105">
-                        <span class="text-base mb-0.5">🔴</span>
-                        <span>Rojo</span>
-                        <span class="text-[9px] font-mono opacity-80">x2.0</span>
+                            class="py-2.5 rounded-2xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105 choice-btn">
+                        <span>🔴 Rojo (x2.0)</span>
                     </button>
-
                     <button type="button" onclick="selectChoice('black')" id="btn-choice-black"
-                            class="py-3 rounded-2xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-neutral-500 transition-all">
-                        <span class="text-base mb-0.5">⚫</span>
-                        <span>Negro</span>
-                        <span class="text-[9px] font-mono opacity-80">x2.0</span>
+                            class="py-2.5 rounded-2xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-neutral-500 transition-all choice-btn">
+                        <span>⚫ Negro (x2.0)</span>
                     </button>
-
                     <button type="button" onclick="selectChoice('zero')" id="btn-choice-zero"
-                            class="py-3 rounded-2xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-green-500 transition-all">
-                        <span class="text-base mb-0.5">🟢</span>
-                        <span>Cero (0)</span>
-                        <span class="text-[9px] font-mono text-yellow-400 font-bold">x22</span>
+                            class="py-2.5 rounded-2xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-green-500 transition-all choice-btn">
+                        <span>🟢 Cero (x22)</span>
                     </button>
+                </div>
+
+                <!-- Fila 2: Par / Impar -->
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <button type="button" onclick="selectChoice('even')" id="btn-choice-even"
+                            class="py-2 rounded-xl border border-purple-500/40 bg-black/60 text-purple-200 text-xs font-black uppercase flex items-center justify-center gap-1 hover:border-purple-300 transition-all choice-btn">
+                        <span>⚖️ Par (x2.0)</span>
+                    </button>
+                    <button type="button" onclick="selectChoice('odd')" id="btn-choice-odd"
+                            class="py-2 rounded-xl border border-purple-500/40 bg-black/60 text-purple-200 text-xs font-black uppercase flex items-center justify-center gap-1 hover:border-purple-300 transition-all choice-btn">
+                        <span>⚡ Impar (x2.0)</span>
+                    </button>
+                </div>
+
+                <!-- Fila 3: Número Específico (Pleno x30) -->
+                <div class="p-2.5 rounded-2xl bg-black/70 border border-yellow-500/40 flex items-center justify-between gap-2">
+                    <div class="text-left">
+                        <span class="text-[10px] text-yellow-300 font-bold uppercase block">🎯 Número Específico</span>
+                        <span class="text-[9px] text-stone-400 font-mono">Paga x30 tu apuesta</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="target_number_input" min="0" max="36" placeholder="0-36"
+                               class="w-16 bg-black border border-yellow-500/50 rounded-xl py-1 text-center font-mono font-bold text-white text-xs">
+                        <button type="button" onclick="selectNumberChoice()" id="btn-choice-number"
+                                class="btn-gold px-3 py-1.5 rounded-xl text-[10px] font-black uppercase shadow choice-btn">
+                            Fijar
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -158,7 +180,6 @@
 
 <!-- RENDERIZADO HD Y FÍSICA EXACTA DE LA RULETA -->
 <script>
-    // 🏛️ Secuencia Oficial Europea (37 casillas, Sentido Horario desde el 0)
     const ROULETTE_ORDER = [
         0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26
     ];
@@ -168,7 +189,6 @@
     let currentRotation = 0;
     let isSpinning = false;
 
-    // Dibuja la ruleta en el Canvas una sola vez con nitidez vectorial
     function drawRouletteWheel() {
         const canvas = document.getElementById('roulette-canvas');
         if (!canvas) return;
@@ -180,19 +200,16 @@
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // El 0 se dibuja exactamente en la cúspide superior (-PI/2)
         let startAngle = -Math.PI / 2 - (sliceAngle / 2);
 
         for (let i = 0; i < 37; i++) {
             const num = ROULETTE_ORDER[i];
             const endAngle = startAngle + sliceAngle;
 
-            // Determina color exacto
-            let color = '#151515'; // Negro
-            if (num === 0) color = '#15803d'; // Verde
-            else if (RED_NUMBERS.includes(num)) color = '#dc2626'; // Rojo
+            let color = '#151515';
+            if (num === 0) color = '#15803d';
+            else if (RED_NUMBERS.includes(num)) color = '#dc2626';
 
-            // Dibuja gajo
             ctx.beginPath();
             ctx.moveTo(cx, cy);
             ctx.arc(cx, cy, radius, startAngle, endAngle);
@@ -200,12 +217,10 @@
             ctx.fillStyle = color;
             ctx.fill();
 
-            // Borde dorado entre casillas
             ctx.strokeStyle = '#d4af37';
             ctx.lineWidth = 1;
             ctx.stroke();
 
-            // Escribe número
             ctx.save();
             ctx.translate(cx, cy);
             ctx.rotate(startAngle + sliceAngle / 2);
@@ -226,21 +241,20 @@
     function selectChoice(choice) {
         if (isSpinning) return;
         document.getElementById('bet_choice_input').value = choice;
-        const btnRed = document.getElementById('btn-choice-red');
-        const btnBlack = document.getElementById('btn-choice-black');
-        const btnZero = document.getElementById('btn-choice-zero');
+        document.querySelectorAll('.choice-btn').forEach(b => {
+            b.classList.remove('border-2', 'border-yellow-400', 'scale-105', 'shadow-lg');
+        });
+        const active = document.getElementById(`btn-choice-${choice}`);
+        if (active) active.classList.add('border-2', 'border-yellow-400', 'scale-105', 'shadow-lg');
+    }
 
-        btnRed.className = "py-3 rounded-2xl border border-red-900 bg-red-950/30 text-red-300 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
-        btnBlack.className = "py-3 rounded-2xl border border-neutral-700 bg-neutral-900/60 text-neutral-300 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
-        btnZero.className = "py-3 rounded-2xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center transition-all";
-
-        if (choice === 'red') {
-            btnRed.className = "py-3 rounded-2xl border-2 border-red-500 bg-red-600/40 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(239,68,68,0.4)] scale-105";
-        } else if (choice === 'black') {
-            btnBlack.className = "py-3 rounded-2xl border-2 border-neutral-400 bg-neutral-900 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)] scale-105";
-        } else if (choice === 'zero') {
-            btnZero.className = "py-3 rounded-2xl border-2 border-green-500 bg-green-700/50 text-white text-xs font-black uppercase flex flex-col items-center justify-center transition-all shadow-[0_0_15px_rgba(34,197,94,0.4)] scale-105";
+    function selectNumberChoice() {
+        const val = document.getElementById('target_number_input').value;
+        if (val === '' || val < 0 || val > 36) {
+            alert("Ingresa un número entre 0 y 36.");
+            return;
         }
+        selectChoice('number');
     }
 
     function setBet(amount) {
@@ -269,6 +283,8 @@
         formData.append('tg_id', tgId);
         formData.append('bet_amount', betAmount);
         formData.append('bet_choice', betChoice);
+        // 🎯 TARGET NUMBER ENVIADO CORRECTAMENTE:
+        formData.append('target_number', document.getElementById('target_number_input')?.value || '-1');
         formData.append('ajax', '1');
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
@@ -297,17 +313,11 @@
                 return;
             }
 
-            // 🎯 CÁLCULO ANGULAR MATEMÁTICO EXACTO:
             const winningNum = data.numero_ganador;
             const winningIndex = ROULETTE_ORDER.indexOf(winningNum);
             const sliceDeg = 360 / 37;
 
-            // Cada gajo i está a i * sliceDeg grados del 0 (que está arriba).
-            // Para que el gajo 'winningIndex' termine arriba (0°), debemos girar:
-            // target = (360 - (winningIndex * sliceDeg))
             const slotTargetDeg = (360 - (winningIndex * sliceDeg)) % 360;
-
-            // Agregamos 6 vueltas completas (2160°) para el efecto dramático de física
             const fullSpins = 2160;
             const currentMod = currentRotation % 360;
             const delta = (slotTargetDeg - currentMod + 360) % 360;
@@ -315,11 +325,9 @@
 
             currentRotation = nextRotation;
 
-            // Animación CSS con curva de deceleración física de casino
             canvas.style.transition = 'transform 3.6s cubic-bezier(0.12, 0.88, 0.22, 1)';
             canvas.style.transform = `rotate(${nextRotation}deg)`;
 
-            // Ticks de sonido y haptic progresivos
             let ticks = 0;
             const tickInt = setInterval(() => {
                 playTickSound();
@@ -328,7 +336,6 @@
                 if (ticks > 12) clearInterval(tickInt);
             }, 260);
 
-            // Momento exacto del frenado
             setTimeout(() => {
                 clearInterval(tickInt);
                 isSpinning = false;
@@ -336,7 +343,6 @@
                 btn.classList.remove('opacity-50');
                 btn.innerHTML = '<span>🎡</span> Girar Ruleta Imperial';
 
-                // Actualizar Medallón Central
                 centerNum.innerText = winningNum;
                 if (data.color_ganador === 'red') {
                     centerText.innerText = "ROJO";

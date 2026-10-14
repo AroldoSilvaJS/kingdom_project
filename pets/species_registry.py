@@ -6,9 +6,9 @@ PET_SPECIES_REGISTRY = {
         'family_name': 'Zorro Kitsune Astral',
         'element': 'Luz & Fortuna',
         'stages': [
-            {'stage': 1, 'name': 'Kitling', 'min_lvl': 1, 'title': 'Cachorro Solar ✨', 'sprite': 'Kitling.png', 'buff_desc': 'Bono diario cada 22h y expedición rápida (+10%)'},
-            {'stage': 2, 'name': 'Kitsuray', 'min_lvl': 10, 'title': 'Zorro de Tres Colas 🦊', 'sprite': 'Kitsuray.png', 'buff_desc': 'Bono diario cada 20h y expedición rápida (+20%)'},
-            {'stage': 3, 'name': 'Kitsunami Imperial', 'min_lvl': 25, 'title': 'Soberano de Nueve Colas ⚜️', 'sprite': 'Kitsunami.png', 'buff_desc': 'Bono diario cada 18h y expedición rápida (+35%)'},
+            {'stage': 1, 'name': 'Kitling', 'min_lvl': 1, 'title': 'Cachorro Solar ✨', 'sprite': 'Kitling.png', 'buff_desc': '+25% Oro en Ruleta Diaria y expedición rápida (-20%)'},
+            {'stage': 2, 'name': 'Kitsuray', 'min_lvl': 10, 'title': 'Zorro de Tres Colas 🦊', 'sprite': 'Kitsuray.png', 'buff_desc': '+45% Oro en Ruleta Diaria y expedición rápida (-20%)'},
+            {'stage': 3, 'name': 'Kitsunami Imperial', 'min_lvl': 25, 'title': 'Soberano de Nueve Colas ⚜️', 'sprite': 'Kitsunami.png', 'buff_desc': '+70% Oro en Ruleta Diaria y expedición rápida (-20%)'},
         ]
     },
     'panther': {

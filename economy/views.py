@@ -4,7 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
-from .models import Wallet, UserInventoryItem
+from .models import Wallet, UserInventoryItem, CourtJob
 from core.models import UserRole, UserProfile
 from idols.models import IdolProfile, IdolTribute
 from pets.models import Pet
@@ -89,6 +89,7 @@ def casino_game(request):
                 # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
                 wallet.accumulate_patron_vault(apuesta)
 
+                # Evaluación de la apuesta
                 numero_ganador = random.randint(0, 36)
                 
                 if numero_ganador == 0:
@@ -97,14 +98,37 @@ def casino_game(request):
                     color_ganador = 'red'
                 else:
                     color_ganador = 'black'
-                    
-                if eleccion == color_ganador:
-                    if eleccion == 'zero':
-                        ganancia = int(apuesta * 22)
-                    else:
-                        ganancia = int(apuesta * 2.0)
-                    
-                    # BUFF PANTERA DE ÉBANO
+
+                gano = False
+                multiplicador = 0.0
+
+                # 1. Apuesta a Color
+                if eleccion in ['red', 'black', 'zero']:
+                    if eleccion == color_ganador:
+                        gano = True
+                        multiplicador = 22.0 if eleccion == 'zero' else 2.0
+
+                # 2. Apuesta a Par / Impar
+                elif eleccion in ['even', 'odd']:
+                    if numero_ganador != 0:
+                        es_par = (numero_ganador % 2 == 0)
+                        if (eleccion == 'even' and es_par) or (eleccion == 'odd' and not es_par):
+                            gano = True
+                            multiplicador = 2.0
+
+                # 3. Apuesta a Número Específico (Pleno del 0 al 36)
+                elif eleccion == 'number':
+                    try:
+                        num_apostado = int(request.POST.get('target_number', -1))
+                        if num_apostado == numero_ganador:
+                            gano = True
+                            multiplicador = 30.0  # 🎯 ¡Pleno de la Suerte x30!
+                    except ValueError:
+                        pass
+
+                if gano:
+                    ganancia = int(round(apuesta * multiplicador))
+                    # Buff Pantera
                     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
                     if pet and pet.species == 'panther':
                         panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
@@ -113,7 +137,7 @@ def casino_game(request):
                         
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "win"
-                    xp_gain = 3
+                    xp_gain = 8 if multiplicador >= 20.0 else 3
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
@@ -156,16 +180,20 @@ def claim_bonus(request):
         profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
         
         if wallet.can_claim_bonus():
-            bonus_amount = profile.get_daily_bonus_amount()
+            base_bonus = profile.get_daily_bonus_amount()
+            # Multiplicador del Zorro Kitsune (+25% / +45% / +70%)
+            multiplier = wallet.get_kitsune_gold_multiplier()
+            bonus_amount = int(round(base_bonus * multiplier))
+
             wallet.add_funds(bonus_amount)
             wallet.last_bonus_claim = timezone.now()
             wallet.save()
             
             grant_user_xp(request, tg_id, 25, reason="Ruleta de la Fortuna")
-            messages.success(request, f"🎡 ¡La Ruleta de la Fortuna te ha otorgado +{bonus_amount} 🪙 de oro y +25 EXP!")
+            extra_msg = f" (¡+{int((multiplier-1)*100)}% por tu Zorro Kitsune!)" if multiplier > 1.0 else ""
+            messages.success(request, f"🎡 ¡La Ruleta te ha otorgado +{bonus_amount} 🪙 de oro{extra_msg} y +25 EXP!")
         else:
-            horas = wallet.get_cooldown_hours()
-            messages.error(request, f"Aún no han transcurrido las {horas}h de recarga de la Ruleta Diaria.")
+            messages.error(request, "Ya has reclamado tu ofrenda de hoy. La Ruleta se reinicia cada día a las 12:00 PM.")
             
     return redirect(f'/economy/wallet/?tg_id={tg_id}')
 
@@ -270,7 +298,7 @@ def slots_game(request):
 
                     wallet.add_funds(ganancia - apuesta)
 
-                # 👑 PILAR 2: TIRO DE AMORTIGUACIÓN (Si sale Corona o Diamante solitaria)
+                # 👑 PILAR 2: TIRO DE AMORTIGUACIÓN
                 elif '👑' in reels or '💎' in reels:
                     reintegro = max(1, int(round(apuesta * 0.5)))
                     wallet.remove_funds(apuesta - reintegro)
@@ -371,7 +399,6 @@ def blackjack_game(request):
                     messages.error(request, err)
                 else:
                     wallet.remove_funds(apuesta)
-                    # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
                     wallet.accumulate_patron_vault(apuesta)
 
                     player_hand = [draw_card(), draw_card()]
@@ -465,7 +492,6 @@ def blackjack_game(request):
                 resultado = 'lose'
                 ganancia = apuesta
 
-                # BUFF LOBO ESPECTRAL
                 wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
                     wallet.add_funds(apuesta)
@@ -533,10 +559,6 @@ def blackjack_game(request):
     })
 
 
-# ==========================================
-# JUEGO: LAS MINAS DEL REINO (BLINDADO Y SIN EXPLOIT)
-# ==========================================
-
 def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     if revealed_count <= 0:
         return 1.0
@@ -565,7 +587,6 @@ def mines_game(request):
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         action = request.POST.get('action')
 
-        # 1. INICIAR PARTIDA
         if action == 'start':
             try:
                 bet = int(request.POST.get('bet_amount', 20))
@@ -584,7 +605,6 @@ def mines_game(request):
                     mines_count = 3
                 else:
                     wallet.remove_funds(bet)
-                    # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
                     wallet.accumulate_patron_vault(bet)
 
                     all_indices = list(range(25))
@@ -615,7 +635,6 @@ def mines_game(request):
             except ValueError:
                 if is_ajax: return JsonResponse({'success': False, 'error': 'Valores no válidos.'}, status=400)
 
-        # 2. DESTAPAR UN COFRE
         elif action == 'reveal' and session_mines and session_mines.get('in_game'):
             try:
                 tile_idx = int(request.POST.get('tile_index', -1))
@@ -679,7 +698,6 @@ def mines_game(request):
             except ValueError:
                 pass
 
-        # 3. RETIRARSE Y COBRAR (CASHOUT)
         elif action == 'cashout' and session_mines and session_mines.get('in_game'):
             revealed_count = len(session_mines.get('revealed', []))
             if revealed_count > 0:
@@ -915,3 +933,100 @@ def bazar_buy_action(request):
         'nuevo_saldo': wallet.balance,
         'shield_days': profile.days_of_shield_remaining
     })
+
+
+# ==========================================
+# LABORES DE LA CORTE (TRABAJOS ACTIVOS)
+# ==========================================
+
+JOBS_CATALOG = {
+    'cliente': [
+        {'key': 'c_guard', 'title': 'Vigilancia de los Pasadizos 🍷', 'duration': 20, 'gold': 15, 'xp': 6, 'desc': 'Ronda de seguridad por los salones clandestinos.'},
+        {'key': 'c_trade', 'title': 'Contrabando de Vinos & Especias 🍾', 'duration': 120, 'gold': 45, 'xp': 20, 'desc': 'Gestión de mercancías secretas para los aposentos reales.'},
+        {'key': 'c_audit', 'title': 'Inspección Nocturna de Bóvedas 🏦', 'duration': 360, 'gold': 95, 'xp': 45, 'desc': 'Custodia de las arcas imperiales durante la noche.'},
+    ],
+    'idol': [
+        {'key': 'i_glam',  'title': 'Sesión de Maquillaje & Glamour 💄', 'duration': 20, 'gold': 18, 'xp': 8, 'desc': 'Preparación estética para recibir a los nobles.'},
+        {'key': 'i_dance', 'title': 'Ensayo de Danza en la Corte 💃', 'duration': 120, 'gold': 50, 'xp': 22, 'desc': 'Perfeccionamiento artístico en los salones de ensayo.'},
+        {'key': 'i_gala',  'title': 'Anfitriona de Gala en el Salón Imperial 🌹', 'duration': 360, 'gold': 110, 'xp': 50, 'desc': 'Presidir el banquete principal de la noche.'},
+    ]
+}
+
+def court_jobs_view(request):
+    tg_id = get_safe_tg_id(request)
+    if not tg_id:
+        return redirect('/')
+
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+
+    has_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
+    is_idol = (role_obj and role_obj.role == 'idol') or has_idols
+    role_key = 'idol' if is_idol else 'cliente'
+
+    active_job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+    available_jobs = JOBS_CATALOG.get(role_key, JOBS_CATALOG['cliente'])
+
+    return render(request, 'economy/jobs.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'is_idol': is_idol,
+        'active_job': active_job,
+        'available_jobs': available_jobs,
+    })
+
+def start_court_job(request):
+    if request.method == 'POST':
+        tg_id = get_safe_tg_id(request)
+        role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+        has_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
+        is_idol = (role_obj and role_obj.role == 'idol') or has_idols
+        role_key = 'idol' if is_idol else 'cliente'
+
+        if CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).exists():
+            messages.error(request, "Ya tienes una labor en curso en el Reino.")
+            return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+        job_key = request.POST.get('job_key')
+        catalog = {j['key']: j for j in JOBS_CATALOG.get(role_key, [])}
+        job_info = catalog.get(job_key)
+
+        if not job_info:
+            messages.error(request, "Labor no válida.")
+            return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+        CourtJob.objects.create(
+            telegram_user_id=tg_id,
+            job_key=job_info['key'],
+            title=job_info['title'],
+            role_type=role_key,
+            duration_minutes=job_info['duration'],
+            finishes_at=timezone.now() + timedelta(minutes=job_info['duration']),
+            gold_reward=job_info['gold'],
+            xp_reward=job_info['xp']
+        )
+        messages.success(request, f"⏳ Has comenzado la labor: «{job_info['title']}».")
+
+    return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+def claim_court_job(request):
+    if request.method == 'POST':
+        tg_id = get_safe_tg_id(request)
+        job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+
+        if not job or not job.is_finished():
+            messages.error(request, "Esta labor aún no ha finalizado.")
+            return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        wallet.add_funds(job.gold_reward)
+        grant_user_xp(request, tg_id, job.xp_reward, reason="Paga de Labor de Corte")
+
+        job.is_claimed = True
+        job.save(update_fields=['is_claimed'])
+
+        messages.success(request, f"🪙 ¡Labor cumplida con honor! Has cobrado +{job.gold_reward} 🪙 y +{job.xp_reward} EXP.")
+
+    return redirect(f'/economy/jobs/?tg_id={tg_id}')

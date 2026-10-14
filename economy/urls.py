@@ -13,4 +13,7 @@ urlpatterns = [
     path('mines/', views.mines_game, name='mines'),
     path('bazar/', views.bazar_shop, name='bazar'),
     path('bazar/buy/', views.bazar_buy_action, name='bazar_buy'),
+    path('jobs/', views.court_jobs_view, name='jobs'),
+    path('jobs/start/', views.start_court_job, name='start_job'),
+    path('jobs/claim/', views.claim_court_job, name='claim_job'),
 ]
