@@ -1,37 +1,50 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2">
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
-    <!-- ENCABEZADO -->
+    <!-- ENCABEZADO Y VOLVER -->
     <div class="flex justify-between items-center px-1">
-        <div>
-            <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
+        <button type="button" onclick="universalNav('/')" 
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
+            <span>⬅</span> <span>Menú</span>
+        </button>
+        <span class="text-xs border border-vip-gold/40 text-vip-gold bg-black/60 px-3.5 py-1 rounded-full uppercase tracking-widest font-bold">
+            🏆 Salón de la Fama
+        </span>
+    </div>
+
+    <!-- BANNER HERO -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden border border-vip-gold/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1a0a28] via-[#090212] to-black">
+        <div class="relative z-10 flex flex-col items-center">
+            <span class="text-3xl mb-1 filter drop-shadow">🏆</span>
+            <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
                 Salón de la Fama
-            </h2>
-            <p class="text-[11px] text-vip-text/60">Los más célebres y poderosos del Reino</p>
+            </h1>
+            <p class="text-[11px] text-stone-300 mt-1 max-w-[280px]">
+                Los linajes más influyentes y las mayores fortunas del Reino.
+            </p>
         </div>
-        <span class="text-2xl filter drop-shadow-[0_0_8px_rgba(212,175,55,0.6)]">🏆</span>
     </div>
 
     <!-- SECCIÓN 1: TOP IDOLS (REINAS DEL PLACER) -->
-    <div class="vip-panel p-4 flex flex-col gap-3">
-        <h3 class="font-serif text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5 border-b border-vip-gold/20 pb-2">
+    <div class="vip-panel p-4 flex flex-col gap-3 rounded-3xl border border-purple-500/40 bg-gradient-to-br from-[#160824] to-black shadow-xl">
+        <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-500/20 pb-2">
             <span>👑</span> Reinas del Escenario (Top Idols)
         </h3>
 
         <div class="flex flex-col gap-2">
             {% for idol in top_idols %}
-            <a href="{% url 'idols:detail' idol.id %}?tg_id={{ tg_id }}" 
-               class="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-vip-gold/20 hover:border-vip-gold/50 transition-all group">
-                <div class="flex items-center gap-3">
+            <div onclick="universalNav('/idols/{{ idol.id }}/')" 
+               class="flex items-center justify-between p-2.5 rounded-2xl bg-black/50 border border-purple-500/30 hover:border-purple-400 transition-all cursor-pointer group active:scale-98">
+                <div class="flex items-center gap-3 min-w-0">
                     <!-- Medalla -->
-                    <span class="w-6 text-center font-serif font-black text-sm {% if forloop.counter == 1 %}text-yellow-400{% elif forloop.counter == 2 %}text-gray-300{% elif forloop.counter == 3 %}text-amber-600{% else %}text-vip-text/50{% endif %}">
-                        {% if forloop.counter == 1 %}🥇{% elif forloop.counter == 2 %}🥈{% elif forloop.counter == 3 %}🥉{% else %}#{{ forloop.counter }}{% endif %}
+                    <span class="w-6 text-center font-serif font-black text-base flex-shrink-0">
+                        {% if forloop.counter == 1 %}🥇{% elif forloop.counter == 2 %}🥈{% elif forloop.counter == 3 %}🥉{% else %}<span class="text-xs text-stone-500 font-mono">#{{ forloop.counter }}</span>{% endif %}
                     </span>
                     
                     <!-- Foto -->
-                    <div class="w-9 h-9 rounded-full overflow-hidden border border-vip-gold/40 bg-black">
+                    <div class="w-10 h-10 rounded-2xl overflow-hidden border border-purple-400/60 bg-black flex-shrink-0 shadow">
                         {% if idol.photo %}
                             <img src="{{ idol.photo.url }}" class="w-full h-full object-cover">
                         {% else %}
@@ -39,51 +52,90 @@
                         {% endif %}
                     </div>
 
-                    <div>
-                        <h4 class="font-bold text-white text-xs group-hover:text-vip-gold transition-colors leading-tight">{{ idol.stage_name }}</h4>
-                        <span class="text-[10px] text-vip-text/50">{{ idol.services_done }} servicios realizados</span>
+                    <div class="min-w-0">
+                        <h4 class="font-serif font-bold text-white text-xs group-hover:text-purple-300 transition-colors leading-tight truncate">
+                            {{ idol.stage_name }}
+                        </h4>
+                        <span class="text-[10px] text-stone-400 font-mono block truncate">{{ idol.services_done }} roles • {{ idol.get_display_owner }}</span>
                     </div>
                 </div>
 
-                <div class="text-right">
-                    <span class="text-yellow-400 font-bold text-xs font-mono">⭐ {{ idol.rating }}</span>
+                <div class="text-right flex-shrink-0">
+                    <span class="text-yellow-400 font-bold text-xs font-mono bg-black/70 px-2 py-0.5 rounded-lg border border-yellow-500/30">⭐ {{ idol.rating }}</span>
                 </div>
-            </a>
+            </div>
             {% empty %}
-                <p class="text-center text-xs text-vip-text/40 py-3">Aún no hay calificaciones suficientes.</p>
+                <p class="text-center text-xs text-stone-500 py-3">Aún no hay calificaciones suficientes.</p>
             {% endfor %}
         </div>
     </div>
 
-    <!-- SECCIÓN 2: MAGNATES DEL REINO (MAYORES FORTUNAS) -->
-    <div class="vip-panel p-4 flex flex-col gap-3">
-        <h3 class="font-serif text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-vip-gold/20 pb-2">
-            <span>💰</span> Magnates Imperiales (Mayores Bóvedas)
-        </h3>
+    <!-- SECCIÓN 2: MAGNATES DEL REINO (MAYORES FORTUNAS DE CLIENTES) -->
+    <div class="vip-panel p-4 flex flex-col gap-3 rounded-3xl border border-yellow-500/40 bg-gradient-to-br from-[#191004] to-black shadow-xl">
+        <div class="flex justify-between items-center border-b border-yellow-500/20 pb-2">
+            <h3 class="font-serif text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span>💰</span> Magnates Imperiales (Mayores Bóvedas)
+            </h3>
+            <span class="text-[9.5px] font-mono text-stone-400">Top 10 Fortunas</span>
+        </div>
 
         <div class="flex flex-col gap-2">
-        {% for noble in magnates %}
-        <div class="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-vip-gold/20">
-            <div class="flex items-center gap-3">
-                <span class="w-6 text-center font-serif font-black text-sm">#{{ forloop.counter }}</span>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <h4 class="font-bold text-white text-xs font-mono">Noble ...{{ noble.telegram_id }}</h4>
-                        <span class="text-[9px] bg-purple-950/80 border border-purple-500/40 text-purple-200 px-1.5 py-0.2 rounded font-mono font-bold">
-                            LVL {{ noble.nivel }}
+            {% for noble in magnates %}
+            <div class="flex items-center justify-between p-3 rounded-2xl border transition-all
+                {% if noble.is_me %}
+                    bg-gradient-to-r from-amber-950/70 via-black to-yellow-950/60 border-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.3)]
+                {% else %}
+                    bg-black/50 border-white/10 hover:border-yellow-500/40
+                {% endif %}">
+                
+                <div class="flex items-center gap-3 min-w-0">
+                    <!-- Medalla de Posición -->
+                    <span class="w-6 text-center font-serif font-black text-base flex-shrink-0">
+                        {% if forloop.counter == 1 %}🥇{% elif forloop.counter == 2 %}🥈{% elif forloop.counter == 3 %}🥉{% else %}<span class="text-xs text-stone-500 font-mono">#{{ forloop.counter }}</span>{% endif %}
+                    </span>
+
+                    <!-- Avatar Simbólico -->
+                    <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg flex-shrink-0 shadow
+                        {% if noble.avatar_frame == 'flame' %}bg-rose-950/80 border border-rose-500 text-rose-300
+                        {% elif noble.avatar_frame == 'neon' %}bg-purple-950/80 border border-purple-400 text-purple-200
+                        {% elif noble.avatar_frame == 'diamond' %}bg-cyan-950/80 border border-cyan-400 text-cyan-200
+                        {% else %}bg-yellow-950/80 border border-yellow-500 text-yellow-300{% endif %}">
+                        <span>🥂</span>
+                    </div>
+
+                    <div class="flex flex-col min-w-0">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <!-- Nombre real o Alias -->
+                            <h4 class="font-bold text-white text-xs truncate max-w-[130px]">
+                                {{ noble.name }}
+                            </h4>
+                            
+                            <!-- Nivel Nobiliario -->
+                            <span class="text-[9px] bg-purple-950/80 border border-purple-500/40 text-purple-200 px-1.5 py-0.2 rounded font-mono font-black">
+                                L{{ noble.nivel }}
+                            </span>
+
+                            {% if noble.is_me %}
+                                <span class="text-[8.5px] bg-yellow-500 text-black px-1.5 py-0.2 rounded font-black uppercase font-mono">Tú</span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Título Nobiliario -->
+                        <span class="text-[10px] text-stone-400 uppercase tracking-tight truncate mt-0.5">
+                            {{ noble.titulo }}
                         </span>
                     </div>
-                    <span class="text-[9px] text-vip-text/50 uppercase">{{ noble.titulo }}</span>
+                </div>
+
+                <!-- Fortuna en Oro -->
+                <div class="text-right flex items-center gap-1 flex-shrink-0">
+                    <span class="font-serif font-black text-gold-gradient text-sm font-mono">{{ noble.balance }}</span>
+                    <span class="text-xs">🪙</span>
                 </div>
             </div>
-            <div class="text-right flex items-center gap-1">
-                <span class="font-serif font-bold text-vip-gold text-xs font-mono">{{ noble.balance }}</span>
-                <span class="text-[10px]">🪙</span>
-            </div>
-        </div>
-        {% empty %}
-            <p class="text-center text-xs text-vip-text/40 py-3">No hay datos de bóvedas.</p>
-        {% endfor %}
+            {% empty %}
+                <p class="text-center text-xs text-stone-500 py-3">No hay datos de bóvedas.</p>
+            {% endfor %}
         </div>
     </div>
 

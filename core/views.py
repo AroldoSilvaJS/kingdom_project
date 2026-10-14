@@ -265,19 +265,42 @@ def leaderboard(request):
     top_wallets = Wallet.objects.order_by('-balance')[:10]
     user_ids = [w.telegram_user_id for w in top_wallets]
     profiles_dict = {p.telegram_user_id: p for p in UserProfile.objects.filter(telegram_user_id__in=user_ids)}
+    
+    # También buscamos si alguna billetera pertenece a una dueña de Idol para rescatar su @username
+    idols_dict = {}
+    for i in IdolProfile.objects.filter(telegram_user_id__in=user_ids):
+        if i.owner_username and not i.owner_username.startswith('Noble_'):
+            idols_dict[i.telegram_user_id] = i.owner_username
 
     magnates = []
     for w in top_wallets:
         prof = profiles_dict.get(w.telegram_user_id)
-        titulo = prof.get_rank_name() if prof else "Ciudadano Honorable"
+        
+        # Rescatar el mejor nombre disponible
+        display_name = None
+        if prof and prof.username and not str(prof.username).lower().startswith('noble_'):
+            display_name = prof.username
+        elif w.telegram_user_id in idols_dict:
+            display_name = idols_dict[w.telegram_user_id]
+        
+        # Si aún no tiene alias, mostramos un identificador noble limpio
+        if not display_name:
+            display_name = f"Noble #{str(w.telegram_user_id)[-4:]}"
+
+        titulo = prof.custom_title_text if (prof and prof.custom_title_text) else (prof.get_rank_name() if prof else "Curioso Clandestino 🍷")
         nivel = prof.level if prof else 1
+        avatar_frame = prof.avatar_frame if prof else 'gold'
+        is_me = (str(w.telegram_user_id) == str(tg_id))
         
         magnates.append({
             'telegram_id': str(w.telegram_user_id)[-4:],
             'full_id': w.telegram_user_id,
+            'name': display_name,
             'balance': w.balance,
             'titulo': titulo,
             'nivel': nivel,
+            'avatar_frame': avatar_frame,
+            'is_me': is_me,
         })
 
     return render(request, 'core/leaderboard.html', {
