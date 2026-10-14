@@ -163,7 +163,7 @@ class UserProfile(models.Model):
         return base + incremento
 
     def add_xp(self, amount):
-        """Ascenso equilibrado con recompensa controlada de +10 🪙 por nivel"""
+        """Ascenso equilibrado con recompensa de oro real escalonada por nivel."""
         if amount <= 0:
             return (False, self.level, 0)
 
@@ -178,7 +178,8 @@ class UserProfile(models.Model):
                 self.current_xp -= costo
                 self.level += 1
                 leveled_up = True
-                gold_reward += 10  # Premio noble de 10 🪙
+                # 👑 PILAR 3: Premio noble escalonado por nivel (35 🪙 a 125 🪙)
+                gold_reward += 25 + (self.level * 5)
             else:
                 break
 

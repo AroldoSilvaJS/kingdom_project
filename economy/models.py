@@ -4,12 +4,12 @@ from datetime import timedelta
 
 class Wallet(models.Model):
     telegram_user_id = models.BigIntegerField(unique=True, db_index=True)
-    
-    # Saldo de regalo inicial noble pero cuidado (100 monedas de oro)
     balance = models.IntegerField("Monedas de Oro", default=100)
-    
     last_bonus_claim = models.DateTimeField("Último bono", null=True, blank=True)
     
+    # 👑 PILAR 1: COFRE DEL MECENAS (RAKEBACK ACUMULATIVO DEL 8%)
+    patron_vault = models.PositiveIntegerField("Cofre del Mecenas", default=0)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -30,6 +30,23 @@ class Wallet(models.Model):
             self.save()
             return True
         return False
+
+    def accumulate_patron_vault(self, bet_amount):
+        """Acumula automáticamente el 8% de cada apuesta en el Cofre del Mecenas."""
+        rebate = max(1, int(round(bet_amount * 0.08)))
+        self.patron_vault += rebate
+        self.save(update_fields=['patron_vault'])
+        return rebate
+
+    def claim_patron_vault(self):
+        """Transfiere el oro acumulado en el Cofre a su saldo disponible."""
+        amount = self.patron_vault
+        if amount > 0:
+            self.balance += amount
+            self.patron_vault = 0
+            self.save(update_fields=['balance', 'patron_vault'])
+            return amount
+        return 0
 
     def get_cooldown_hours(self):
         try:

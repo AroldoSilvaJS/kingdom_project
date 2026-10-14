@@ -13,7 +13,6 @@
                 <span class="text-[9.5px] uppercase tracking-[0.25em] text-vip-gold font-bold">Bóveda Imperial VIP</span>
                 <p class="text-[11px] text-stone-400 font-mono mt-0.5">Titular: <span>{{ wallet.telegram_user_id }}</span></p>
             </div>
-            <!-- Chip metálico aristocrático -->
             <div class="w-10 h-7 rounded-lg bg-gradient-to-br from-yellow-300 via-amber-500 to-yellow-600 border border-yellow-200/60 shadow flex items-center justify-center text-xs">
                 🪙
             </div>
@@ -22,7 +21,7 @@
         <div class="my-4 relative z-10">
             <span class="text-[11px] text-stone-400 uppercase tracking-wider font-semibold">Fortuna Disponible</span>
             <div class="flex items-baseline gap-2 mt-1">
-                <span class="font-serif text-4xl sm:text-5xl font-black text-gold-gradient tracking-tight">
+                <span class="font-serif text-4xl sm:text-5xl font-black text-gold-gradient tracking-tight" id="main-balance-text">
                     {{ wallet.balance }}
                 </span>
                 <span class="text-xs font-bold text-yellow-400 tracking-widest uppercase font-mono">Monedas de Oro</span>
@@ -34,6 +33,37 @@
                 <span>🦊</span> Bendición Kitsune Activa: Recarga de bono cada {{ wallet.get_cooldown_hours }}h
             </div>
         {% endif %}
+    </div>
+
+    <!-- 👑 PILAR 1: COFRE DEL MECENAS (RAKEBACK VIP DEL 8%) -->
+    <div class="vip-panel p-4 rounded-3xl border-2 border-yellow-500/60 bg-gradient-to-r from-amber-950/70 via-black to-[#1a0a28] flex items-center justify-between shadow-[0_0_20px_rgba(212,175,55,0.25)] relative overflow-hidden">
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-yellow-500/20 border border-yellow-400 flex items-center justify-center text-2xl shadow flex-shrink-0 animate-bounce">
+                🏺
+            </div>
+            <div class="flex flex-col">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-black text-white uppercase tracking-wider">Cofre del Mecenas</span>
+                    <span class="text-[8.5px] bg-yellow-500 text-black px-1.5 py-0.2 rounded font-black uppercase font-mono">8% Retorno</span>
+                </div>
+                <p class="text-[10px] text-stone-300 mt-0.5 leading-tight">
+                    Acumulas oro automáticamente en cada tirada del casino.
+                </p>
+                <div class="flex items-center gap-1 text-xs font-mono font-black text-yellow-300 mt-1">
+                    <span id="vault-amount">{{ wallet.patron_vault|default:0 }}</span> 🪙 acumuladas
+                </div>
+            </div>
+        </div>
+
+        <form action="{% url 'economy:claim_vault' %}" method="POST" class="m-0 flex-shrink-0" id="claim-vault-form">
+            {% csrf_token %}
+            <input type="hidden" name="tg_id" value="{{ wallet.telegram_user_id }}">
+            <input type="hidden" name="ajax" value="1">
+            <button type="button" onclick="claimPatronVault()" id="btn-claim-vault" {% if wallet.patron_vault <= 0 %}disabled{% endif %}
+                    class="btn-gold py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all {% if wallet.patron_vault <= 0 %}opacity-40 cursor-not-allowed{% endif %}">
+                Cobrar
+            </button>
+        </form>
     </div>
 
     <!-- MENSAJES -->
@@ -100,7 +130,7 @@
                 <span class="text-3xl">🎡</span>
                 <div>
                     <h4 class="font-bold text-white text-xs uppercase tracking-wider">Ruleta Real</h4>
-                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">x2.0 / x14</span>
+                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">x2.0 / x22</span>
                 </div>
             </button>
 
@@ -120,7 +150,7 @@
                 <span class="text-3xl">🍒</span>
                 <div>
                     <h4 class="font-bold text-white text-xs uppercase tracking-wider">Tragaperras</h4>
-                    <span class="text-[9.5px] text-purple-300 font-mono font-bold">Jackpot x15</span>
+                    <span class="text-[9.5px] text-purple-300 font-mono font-bold">Jackpot x25</span>
                 </div>
             </button>
 
@@ -145,6 +175,45 @@
 </div>
 
 <script>
+    async function claimPatronVault() {
+        const btn = document.getElementById('btn-claim-vault');
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ wallet.telegram_user_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span>';
+
+        try {
+            const resp = await fetch("{% url 'economy:claim_vault' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                document.getElementById('main-balance-text').innerText = data.nuevo_saldo;
+                document.getElementById('vault-amount').innerText = '0';
+                btn.className = "btn-gold py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider shadow opacity-40 cursor-not-allowed";
+                btn.innerHTML = 'Cobrado';
+                if (window.showVipAlert) {
+                    showVipAlert(`¡Retiraste +${data.claimed} 🪙 de retorno a tu Bóveda!`, "Cofre del Mecenas", "🏺");
+                }
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = 'Cobrar';
+                alert(data.error);
+            }
+        } catch(e) {
+            btn.disabled = false;
+            btn.innerHTML = 'Cobrar';
+        }
+    }
+
     function spinDailyWheel() {
         const btn = document.getElementById('btn-spin-daily');
         const wheel = document.getElementById('daily-wheel');
@@ -157,7 +226,6 @@
         const degrees = 1800 + Math.floor(Math.random() * 360);
         wheel.style.transform = `rotate(${degrees}deg)`;
 
-        // Gira 3s, luego muestra el mensaje de éxito durante 2s para que dé tiempo a leer
         setTimeout(() => {
             btn.innerHTML = '<span>🎉</span> ¡Premio Concedido! Guardando oro...';
             btn.classList.remove('opacity-60');
