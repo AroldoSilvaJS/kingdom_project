@@ -1004,11 +1004,15 @@ def open_photocard_box_ajax(request, box_id):
         extra_legendary += 15.0
 
     roll = random.random() * 100
-    if roll < (3.0 + extra_legendary):
+    p_legendary = 3.0 + extra_legendary
+    p_epic = p_legendary + 12.0
+    p_rare = p_epic + 25.0
+
+    if roll < p_legendary:
         target_rarity = 'legendary'
-    elif roll < (15.0 + extra_legendary):
+    elif roll < p_epic:
         target_rarity = 'epic'
-    elif roll < 40.0:
+    elif roll < p_rare:
         target_rarity = 'rare'
     else:
         target_rarity = 'common'
@@ -1215,7 +1219,7 @@ def admin_photocards_manage(request):
         except Exception as e:
             err_str = str(e)
             if "File size too large" in err_str:
-                messages.error(request, "⚠️ La imagen supera el límite de Cloudinary (10 MB). Por favor comprímela antes de subir.")
+                messages.error(request, "⚠️ La imagen supera el límite de carga permitido (10 MB). Por favor comprímela antes de subir.")
             else:
                 messages.error(request, f"⚠️ Error al procesar archivo: {err_str}")
 

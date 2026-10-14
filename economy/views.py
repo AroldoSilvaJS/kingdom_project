@@ -643,17 +643,15 @@ def mines_game(request):
             except ValueError:
                 pass
 
-        # 3. RETIRARSE Y COBRAR (CASHOUT - SIN DUPLICAR MULTIPLICADORES)
+        # 3. RETIRARSE Y COBRAR (CASHOUT)
         elif action == 'cashout' and session_mines and session_mines.get('in_game'):
             revealed_count = len(session_mines.get('revealed', []))
             if revealed_count > 0:
-                # Usa el multiplicador exactamente calculado al abrir
                 mult = session_mines.get('multiplier', 1.0)
                 ganancia = int(session_mines['bet'] * mult)
 
-                # Bonus Pantera solo sobre la ganancia neta
                 if pet and pet.species == 'panther':
-                    panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                    panther_profit_bonus = {1: 0.03, 2: 0.06, 0.10}.get(pet.evolution_stage_number, 0.03)
                     net = max(0, ganancia - session_mines['bet'])
                     ganancia = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
 
@@ -672,6 +670,10 @@ def mines_game(request):
                         'all_mines': all_mines,
                         'nuevo_saldo': wallet.balance
                     })
+            else:
+                # 👈 AÑADIR ESTE ELSE PARA QUE NO DE ERROR 500
+                if is_ajax:
+                    return JsonResponse({'success': False, 'error': 'Debes destapar al menos un cofre antes de retirarte.'}, status=400)
 
     in_game = session_mines is not None and session_mines.get('in_game', False)
     current_revealed = session_mines.get('revealed', []) if session_mines else []

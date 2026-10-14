@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-b_gxt!(b-)8=@2gj^1@2hs7bfy!ck@=d7&@_$+x!i*)hs)m4yy'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('true', '1')
 
 ALLOWED_HOSTS = ['*']
 
@@ -160,8 +160,6 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else []
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# 👈 AÑADIR ESTA LÍNEA (compatibilidad Django 6 con Cloudinary y WhiteNoise):
-STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 # Archivos subidos por los usuarios
 MEDIA_URL = '/media/' 

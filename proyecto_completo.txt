@@ -79,7 +79,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-b_gxt!(b-)8=@2gj^1@2hs7bfy!ck@=d7&@_$+x!i*)hs)m4yy'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('true', '1')
 
 ALLOWED_HOSTS = ['*']
 
@@ -163,7 +163,7 @@ if DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.config(
             default=DATABASE_URL,
-            conn_max_age=600,
+            conn_max_age=0,  # 👈 Cambiar a 0 para que no sature el pooler
             conn_health_checks=True,
         )
     }
@@ -215,8 +215,6 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else []
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# 👈 AÑADIR ESTA LÍNEA (compatibilidad Django 6 con Cloudinary y WhiteNoise):
-STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 
 # Archivos subidos por los usuarios
 MEDIA_URL = '/media/' 
@@ -410,7 +408,7 @@ ARCHIVO: .\core\context_processors.py
 
 # core/context_processors.py
 from idols.models import CustomRequest, IdolProfile
-from core.models import UserRole
+from core.models import UserRole, KingdomSetting
 
 ADMIN_TG_ID = '7474444797'
 
@@ -421,13 +419,24 @@ def kingdom_notifications(request):
         request.COOKIES.get('tg_id') or 
         request.session.get('tg_id')
     )
+
+    # 📢 Decreto Público Imperial (Global para toda la app)
+    broadcast_active = KingdomSetting.get_val('broadcast_active', 'false') == 'true'
+    broadcast_msg = KingdomSetting.get_val('broadcast_message', '')
+
+    context = {
+        'broadcast_active': broadcast_active,
+        'broadcast_message': broadcast_msg,
+        'unread_notifications_count': 0
+    }
+
     if not raw_id or str(raw_id).strip() in ['', 'None', 'undefined', 'null']:
-        return {'unread_notifications_count': 0}
+        return context
 
     try:
         tg_id = int(raw_id)
     except (ValueError, TypeError):
-        return {'unread_notifications_count': 0}
+        return context
 
     role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
     has_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
@@ -445,7 +454,8 @@ def kingdom_notifications(request):
             status='accepted'
         ).count()
 
-    return {'unread_notifications_count': count}
+    context['unread_notifications_count'] = count
+    return context
 
 ==================================================
 ARCHIVO: .\core\middleware.py
@@ -1725,7 +1735,7 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🧹 Purga total completada. Datos reseteados al 100%. Elige tu destino.")
             return redirect(f"/choose-role/?tg_id={admin_tg_id}&force=1")
 
-        # 11. TEMÁTICA SEMANAL DEL MURO
+        # 11. TEMÁTICA SEMANAL DEL MURO (GUARDAR O DESACTIVAR)
         elif accion == 'save_feed_theme':
             title = request.POST.get('theme_title', '').strip()
             msg = request.POST.get('theme_message', '').strip()
@@ -1744,6 +1754,15 @@ def admin_panel(request, admin_tg_id):
                 KingdomSetting.set_val('feed_theme_banner', image_url)
 
             messages.success(request, "🎭 ¡Temática semanal del Muro actualizada con éxito!")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+
+        # 👈 AÑADIR ESTA NUEVA ACCIÓN: DESACTIVAR Y BORRAR DE UN CLIC
+        elif accion == 'delete_feed_theme':
+            KingdomSetting.set_val('feed_theme_active', 'false')
+            KingdomSetting.set_val('feed_theme_title', '')
+            KingdomSetting.set_val('feed_theme_message', '')
+            KingdomSetting.set_val('feed_theme_banner', '')
+            messages.success(request, "🗑️ Temática del Muro desactivada y eliminada con éxito.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
     # 🔄 AUTO-SINCRONIZACIÓN GARANTIZADA:
@@ -2340,7 +2359,7 @@ def casino_game(request):
                     
                 if eleccion == color_ganador:
                     if eleccion == 'zero':
-                        ganancia = int(apuesta * 14)
+                        ganancia = int(apuesta * 22)
                     else:
                         ganancia = int(apuesta * 2.0)
                     
@@ -2418,14 +2437,14 @@ def slots_game(request):
     ganancia = 0
     reels = ['👑', '💎', '⭐']
 
-    # 🎲 SISTEMA DE PESOS PROBABILÍSTICOS (RTP ~93%, Matématicamente sostenible)
+    # 🎲 BOLSA DE PESOS CALIBRADA (~94.5% RTP - EQUILIBRIO PERFECTO)
     WEIGHTED_SYMBOLS = (
-        ['🍇'] * 26 +
-        ['🍒'] * 26 +
+        ['🍇'] * 24 +
+        ['🍒'] * 24 +
         ['🪙'] * 20 +
-        ['⭐'] * 14 +
-        ['💎'] * 10 +
-        ['👑'] * 4
+        ['⭐'] * 15 +
+        ['💎'] * 11 +
+        ['👑'] * 6
     )
         
     if request.method == 'POST':
@@ -2447,37 +2466,74 @@ def slots_game(request):
                 messages.error(request, err)
             else:
                 pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                # BUFF CUERVO ABISAL: Pequeño boost arcano controlado (1.5%, 3%, 5%), nunca 30%
-                raven_chance = {1: 0.015, 2: 0.03, 3: 0.05}.get(pet.evolution_stage_number, 0.015) if (pet and pet.species == 'raven') else 0.0
 
-                if pet and pet.species == 'raven' and random.random() < raven_chance:
-                    reels = ['👑', '👑', '👑']
-                else:
-                    reels = [random.choice(WEIGHTED_SYMBOLS) for _ in range(3)]
+                reels = [random.choice(WEIGHTED_SYMBOLS) for _ in range(3)]
+
+                # 🪶 BUFF CUERVO ABISAL: Si salen 2 gemas iguales de alto valor,
+                # el Cuervo puede completar la tercera gema mágica
+                if pet and pet.species == 'raven':
+                    raven_boost = {1: 0.05, 2: 0.10, 3: 0.18}.get(pet.evolution_stage_number, 0.05)
+                    if (reels[0] == reels[1] in ['👑', '💎', '⭐']) and random.random() < raven_boost:
+                        reels[2] = reels[0]
+                    elif (reels[1] == reels[2] in ['👑', '💎', '⭐']) and random.random() < raven_boost:
+                        reels[0] = reels[1]
                 
-                # Evaluación de Premios
+                # ─── EVALUACIÓN ESCALONADA DE PREMIOS ───
+                # 1. TRÍOS (3 IGUALES)
                 if reels[0] == reels[1] == reels[2]:
-                    multiplicador = 15 if reels[0] == '👑' else (10 if reels[0] == '💎' else (6 if reels[0] == '⭐' else 4))
-                    ganancia = apuesta * multiplicador
+                    symbol = reels[0]
+                    if symbol == '👑':
+                        multiplicador = 25.0  # JACKPOT SUPREMO REAL
+                        xp_gain = 12
+                    elif symbol == '💎':
+                        multiplicador = 15.0  # Triple Diamante
+                        xp_gain = 8
+                    elif symbol == '⭐':
+                        multiplicador = 8.0   # Triple Estrella
+                        xp_gain = 6
+                    elif symbol == '🪙':
+                        multiplicador = 5.0   # Triple Moneda
+                        xp_gain = 4
+                    else:
+                        multiplicador = 3.5   # Frutas (🍇 o 🍒)
+                        xp_gain = 3
+
+                    ganancia = int(apuesta * multiplicador)
                     
+                    # Buff Pantera de Ébano (+4% / +8% / +12% sobre la ganancia neta)
                     if pet and pet.species == 'panther':
-                        panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
+                        panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
                         net = ganancia - apuesta
-                        ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
+                        ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
                         
                     wallet.add_funds(ganancia - apuesta)
-                    resultado = "jackpot"
-                    xp_gain = 8
+                    resultado = "jackpot" if symbol in ['👑', '💎'] else "trio"
+
+                # 2. PARES (2 IGUALES)
                 elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-                    ganancia = int(apuesta * 1.25)
+                    # Detectar qué símbolo formó el par
+                    pair_sym = reels[1] if (reels[0] == reels[1] or reels[1] == reels[2]) else reels[0]
+
+                    # Par Premium vs Par Común
+                    if pair_sym in ['👑', '💎', '⭐']:
+                        multiplicador = 1.6  # Ganancia neta agradable
+                        xp_gain = 3
+                        resultado = "pair_premium"
+                    else:
+                        multiplicador = 1.2  # Reintegro amortiguador
+                        xp_gain = 2
+                        resultado = "pair"
+
+                    ganancia = int(round(apuesta * multiplicador))
+
                     if pet and pet.species == 'panther':
-                        panther_rates = {1: 0.03, 2: 0.06, 3: 0.10}
-                        net = ganancia - apuesta
-                        ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.03))))
-                        
+                        panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
+                        net = max(0, ganancia - apuesta)
+                        ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
+
                     wallet.add_funds(ganancia - apuesta)
-                    resultado = "pair"
-                    xp_gain = 3
+
+                # 3. DERROTA
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
@@ -2622,9 +2678,10 @@ def blackjack_game(request):
 
                 # BUFF LOBO ESPECTRAL: Protección balanceada (4%, 7%, 10%)
                 wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
+                # Indicar si la protección del lobo intervino:
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
                     wallet.add_funds(session_bj['bet'])
-                    resultado = 'push'
+                    resultado = 'wolf_saved'  # 👈 Diferenciado para mostrar aviso especial
                     ganancia = session_bj['bet']
 
                 grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
@@ -2663,9 +2720,9 @@ def blackjack_game(request):
                 # BUFF LOBO ESPECTRAL
                 wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
-                    wallet.add_funds(apuesta)
-                    resultado = 'push'
-                    ganancia = apuesta
+                   wallet.add_funds(apuesta)
+                   resultado = 'wolf_saved'  # 👈 Aquí
+                   ganancia = apuesta
 
                 grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
                 
@@ -2870,17 +2927,15 @@ def mines_game(request):
             except ValueError:
                 pass
 
-        # 3. RETIRARSE Y COBRAR (CASHOUT - SIN DUPLICAR MULTIPLICADORES)
+        # 3. RETIRARSE Y COBRAR (CASHOUT)
         elif action == 'cashout' and session_mines and session_mines.get('in_game'):
             revealed_count = len(session_mines.get('revealed', []))
             if revealed_count > 0:
-                # Usa el multiplicador exactamente calculado al abrir
                 mult = session_mines.get('multiplier', 1.0)
                 ganancia = int(session_mines['bet'] * mult)
 
-                # Bonus Pantera solo sobre la ganancia neta
                 if pet and pet.species == 'panther':
-                    panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                    panther_profit_bonus = {1: 0.03, 2: 0.06, 0.10}.get(pet.evolution_stage_number, 0.03)
                     net = max(0, ganancia - session_mines['bet'])
                     ganancia = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
 
@@ -2899,6 +2954,10 @@ def mines_game(request):
                         'all_mines': all_mines,
                         'nuevo_saldo': wallet.balance
                     })
+            else:
+                # 👈 AÑADIR ESTE ELSE PARA QUE NO DE ERROR 500
+                if is_ajax:
+                    return JsonResponse({'success': False, 'error': 'Debes destapar al menos un cofre antes de retirarte.'}, status=400)
 
     in_game = session_mines is not None and session_mines.get('in_game', False)
     current_revealed = session_mines.get('revealed', []) if session_mines else []
@@ -3562,12 +3621,14 @@ urlpatterns = [
     path('photocards/open/<int:box_id>/', views.open_photocard_box_ajax, name='open_box_ajax'),
     path('photocards/album/', views.my_photocards_album, name='my_photocards_album'),
     path('photocards/admin/', views.admin_photocards_manage, name='admin_photocards'),
-    # Mercado e Intercambios de Photocards
-    path('photocards/market/', views.photocards_market, name='photocards_market'),
-    path('photocards/sell/<int:user_card_id>/', views.photocard_sell_action, name='photocard_sell_action'),
+      # Mercado e Intercambios de Photocards
+        path('photocards/market/', views.photocards_market, name='photocards_market'),
+        path('photocards/fusion/', views.photocard_fusion, name='photocard_fusion'),  # 👈 AÑADIR ESTA LÍNEA
+        path('photocards/sell/<int:user_card_id>/', views.photocard_sell_action, name='photocard_sell_action'),
     path('photocards/buy/<int:user_card_id>/', views.photocard_buy_action, name='photocard_buy_action'),
     path('photocards/trade/create/<int:user_card_id>/', views.create_trade_offer, name='create_trade_offer'),
     path('photocards/trade/<int:trade_id>/<str:action>/', views.handle_trade_offer, name='handle_trade_offer'),
+  
 ]
 
 
@@ -4581,11 +4642,15 @@ def open_photocard_box_ajax(request, box_id):
         extra_legendary += 15.0
 
     roll = random.random() * 100
-    if roll < (3.0 + extra_legendary):
+    p_legendary = 3.0 + extra_legendary
+    p_epic = p_legendary + 12.0
+    p_rare = p_epic + 25.0
+
+    if roll < p_legendary:
         target_rarity = 'legendary'
-    elif roll < (15.0 + extra_legendary):
+    elif roll < p_epic:
         target_rarity = 'epic'
-    elif roll < 40.0:
+    elif roll < p_rare:
         target_rarity = 'rare'
     else:
         target_rarity = 'common'
@@ -4792,7 +4857,7 @@ def admin_photocards_manage(request):
         except Exception as e:
             err_str = str(e)
             if "File size too large" in err_str:
-                messages.error(request, "⚠️ La imagen supera el límite de Cloudinary (10 MB). Por favor comprímela antes de subir.")
+                messages.error(request, "⚠️ La imagen supera el límite de carga permitido (10 MB). Por favor comprímela antes de subir.")
             else:
                 messages.error(request, f"⚠️ Error al procesar archivo: {err_str}")
 
@@ -5053,6 +5118,141 @@ def handle_trade_offer(request, trade_id, action):
 
     return redirect('/idols/photocards/market/')
 
+# ==========================================
+# EL CALDERO REAL: FUSIÓN DE PHOTOCARDS
+# ==========================================
+
+def photocard_fusion(request):
+    tg_id = resolve_safe_tg(request)
+    if not tg_id:
+        return redirect('/')
+
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+
+    RECIPES = {
+        'common': {'required_count': 4, 'cost': 35, 'source_rarity': 'common', 'target_rarity': 'rare', 'luck_target': 'epic', 'luck_chance': 0.12},
+        'rare':   {'required_count': 3, 'cost': 75, 'source_rarity': 'rare',   'target_rarity': 'epic', 'luck_target': 'legendary', 'luck_chance': 0.15},
+        'epic':   {'required_count': 3, 'cost': 150, 'source_rarity': 'epic',  'target_rarity': 'epic', 'luck_target': 'legendary', 'luck_chance': 0.25},
+    }
+
+    if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+        tier = request.POST.get('tier', 'common')
+        raw_card_ids = request.POST.getlist('card_ids')
+
+        recipe = RECIPES.get(tier)
+        if not recipe:
+            err = "Receta de fusión no válida."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
+        if wallet.balance < recipe['cost']:
+            err = f"No tienes suficiente oro ({recipe['cost']} 🪙 necesarios)."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
+        try:
+            card_ids = [int(cid) for cid in raw_card_ids if str(cid).isdigit()]
+        except ValueError:
+            card_ids = []
+
+        if len(card_ids) != recipe['required_count']:
+            err = f"Debes seleccionar exactamente {recipe['required_count']} cartas para esta transmutación."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
+        with transaction.atomic():
+            selected_cards = list(UserPhotocard.objects.select_for_update().filter(
+                id__in=card_ids,
+                telegram_user_id=tg_id,
+                is_for_sale=False,
+                photocard__rarity=recipe['source_rarity']
+            ).select_related('photocard'))
+
+            if len(selected_cards) != recipe['required_count']:
+                err = "Algunas cartas seleccionadas ya no están disponibles, están a la venta o no coinciden en rareza."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
+                return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
+            # Descontar costo en oro
+            wallet.remove_funds(recipe['cost'])
+
+            # Eliminar cartas sacrificadas y cancelar trades activos
+            consumed_ids = [c.id for c in selected_cards]
+            PhotocardTrade.objects.filter(sender_card_id__in=consumed_ids, status='pending').update(status='cancelled')
+            PhotocardTrade.objects.filter(receiver_card_id__in=consumed_ids, status='pending').update(status='cancelled')
+            UserPhotocard.objects.filter(id__in=consumed_ids).delete()
+
+            # Probabilidad de resultado con buff de Conejo Lunar
+            luck_prob = recipe['luck_chance']
+            if pet and pet.species == 'rabbit':
+                rabbit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                luck_prob += rabbit_bonus
+
+            roll = random.random()
+            if roll < luck_prob:
+                awarded_rarity = recipe['luck_target']
+                is_lucky_jump = True
+            else:
+                awarded_rarity = recipe['target_rarity']
+                is_lucky_jump = False
+
+            # Buscar cartas en el catálogo
+            pool = list(Photocard.objects.filter(rarity=awarded_rarity))
+            if not pool:
+                pool = list(Photocard.objects.all())
+
+            new_card = random.choice(pool)
+            new_user_card = UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=new_card)
+
+            xp_map = {'rare': 15, 'epic': 30, 'legendary': 60}
+            grant_user_xp(request, tg_id, xp_map.get(new_card.rarity, 20), reason="Alquimia de Photocards")
+
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'is_lucky': is_lucky_jump,
+                    'nuevo_saldo': wallet.balance,
+                    'card': {
+                        'id': new_user_card.id,
+                        'name': new_card.name,
+                        'idol_name': new_card.display_idol_name,
+                        'rarity': new_card.rarity,
+                        'rarity_display': new_card.get_rarity_display(),
+                        'color': new_card.get_color_hex(),
+                        'image_url': new_card.image.url if new_card.image else ''
+                    }
+                })
+
+            messages.success(request, f"✨ ¡Alquimia completada! Obtuviste «{new_card.name}» ({new_card.get_rarity_display()}).")
+            return redirect(f'/idols/photocards/album/?tg_id={tg_id}')
+
+    # GET: Listado de cartas del usuario agrupadas por rareza (sin incluir las que están a la venta)
+    available_cards = UserPhotocard.objects.filter(
+        telegram_user_id=tg_id,
+        is_for_sale=False
+    ).exclude(photocard__rarity='legendary').select_related('photocard').order_by('-obtained_at')
+
+    commons = [c for c in available_cards if c.photocard.rarity == 'common']
+    rares   = [c for c in available_cards if c.photocard.rarity == 'rare']
+    epics   = [c for c in available_cards if c.photocard.rarity == 'epic']
+
+    return render(request, 'idols/photocard_fusion.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'pet': pet,
+        'commons': commons,
+        'rares': rares,
+        'epics': epics,
+    })
+
 ==================================================
 ARCHIVO: .\idols\__init__.py
 ==================================================
@@ -5143,31 +5343,40 @@ class Pet(models.Model):
         if self.can_be_petted(): return 0
         return max(1, int(((self.last_petted + timedelta(minutes=30)) - timezone.now()).total_seconds() // 60))
 
-    def can_go_expedition(self):
-        return not self.last_expedition or timezone.now() >= self.last_expedition + timedelta(minutes=90)
+    def add_xp(self, amount):
+        """Maneja la experiencia y subidas de nivel en cascada de forma segura."""
+        if amount <= 0:
+            return (False, self.level, self.evolution_stage_number)
 
-    def minutes_until_next_expedition(self):
-        if self.can_go_expedition(): return 0
-        return max(1, int(((self.last_expedition + timedelta(minutes=90)) - timezone.now()).total_seconds() // 60))
+        old_stage = self.evolution_stage_number
+        self.xp += int(amount)
+        leveled_up = False
+
+        while True:
+            needed = self.xp_to_next_level
+            if self.xp >= needed:
+                self.xp -= needed
+                self.level += 1
+                leveled_up = True
+            else:
+                break
+
+        new_stage = self.evolution_stage_number
+        self.save()
+        return (leveled_up, self.level, new_stage > old_stage)
 
     def feed(self):
         self.energy = min(100, self.energy + 25)
         self.happiness = min(100, self.happiness + 10)
-        self.xp += 20
-        if self.xp >= self.xp_to_next_level:
-            self.xp -= self.xp_to_next_level
-            self.level += 1
         self.last_fed = timezone.now()
-        self.save()
+        leveled_up, _, did_evolve = self.add_xp(20)
+        return did_evolve
 
     def pet_action(self):
         self.happiness = min(100, self.happiness + 20)
-        self.xp += 15
-        if self.xp >= self.xp_to_next_level:
-            self.xp -= self.xp_to_next_level
-            self.level += 1
         self.last_petted = timezone.now()
-        self.save()
+        leveled_up, _, did_evolve = self.add_xp(15)
+        return did_evolve
 
     def get_image_url(self):
         return f"/media/pets/{self.stage_info['sprite']}"
@@ -5395,7 +5604,7 @@ def interact_pet(request):
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-        old_stage = pet.evolution_stage_number
+        FEED_COST = 15  # Sincronizado exactamente con el template
 
         if action == 'feed':
             if pet.energy >= 100:
@@ -5405,12 +5614,9 @@ def interact_pet(request):
                 messages.info(request, msg)
                 return redirect(f'/pets/?tg_id={tg_id}')
 
-            if wallet.remove_funds(25): # 👈 Rebalanceado a 25 🪙
-                pet.feed()
+            if wallet.remove_funds(FEED_COST):
+                did_evolve = pet.feed()
                 grant_user_xp(request, tg_id, 4, reason="Alimentar Mascota")
-                
-                new_stage = pet.evolution_stage_number
-                did_evolve = (new_stage > old_stage)
 
                 if is_ajax:
                     return JsonResponse({
@@ -5425,7 +5631,7 @@ def interact_pet(request):
                         'pet_level': pet.level,
                         'nuevo_saldo': wallet.balance,
                         'evolved': did_evolve,
-                        'new_stage': new_stage,
+                        'new_stage': pet.evolution_stage_number,
                         'new_name': pet.evolved_name,
                         'new_title': pet.stage_info.get('title', ''),
                         'new_sprite': pet.get_image_url(),
@@ -5433,7 +5639,7 @@ def interact_pet(request):
                     })
                 messages.success(request, f"🍖 ¡Alimentaste a {pet.name}!")
             else:
-                msg = f"No tienes suficientes monedas (15 🪙)."
+                msg = f"No tienes suficiente oro ({FEED_COST} 🪙 necesarios)."
                 if is_ajax:
                     return JsonResponse({'success': False, 'error': msg}, status=400)
                 messages.error(request, msg)
@@ -5447,11 +5653,8 @@ def interact_pet(request):
                 messages.info(request, msg)
                 return redirect(f'/pets/?tg_id={tg_id}')
 
-            pet.pet_action()
+            did_evolve = pet.pet_action()
             grant_user_xp(request, tg_id, 5, reason="Acariciar Mascota")
-
-            new_stage = pet.evolution_stage_number
-            did_evolve = (new_stage > old_stage)
 
             if is_ajax:
                 return JsonResponse({
@@ -5466,7 +5669,7 @@ def interact_pet(request):
                     'pet_level': pet.level,
                     'cooldown_minutes': 30,
                     'evolved': did_evolve,
-                    'new_stage': new_stage,
+                    'new_stage': pet.evolution_stage_number,
                     'new_name': pet.evolved_name,
                     'new_title': pet.stage_info.get('title', ''),
                     'new_sprite': pet.get_image_url(),
@@ -5478,7 +5681,7 @@ def interact_pet(request):
 
 
 def expedition_pet(request):
-    """Envía a la mascota a explorar una de las 3 zonas con probabilidad de Photocards reales"""
+    """Envía a la mascota a explorar con balance de oro, buffs escalados y cartas seguras."""
     if request.method == 'POST':
         tg_id = resolve_tg_id(request)
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
@@ -5522,21 +5725,16 @@ def expedition_pet(request):
         pet.last_expedition = timezone.now()
 
         food_found = False
+        # Recompensas de Expedición: Oro, XP y Photocards (Sin regalar comida/energía)
         card_dropped = None
 
         if zone == 'forest':
-            gold_found = random.randint(10, 20) + min(10, pet.level)
+            gold_found = random.randint(12, 22) + min(10, pet.level)
             xp_mascota = 25
-            if random.random() < 0.30:
-                food_found = True
-                pet.energy = min(100, pet.energy + 20)
 
         elif zone == 'crypts':
-            gold_found = random.randint(25, 45) + min(15, pet.level)
+            gold_found = random.randint(28, 48) + min(15, pet.level)
             xp_mascota = 45
-            if random.random() < 0.20:
-                food_found = True
-                pet.energy = min(100, pet.energy + 20)
 
             chance_card = 0.25 if pet.species == 'rabbit' else 0.15
             if random.random() < chance_card:
@@ -5553,7 +5751,7 @@ def expedition_pet(request):
                     }
 
         else: # cavern
-            gold_found = random.randint(50, 90) + min(25, pet.level * 2)
+            gold_found = random.randint(55, 95) + min(25, pet.level * 2)
             xp_mascota = 70
 
             chance_card = 0.40 if pet.species == 'rabbit' else 0.25
@@ -5572,27 +5770,19 @@ def expedition_pet(request):
                         'image_url': c.image.url if c.image else ''
                     }
 
-        # Buff Ciervo de Jade: Probabilidad de duplicar oro
-        if pet.species == 'deer' and random.random() < 0.25:
-            gold_found *= 2
-
-        old_stage = pet.evolution_stage_number
-        leveled_up = False
-        pet.xp += xp_mascota
-        if pet.xp >= pet.xp_to_next_level:
-            pet.xp -= pet.xp_to_next_level
-            pet.level += 1
-            leveled_up = True
+        # Buff Ciervo de Jade calibrado por fase (15% / 25% / 40%)
+        if pet.species == 'deer':
+            deer_rates = {1: 0.15, 2: 0.25, 3: 0.40}
+            if random.random() < deer_rates.get(pet.evolution_stage_number, 0.15):
+                gold_found *= 2
 
         pet.save()
-
-        new_stage = pet.evolution_stage_number
-        did_evolve = (new_stage > old_stage)
+        leveled_up, _, did_evolve = pet.add_xp(xp_mascota)
 
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         wallet.add_funds(gold_found)
         
-        # Buff Búho Cronos: EXP aumentada para el noble
+        # Buff Búho Cronos
         xp_gain_player = max(10, gold_found // 4)
         if pet.species == 'owl':
             xp_gain_player = int(xp_gain_player * 1.30)
@@ -5605,14 +5795,13 @@ def expedition_pet(request):
                 'zone_name': z_data['name'],
                 'gold': gold_found,
                 'xp': xp_mascota,
-                'food_found': food_found,
                 'card_dropped': card_dropped,
                 'leveled_up': leveled_up,
                 'pet_level': pet.level,
                 'pet_energy': pet.energy,
                 'nuevo_saldo': wallet.balance,
                 'evolved': did_evolve,
-                'new_stage': new_stage,
+                'new_stage': pet.evolution_stage_number,
                 'new_name': pet.evolved_name,
                 'new_title': pet.stage_info.get('title', ''),
                 'new_sprite': pet.get_image_url(),
@@ -5630,7 +5819,7 @@ def change_pet(request):
         tg_id = resolve_tg_id(request)
         new_species = request.POST.get('new_species') or request.POST.get('species')
         new_name = request.POST.get('new_name', '').strip()
-        cost = 500  # 👈 Rebalanceado a 500 🪙
+        cost = 300  # Sincronizado a 300 🪙 con el template de forma exacta
         
         pet = get_object_or_404(Pet, telegram_user_id=tg_id)
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
@@ -5650,7 +5839,7 @@ def change_pet(request):
             grant_user_xp(request, tg_id, 30, reason="Ritual de Transmutación")
             messages.success(request, f"✨ ¡Ritual completado! Has transmutado tu mascota a {new_name} ({pet.evolved_name}) por {cost} 🪙.")
         else:
-            messages.error(request, f"No tienes suficiente oro ({cost} 🪙). Tu saldo actual es de {wallet.balance} 🪙.")
+            messages.error(request, f"No tienes suficiente oro ({cost} 🪙 necesarios). Tu saldo actual es de {wallet.balance} 🪙.")
             
     return redirect(f'/pets/?tg_id={tg_id}')
 
@@ -5802,6 +5991,23 @@ ARCHIVO: .\templates\base.html
         
         <div class="w-48 h-[1px] bg-gradient-to-r from-transparent via-vip-gold/70 to-transparent mt-0.5"></div>
     </header>
+
+    <!-- 📢 DECRETO IMPERIAL PÚBLICO DE LA CORONA -->
+    {% if broadcast_active and broadcast_message %}
+    <div class="w-full max-w-md px-3 mb-2.5 z-20">
+        <div class="p-3.5 rounded-2xl border-2 border-yellow-500/80 bg-gradient-to-r from-amber-950/95 via-black to-[#1a0c28] shadow-[0_0_25px_rgba(234,179,8,0.35)] flex items-start gap-3 relative overflow-hidden">
+            <span class="text-xl flex-shrink-0 animate-bounce">📢</span>
+            <div class="flex flex-col min-w-0">
+                <span class="text-[9.5px] font-mono font-black uppercase tracking-widest text-yellow-400">
+                    Decreto de la Corona Imperial 👑
+                </span>
+                <p class="text-xs text-stone-200 font-medium leading-relaxed mt-0.5">
+                    {{ broadcast_message }}
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Contenedor Dinámico de Vistas -->
     <main class="w-full max-w-md flex-1 px-4 z-10">
@@ -6518,9 +6724,16 @@ ARCHIVO: .\templates\core\admin_panel.html
           <input type="file" name="theme_banner" accept="image/*" class="text-xs text-stone-400">
         </div>
 
-        <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-          💾 Guardar Temática Semanal
-        </button>
+        <div class="grid grid-cols-2 gap-2 mt-1">
+          <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+            💾 Guardar Temática
+          </button>
+          
+          <button type="submit" name="accion" value="delete_feed_theme" onclick="return confirm('¿Retirar y borrar la temática del Muro ahora mismo?')"
+                  class="bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider active:scale-95 transition-all">
+            🚫 Retirar del Muro
+          </button>
+        </div>
       </form>
     </div>
 
@@ -7779,7 +7992,7 @@ ARCHIVO: .\templates\economy\blackjack.html
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-44">
+<div class="flex flex-col gap-4 mt-2 pb-44 max-w-md mx-auto">
     
     <!-- ENCABEZADO Y VOLVER -->
     <div class="flex justify-between items-center px-1">
@@ -7790,6 +8003,7 @@ ARCHIVO: .\templates\economy\blackjack.html
         <div class="flex items-center gap-1.5 bg-black/70 border border-vip-gold/40 px-3.5 py-1.5 rounded-full shadow-inner">
             <span class="text-xs">🪙</span>
             <span class="text-xs font-mono font-bold text-gold-gradient" id="bj-balance">{{ wallet.balance }}</span>
+            <span class="text-[9px] uppercase font-bold text-yellow-400">Oro</span>
         </div>
     </div>
 
@@ -7835,7 +8049,7 @@ ARCHIVO: .\templates\economy\blackjack.html
                     </div>
                     {% endwith %}
 
-                    <!-- Carta Oculta -->
+                    <!-- Carta Oculta con Sello Real -->
                     <div class="card-deal w-14 h-20 rounded-xl shadow-2xl border-2 border-yellow-500/70 bg-gradient-to-br from-[#4a0815] via-[#850d24] to-[#2b040b] flex flex-col items-center justify-center relative select-none animate-pulse">
                         <div class="w-10 h-16 border border-yellow-500/40 rounded-lg flex items-center justify-center">
                             <span class="text-base text-yellow-300 drop-shadow">👑</span>
@@ -8041,9 +8255,14 @@ ARCHIVO: .\templates\economy\blackjack.html
             const data = await resp.json();
 
             if (!data.success) {
-            showVipAlert(data.error, "Regla de la Corte", "⚠️");
-            return;
-        }
+                if (window.showVipAlert) {
+                    showVipAlert(data.error, "Regla de la Corte", "⚠️");
+                } else {
+                    alert(data.error);
+                }
+                return;
+            }
+
             // Actualizar Saldo
             const balanceElem = document.getElementById('bj-balance');
             if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
@@ -8073,7 +8292,7 @@ ARCHIVO: .\templates\economy\blackjack.html
                 inGameControls.classList.add('hidden');
                 betControls.classList.remove('hidden');
 
-                // Resultado
+                // ─── EVALUACIÓN VISUAL DE RESULTADOS ───
                 if (data.resultado === 'blackjack') {
                     playCoins();
                     try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
@@ -8087,6 +8306,13 @@ ARCHIVO: .\templates\economy\blackjack.html
                     resultBox.innerHTML = `
                     <div class="p-2.5 bg-emerald-950/90 border-2 border-emerald-500 text-emerald-200 text-xs font-bold rounded-xl text-center shadow-[0_0_15px_rgba(16,185,129,0.5)]">
                         🎉 ¡Victoria Noble! Superaste al Croupier (+${data.ganancia} 🪙).
+                    </div>`;
+                } else if (data.resultado === 'wolf_saved') {
+                    playCoins();
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                    resultBox.innerHTML = `
+                    <div class="p-2.5 bg-cyan-950/95 border-2 border-cyan-400 text-cyan-200 text-xs font-bold rounded-xl text-center shadow-[0_0_20px_rgba(34,211,238,0.6)] animate-pulse">
+                        🐺 ¡Tu Lobo Espectral intervino en las sombras! Recuperas tu apuesta de ${data.ganancia} 🪙.
                     </div>`;
                 } else if (data.resultado === 'push') {
                     resultBox.innerHTML = `
@@ -8201,7 +8427,7 @@ ARCHIVO: .\templates\economy\casino.html
                             class="py-3 rounded-2xl border border-green-900 bg-green-950/30 text-green-400 text-xs font-black uppercase flex flex-col items-center justify-center hover:border-green-500 transition-all">
                         <span class="text-base mb-0.5">🟢</span>
                         <span>Cero (0)</span>
-                        <span class="text-[9px] font-mono text-yellow-400 font-bold">x14</span>
+                        <span class="text-[9px] font-mono text-yellow-400 font-bold">x22</span>
                     </button>
                 </div>
             </div>
@@ -8998,14 +9224,22 @@ ARCHIVO: .\templates\economy\slots.html
             </button>
         </div>
 
-        <!-- TABLA DE PREMIOS -->
-        <div class="w-full mt-4 bg-black/40 border border-vip-gold/20 p-3 rounded-xl text-left">
-            <h4 class="text-[10px] font-bold text-vip-gold uppercase tracking-wider mb-1.5">📜 Tabla de Pagos</h4>
-            <div class="grid grid-cols-2 gap-1.5 text-[10px] text-vip-text/70">
-                <span>👑👑👑 Triple Corona: <strong class="text-yellow-400">x15</strong></span>
-                <span>💎💎💎 Triple Diamante: <strong class="text-purple-300">x10</strong></span>
-                <span>⭐⭐⭐ Triple Estrella: <strong class="text-yellow-200">x6</strong></span>
-                <span>✨ Par de cualquier gema: <strong class="text-white">x1.4</strong></span>
+        <!-- TABLA DE PREMIOS REBALANCEADA -->
+        <div class="w-full mt-4 bg-black/50 border border-vip-gold/30 p-3.5 rounded-2xl text-left shadow-inner">
+            <h4 class="text-[10px] font-black text-vip-gold uppercase tracking-wider mb-2 flex items-center justify-between border-b border-white/5 pb-1">
+                <span>📜 Tabla de Pagos Imperial</span>
+                <span class="text-[9px] text-yellow-300 font-mono">RTP Equilibrado</span>
+            </h4>
+            <div class="grid grid-cols-2 gap-2 text-[10px] text-stone-300 font-medium">
+                <span class="flex items-center justify-between">👑👑👑 Triple Corona: <strong class="text-yellow-400 font-mono font-black">x25</strong></span>
+                <span class="flex items-center justify-between">💎💎💎 Triplete Diamante: <strong class="text-purple-300 font-mono font-black">x15</strong></span>
+                <span class="flex items-center justify-between">⭐⭐⭐ Triplete Estrella: <strong class="text-amber-300 font-mono font-bold">x8</strong></span>
+                <span class="flex items-center justify-between">🪙🪙🪙 Monedas de Oro: <strong class="text-yellow-300 font-mono font-bold">x5</strong></span>
+                <span class="flex items-center justify-between">🍇/🍒 Trío de Frutas: <strong class="text-white font-mono">x3.5</strong></span>
+                <span class="flex items-center justify-between">👑/💎/⭐ Par Noble: <strong class="text-emerald-300 font-mono font-bold">x1.6</strong></span>
+            </div>
+            <div class="text-[9px] text-stone-500 font-mono mt-2 text-center pt-1 border-t border-white/5">
+                Cualquier Par Básico (Fruta o Moneda) devuelve tu apuesta: <strong class="text-stone-300">x1.2</strong>
             </div>
         </div>
 
@@ -9189,15 +9423,26 @@ ARCHIVO: .\templates\economy\slots.html
                     playCoins();
                     try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
                     resultBox.innerHTML = `
-                        <div class="p-3 bg-gradient-to-r from-yellow-950 via-yellow-600 to-yellow-950 border border-yellow-300 rounded-xl text-black text-xs font-black uppercase tracking-wider w-full animate-bounce shadow-lg">
+                        <div class="p-3 bg-gradient-to-r from-yellow-500 via-amber-300 to-yellow-500 border border-yellow-200 rounded-xl text-stone-950 text-xs font-black uppercase tracking-wider w-full animate-bounce shadow-[0_0_20px_rgba(234,179,8,0.7)]">
                             👑 ¡JACKPOT IMPERIAL! Has ganado +${data.ganancia} 🪙 de oro.
                         </div>`;
-                } else if (data.resultado === 'pair') {
+                } else if (data.resultado === 'trio') {
                     playCoins();
                     try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
                     resultBox.innerHTML = `
-                        <div class="p-2.5 bg-purple-950/80 border border-purple-500 rounded-xl text-purple-200 text-xs font-bold w-full">
-                            ✨ ¡Par conseguido! Recuperas tu apuesta con ganancia (+${data.ganancia} 🪙).
+                        <div class="p-2.5 bg-purple-950/90 border border-purple-400 rounded-xl text-purple-200 text-xs font-bold w-full shadow">
+                            ✨ ¡Trío Conseguido! Cobras +${data.ganancia} 🪙.
+                        </div>`;
+                } else if (data.resultado === 'pair_premium') {
+                    playCoins();
+                    resultBox.innerHTML = `
+                        <div class="p-2.5 bg-emerald-950/80 border border-emerald-500 rounded-xl text-emerald-200 text-xs font-bold w-full">
+                            💎 ¡Par Noble! Ganancia neta (+${data.ganancia} 🪙).
+                        </div>`;
+                } else if (data.resultado === 'pair') {
+                    resultBox.innerHTML = `
+                        <div class="p-2.5 bg-amber-950/80 border border-amber-500/60 rounded-xl text-amber-200 text-xs font-bold w-full">
+                            🍒 ¡Par conseguido! Recuperas tu apuesta (+${data.ganancia} 🪙).
                         </div>`;
                 } else {
                     try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
@@ -9882,8 +10127,8 @@ ARCHIVO: .\templates\idols\collection.html
                 {% for ant in antojos %}
                     <div class="relative rounded-2xl overflow-hidden border border-yellow-500/50 aspect-[3/4] bg-black shadow-lg flex flex-col justify-end group">
                         <img src="{{ ant.delivered_photo.url }}" alt="{{ ant.description }}" 
-                        onclick="openImageLightbox('{{ ant.delivered_photo.url }}', '{{ ant.description|escapejs }}')"
-                        class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
+                             onclick="openImageLightbox('{{ ant.delivered_photo.url }}', '{{ ant.description|escapejs }}')"
+                             class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
                         <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
                         <div class="relative z-10 p-2.5 flex flex-col">
                             <span class="text-[9px] bg-yellow-500 text-black font-black uppercase px-1.5 py-0.2 rounded w-fit mb-1">Antojo Exclusivo</span>
@@ -9896,11 +10141,24 @@ ARCHIVO: .\templates\idols\collection.html
         </div>
     {% endif %}
 
-    <!-- SECCIÓN 2: FOTOS DE KINGDOMFANS DESBLOQUEADAS -->
-    {% for post in posts %}
+    <!-- SECCIÓN 2: FOTOS Y VIDEOS DE KINGDOMFANS DESBLOQUEADOS -->
+    {% if posts %}
+        <div class="flex flex-col gap-2.5 mt-2">
+            <h3 class="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span>💎</span> Contenido VIP Desbloqueado ({{ posts|length }})
+            </h3>
+            <div class="grid grid-cols-2 gap-3">
+                {% for post in posts %}
                     <div class="relative rounded-2xl overflow-hidden border border-purple-500/40 aspect-[3/4] bg-black shadow-md flex flex-col justify-end group">
                         {% if post.is_video %}
-                            <video src="{{ post.video.url }}" controls playsinline class="w-full h-full object-cover"></video>
+                            <video controls 
+                                   playsinline 
+                                   preload="metadata" 
+                                   class="w-full h-full object-cover bg-black">
+                                <source src="{{ post.video.url }}" type="video/mp4">
+                                <source src="{{ post.video.url }}" type="video/webm">
+                                <source src="{{ post.video.url }}" type="video/quicktime">
+                            </video>
                         {% elif post.image %}
                             <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
                                  onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
@@ -11687,19 +11945,11 @@ ARCHIVO: .\templates\idols\photocards_album.html
 <div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
     <!-- TABS DE NAVEGACIÓN -->
-    <div class="grid grid-cols-3 gap-1 bg-black/50 p-1 rounded-xl border border-vip-gold/30 mb-6 text-xs font-semibold text-center">
-        <a href="/idols/photocards/?tg_id={{ tg_id }}" 
-           class="py-2.5 rounded-lg transition-all text-gray-400 hover:text-white flex items-center justify-center gap-1">
-            <span>🎁</span> <span>Cajas</span>
-        </a>
-        <a href="/idols/photocards/album/?tg_id={{ tg_id }}" 
-           class="py-2.5 rounded-lg transition-all bg-gradient-to-r from-vip-gold/30 to-amber-600/30 text-vip-gold border border-vip-gold/50 shadow-sm flex items-center justify-center gap-1 font-bold">
-            <span>📖</span> <span>Mi Álbum</span>
-        </a>
-        <a href="/idols/photocards/market/?tg_id={{ tg_id }}" 
-           class="py-2.5 rounded-lg transition-all text-gray-400 hover:text-white flex items-center justify-center gap-1">
-            <span>🏛️</span> <span>Mercado</span>
-        </a>
+    <div class="grid grid-cols-4 gap-1 bg-black/60 p-1 rounded-xl border border-vip-gold/30 mb-4 text-[10.5px] font-bold text-center shadow-lg">
+        <button type="button" onclick="universalNav('/idols/photocards/')" class="py-2 rounded-lg text-stone-400 hover:text-white">🎁 Cajas</button>
+        <button type="button" class="py-2 rounded-lg bg-vip-gold text-black font-black shadow">📖 Álbum</button>
+        <button type="button" onclick="universalNav('/idols/photocards/market/')" class="py-2 rounded-lg text-stone-400 hover:text-white">🏛️ Mercado</button>
+        <button type="button" onclick="universalNav('/idols/photocards/fusion/')" class="py-2 rounded-lg text-purple-300 hover:text-white">🔮 Caldero</button>
     </div>
 
     <!-- MENSAJES -->
@@ -12661,6 +12911,320 @@ ARCHIVO: .\templates\idols\photocard_boxes.html
 {% endblock %}
 
 ==================================================
+ARCHIVO: .\templates\idols\photocard_fusion.html
+==================================================
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    
+    <!-- SUB-NAV SUPERIOR: CAJAS | ÁLBUM | MERCADO | CALDERO -->
+    <div class="grid grid-cols-4 gap-1 bg-black/60 p-1 rounded-2xl border border-vip-gold/30 text-[10px] font-bold text-center shadow-lg">
+        <button type="button" onclick="universalNav('/idols/photocards/')" class="py-2 rounded-xl text-stone-400 hover:text-white">🎁 Cajas</button>
+        <button type="button" onclick="universalNav('/idols/photocards/album/')" class="py-2 rounded-xl text-stone-400 hover:text-white">📖 Álbum</button>
+        <button type="button" onclick="universalNav('/idols/photocards/market/')" class="py-2 rounded-xl text-stone-400 hover:text-white">🏛️ Mercado</button>
+        <button type="button" class="py-2 rounded-xl bg-gradient-to-r from-purple-900 to-fuchsia-900 text-purple-200 border border-purple-400 font-black shadow">🔮 Caldero</button>
+    </div>
+
+    <!-- BANNER HERO DEL CALDERO -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden border border-purple-500/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#200835] via-[#0d0217] to-black">
+        <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-fuchsia-600/20 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="relative z-10 flex flex-col items-center">
+            <span class="text-3xl mb-1 filter drop-shadow">🔮</span>
+            <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
+                El Caldero Real
+            </h1>
+            <p class="text-[11px] text-stone-300 mt-1 max-w-[280px]">
+                Funde tus cartas repetidas para transmutarlas en reliquias de rareza superior.
+            </p>
+
+            <div class="mt-2.5 inline-flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3.5 py-1 rounded-full text-xs font-mono font-bold text-yellow-400">
+                <span>🪙 Bóveda:</span> <span id="fusion-gold" class="text-white font-black">{{ wallet.balance }}</span> 🪙
+            </div>
+        </div>
+    </div>
+
+    <!-- SELECTOR DE RECETA -->
+    <div class="grid grid-cols-3 gap-1.5 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl text-[10px] font-bold uppercase text-center shadow-inner">
+        <button type="button" onclick="switchRecipe('common')" id="btn-tab-common" 
+                class="py-2.5 rounded-xl bg-vip-gold text-black font-black recipe-tab-btn">
+            ⚪ Comunes (4)
+        </button>
+        <button type="button" onclick="switchRecipe('rare')" id="btn-tab-rare" 
+                class="py-2.5 rounded-xl text-blue-400 hover:text-white recipe-tab-btn">
+            🔵 Raras (3)
+        </button>
+        <button type="button" onclick="switchRecipe('epic')" id="btn-tab-epic" 
+                class="py-2.5 rounded-xl text-purple-400 hover:text-white recipe-tab-btn">
+            🟣 Épicas (3)
+        </button>
+    </div>
+
+    <!-- TARJETA DE INFORMACIÓN DE RECETA -->
+    <div class="bg-black/70 border border-white/10 p-3.5 rounded-2xl flex items-center justify-between text-xs" id="recipe-summary-box">
+        <div class="flex flex-col">
+            <span class="font-bold text-white" id="recipe-title">Transmutación Común ➔ Rara 🔵</span>
+            <span class="text-[10px] text-stone-400 mt-0.5" id="recipe-desc">Sacrifica 4 cartas comunes para forjar 1 Rara garantizada.</span>
+        </div>
+        <span class="font-mono text-xs font-black text-yellow-400 bg-black/80 border border-yellow-500/40 px-2.5 py-1 rounded-xl" id="recipe-cost">
+            35 🪙
+        </span>
+    </div>
+
+    <!-- SECCIÓN DE SELECCIÓN DE CARTAS -->
+    <div class="flex flex-col gap-2">
+        <div class="flex justify-between items-center px-1">
+            <span class="text-xs font-bold text-stone-300 uppercase tracking-wider">
+                Selecciona tus cartas sacrificadas:
+            </span>
+            <span class="text-[10px] font-mono font-bold text-purple-300" id="selection-counter">0 / 4 seleccionadas</span>
+        </div>
+
+        <!-- Cuadrícula Comunes -->
+        <div id="grid-common" class="grid grid-cols-3 gap-2.5 cards-pool-grid">
+            {% for c in commons %}
+            <div onclick="toggleCardSelection(this, {{ c.id }})" 
+                 class="selectable-card relative aspect-[5/7] rounded-xl overflow-hidden border-2 border-stone-600 bg-black cursor-pointer shadow active:scale-95 transition-all select-none group"
+                 data-id="{{ c.id }}" data-tier="common">
+                <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
+                <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
+                <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-purple-600 border border-white text-white flex items-center justify-center text-xs font-black shadow-lg">✓</div>
+                <div class="absolute bottom-1 inset-x-1 bg-black/80 p-1 rounded text-center truncate text-[9px] text-white font-bold">
+                    {{ c.photocard.name }}
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-span-3 text-center py-8 text-stone-500 text-xs bg-black/40 rounded-2xl border border-white/5">
+                No tienes suficientes cartas Comunes libres para sacrificar.
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Cuadrícula Raras -->
+        <div id="grid-rare" class="hidden grid grid-cols-3 gap-2.5 cards-pool-grid">
+            {% for c in rares %}
+            <div onclick="toggleCardSelection(this, {{ c.id }})" 
+                 class="selectable-card relative aspect-[5/7] rounded-xl overflow-hidden border-2 border-blue-500 bg-black cursor-pointer shadow active:scale-95 transition-all select-none group"
+                 data-id="{{ c.id }}" data-tier="rare">
+                <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
+                <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
+                <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-blue-600 border border-white text-white flex items-center justify-center text-xs font-black shadow-lg">✓</div>
+                <div class="absolute bottom-1 inset-x-1 bg-black/80 p-1 rounded text-center truncate text-[9px] text-white font-bold">
+                    {{ c.photocard.name }}
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-span-3 text-center py-8 text-stone-500 text-xs bg-black/40 rounded-2xl border border-white/5">
+                No tienes cartas Raras libres para sacrificar.
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Cuadrícula Épicas -->
+        <div id="grid-epic" class="hidden grid grid-cols-3 gap-2.5 cards-pool-grid">
+            {% for c in epics %}
+            <div onclick="toggleCardSelection(this, {{ c.id }})" 
+                 class="selectable-card relative aspect-[5/7] rounded-xl overflow-hidden border-2 border-purple-500 bg-black cursor-pointer shadow active:scale-95 transition-all select-none group"
+                 data-id="{{ c.id }}" data-tier="epic">
+                <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
+                <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
+                <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-purple-600 border border-white text-white flex items-center justify-center text-xs font-black shadow-lg">✓</div>
+                <div class="absolute bottom-1 inset-x-1 bg-black/80 p-1 rounded text-center truncate text-[9px] text-white font-bold">
+                    {{ c.photocard.name }}
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-span-3 text-center py-8 text-stone-500 text-xs bg-black/40 rounded-2xl border border-white/5">
+                No tienes cartas Épicas libres para sacrificar.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- BOTÓN DE INICIAR ALQUIMIA -->
+    <button type="button" id="btn-do-fusion" onclick="executeFusion()" disabled
+            class="btn-gold py-4 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-all opacity-50 cursor-not-allowed mt-2">
+        <span>🔮</span> <span>Encender Caldero Alquímico</span>
+    </button>
+
+</div>
+
+<!-- 🌟 MODAL DE REVELACIÓN DE ALQUIMIA -->
+<div id="fusion-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 select-none">
+    <div class="w-full max-w-sm bg-gradient-to-b from-[#2a0e4a] via-[#10041f] to-black border-2 border-purple-400 rounded-3xl p-6 shadow-[0_0_60px_rgba(168,85,247,0.5)] flex flex-col items-center text-center relative overflow-hidden">
+        
+        <span class="text-[10px] font-mono font-bold uppercase tracking-widest text-amber-300 bg-black/70 px-3 py-0.5 rounded-full border border-yellow-500/50 mb-2" id="f-modal-tag">
+            ¡Transmutación Consumada!
+        </span>
+
+        <h3 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest mb-1" id="f-modal-name">
+            Nombre Carta
+        </h3>
+        <p class="text-xs text-yellow-300 font-bold mb-3" id="f-modal-idol">Idol</p>
+
+        <!-- Carta Revelada -->
+        <div class="w-44 h-60 rounded-2xl border-3 overflow-hidden shadow-2xl bg-black relative mb-3" id="f-modal-card-box">
+            <img id="f-modal-img" src="" class="w-full h-full object-cover">
+        </div>
+
+        <button type="button" onclick="closeFusionModal()" 
+                class="btn-gold w-full py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+            Guardar en mi Álbum
+        </button>
+    </div>
+</div>
+
+<script>
+    let currentTier = 'common';
+    let selectedIds = [];
+
+    const TIER_CONFIG = {
+        'common': { need: 4, cost: 35, title: 'Transmutación Común ➔ Rara 🔵', desc: 'Sacrifica 4 comunes para forjar 1 Rara garantizada (con chance épica).' },
+        'rare':   { need: 3, cost: 75, title: 'Transmutación Rara ➔ Épica 🟣', desc: 'Sacrifica 3 raras para forjar 1 Épica garantizada (con chance legendaria).' },
+        'epic':   { need: 3, cost: 150, title: 'Gran Ritual ➔ Épica Superior o 👑', desc: 'Sacrifica 3 épicas: 25% de Legendaria 👑 (o una Épica diferente).' }
+    };
+
+    function switchRecipe(tier) {
+        currentTier = tier;
+        selectedIds = [];
+
+        document.querySelectorAll('.recipe-tab-btn').forEach(b => {
+            b.className = "py-2.5 rounded-xl text-stone-400 hover:text-white recipe-tab-btn";
+        });
+        const activeBtn = document.getElementById(`btn-tab-${tier}`);
+        if (tier === 'common') activeBtn.className = "py-2.5 rounded-xl bg-vip-gold text-black font-black recipe-tab-btn";
+        else if (tier === 'rare') activeBtn.className = "py-2.5 rounded-xl bg-blue-600 text-white font-black recipe-tab-btn";
+        else activeBtn.className = "py-2.5 rounded-xl bg-purple-600 text-white font-black recipe-tab-btn";
+
+        // Cuadrículas
+        ['common', 'rare', 'epic'].forEach(t => {
+            const grid = document.getElementById(`grid-${t}`);
+            if (t === tier) grid.classList.remove('hidden');
+            else grid.classList.add('hidden');
+        });
+
+        // Limpiar selecciones previas visualmente
+        document.querySelectorAll('.selectable-card').forEach(c => {
+            c.classList.remove('border-yellow-400', 'scale-105', 'shadow-[0_0_15px_rgba(234,179,8,0.7)]');
+            c.querySelector('.check-mark').classList.add('hidden');
+        });
+
+        // Actualizar textos
+        const cfg = TIER_CONFIG[tier];
+        document.getElementById('recipe-title').innerText = cfg.title;
+        document.getElementById('recipe-desc').innerText = cfg.desc;
+        document.getElementById('recipe-cost').innerText = `${cfg.cost} 🪙`;
+
+        updateSelectionState();
+    }
+
+    function toggleCardSelection(el, cardId) {
+        const need = TIER_CONFIG[currentTier].need;
+        const idx = selectedIds.indexOf(cardId);
+
+        if (idx > -1) {
+            selectedIds.splice(idx, 1);
+            el.classList.remove('border-yellow-400', 'scale-105', 'shadow-[0_0_15px_rgba(234,179,8,0.7)]');
+            el.querySelector('.check-mark').classList.add('hidden');
+        } else {
+            if (selectedIds.length >= need) {
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning'); } catch(e) {}
+                return;
+            }
+            selectedIds.push(cardId);
+            el.classList.add('border-yellow-400', 'scale-105', 'shadow-[0_0_15px_rgba(234,179,8,0.7)]');
+            el.querySelector('.check-mark').classList.remove('hidden');
+        }
+
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+        updateSelectionState();
+    }
+
+    function updateSelectionState() {
+        const need = TIER_CONFIG[currentTier].need;
+        const counter = document.getElementById('selection-counter');
+        const btn = document.getElementById('btn-do-fusion');
+
+        counter.innerText = `${selectedIds.length} / ${need} seleccionadas`;
+
+        if (selectedIds.length === need) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.innerHTML = `<span>🔮</span> <span>Encender Caldero (${TIER_CONFIG[currentTier].cost} 🪙)</span>`;
+        } else {
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            btn.innerHTML = `<span>🔮</span> <span>Selecciona ${need - selectedIds.length} cartas más</span>`;
+        }
+    }
+
+    async function executeFusion() {
+        const need = TIER_CONFIG[currentTier].need;
+        if (selectedIds.length !== need) return;
+
+        const btn = document.getElementById('btn-do-fusion');
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> Fundiendo esencia mágica...';
+
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('tier', currentTier);
+        selectedIds.forEach(id => formData.append('card_ids', id));
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            const resp = await fetch("{% url 'idols:photocard_fusion' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            if (!data.success) {
+                alert(data.error);
+                btn.disabled = false;
+                updateSelectionState();
+                return;
+            }
+
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+
+            document.getElementById('fusion-gold').innerText = data.nuevo_saldo;
+
+            // Modal de Revelación
+            document.getElementById('f-modal-name').innerText = data.card.name;
+            document.getElementById('f-modal-idol').innerText = `Idol: ${data.card.idol_name}`;
+            document.getElementById('f-modal-img').src = data.card.image_url;
+            
+            const cardBox = document.getElementById('f-modal-card-box');
+            cardBox.style.borderColor = data.card.color;
+            cardBox.style.boxShadow = `0 0 35px ${data.card.color}`;
+
+            const tag = document.getElementById('f-modal-tag');
+            tag.innerText = data.is_lucky ? '🎉 ¡SALTO AFORTUNADO DE RAREZA! 🎉' : '✨ ¡Transmutación Exitosa! ✨';
+            tag.style.color = data.card.color;
+            tag.style.borderColor = data.card.color;
+
+            document.getElementById('fusion-modal').classList.remove('hidden');
+
+        } catch(e) {
+            alert("Error de conexión al fundir cartas.");
+            btn.disabled = false;
+            updateSelectionState();
+        }
+    }
+
+    function closeFusionModal() {
+        universalNav('/idols/photocards/album/');
+    }
+</script>
+{% endblock %}
+
+==================================================
 ARCHIVO: .\templates\pets\sanctuary.html
 ==================================================
 
@@ -12952,9 +13516,14 @@ ARCHIVO: .\templates\pets\sanctuary.html
                 </span>
             </div>
             
-            <p class="text-[11px] text-stone-300 leading-relaxed mb-3">
-                Transmuta la esencia de tu compañero hacia cualquiera de las 10 bestias míticas del Reino conservando la afinidad espiritual.
-            </p>
+            <!-- ⚠️ AVISO VISUAL CLARO DE PÉRDIDA DE NIVEL -->
+            <div class="p-3 mb-3 rounded-2xl bg-rose-950/70 border border-rose-500/60 text-rose-200 text-xs flex items-start gap-2.5 shadow">
+                <span class="text-base flex-shrink-0">⚠️</span>
+                <div class="leading-relaxed text-[11px]">
+                    <strong>Decreto de Renacimiento:</strong> Al cambiar de especie, tu compañero renace en su forma inicial: 
+                    <strong class="text-white">Fase 1 (Nivel 1 con 0 XP)</strong>. Sus evoluciones y niveles anteriores se reiniciarán.
+                </div>
+            </div>
 
             <form action="{% url 'pets:change_pet' %}" method="POST" class="flex flex-col gap-3">
                 {% csrf_token %}
@@ -12977,7 +13546,8 @@ ARCHIVO: .\templates\pets\sanctuary.html
                            class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-vip-gold">
                 </div>
 
-                <button type="submit" onclick="return confirm('¿Confirmas transmutar a tu mascota por 300 🪙?')"
+                <button type="submit" 
+                        onclick="return confirm('⚠️ ATENCIÓN: Tu mascota renacerá en Nivel 1 (Fase 1) y perderá su nivel actual. ¿Seguro que deseas pagar 300 🪙 para transmutarla?')"
                         class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
                     Consagrar Transmutación (300 🪙)
                 </button>
