@@ -1370,122 +1370,8 @@ def photocard_buy_action(request, user_card_id):
     return redirect('/idols/photocards/market/')
 
 
-def create_trade_offer(request, user_card_id):
-    if request.method == 'POST':
-        tg_id = resolve_safe_tg(request)
-        sender_card = get_object_or_404(UserPhotocard, id=user_card_id, telegram_user_id=tg_id)
-        
-        target_raw = request.POST.get('target_user', '').strip()
-        receiver_id = None
-        receiver_name = 'Noble'
-
-        if target_raw == 'open':
-            receiver_id = 0
-            receiver_name = 'Cualquier Miembro del Reino'
-        elif target_raw.isdigit():
-            receiver_id = int(target_raw)
-            p = UserProfile.objects.filter(telegram_user_id=receiver_id).first()
-            if p and p.username: receiver_name = p.username
-        else:
-            clean_at = target_raw if target_raw.startswith('@') else f"@{target_raw}"
-            p = UserProfile.objects.filter(username__iexact=clean_at).first()
-            if p:
-                receiver_id = p.telegram_user_id
-                receiver_name = p.username
-
-        if receiver_id is None or receiver_id == tg_id:
-            messages.error(request, "Debes seleccionar a un destinatario válido de la lista.")
-            return redirect('/idols/photocards/album/')
-
-        sender_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-        s_name = sender_profile.username if (sender_profile and sender_profile.username) else f"Noble_{tg_id}"
-
-        trade = PhotocardTrade.objects.create(
-            sender_telegram_id=tg_id,
-            sender_username=s_name,
-            sender_card=sender_card,
-            receiver_telegram_id=receiver_id,
-            receiver_username=receiver_name,
-            status='pending'
-        )
-
-        if receiver_id != 0:
-            send_telegram_msg(
-                chat_id=receiver_id,
-                text=(
-                    f"🤝 <b>¡Nueva Oferta de Intercambio de Photocards!</b>\n\n"
-                    f"👤 <b>De:</b> {s_name}\n"
-                    f"🎴 <b>Te ofrece:</b> <i>«{sender_card.photocard.name}»</i> ({sender_card.photocard.get_rarity_display()})\n\n"
-                    f"Ingresa a tu Mercado para revisar y aceptar el intercambio."
-                ),
-                button_text="🤝 Revisar Oferta",
-                button_url=f"https://kingdom-pleasure-app.onrender.com/idols/photocards/market/?tg_id={receiver_id}"
-            )
-            messages.success(request, f"🤝 Propuesta enviada directamente a {receiver_name}.")
-        else:
-            messages.success(request, "📢 ¡Tu carta ha sido publicada en el Tablón de Intercambios del Mercado para cualquiera!")
-
-        return redirect('/idols/photocards/market/')
-
-    return redirect('/idols/photocards/album/')
-
-
-def handle_trade_offer(request, trade_id, action):
-    tg_id = resolve_safe_tg(request)
-    trade = get_object_or_404(PhotocardTrade, id=trade_id, status='pending')
-
-    if action == 'accept' and trade.receiver_telegram_id == tg_id:
-        with transaction.atomic():
-            sender_card = trade.sender_card
-            sender_card.telegram_user_id = trade.receiver_telegram_id
-            sender_card.is_for_sale = False
-            sender_card.sale_price = 0
-            sender_card.save()
-
-            if trade.receiver_card and trade.receiver_card.telegram_user_id == tg_id:
-                rec_card = trade.receiver_card
-                rec_card.telegram_user_id = trade.sender_telegram_id
-                rec_card.is_for_sale = False
-                rec_card.sale_price = 0
-                rec_card.save()
-
-            trade.status = 'accepted'
-            trade.save()
-
-            send_telegram_msg(
-                chat_id=trade.sender_telegram_id,
-                text=f"🎉 <b>¡Tu intercambio con {trade.receiver_username} fue aceptado!</b>\nLa Photocard ha sido transferida a su nuevo dueño.",
-                button_text="🎴 Ver Mi Álbum",
-                button_url=f"https://kingdom-pleasure-app.onrender.com/idols/photocards/album/?tg_id={trade.sender_telegram_id}"
-            )
-
-            grant_user_xp(request, tg_id, 15, reason="Intercambio Exitoso")
-            grant_user_xp(None, trade.sender_telegram_id, 15, reason="Intercambio Exitoso")
-
-        messages.success(request, "🎉 ¡Intercambio completado! Las cartas ya están en sus nuevos álbumes.")
-
-    elif action == 'reject' and trade.receiver_telegram_id == tg_id:
-        trade.status = 'rejected'
-        trade.save()
-        send_telegram_msg(
-            chat_id=trade.sender_telegram_id,
-            text=f"⚠️ Tu propuesta de intercambio de «{trade.sender_card.photocard.name}» fue rechazada por {trade.receiver_username}."
-        )
-        messages.info(request, "Propuesta rechazada.")
-
-    elif action == 'cancel' and trade.sender_telegram_id == tg_id:
-        trade.status = 'cancelled'
-        trade.save()
-        messages.info(request, "Propuesta de intercambio cancelada.")
-
-    return redirect('/idols/photocards/market/')
-
 # ==========================================
-# EL CALDERO REAL: FUSIÓN DE PHOTOCARDS
-# ==========================================
-
-# ==========================================
-# EL CALDERO REAL: FUSIÓN DE PHOTOCARDS
+# EL CALDERO REAL: FUSIÓN DE PHOTOCARDS (BLINDADO)
 # ==========================================
 
 def photocard_fusion(request):
@@ -1511,6 +1397,17 @@ def photocard_fusion(request):
         recipe = RECIPES.get(tier)
         if not recipe:
             err = "Receta de fusión no válida."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
+        # 🛡️ VALIDACIÓN 1: Verificar existencia de cartas objetivo ANTES de tocar oro o cartas
+        target_rarity = recipe['target_rarity']
+        target_pool_exists = Photocard.objects.filter(rarity=target_rarity).exists()
+        luck_pool_exists = Photocard.objects.filter(rarity=recipe['luck_target']).exists()
+
+        if not target_pool_exists and not luck_pool_exists:
+            err = f"⚠️ La Corona aún no ha forjado Photocards de rareza {target_rarity.upper()} en el Reino. Tus cartas y oro están a salvo."
             if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
             messages.error(request, err)
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
@@ -1546,33 +1443,37 @@ def photocard_fusion(request):
                 messages.error(request, err)
                 return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-            # Descontar costo en oro
-            wallet.remove_funds(recipe['cost'])
-
-            # Eliminar cartas sacrificadas y cancelar trades activos
-            consumed_ids = [c.id for c in selected_cards]
-            PhotocardTrade.objects.filter(sender_card_id__in=consumed_ids, status='pending').update(status='cancelled')
-            PhotocardTrade.objects.filter(receiver_card_id__in=consumed_ids, status='pending').update(status='cancelled')
-            UserPhotocard.objects.filter(id__in=consumed_ids).delete()
-
-            # Probabilidad de resultado con buff de Conejo Lunar
+            # Probabilidad con buff de Conejo Lunar
             luck_prob = recipe['luck_chance']
             if pet and pet.species == 'rabbit':
                 rabbit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
                 luck_prob += rabbit_bonus
 
             roll = random.random()
-            if roll < luck_prob:
+            is_lucky_jump = False
+
+            if roll < luck_prob and luck_pool_exists:
                 awarded_rarity = recipe['luck_target']
                 is_lucky_jump = True
-            else:
+            elif target_pool_exists:
                 awarded_rarity = recipe['target_rarity']
-                is_lucky_jump = False
+            else:
+                # Si no hay suerte y no hay target, salvaguardar con la misma rareza origen (¡NUNCA INFERIOR!)
+                awarded_rarity = recipe['source_rarity']
 
-            # Buscar cartas en el catálogo
             pool = list(Photocard.objects.filter(rarity=awarded_rarity))
             if not pool:
-                pool = list(Photocard.objects.all())
+                # Salvaguarda estricta: buscar la rareza origen
+                pool = list(Photocard.objects.filter(rarity=recipe['source_rarity']))
+                if not pool:
+                    pool = list(Photocard.objects.all())
+
+            # Descontar costo y destruir cartas consumidas
+            wallet.remove_funds(recipe['cost'])
+            consumed_ids = [c.id for c in selected_cards]
+            PhotocardTrade.objects.filter(sender_card_id__in=consumed_ids, status='pending').update(status='cancelled')
+            PhotocardTrade.objects.filter(receiver_card_id__in=consumed_ids, status='pending').update(status='cancelled')
+            UserPhotocard.objects.filter(id__in=consumed_ids).delete()
 
             new_card = random.choice(pool)
             new_user_card = UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=new_card)
@@ -1596,11 +1497,10 @@ def photocard_fusion(request):
                     }
                 })
 
-            # ✅ AHORA SÍ: Fuera del "if is_ajax" para peticiones estándar
             messages.success(request, f"✨ ¡Alquimia completada! Obtuviste «{new_card.name}» ({new_card.get_rarity_display()}).")
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-    # GET: Listado de cartas del usuario agrupadas por rareza (sin incluir las que están a la venta)
+    # GET: Listado de cartas libres
     available_cards = UserPhotocard.objects.filter(
         telegram_user_id=tg_id,
         is_for_sale=False
@@ -1619,3 +1519,156 @@ def photocard_fusion(request):
         'rares': rares,
         'epics': epics,
     })
+
+
+# ==========================================
+# INTERCAMBIOS P2P BLINDADOS
+# ==========================================
+
+def create_trade_offer(request, user_card_id):
+    if request.method == 'POST':
+        tg_id = resolve_safe_tg(request)
+        sender_card = get_object_or_404(UserPhotocard, id=user_card_id, telegram_user_id=tg_id, is_for_sale=False)
+        
+        target_raw = request.POST.get('target_user', '').strip()
+        receiver_id = None
+        receiver_name = 'Noble'
+
+        if target_raw == 'open':
+            receiver_id = 0
+            receiver_name = 'Cualquier Miembro del Reino'
+        elif target_raw.isdigit():
+            receiver_id = int(target_raw)
+            p = UserProfile.objects.filter(telegram_user_id=receiver_id).first()
+            if p and p.username: receiver_name = p.username
+        else:
+            clean_at = target_raw if target_raw.startswith('@') else f"@{target_raw}"
+            p = UserProfile.objects.filter(username__iexact=clean_at).first()
+            if p:
+                receiver_id = p.telegram_user_id
+                receiver_name = p.username
+
+        if receiver_id is None or receiver_id == tg_id:
+            messages.error(request, "Debes seleccionar a un destinatario válido.")
+            return redirect('/idols/photocards/album/')
+
+        sender_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+        s_name = sender_profile.username if (sender_profile and sender_profile.username) else f"Noble_{tg_id}"
+
+        # Cancelar trade previo con la misma carta si existiera
+        PhotocardTrade.objects.filter(sender_card=sender_card, status='pending').update(status='cancelled')
+
+        trade = PhotocardTrade.objects.create(
+            sender_telegram_id=tg_id,
+            sender_username=s_name,
+            sender_card=sender_card,
+            receiver_telegram_id=receiver_id,
+            receiver_username=receiver_name,
+            status='pending'
+        )
+
+        if receiver_id != 0:
+            send_telegram_msg(
+                chat_id=receiver_id,
+                text=(
+                    f"🤝 <b>¡Nueva Oferta de Intercambio de Photocards!</b>\n\n"
+                    f"👤 <b>De:</b> {s_name}\n"
+                    f"🎴 <b>Te ofrece:</b> <i>«{sender_card.photocard.name}»</i> ({sender_card.photocard.get_rarity_display()})\n\n"
+                    f"Ingresa a tu Mercado para revisar y aceptar el intercambio."
+                ),
+                button_text="🤝 Revisar Oferta",
+                button_url=f"https://kingdom-pleasure-app.onrender.com/idols/photocards/market/?tg_id={receiver_id}"
+            )
+            messages.success(request, f"🤝 Propuesta enviada directamente a {receiver_name}.")
+        else:
+            messages.success(request, "📢 ¡Tu carta ha sido publicada en el Tablón de Intercambios del Mercado para cualquiera!")
+
+        return redirect('/idols/photocards/market/')
+
+    return redirect('/idols/photocards/album/')
+
+
+def handle_trade_offer(request, trade_id, action):
+    tg_id = resolve_safe_tg(request)
+    trade = get_object_or_404(PhotocardTrade, id=trade_id, status='pending')
+
+    # Permitir aceptar si es el destinatario O si es un trade abierto (receiver_telegram_id == 0)
+    is_authorized = (trade.receiver_telegram_id == tg_id) or (trade.receiver_telegram_id == 0 and trade.sender_telegram_id != tg_id)
+
+    if action == 'accept' and is_authorized:
+        # Carta que el receptor ofrece a cambio
+        return_card_id = request.POST.get('return_card_id') or request.GET.get('return_card_id')
+        
+        with transaction.atomic():
+            sender_card = UserPhotocard.objects.select_for_update().filter(id=trade.sender_card_id).first()
+            
+            # Blindaje contra robo/duplicación: verificar que el emisor todavía posea la carta
+            if not sender_card or sender_card.telegram_user_id != trade.sender_telegram_id or sender_card.is_for_sale:
+                trade.status = 'cancelled'
+                trade.save()
+                messages.error(request, "⚠️ El intercambio no se pudo completar: el emisor ya no posee esta carta o la puso a la venta.")
+                return redirect('/idols/photocards/market/')
+
+            receiver_card = None
+            if return_card_id and str(return_card_id).isdigit():
+                receiver_card = UserPhotocard.objects.select_for_update().filter(
+                    id=int(return_card_id),
+                    telegram_user_id=tg_id,
+                    is_for_sale=False
+                ).first()
+
+            # Transferencia de la carta del emisor al receptor
+            sender_card.telegram_user_id = tg_id
+            sender_card.is_for_sale = False
+            sender_card.sale_price = 0
+            sender_card.save()
+
+            # Transferencia de la carta del receptor al emisor (trueque 1 a 1)
+            if receiver_card:
+                receiver_card.telegram_user_id = trade.sender_telegram_id
+                receiver_card.is_for_sale = False
+                receiver_card.sale_price = 0
+                receiver_card.save()
+                trade.receiver_card = receiver_card
+
+            trade.receiver_telegram_id = tg_id
+            receiver_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+            if receiver_profile and receiver_profile.username:
+                trade.receiver_username = receiver_profile.username
+
+            trade.status = 'accepted'
+            trade.save()
+
+            # Notificar al emisor
+            send_telegram_msg(
+                chat_id=trade.sender_telegram_id,
+                text=(
+                    f"🎉 <b>¡Tu intercambio de Photocards fue aceptado!</b>\n\n"
+                    f"👤 <b>Por:</b> {trade.receiver_username}\n"
+                    f"🎴 <b>Entregaste:</b> «{sender_card.photocard.name}»\n" +
+                    (f"🎴 <b>Recibiste a cambio:</b> «{receiver_card.photocard.name}»" if receiver_card else "")
+                ),
+                button_text="🎴 Ver Mi Álbum",
+                button_url=f"https://kingdom-pleasure-app.onrender.com/idols/photocards/album/?tg_id={trade.sender_telegram_id}"
+            )
+
+            grant_user_xp(request, tg_id, 15, reason="Intercambio Exitoso")
+            grant_user_xp(None, trade.sender_telegram_id, 15, reason="Intercambio Exitoso")
+
+        messages.success(request, f"🎉 ¡Intercambio completado! «{sender_card.photocard.name}» ya está en tu Álbum.")
+
+    elif action == 'reject' and is_authorized:
+        trade.status = 'rejected'
+        trade.save()
+        send_telegram_msg(
+            chat_id=trade.sender_telegram_id,
+            text=f"⚠️ Tu propuesta de intercambio de «{trade.sender_card.photocard.name}» fue rechazada."
+        )
+        messages.info(request, "Propuesta rechazada.")
+
+    elif action == 'cancel' and trade.sender_telegram_id == tg_id:
+        trade.status = 'cancelled'
+        trade.save()
+        messages.info(request, "Propuesta de intercambio cancelada.")
+
+    return redirect('/idols/photocards/market/')

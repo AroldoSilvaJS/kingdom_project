@@ -1498,19 +1498,42 @@ def leaderboard(request):
     top_wallets = Wallet.objects.order_by('-balance')[:10]
     user_ids = [w.telegram_user_id for w in top_wallets]
     profiles_dict = {p.telegram_user_id: p for p in UserProfile.objects.filter(telegram_user_id__in=user_ids)}
+    
+    # También buscamos si alguna billetera pertenece a una dueña de Idol para rescatar su @username
+    idols_dict = {}
+    for i in IdolProfile.objects.filter(telegram_user_id__in=user_ids):
+        if i.owner_username and not i.owner_username.startswith('Noble_'):
+            idols_dict[i.telegram_user_id] = i.owner_username
 
     magnates = []
     for w in top_wallets:
         prof = profiles_dict.get(w.telegram_user_id)
-        titulo = prof.get_rank_name() if prof else "Ciudadano Honorable"
+        
+        # Rescatar el mejor nombre disponible
+        display_name = None
+        if prof and prof.username and not str(prof.username).lower().startswith('noble_'):
+            display_name = prof.username
+        elif w.telegram_user_id in idols_dict:
+            display_name = idols_dict[w.telegram_user_id]
+        
+        # Si aún no tiene alias, mostramos un identificador noble limpio
+        if not display_name:
+            display_name = f"Noble #{str(w.telegram_user_id)[-4:]}"
+
+        titulo = prof.custom_title_text if (prof and prof.custom_title_text) else (prof.get_rank_name() if prof else "Curioso Clandestino 🍷")
         nivel = prof.level if prof else 1
+        avatar_frame = prof.avatar_frame if prof else 'gold'
+        is_me = (str(w.telegram_user_id) == str(tg_id))
         
         magnates.append({
             'telegram_id': str(w.telegram_user_id)[-4:],
             'full_id': w.telegram_user_id,
+            'name': display_name,
             'balance': w.balance,
             'titulo': titulo,
             'nivel': nivel,
+            'avatar_frame': avatar_frame,
+            'is_me': is_me,
         })
 
     return render(request, 'core/leaderboard.html', {
@@ -2193,34 +2216,48 @@ class Wallet(models.Model):
             return amount
         return 0
 
-    def get_cooldown_hours(self):
+    # 🕛 RESET FIJO AL MEDIODÍA (12:00 PM HORA SERVIDOR / CHILE)
+    def get_current_cycle_start(self):
+        """Calcula el inicio del ciclo diario actual (12:00 PM)."""
+        now = timezone.now().astimezone(timezone.get_current_timezone())
+        if now.hour >= 12:
+            return now.replace(hour=12, minute=0, second=0, microsecond=0)
+        yesterday = now - timedelta(days=1)
+        return yesterday.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    def can_claim_bonus(self):
+        """Permite girar una vez por ciclo diario (resetea cada día a las 12:00 PM)."""
+        if not self.last_bonus_claim:
+            return True
+        cycle_start = self.get_current_cycle_start()
+        return self.last_bonus_claim < cycle_start
+    
+    def seconds_until_next_bonus(self):
+        """Segundos restantes hasta las próximas 12:00 PM."""
+        if self.can_claim_bonus():
+            return 0
+        now = timezone.now().astimezone(timezone.get_current_timezone())
+        if now.hour >= 12:
+            next_reset = (now + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+        else:
+            next_reset = now.replace(hour=12, minute=0, second=0, microsecond=0)
+        return max(0, int((next_reset - now).total_seconds()))
+
+    def get_kitsune_gold_multiplier(self):
+        """El Zorro Kitsune bendice con un bono masivo de oro al mediodía (+25% / +45% / +70%)."""
         try:
             from pets.models import Pet
             pet = Pet.objects.filter(telegram_user_id=self.telegram_user_id).first()
             if pet and pet.species == 'fox':
                 stage = pet.evolution_stage_number
-                if stage >= 3:
-                    return 18
-                elif stage == 2:
-                    return 20
-                return 22
+                return {1: 1.25, 2: 1.45, 3: 1.70}.get(stage, 1.25)
         except Exception:
             pass
-        return 24
+        return 1.0
 
-    def can_claim_bonus(self):
-        if not self.last_bonus_claim:
-            return True
-        hours = self.get_cooldown_hours()
-        return timezone.now() >= self.last_bonus_claim + timedelta(hours=hours)
-    
-    def seconds_until_next_bonus(self):
-        if self.can_claim_bonus():
-            return 0
-        hours = self.get_cooldown_hours()
-        proximo_reclamo = self.last_bonus_claim + timedelta(hours=hours)
-        restante = (proximo_reclamo - timezone.now()).total_seconds()
-        return max(0, int(restante))
+    # Mantenido por compatibilidad
+    def get_cooldown_hours(self):
+        return 24
 
 
 class UserInventoryItem(models.Model):
@@ -2268,7 +2305,7 @@ class UserInventoryItem(models.Model):
         return obj.quantity if obj else 0
 
 
-    class CourtJob(models.Model):
+class CourtJob(models.Model):
     telegram_user_id = models.BigIntegerField("ID del Trabajador", db_index=True)
     job_key = models.CharField("Código de Labor", max_length=50)
     title = models.CharField("Título de la Labor", max_length=100)
@@ -2334,7 +2371,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
-from .models import Wallet, UserInventoryItem
+from .models import Wallet, UserInventoryItem, CourtJob
 from core.models import UserRole, UserProfile
 from idols.models import IdolProfile, IdolTribute
 from pets.models import Pet
@@ -2420,59 +2457,59 @@ def casino_game(request):
                 wallet.accumulate_patron_vault(apuesta)
 
                 # Evaluación de la apuesta
-            numero_ganador = random.randint(0, 36)
-            
-            if numero_ganador == 0:
-                color_ganador = 'zero'
-            elif numero_ganador in ROJOS:
-                color_ganador = 'red'
-            else:
-                color_ganador = 'black'
+                numero_ganador = random.randint(0, 36)
+                
+                if numero_ganador == 0:
+                    color_ganador = 'zero'
+                elif numero_ganador in ROJOS:
+                    color_ganador = 'red'
+                else:
+                    color_ganador = 'black'
 
-            gano = False
-            multiplicador = 0.0
+                gano = False
+                multiplicador = 0.0
 
-            # 1. Apuesta a Color
-            if eleccion in ['red', 'black', 'zero']:
-                if eleccion == color_ganador:
-                    gano = True
-                    multiplicador = 22.0 if eleccion == 'zero' else 2.0
-
-            # 2. Apuesta a Par / Impar
-            elif eleccion in ['even', 'odd']:
-                if numero_ganador != 0:
-                    es_par = (numero_ganador % 2 == 0)
-                    if (eleccion == 'even' and es_par) or (eleccion == 'odd' and not es_par):
+                # 1. Apuesta a Color
+                if eleccion in ['red', 'black', 'zero']:
+                    if eleccion == color_ganador:
                         gano = True
-                        multiplicador = 2.0
+                        multiplicador = 22.0 if eleccion == 'zero' else 2.0
 
-            # 3. Apuesta a Número Específico (Pleno del 0 al 36)
-            elif eleccion == 'number':
-                try:
-                    num_apostado = int(request.POST.get('target_number', -1))
-                    if num_apostado == numero_ganador:
-                        gano = True
-                        multiplicador = 30.0  # 🎯 ¡Pleno de la Suerte x30!
-                except ValueError:
-                    pass
+                # 2. Apuesta a Par / Impar
+                elif eleccion in ['even', 'odd']:
+                    if numero_ganador != 0:
+                        es_par = (numero_ganador % 2 == 0)
+                        if (eleccion == 'even' and es_par) or (eleccion == 'odd' and not es_par):
+                            gano = True
+                            multiplicador = 2.0
 
-            if gano:
-                ganancia = int(round(apuesta * multiplicador))
-                # Buff Pantera
-                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                if pet and pet.species == 'panther':
-                    panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
-                    net_profit = ganancia - apuesta
-                    ganancia = int(apuesta + (net_profit * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
-                    
-                wallet.add_funds(ganancia - apuesta)
-                resultado = "win"
-                xp_gain = 8 if multiplicador >= 20.0 else 3
-            else:
-                wallet.remove_funds(apuesta)
-                resultado = "lose"
-                ganancia = apuesta
-                xp_gain = 1
+                # 3. Apuesta a Número Específico (Pleno del 0 al 36)
+                elif eleccion == 'number':
+                    try:
+                        num_apostado = int(request.POST.get('target_number', -1))
+                        if num_apostado == numero_ganador:
+                            gano = True
+                            multiplicador = 30.0  # 🎯 ¡Pleno de la Suerte x30!
+                    except ValueError:
+                        pass
+
+                if gano:
+                    ganancia = int(round(apuesta * multiplicador))
+                    # Buff Pantera
+                    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                    if pet and pet.species == 'panther':
+                        panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
+                        net_profit = ganancia - apuesta
+                        ganancia = int(apuesta + (net_profit * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
+                        
+                    wallet.add_funds(ganancia - apuesta)
+                    resultado = "win"
+                    xp_gain = 8 if multiplicador >= 20.0 else 3
+                else:
+                    wallet.remove_funds(apuesta)
+                    resultado = "lose"
+                    ganancia = apuesta
+                    xp_gain = 1
 
                 # EXP balanceada
                 grant_user_xp(request, tg_id, xp_gain, reason="Ruleta Imperial")
@@ -2628,7 +2665,7 @@ def slots_game(request):
 
                     wallet.add_funds(ganancia - apuesta)
 
-                # 👑 PILAR 2: TIRO DE AMORTIGUACIÓN (Si sale Corona o Diamante solitaria)
+                # 👑 PILAR 2: TIRO DE AMORTIGUACIÓN
                 elif '👑' in reels or '💎' in reels:
                     reintegro = max(1, int(round(apuesta * 0.5)))
                     wallet.remove_funds(apuesta - reintegro)
@@ -2729,7 +2766,6 @@ def blackjack_game(request):
                     messages.error(request, err)
                 else:
                     wallet.remove_funds(apuesta)
-                    # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
                     wallet.accumulate_patron_vault(apuesta)
 
                     player_hand = [draw_card(), draw_card()]
@@ -2823,7 +2859,6 @@ def blackjack_game(request):
                 resultado = 'lose'
                 ganancia = apuesta
 
-                # BUFF LOBO ESPECTRAL
                 wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
                     wallet.add_funds(apuesta)
@@ -2891,10 +2926,6 @@ def blackjack_game(request):
     })
 
 
-# ==========================================
-# JUEGO: LAS MINAS DEL REINO (BLINDADO Y SIN EXPLOIT)
-# ==========================================
-
 def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     if revealed_count <= 0:
         return 1.0
@@ -2923,7 +2954,6 @@ def mines_game(request):
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         action = request.POST.get('action')
 
-        # 1. INICIAR PARTIDA
         if action == 'start':
             try:
                 bet = int(request.POST.get('bet_amount', 20))
@@ -2942,7 +2972,6 @@ def mines_game(request):
                     mines_count = 3
                 else:
                     wallet.remove_funds(bet)
-                    # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
                     wallet.accumulate_patron_vault(bet)
 
                     all_indices = list(range(25))
@@ -2973,7 +3002,6 @@ def mines_game(request):
             except ValueError:
                 if is_ajax: return JsonResponse({'success': False, 'error': 'Valores no válidos.'}, status=400)
 
-        # 2. DESTAPAR UN COFRE
         elif action == 'reveal' and session_mines and session_mines.get('in_game'):
             try:
                 tile_idx = int(request.POST.get('tile_index', -1))
@@ -3037,7 +3065,6 @@ def mines_game(request):
             except ValueError:
                 pass
 
-        # 3. RETIRARSE Y COBRAR (CASHOUT)
         elif action == 'cashout' and session_mines and session_mines.get('in_game'):
             revealed_count = len(session_mines.get('revealed', []))
             if revealed_count > 0:
@@ -3273,6 +3300,7 @@ def bazar_buy_action(request):
         'nuevo_saldo': wallet.balance,
         'shield_days': profile.days_of_shield_remaining
     })
+
 
 # ==========================================
 # LABORES DE LA CORTE (TRABAJOS ACTIVOS)
@@ -7167,37 +7195,50 @@ ARCHIVO: .\templates\core\leaderboard.html
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2">
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
-    <!-- ENCABEZADO -->
+    <!-- ENCABEZADO Y VOLVER -->
     <div class="flex justify-between items-center px-1">
-        <div>
-            <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
+        <button type="button" onclick="universalNav('/')" 
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
+            <span>⬅</span> <span>Menú</span>
+        </button>
+        <span class="text-xs border border-vip-gold/40 text-vip-gold bg-black/60 px-3.5 py-1 rounded-full uppercase tracking-widest font-bold">
+            🏆 Salón de la Fama
+        </span>
+    </div>
+
+    <!-- BANNER HERO -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden border border-vip-gold/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1a0a28] via-[#090212] to-black">
+        <div class="relative z-10 flex flex-col items-center">
+            <span class="text-3xl mb-1 filter drop-shadow">🏆</span>
+            <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
                 Salón de la Fama
-            </h2>
-            <p class="text-[11px] text-vip-text/60">Los más célebres y poderosos del Reino</p>
+            </h1>
+            <p class="text-[11px] text-stone-300 mt-1 max-w-[280px]">
+                Los linajes más influyentes y las mayores fortunas del Reino.
+            </p>
         </div>
-        <span class="text-2xl filter drop-shadow-[0_0_8px_rgba(212,175,55,0.6)]">🏆</span>
     </div>
 
     <!-- SECCIÓN 1: TOP IDOLS (REINAS DEL PLACER) -->
-    <div class="vip-panel p-4 flex flex-col gap-3">
-        <h3 class="font-serif text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5 border-b border-vip-gold/20 pb-2">
+    <div class="vip-panel p-4 flex flex-col gap-3 rounded-3xl border border-purple-500/40 bg-gradient-to-br from-[#160824] to-black shadow-xl">
+        <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-500/20 pb-2">
             <span>👑</span> Reinas del Escenario (Top Idols)
         </h3>
 
         <div class="flex flex-col gap-2">
             {% for idol in top_idols %}
-            <a href="{% url 'idols:detail' idol.id %}?tg_id={{ tg_id }}" 
-               class="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-vip-gold/20 hover:border-vip-gold/50 transition-all group">
-                <div class="flex items-center gap-3">
+            <div onclick="universalNav('/idols/{{ idol.id }}/')" 
+               class="flex items-center justify-between p-2.5 rounded-2xl bg-black/50 border border-purple-500/30 hover:border-purple-400 transition-all cursor-pointer group active:scale-98">
+                <div class="flex items-center gap-3 min-w-0">
                     <!-- Medalla -->
-                    <span class="w-6 text-center font-serif font-black text-sm {% if forloop.counter == 1 %}text-yellow-400{% elif forloop.counter == 2 %}text-gray-300{% elif forloop.counter == 3 %}text-amber-600{% else %}text-vip-text/50{% endif %}">
-                        {% if forloop.counter == 1 %}🥇{% elif forloop.counter == 2 %}🥈{% elif forloop.counter == 3 %}🥉{% else %}#{{ forloop.counter }}{% endif %}
+                    <span class="w-6 text-center font-serif font-black text-base flex-shrink-0">
+                        {% if forloop.counter == 1 %}🥇{% elif forloop.counter == 2 %}🥈{% elif forloop.counter == 3 %}🥉{% else %}<span class="text-xs text-stone-500 font-mono">#{{ forloop.counter }}</span>{% endif %}
                     </span>
                     
                     <!-- Foto -->
-                    <div class="w-9 h-9 rounded-full overflow-hidden border border-vip-gold/40 bg-black">
+                    <div class="w-10 h-10 rounded-2xl overflow-hidden border border-purple-400/60 bg-black flex-shrink-0 shadow">
                         {% if idol.photo %}
                             <img src="{{ idol.photo.url }}" class="w-full h-full object-cover">
                         {% else %}
@@ -7205,51 +7246,90 @@ ARCHIVO: .\templates\core\leaderboard.html
                         {% endif %}
                     </div>
 
-                    <div>
-                        <h4 class="font-bold text-white text-xs group-hover:text-vip-gold transition-colors leading-tight">{{ idol.stage_name }}</h4>
-                        <span class="text-[10px] text-vip-text/50">{{ idol.services_done }} servicios realizados</span>
+                    <div class="min-w-0">
+                        <h4 class="font-serif font-bold text-white text-xs group-hover:text-purple-300 transition-colors leading-tight truncate">
+                            {{ idol.stage_name }}
+                        </h4>
+                        <span class="text-[10px] text-stone-400 font-mono block truncate">{{ idol.services_done }} roles • {{ idol.get_display_owner }}</span>
                     </div>
                 </div>
 
-                <div class="text-right">
-                    <span class="text-yellow-400 font-bold text-xs font-mono">⭐ {{ idol.rating }}</span>
+                <div class="text-right flex-shrink-0">
+                    <span class="text-yellow-400 font-bold text-xs font-mono bg-black/70 px-2 py-0.5 rounded-lg border border-yellow-500/30">⭐ {{ idol.rating }}</span>
                 </div>
-            </a>
+            </div>
             {% empty %}
-                <p class="text-center text-xs text-vip-text/40 py-3">Aún no hay calificaciones suficientes.</p>
+                <p class="text-center text-xs text-stone-500 py-3">Aún no hay calificaciones suficientes.</p>
             {% endfor %}
         </div>
     </div>
 
-    <!-- SECCIÓN 2: MAGNATES DEL REINO (MAYORES FORTUNAS) -->
-    <div class="vip-panel p-4 flex flex-col gap-3">
-        <h3 class="font-serif text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-vip-gold/20 pb-2">
-            <span>💰</span> Magnates Imperiales (Mayores Bóvedas)
-        </h3>
+    <!-- SECCIÓN 2: MAGNATES DEL REINO (MAYORES FORTUNAS DE CLIENTES) -->
+    <div class="vip-panel p-4 flex flex-col gap-3 rounded-3xl border border-yellow-500/40 bg-gradient-to-br from-[#191004] to-black shadow-xl">
+        <div class="flex justify-between items-center border-b border-yellow-500/20 pb-2">
+            <h3 class="font-serif text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span>💰</span> Magnates Imperiales (Mayores Bóvedas)
+            </h3>
+            <span class="text-[9.5px] font-mono text-stone-400">Top 10 Fortunas</span>
+        </div>
 
         <div class="flex flex-col gap-2">
-        {% for noble in magnates %}
-        <div class="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-vip-gold/20">
-            <div class="flex items-center gap-3">
-                <span class="w-6 text-center font-serif font-black text-sm">#{{ forloop.counter }}</span>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <h4 class="font-bold text-white text-xs font-mono">Noble ...{{ noble.telegram_id }}</h4>
-                        <span class="text-[9px] bg-purple-950/80 border border-purple-500/40 text-purple-200 px-1.5 py-0.2 rounded font-mono font-bold">
-                            LVL {{ noble.nivel }}
+            {% for noble in magnates %}
+            <div class="flex items-center justify-between p-3 rounded-2xl border transition-all
+                {% if noble.is_me %}
+                    bg-gradient-to-r from-amber-950/70 via-black to-yellow-950/60 border-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.3)]
+                {% else %}
+                    bg-black/50 border-white/10 hover:border-yellow-500/40
+                {% endif %}">
+                
+                <div class="flex items-center gap-3 min-w-0">
+                    <!-- Medalla de Posición -->
+                    <span class="w-6 text-center font-serif font-black text-base flex-shrink-0">
+                        {% if forloop.counter == 1 %}🥇{% elif forloop.counter == 2 %}🥈{% elif forloop.counter == 3 %}🥉{% else %}<span class="text-xs text-stone-500 font-mono">#{{ forloop.counter }}</span>{% endif %}
+                    </span>
+
+                    <!-- Avatar Simbólico -->
+                    <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg flex-shrink-0 shadow
+                        {% if noble.avatar_frame == 'flame' %}bg-rose-950/80 border border-rose-500 text-rose-300
+                        {% elif noble.avatar_frame == 'neon' %}bg-purple-950/80 border border-purple-400 text-purple-200
+                        {% elif noble.avatar_frame == 'diamond' %}bg-cyan-950/80 border border-cyan-400 text-cyan-200
+                        {% else %}bg-yellow-950/80 border border-yellow-500 text-yellow-300{% endif %}">
+                        <span>🥂</span>
+                    </div>
+
+                    <div class="flex flex-col min-w-0">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <!-- Nombre real o Alias -->
+                            <h4 class="font-bold text-white text-xs truncate max-w-[130px]">
+                                {{ noble.name }}
+                            </h4>
+                            
+                            <!-- Nivel Nobiliario -->
+                            <span class="text-[9px] bg-purple-950/80 border border-purple-500/40 text-purple-200 px-1.5 py-0.2 rounded font-mono font-black">
+                                L{{ noble.nivel }}
+                            </span>
+
+                            {% if noble.is_me %}
+                                <span class="text-[8.5px] bg-yellow-500 text-black px-1.5 py-0.2 rounded font-black uppercase font-mono">Tú</span>
+                            {% endif %}
+                        </div>
+
+                        <!-- Título Nobiliario -->
+                        <span class="text-[10px] text-stone-400 uppercase tracking-tight truncate mt-0.5">
+                            {{ noble.titulo }}
                         </span>
                     </div>
-                    <span class="text-[9px] text-vip-text/50 uppercase">{{ noble.titulo }}</span>
+                </div>
+
+                <!-- Fortuna en Oro -->
+                <div class="text-right flex items-center gap-1 flex-shrink-0">
+                    <span class="font-serif font-black text-gold-gradient text-sm font-mono">{{ noble.balance }}</span>
+                    <span class="text-xs">🪙</span>
                 </div>
             </div>
-            <div class="text-right flex items-center gap-1">
-                <span class="font-serif font-bold text-vip-gold text-xs font-mono">{{ noble.balance }}</span>
-                <span class="text-[10px]">🪙</span>
-            </div>
-        </div>
-        {% empty %}
-            <p class="text-center text-xs text-vip-text/40 py-3">No hay datos de bóvedas.</p>
-        {% endfor %}
+            {% empty %}
+                <p class="text-center text-xs text-stone-500 py-3">No hay datos de bóvedas.</p>
+            {% endfor %}
         </div>
     </div>
 
@@ -8753,7 +8833,6 @@ ARCHIVO: .\templates\economy\casino.html
 
 <!-- RENDERIZADO HD Y FÍSICA EXACTA DE LA RULETA -->
 <script>
-    // 🏛️ Secuencia Oficial Europea (37 casillas, Sentido Horario desde el 0)
     const ROULETTE_ORDER = [
         0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26
     ];
@@ -8763,7 +8842,6 @@ ARCHIVO: .\templates\economy\casino.html
     let currentRotation = 0;
     let isSpinning = false;
 
-    // Dibuja la ruleta en el Canvas una sola vez con nitidez vectorial
     function drawRouletteWheel() {
         const canvas = document.getElementById('roulette-canvas');
         if (!canvas) return;
@@ -8775,19 +8853,16 @@ ARCHIVO: .\templates\economy\casino.html
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // El 0 se dibuja exactamente en la cúspide superior (-PI/2)
         let startAngle = -Math.PI / 2 - (sliceAngle / 2);
 
         for (let i = 0; i < 37; i++) {
             const num = ROULETTE_ORDER[i];
             const endAngle = startAngle + sliceAngle;
 
-            // Determina color exacto
-            let color = '#151515'; // Negro
-            if (num === 0) color = '#15803d'; // Verde
-            else if (RED_NUMBERS.includes(num)) color = '#dc2626'; // Rojo
+            let color = '#151515';
+            if (num === 0) color = '#15803d';
+            else if (RED_NUMBERS.includes(num)) color = '#dc2626';
 
-            // Dibuja gajo
             ctx.beginPath();
             ctx.moveTo(cx, cy);
             ctx.arc(cx, cy, radius, startAngle, endAngle);
@@ -8795,12 +8870,10 @@ ARCHIVO: .\templates\economy\casino.html
             ctx.fillStyle = color;
             ctx.fill();
 
-            // Borde dorado entre casillas
             ctx.strokeStyle = '#d4af37';
             ctx.lineWidth = 1;
             ctx.stroke();
 
-            // Escribe número
             ctx.save();
             ctx.translate(cx, cy);
             ctx.rotate(startAngle + sliceAngle / 2);
@@ -8863,6 +8936,8 @@ ARCHIVO: .\templates\economy\casino.html
         formData.append('tg_id', tgId);
         formData.append('bet_amount', betAmount);
         formData.append('bet_choice', betChoice);
+        // 🎯 TARGET NUMBER ENVIADO CORRECTAMENTE:
+        formData.append('target_number', document.getElementById('target_number_input')?.value || '-1');
         formData.append('ajax', '1');
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
@@ -8891,17 +8966,11 @@ ARCHIVO: .\templates\economy\casino.html
                 return;
             }
 
-            // 🎯 CÁLCULO ANGULAR MATEMÁTICO EXACTO:
             const winningNum = data.numero_ganador;
             const winningIndex = ROULETTE_ORDER.indexOf(winningNum);
             const sliceDeg = 360 / 37;
 
-            // Cada gajo i está a i * sliceDeg grados del 0 (que está arriba).
-            // Para que el gajo 'winningIndex' termine arriba (0°), debemos girar:
-            // target = (360 - (winningIndex * sliceDeg))
             const slotTargetDeg = (360 - (winningIndex * sliceDeg)) % 360;
-
-            // Agregamos 6 vueltas completas (2160°) para el efecto dramático de física
             const fullSpins = 2160;
             const currentMod = currentRotation % 360;
             const delta = (slotTargetDeg - currentMod + 360) % 360;
@@ -8909,11 +8978,9 @@ ARCHIVO: .\templates\economy\casino.html
 
             currentRotation = nextRotation;
 
-            // Animación CSS con curva de deceleración física de casino
             canvas.style.transition = 'transform 3.6s cubic-bezier(0.12, 0.88, 0.22, 1)';
             canvas.style.transform = `rotate(${nextRotation}deg)`;
 
-            // Ticks de sonido y haptic progresivos
             let ticks = 0;
             const tickInt = setInterval(() => {
                 playTickSound();
@@ -8922,7 +8989,6 @@ ARCHIVO: .\templates\economy\casino.html
                 if (ticks > 12) clearInterval(tickInt);
             }, 260);
 
-            // Momento exacto del frenado
             setTimeout(() => {
                 clearInterval(tickInt);
                 isSpinning = false;
@@ -8930,7 +8996,6 @@ ARCHIVO: .\templates\economy\casino.html
                 btn.classList.remove('opacity-50');
                 btn.innerHTML = '<span>🎡</span> Girar Ruleta Imperial';
 
-                // Actualizar Medallón Central
                 centerNum.innerText = winningNum;
                 if (data.color_ganador === 'red') {
                     centerText.innerText = "ROJO";
@@ -9870,7 +9935,7 @@ ARCHIVO: .\templates\economy\wallet.html
 
         {% if pet and pet.species == 'fox' %}
             <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/70 border border-amber-500/50 text-[10px] text-amber-300 font-bold relative z-10">
-                <span>🦊</span> Bendición Kitsune Activa: Recarga de bono cada {{ wallet.get_cooldown_hours }}h
+                <span>🦊</span> Bendición Kitsune Activa: Bono masivo de oro al mediodía (12:00 PM)
             </div>
         {% endif %}
     </div>
@@ -9921,7 +9986,7 @@ ARCHIVO: .\templates\economy\wallet.html
             <h3 class="font-serif text-xs font-black text-vip-gold uppercase tracking-wider flex items-center gap-1.5">
                 <span>🎡</span> Ruleta de la Fortuna
             </h3>
-            <span class="text-[10px] text-purple-300 font-bold uppercase font-mono">Ofrenda Diaria</span>
+            <span class="text-[10px] text-purple-300 font-bold uppercase font-mono">Reinicio 12:00 PM</span>
         </div>
         <p class="text-[11px] text-stone-400 mb-2">Gira el disco sagrado para recibir oro y EXP gratis</p>
 
@@ -9947,7 +10012,7 @@ ARCHIVO: .\templates\economy\wallet.html
                 </button>
             {% else %}
                 <div class="w-full bg-black/80 border border-vip-gold/30 py-3 px-4 rounded-2xl flex items-center justify-between text-xs shadow-inner">
-                    <span class="text-stone-400 font-medium">⏳ Próximo giro en:</span>
+                    <span class="text-stone-400 font-medium">⏳ Próximo reinicio (12:00 PM):</span>
                     <span id="countdown-timer" class="font-mono font-bold text-yellow-400 text-sm">Calculando...</span>
                 </div>
             {% endif %}
@@ -9970,7 +10035,7 @@ ARCHIVO: .\templates\economy\wallet.html
                 <span class="text-3xl">🎡</span>
                 <div>
                     <h4 class="font-bold text-white text-xs uppercase tracking-wider">Ruleta Real</h4>
-                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">x2.0 / x22</span>
+                    <span class="text-[9.5px] text-yellow-400/90 font-mono font-bold">x2.0 / x30</span>
                 </div>
             </button>
 

@@ -4,20 +4,12 @@
 {% block content %}
 <div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
 
-    <!-- SUB-NAV SUPERIOR: CAJAS | ÁLBUM | MERCADO -->
-    <div class="grid grid-cols-3 gap-1 bg-black/60 p-1 rounded-2xl border border-vip-gold/30 text-xs font-semibold text-center shadow-lg">
-        <button type="button" onclick="universalNav('/idols/photocards/')" 
-           class="py-2 rounded-xl transition-all text-stone-400 hover:text-white flex items-center justify-center gap-1">
-            <span>🎁</span> <span>Cajas</span>
-        </button>
-        <button type="button" onclick="universalNav('/idols/photocards/album/')" 
-           class="py-2 rounded-xl transition-all text-stone-400 hover:text-white flex items-center justify-center gap-1">
-            <span>📖</span> <span>Mi Álbum</span>
-        </button>
-        <button type="button" onclick="universalNav('/idols/photocards/market/')" 
-           class="py-2 rounded-xl transition-all bg-gradient-to-r from-vip-gold/30 to-amber-600/30 text-vip-gold border border-vip-gold/50 shadow-sm flex items-center justify-center gap-1 font-bold">
-            <span>🏛️</span> <span>Mercado</span>
-        </button>
+    <!-- SUB-NAV SUPERIOR: CAJAS | ÁLBUM | MERCADO | CALDERO -->
+    <div class="grid grid-cols-4 gap-1 bg-black/60 p-1 rounded-2xl border border-vip-gold/30 text-[10px] font-bold text-center shadow-lg">
+        <button type="button" onclick="universalNav('/idols/photocards/')" class="py-2 rounded-xl text-stone-400 hover:text-white">🎁 Cajas</button>
+        <button type="button" onclick="universalNav('/idols/photocards/album/')" class="py-2 rounded-xl text-stone-400 hover:text-white">📖 Álbum</button>
+        <button type="button" class="py-2 rounded-xl bg-gradient-to-r from-vip-gold/30 to-amber-600/30 text-vip-gold border border-vip-gold/50 font-black shadow">🏛️ Mercado</button>
+        <button type="button" onclick="universalNav('/idols/photocards/fusion/')" class="py-2 rounded-xl text-purple-300 hover:text-white">🔮 Caldero</button>
     </div>
 
     <!-- ENCABEZADO Y BALANCE -->
@@ -45,7 +37,7 @@
         {% endfor %}
     {% endif %}
 
-    <!-- PESTAÑAS DEL MERCADO: VENTA EN ORO vs PROPUESTAS DE INTERCAMBIO -->
+    <!-- PESTAÑAS: EN VENTA vs INTERCAMBIOS -->
     <div class="grid grid-cols-2 gap-1 bg-black/60 p-1 rounded-2xl border border-vip-gold/25 text-xs font-bold uppercase text-center shadow-inner">
         <button type="button" onclick="switchMarketTab('cards')" id="tab-btn-cards" class="py-2 rounded-xl bg-vip-gold text-black font-black">
             🏷️ En Venta ({{ market_cards.count }})
@@ -55,15 +47,15 @@
         </button>
     </div>
 
-    <!-- SECCIÓN 1: CARTAS A LA VENTA EN ORO -->
+    <!-- SECCIÓN 1: CARTAS A LA VENTA -->
     <div id="market-cards-tab" class="flex flex-col gap-3">
         
-        <!-- TUS CARTAS A LA VENTA (SI TIENES) -->
+        <!-- TUS PUBLICACIONES ACTIVAS -->
         {% if my_sales %}
         <div class="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-3">
             <div class="flex justify-between items-center mb-2">
                 <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider">🏷️ Tus Publicaciones ({{ my_sales.count }})</span>
-                <span class="text-[9.5px] text-stone-400">Puedes retirar tu carta cuando quieras</span>
+                <span class="text-[9.5px] text-stone-400">Retira tu carta cuando quieras</span>
             </div>
             <div class="grid grid-cols-2 gap-2">
                 {% for item in my_sales %}
@@ -79,7 +71,7 @@
                         {% csrf_token %}
                         <input type="hidden" name="tg_id" value="{{ tg_id }}">
                         <input type="hidden" name="mode" value="cancel">
-                        <button type="submit" class="w-full py-1 text-[10px] bg-red-950/70 hover:bg-red-900 border border-red-500/40 text-red-200 rounded-lg font-bold transition-all">
+                        <button type="submit" class="w-full py-1 text-[10px] bg-red-950/70 hover:bg-red-900 border border-red-500/40 text-red-200 rounded-lg font-bold">
                             Retirar Venta
                         </button>
                     </form>
@@ -89,24 +81,15 @@
         </div>
         {% endif %}
 
-        <!-- VITRINA DEL MERCADO (CARTAS DE OTROS USUARIOS) -->
-        <div class="flex items-center justify-between px-1">
-            <h2 class="text-xs font-bold text-stone-300 uppercase tracking-wider">Photocards Disponibles</h2>
-            <button type="button" onclick="universalNav('/idols/photocards/album/')" class="text-xs text-vip-gold hover:underline flex items-center gap-1 font-bold">
-                <span>+ Vender desde mi Álbum</span> <span>➔</span>
-            </button>
-        </div>
-
-        <!-- BARRA DE BÚSQUEDA Y FILTRO RÁPIDO EN VIVO -->
+        <!-- BARRA DE BÚSQUEDA Y FILTROS -->
         <div class="flex flex-col gap-2 my-1">
             <div class="relative w-full">
                 <span class="absolute inset-y-0 left-3 flex items-center text-xs opacity-50">🔍</span>
                 <input type="text" id="marketSearchInput" onkeyup="filterMarketCards()" 
-                       placeholder="Buscar por Idol (ej: Jennie, Karina) o carta..." 
+                       placeholder="Buscar por Idol (Jennie, Karina...) o carta..." 
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
             </div>
 
-            <!-- Botones de Rareza -->
             <div class="grid grid-cols-5 gap-1 p-1 bg-black/60 border border-white/10 rounded-xl text-[9px] font-bold uppercase text-center">
                 <button type="button" onclick="setRarityFilter('all')" class="py-1 rounded-lg bg-vip-gold text-black font-black m-rarity-btn" id="m-f-all">Todas</button>
                 <button type="button" onclick="setRarityFilter('common')" class="py-1 rounded-lg text-stone-400 hover:text-white m-rarity-btn" id="m-f-common">Común</button>
@@ -117,12 +100,13 @@
         </div>
 
         {% if market_cards %}
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-3" id="market-cards-container">
             {% for item in market_cards %}
-            <div class="bg-black/70 border rounded-2xl p-2.5 flex flex-col justify-between shadow-xl relative group overflow-hidden"
+            <div class="market-card-item bg-black/70 border rounded-2xl p-2.5 flex flex-col justify-between shadow-xl relative group overflow-hidden"
+                 data-search="{{ item.photocard.name|lower }} {{ item.photocard.display_idol_name|lower }}"
+                 data-rarity="{{ item.photocard.rarity }}"
                  style="border-color: {{ item.photocard.get_color_hex }};">
                 
-                <!-- BADGE DE RAREZA -->
                 <div class="absolute top-3.5 left-3.5 z-10">
                     <span class="text-[8px] font-mono uppercase font-black px-2 py-0.5 rounded-full border shadow backdrop-blur-md"
                           style="color: {{ item.photocard.get_color_hex }}; border-color: {{ item.photocard.get_color_hex }}; background: rgba(0,0,0,0.85);">
@@ -130,20 +114,17 @@
                     </span>
                 </div>
 
-                <!-- FOTO DE LA CARTA -->
                 <div class="w-full aspect-[5/7] rounded-xl overflow-hidden bg-black mb-2 border border-white/10 relative">
                     <img src="{{ item.photocard.image.url }}" 
                          alt="{{ item.photocard.name }}" 
                          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
                 </div>
 
-                <!-- DATOS DE LA CARTA -->
                 <div class="mb-2">
                     <h3 class="text-xs font-black text-white truncate leading-tight">{{ item.photocard.name }}</h3>
                     <p class="text-[10px] text-yellow-400 font-bold truncate">{{ item.photocard.display_idol_name }}</p>
                 </div>
 
-                <!-- PRECIO Y BOTÓN DE COMPRA -->
                 <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-1.5">
                     <div class="text-xs font-black text-amber-300 font-mono flex items-center gap-1">
                         <span>🪙</span> {{ item.sale_price }}
@@ -180,10 +161,9 @@
     <!-- SECCIÓN 2: TABLÓN DE INTERCAMBIOS (TRADES) -->
     <div id="market-trades-tab" class="hidden flex flex-col gap-3">
         
-        <!-- PROPUESTAS RECIBIDAS -->
         <div class="flex items-center justify-between px-1">
-            <h3 class="text-xs font-bold text-purple-300 uppercase tracking-wider">Propuestas para Ti</h3>
-            <span class="text-[10px] text-stone-500">{{ received_trades.count }} pendientes</span>
+            <h3 class="text-xs font-bold text-purple-300 uppercase tracking-wider">Ofertas Disponibles</h3>
+            <span class="text-[10px] text-stone-400 font-mono">{{ received_trades.count }} activas</span>
         </div>
 
         {% for trade in received_trades %}
@@ -191,6 +171,9 @@
             <div class="flex justify-between items-center">
                 <span class="text-xs font-bold text-white flex items-center gap-1">
                     <span>👤</span> <span>De: {{ trade.sender_username }}</span>
+                    {% if trade.receiver_telegram_id == 0 %}
+                        <span class="text-[8.5px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 px-1.5 rounded uppercase font-mono">Abierto 📢</span>
+                    {% endif %}
                 </span>
                 <span class="text-[9px] font-mono text-purple-300 bg-purple-950/80 px-2 py-0.5 rounded-full border border-purple-700">
                     {{ trade.created_at|timesince }} atrás
@@ -210,19 +193,28 @@
 
             <!-- Botones Aceptar / Rechazar -->
             <div class="grid grid-cols-2 gap-2 pt-1">
-                <a href="/idols/photocards/trade/{{ trade.id }}/accept/?tg_id={{ tg_id }}" 
-                   class="btn-gold py-2 rounded-xl text-center text-[10px] font-black uppercase tracking-wider shadow">
-                    ✅ Aceptar
-                </a>
-                <a href="/idols/photocards/trade/{{ trade.id }}/reject/?tg_id={{ tg_id }}" 
-                   class="bg-rose-950 border border-rose-600 text-rose-200 py-2 rounded-xl text-center text-[10px] font-bold uppercase">
-                    ❌ Rechazar
-                </a>
+                <form action="/idols/photocards/trade/{{ trade.id }}/accept/" method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <button type="submit" 
+                            class="w-full btn-gold py-2 rounded-xl text-center text-[10px] font-black uppercase tracking-wider shadow">
+                        ✅ Aceptar Trueque
+                    </button>
+                </form>
+
+                <form action="/idols/photocards/trade/{{ trade.id }}/reject/" method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <button type="submit" 
+                            class="w-full bg-rose-950 border border-rose-600 text-rose-200 py-2 rounded-xl text-center text-[10px] font-bold uppercase">
+                        ❌ Rechazar
+                    </button>
+                </form>
             </div>
         </div>
         {% empty %}
         <div class="bg-black/40 border border-white/5 p-6 rounded-2xl text-center text-xs text-stone-500">
-            No tienes ofertas de intercambio pendientes.
+            No tienes ofertas de intercambio pendientes en este momento.
         </div>
         {% endfor %}
 
@@ -239,10 +231,13 @@
                         <span class="text-[10px] text-stone-400 truncate">Para: {{ st.receiver_username }}</span>
                     </div>
                 </div>
-                <a href="/idols/photocards/trade/{{ st.id }}/cancel/?tg_id={{ tg_id }}" 
-                   class="text-[10px] text-rose-400 hover:text-rose-300 font-bold bg-rose-950/60 border border-rose-700/60 px-2 py-1 rounded-lg">
-                    Cancelar
-                </a>
+                <form action="/idols/photocards/trade/{{ st.id }}/cancel/" method="POST" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <button type="submit" class="text-[10px] text-rose-400 hover:text-rose-300 font-bold bg-rose-950/60 border border-rose-700/60 px-2.5 py-1 rounded-lg">
+                        Cancelar
+                    </button>
+                </form>
             </div>
             {% endfor %}
         </div>
