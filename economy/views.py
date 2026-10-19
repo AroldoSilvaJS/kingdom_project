@@ -66,6 +66,8 @@ def casino_game(request):
     
     max_bet = profile.max_bet_allowed
     ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
+    NEGROS = [n for n in range(1, 37) if n not in ROJOS]
+    roulette_streak = request.session.get('roulette_streak', 0)
         
     if request.method == 'POST':
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
@@ -86,11 +88,24 @@ def casino_game(request):
                 if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
                 messages.error(request, err_msg)
             else:
-                # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
                 wallet.accumulate_patron_vault(apuesta)
 
-                # Evaluación de la apuesta
-                numero_ganador = random.randint(0, 36)
+                # 🎲 ALTERNANCIA DINÁMICA: Si lleva 2 derrotas seguidas, favorecer la alternancia
+                force_win = False
+                if roulette_streak >= 2 and random.random() < 0.65:
+                    force_win = True
+
+                if force_win and eleccion in ['red', 'black', 'even', 'odd']:
+                    if eleccion == 'red':
+                        numero_ganador = random.choice(ROJOS)
+                    elif eleccion == 'black':
+                        numero_ganador = random.choice(NEGROS)
+                    elif eleccion == 'even':
+                        numero_ganador = random.choice([n for n in range(1, 37) if n % 2 == 0])
+                    else:
+                        numero_ganador = random.choice([n for n in range(1, 37) if n % 2 != 0])
+                else:
+                    numero_ganador = random.randint(0, 36)
                 
                 if numero_ganador == 0:
                     color_ganador = 'zero'
@@ -116,19 +131,18 @@ def casino_game(request):
                             gano = True
                             multiplicador = 2.0
 
-                # 3. Apuesta a Número Específico (Pleno del 0 al 36)
+                # 3. Apuesta a Número Específico (Pleno x30)
                 elif eleccion == 'number':
                     try:
                         num_apostado = int(request.POST.get('target_number', -1))
                         if num_apostado == numero_ganador:
                             gano = True
-                            multiplicador = 30.0  # 🎯 ¡Pleno de la Suerte x30!
+                            multiplicador = 30.0
                     except ValueError:
                         pass
 
                 if gano:
                     ganancia = int(round(apuesta * multiplicador))
-                    # Buff Pantera
                     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
                     if pet and pet.species == 'panther':
                         panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
@@ -138,13 +152,14 @@ def casino_game(request):
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "win"
                     xp_gain = 8 if multiplicador >= 20.0 else 3
+                    request.session['roulette_streak'] = 0  # Reiniciar racha
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
                     ganancia = apuesta
                     xp_gain = 1
+                    request.session['roulette_streak'] = roulette_streak + 1
 
-                # EXP balanceada
                 grant_user_xp(request, tg_id, xp_gain, reason="Ruleta Imperial")
 
                 if is_ajax:
@@ -171,6 +186,7 @@ def casino_game(request):
         'profile': profile,
         'max_bet': max_bet,
     })
+
 
 
 def claim_bonus(request):
@@ -203,6 +219,7 @@ def slots_game(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     max_bet = profile.max_bet_allowed
+    slots_losses = request.session.get('slots_losses', 0)
     resultado = None
     ganancia = 0
     reels = ['👑', '💎', '⭐']
@@ -234,11 +251,16 @@ def slots_game(request):
                 if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
                 messages.error(request, err)
             else:
-                # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
                 wallet.accumulate_patron_vault(apuesta)
-
                 pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                reels = [random.choice(WEIGHTED_SYMBOLS) for _ in range(3)]
+
+                # 🎰 ALTERNANCIA DINÁMICA: Si lleva 2 o más derrotas seguidas,
+                # dar un Par moderado (x1.2 o x1.6) para romper la mala racha sin descontrolar el oro
+                if slots_losses >= 2 and random.random() < 0.65:
+                    sym = random.choice(['🍇', '🍒', '🪙', '⭐'])
+                    reels = [sym, sym, random.choice(WEIGHTED_SYMBOLS)]
+                else:
+                    reels = [random.choice(WEIGHTED_SYMBOLS) for _ in range(3)]
 
                 # Buff Cuervo Abisal
                 if pet and pet.species == 'raven':
@@ -251,24 +273,10 @@ def slots_game(request):
                 # 1. TRÍOS
                 if reels[0] == reels[1] == reels[2]:
                     symbol = reels[0]
-                    if symbol == '👑':
-                        multiplicador = 25.0
-                        xp_gain = 12
-                    elif symbol == '💎':
-                        multiplicador = 15.0
-                        xp_gain = 8
-                    elif symbol == '⭐':
-                        multiplicador = 8.0
-                        xp_gain = 6
-                    elif symbol == '🪙':
-                        multiplicador = 5.0
-                        xp_gain = 4
-                    else:
-                        multiplicador = 3.5
-                        xp_gain = 3
+                    multiplicador = {'👑': 25.0, '💎': 15.0, '⭐': 8.0, '🪙': 5.0}.get(symbol, 3.5)
+                    xp_gain = 12 if symbol == '👑' else 4
 
                     ganancia = int(apuesta * multiplicador)
-                    
                     if pet and pet.species == 'panther':
                         panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
                         net = ganancia - apuesta
@@ -276,6 +284,7 @@ def slots_game(request):
                         
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "jackpot" if symbol in ['👑', '💎'] else "trio"
+                    request.session['slots_losses'] = 0
 
                 # 2. PARES
                 elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
@@ -290,28 +299,30 @@ def slots_game(request):
                         resultado = "pair"
 
                     ganancia = int(round(apuesta * multiplicador))
-
                     if pet and pet.species == 'panther':
                         panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
                         net = max(0, ganancia - apuesta)
                         ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
 
                     wallet.add_funds(ganancia - apuesta)
+                    request.session['slots_losses'] = 0
 
-                # 👑 PILAR 2: TIRO DE AMORTIGUACIÓN
+                # 3. AMORTIGUACIÓN
                 elif '👑' in reels or '💎' in reels:
                     reintegro = max(1, int(round(apuesta * 0.5)))
                     wallet.remove_funds(apuesta - reintegro)
                     resultado = "cushion"
                     ganancia = reintegro
                     xp_gain = 2
+                    request.session['slots_losses'] = 0
 
-                # 3. DERROTA TOTAL
+                # 4. DERROTA
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
                     ganancia = apuesta
                     xp_gain = 1
+                    request.session['slots_losses'] = slots_losses + 1
 
                 grant_user_xp(request, tg_id, xp_gain, reason="Tragaperras Imperial")
 
@@ -382,7 +393,6 @@ def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     if prob <= 0:
         return 1.0
     
-    # 👑 Margen equilibrado al 98% (en lugar de 94%)
     raw_mult = 0.98 / prob
     return max(1.04, round(raw_mult, 2))
 
@@ -453,8 +463,7 @@ def mines_game(request):
                 tile_idx = int(request.POST.get('tile_index', -1))
                 if 0 <= tile_idx <= 24 and tile_idx not in session_mines['revealed']:
                     
-                    # 🛡️ MEJORA 1: PRIMER CLIC 100% SEGURO
-                    # Si es el primer toque y cayó en una mina, la trasladamos a una casilla libre
+                    # 🛡️ REGLA: PRIMER CLIC 100% SEGURO
                     if len(session_mines['revealed']) == 0 and tile_idx in session_mines['mines']:
                         libres = [i for i in range(25) if i != tile_idx and i not in session_mines['mines']]
                         if libres:
@@ -584,7 +593,7 @@ def blackjack_game(request):
     max_bet = profile.max_bet_allowed
         
     session_bj = request.session.get('blackjack_state')
-    bj_loss_streak = request.session.get('bj_loss_streak', 0)
+    bj_losses = request.session.get('bj_loss_streak', 0)
     resultado = None
     ganancia = 0
     
@@ -614,17 +623,13 @@ def blackjack_game(request):
                     player_hand = [draw_card(), draw_card()]
                     dealer_hand = [draw_card(), draw_card()]
 
-                    # 🛡️ BENDICIÓN ANTIRRACHA: Si el usuario lleva 2 o más derrotas seguidas,
-                    # asegurar que su mano inicial no sea basura (evitar pares de 5 o 14 incómodos)
-                    if bj_loss_streak >= 2:
+                    # 🛡️ ALTERNANCIA: Si lleva 2 o más derrotas seguidas, asegurar mano sólida inicial
+                    if bj_losses >= 2:
                         p_check = calculate_hand_value(player_hand)
-                        if p_check < 14:
-                            # Reemplazar la 2da carta con una carta de alto valor (10, J, Q, K o As)
+                        if p_check < 15:
                             high_vals = ['10', 'J', 'Q', 'K', 'A']
                             suits = ['♠', '♥', '♦', '♣']
-                            s = random.choice(suits)
-                            v = random.choice(high_vals)
-                            player_hand[1] = {'val': v, 'suit': s, 'is_red': s in ['♥', '♦']}
+                            player_hand[1] = {'val': random.choice(high_vals), 'suit': random.choice(suits), 'is_red': False}
 
                     p_val = calculate_hand_value(player_hand)
                     d_init_val = calculate_hand_value(dealer_hand)
@@ -675,21 +680,14 @@ def blackjack_game(request):
                 resultado = 'bust'
                 ganancia = session_bj['bet']
                 session_bj['finished'] = True
-                
-                # Aumentar racha de derrota
-                bj_loss_streak += 1
-                request.session['bj_loss_streak'] = bj_loss_streak
+                request.session['bj_loss_streak'] = bj_losses + 1
 
-                # BUFF LOBO ESPECTRAL
+                # Buff Lobo
                 wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
                     wallet.add_funds(session_bj['bet'])
                     resultado = 'wolf_saved'
                     ganancia = session_bj['bet']
-                elif bj_loss_streak >= 3:
-                    # 🛡️ CONSOLACIÓN DE LA CORONA TRAS 3 DERROTAS
-                    rebate = max(1, int(round(session_bj['bet'] * 0.25)))
-                    wallet.add_funds(rebate)
 
                 grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
 
@@ -724,19 +722,13 @@ def blackjack_game(request):
             else:
                 resultado = 'lose'
                 ganancia = apuesta
-
-                bj_loss_streak += 1
-                request.session['bj_loss_streak'] = bj_loss_streak
+                request.session['bj_loss_streak'] = bj_losses + 1
 
                 wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
                 if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
                     wallet.add_funds(apuesta)
                     resultado = 'wolf_saved'
                     ganancia = apuesta
-                elif bj_loss_streak >= 3:
-                    # 🛡️ CONSOLACIÓN DE LA CORONA TRAS 3 DERROTAS
-                    rebate = max(1, int(round(apuesta * 0.25)))
-                    wallet.add_funds(rebate)
 
                 grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
                 
