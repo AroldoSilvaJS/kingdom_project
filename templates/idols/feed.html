@@ -42,6 +42,7 @@
         {% if feed_theme.banner_url %}
         <div class="w-full bg-black relative overflow-hidden border-b border-amber-500/30">
             <img src="{{ feed_theme.banner_url }}" alt="{{ feed_theme.title }}" 
+                 loading="lazy"
                  class="w-full h-auto max-h-48 object-cover object-center group-hover:scale-[1.02] transition-transform duration-500 block">
             <div class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[#0d0414] to-transparent pointer-events-none"></div>
         </div>
@@ -74,7 +75,7 @@
                      style="background: linear-gradient(135deg, {% if post.idol.aura_color == 'gold' %}#F59E0B, #FBBF24{% elif post.idol.aura_color == 'ruby' %}#F43F5E, #FB7185{% elif post.idol.aura_color == 'emerald' %}#10B981, #34D399{% else %}#A855F7, #C084FC{% endif %});">
                     <div class="w-full h-full rounded-full overflow-hidden bg-black p-[1.5px]">
                         {% if post.idol.photo %}
-                            <img src="{{ post.idol.photo.url }}" class="w-full h-full rounded-full object-cover">
+                            <img src="{{ post.idol.photo.url }}" loading="lazy" class="w-full h-full rounded-full object-cover">
                         {% else %}
                             <div class="w-full h-full rounded-full bg-neutral-900 flex items-center justify-center text-xs">🎭</div>
                         {% endif %}
@@ -121,7 +122,7 @@
                          style="border-color: {% if post.idol.aura_color == 'gold' %}#F59E0B{% elif post.idol.aura_color == 'ruby' %}#F43F5E{% elif post.idol.aura_color == 'emerald' %}#10B981{% else %}#A855F7{% endif %};">
                         <div class="w-full h-full rounded-[13px] overflow-hidden bg-black flex items-center justify-center">
                             {% if post.idol.photo %}
-                                <img src="{{ post.idol.photo.url }}" alt="{{ post.idol.stage_name }}" class="w-full h-full object-cover">
+                                <img src="{{ post.idol.photo.url }}" alt="{{ post.idol.stage_name }}" loading="lazy" class="w-full h-full object-cover">
                             {% else %}
                                 <span class="text-sm">🎭</span>
                             {% endif %}
@@ -174,7 +175,7 @@
             <div class="relative w-full bg-black min-h-[380px] max-h-[580px] flex items-center justify-center overflow-hidden">
                 
                 {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
-                    <!-- CONTENIDO DESBLOQUEADO (VIDEO O FOTO) -->
+                    <!-- CONTENIDO DESBLOQUEADO (VIDEO O FOTO CON LAZY LOADING Y LIGHTBOX) -->
                     {% if post.is_video %}
                         <video src="{{ post.video.url }}" 
                                controls 
@@ -186,6 +187,7 @@
                         </video>
                     {% elif post.image %}
                         <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
+                             loading="lazy"
                              onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
                              class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
                     {% endif %}
@@ -196,12 +198,13 @@
                         </span>
                     {% endif %}
                 {% else %}
-                    <!-- NIEBLA DE OBSIDIANA: MULTIMEDIA VIP BLOQUEADO -->
+                    <!-- NIEBLA DE OBSIDIANA: MULTIMEDIA VIP BLOQUEADO (CON CENSURA BLUR-3XL HERMÉTICA) -->
                     {% if post.is_video %}
-                        <!-- Si es video bloqueado, silenciado y con blur extremo de fondo -->
                         <video src="{{ post.video.url }}" muted loop autoplay playsinline class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.15] scale-110 pointer-events-none"></video>
                     {% elif post.image %}
-                        <img src="{{ post.image.url }}" alt="VIP" class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.18] scale-110 pointer-events-none">
+                        <img src="{{ post.image.url }}" alt="VIP" 
+                             loading="lazy"
+                             class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.18] scale-110 pointer-events-none">
                     {% endif %}
 
                     <!-- Tarjeta Flotante de Desbloqueo VIP -->

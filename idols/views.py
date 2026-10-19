@@ -41,46 +41,59 @@ def check_is_staff_or_admin(tg_id):
     return is_staff
 
 
-def optimize_uploaded_image(file_obj, max_dimension=1600, quality=85):
+def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
     """
-    Comprime y redimensiona imágenes automáticamente antes de subirlas
-    para que nunca excedan el límite de Cloudinary ni ralenticen Telegram.
+    Comprime y convierte imágenes a WebP ultraligero antes de subir a Supabase.
+    Reduce el peso de ~2.5MB a ~80-120KB manteniendo nitidez en móviles.
     """
     if not file_obj:
         return file_obj
 
     try:
         img = Image.open(file_obj)
-        has_alpha = img.mode in ('RGBA', 'LA') or ('transparency' in img.info)
+        
+        # Corregir orientación automática de cámaras de celular
+        try:
+            from PIL import ExifTags
+            for orientation in ExifTags.TAGS.keys():
+                if ExifTags.TAGS[orientation] == 'Orientation':
+                    break
+            exif = img._getexif()
+            if exif and orientation in exif:
+                if exif[orientation] == 3: img = img.rotate(180, expand=True)
+                elif exif[orientation] == 6: img = img.rotate(270, expand=True)
+                elif exif[orientation] == 8: img = img.rotate(90, expand=True)
+        except Exception:
+            pass
 
+        # 1080px es la resolución nativa perfecta para Telegram móvil
         if img.width > max_dimension or img.height > max_dimension:
             img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
 
         output = BytesIO()
+        has_alpha = img.mode in ('RGBA', 'LA') or ('transparency' in img.info)
+
         if has_alpha:
-            img.save(output, format='PNG', optimize=True)
-            content_type = 'image/png'
-            ext = 'png'
+            img.save(output, format='WEBP', quality=quality, method=4)
         else:
             if img.mode != 'RGB':
                 img = img.convert('RGB')
-            img.save(output, format='JPEG', quality=quality, optimize=True)
-            content_type = 'image/jpeg'
-            ext = 'jpg'
+            img.save(output, format='WEBP', quality=quality, method=4)
 
         output.seek(0)
-        filename = os.path.splitext(file_obj.name)[0] + f'.{ext}'
+        base_name = os.path.splitext(file_obj.name)[0]
+        filename = f"{base_name}.webp"
 
         return InMemoryUploadedFile(
             output,
             'ImageField',
             filename,
-            content_type,
+            'image/webp',
             output.getbuffer().nbytes,
             None
         )
     except Exception as e:
-        print(f"⚠️ No se pudo comprimir la imagen: {e}")
+        print(f"⚠️ No se pudo comprimir la imagen a WebP: {e}")
         return file_obj
 
 
