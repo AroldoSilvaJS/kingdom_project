@@ -22,6 +22,7 @@ from core.models import UserProfile, UserRole, KingdomSetting
 from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
+from collections import Counter
 
 ADMIN_CORONA_ID = '7474444797'
 
@@ -1543,6 +1544,19 @@ def photocard_fusion(request):
                 messages.error(request, err)
                 return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
+            # 🛡️ BLINDAJE DE COLECCIÓN: Comprobar que siempre quede al menos 1 copia en el Álbum
+            sacrificed_counts = Counter(c.photocard_id for c in selected_cards)
+            for pid, count in sacrificed_counts.items():
+                total_owned = UserPhotocard.objects.filter(
+                    telegram_user_id=tg_id,
+                    photocard_id=pid
+                ).count()
+                if (total_owned - count) < 1:
+                    err = "⚠️ No puedes fundir tu única copia de una Photocard. La Corona protege tu Álbum."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
+                    return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
             # Probabilidad con buff de Conejo Lunar
             luck_prob = recipe['luck_chance']
             if pet and pet.species == 'rabbit':
@@ -1600,15 +1614,29 @@ def photocard_fusion(request):
             messages.success(request, f"✨ ¡Alquimia completada! Obtuviste «{new_card.name}» ({new_card.get_rarity_display()}).")
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-    # GET: Listado de cartas libres
-    available_cards = UserPhotocard.objects.filter(
+    # ==========================================
+    # GET: LISTADO EXCLUSIVO DE REPETIDAS
+    # ==========================================
+    # Obtenemos todas las cartas libres del usuario ordenadas por ID de carta
+    all_user_cards = UserPhotocard.objects.filter(
         telegram_user_id=tg_id,
         is_for_sale=False
-    ).exclude(photocard__rarity='legendary').select_related('photocard').order_by('-obtained_at')
+    ).exclude(photocard__rarity='legendary').select_related('photocard').order_by('photocard_id', 'id')
 
-    commons = [c for c in available_cards if c.photocard.rarity == 'common']
-    rares   = [c for c in available_cards if c.photocard.rarity == 'rare']
-    epics   = [c for c in available_cards if c.photocard.rarity == 'epic']
+    seen_photocard_ids = set()
+    duplicate_cards = []
+
+    for uc in all_user_cards:
+        if uc.photocard_id not in seen_photocard_ids:
+            # Primera copia: Se guarda sagradamente para el Álbum
+            seen_photocard_ids.add(uc.photocard_id)
+        else:
+            # 2ª, 3ª, 4ª copia: ¡Es repetida! Se puede fundir
+            duplicate_cards.append(uc)
+
+    commons = [c for c in duplicate_cards if c.photocard.rarity == 'common']
+    rares   = [c for c in duplicate_cards if c.photocard.rarity == 'rare']
+    epics   = [c for c in duplicate_cards if c.photocard.rarity == 'epic']
 
     return render(request, 'idols/photocard_fusion.html', {
         'tg_id': tg_id,
