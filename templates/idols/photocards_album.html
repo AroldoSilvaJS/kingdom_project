@@ -36,7 +36,7 @@
         </div>
     </div>
 
-    <!-- PESTAÑAS PRINCIPALES DEL ÁLBUM: COLECCIONES vs REPETIDAS vs TODAS -->
+    <!-- PESTAÑAS: COLECCIONES vs REPETIDAS vs TODAS -->
     <div class="grid grid-cols-3 gap-1 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl text-[10px] font-bold uppercase text-center shadow-inner">
         <button type="button" onclick="switchAlbumView('collections')" id="view-btn-collections" 
                 class="py-2.5 rounded-xl bg-vip-gold text-black font-black shadow transition-all album-tab-btn">
@@ -52,14 +52,11 @@
         </button>
     </div>
 
-    <!-- ========================================== -->
-    <!-- VISTA 1: COLECCIONES AGRUPADAS POR CAJA   -->
-    <!-- ========================================== -->
+    <!-- VISTA 1: COLECCIONES AGRUPADAS POR CAJA -->
     <div id="view-collections" class="flex flex-col gap-4">
         {% for col in collections %}
         <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-gradient-to-br from-[#160824] via-[#090212] to-black shadow-xl flex flex-col gap-3">
             
-            <!-- Cabecera de la Colección con Barra de Progreso -->
             <div class="flex flex-col gap-1.5 border-b border-white/10 pb-2.5">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2 min-w-0">
@@ -80,7 +77,6 @@
                     {% endif %}
                 </div>
 
-                <!-- Barra de Progreso de la Caja -->
                 <div class="flex items-center gap-2 mt-0.5">
                     <div class="flex-1 bg-black/80 h-1.5 rounded-full overflow-hidden border border-vip-gold/25 p-0.5">
                         <div class="bg-gradient-to-r from-yellow-600 via-vip-gold to-yellow-300 h-full rounded-full transition-all duration-500" 
@@ -90,18 +86,21 @@
                 </div>
             </div>
 
-            <!-- Cuadrícula de Cartas de esta Colección -->
             {% if col.user_cards %}
             <div class="grid grid-cols-3 gap-2">
                 {% for uc in col.user_cards %}
-                <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.photocard.image.url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_count }})"
+                <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_count|default:1 }})"
                      class="relative aspect-[5/7] rounded-xl overflow-hidden bg-black border-2 flex flex-col justify-end p-1.5 group cursor-pointer shadow active:scale-95 transition-all select-none"
                      style="border-color: {{ uc.photocard.get_color_hex }};">
                     
-                    <img src="{{ uc.photocard.image.url }}" alt="{{ uc.photocard.name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform">
+                    {% if uc.safe_image_url %}
+                        <img src="{{ uc.safe_image_url }}" alt="{{ uc.photocard.name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform">
+                    {% else %}
+                        <div class="absolute inset-0 flex items-center justify-center text-xs bg-stone-900 text-stone-500">🎴</div>
+                    {% endif %}
+                    
                     <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none"></div>
 
-                    <!-- Insignia de Copias x2, x3 si tiene repetidas -->
                     {% if uc.copies_count > 1 %}
                     <span class="absolute top-1.5 left-1.5 bg-yellow-400 text-black text-[9px] font-mono font-black px-1.5 py-0.2 rounded-md shadow-md z-10 border border-black">
                         x{{ uc.copies_count }}
@@ -125,12 +124,15 @@
             {% endif %}
 
         </div>
+        {% empty %}
+        <div class="vip-panel p-8 text-center rounded-3xl">
+            <span class="text-4xl my-2">🎴</span>
+            <p class="text-xs text-stone-400">No hay cartas en tu Álbum todavía.</p>
+        </div>
         {% endfor %}
     </div>
 
-    <!-- ========================================== -->
-    <!-- VISTA 2: SECCIÓN DEDICADA A REPETIDAS      -->
-    <!-- ========================================== -->
+    <!-- VISTA 2: SECCIÓN DEDICADA A REPETIDAS -->
     <div id="view-duplicates" class="hidden flex flex-col gap-3">
         <div class="p-3.5 bg-gradient-to-r from-amber-950/60 to-black rounded-2xl border border-yellow-500/40 flex items-center justify-between">
             <div>
@@ -146,14 +148,18 @@
         {% if duplicates %}
         <div class="grid grid-cols-2 gap-3">
             {% for uc in duplicates %}
-            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.photocard.image.url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_total }})"
+            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_total }})"
                  class="relative rounded-2xl overflow-hidden aspect-[5/7] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl cursor-pointer active:scale-95 transition-all select-none"
                  style="border-color: {{ uc.photocard.get_color_hex }};">
                 
-                <img src="{{ uc.photocard.image.url }}" class="absolute inset-0 w-full h-full object-cover">
+                {% if uc.safe_image_url %}
+                    <img src="{{ uc.safe_image_url }}" class="absolute inset-0 w-full h-full object-cover">
+                {% else %}
+                    <div class="absolute inset-0 flex items-center justify-center text-xs bg-stone-900 text-stone-500">🎴</div>
+                {% endif %}
+
                 <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none"></div>
 
-                <!-- Insignia destacada de repetidas -->
                 <div class="absolute top-2 left-2 z-10 flex flex-col gap-1">
                     <span class="bg-yellow-400 text-black text-[10px] font-mono font-black px-2 py-0.5 rounded-lg shadow-lg border border-black flex items-center gap-1">
                         <span>🔁</span> Total: x{{ uc.copies_total }}
@@ -184,11 +190,8 @@
         {% endfor %}
     </div>
 
-    <!-- ========================================== -->
-    <!-- VISTA 3: TODAS (VISTA PLANA CON RAREZAS)   -->
-    <!-- ========================================== -->
+    <!-- VISTA 3: TODAS (VISTA PLANA CON FILTROS DE RAREZA) -->
     <div id="view-all" class="hidden flex flex-col gap-3">
-        <!-- Filtros Rápidos de Rareza -->
         <div class="grid grid-cols-5 gap-1 p-1 bg-black/70 border border-vip-gold/25 rounded-2xl text-[10px] font-bold uppercase text-center shadow-inner">
             <button type="button" onclick="filterFlatAlbum('all')" class="py-1.5 rounded-xl bg-vip-gold text-black flat-filter-btn" id="f-all">Todas</button>
             <button type="button" onclick="filterFlatAlbum('common')" class="py-1.5 rounded-xl text-stone-400 hover:text-white flat-filter-btn" id="f-common">Común</button>
@@ -199,12 +202,17 @@
 
         <div class="grid grid-cols-2 gap-3" id="flat-album-grid">
             {% for uc in user_cards %}
-            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.photocard.image.url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, 1)"
+            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, 1)"
                  class="flat-card-item relative rounded-2xl overflow-hidden aspect-[5/7] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl cursor-pointer active:scale-95 transition-all select-none"
                  data-rarity="{{ uc.photocard.rarity }}"
                  style="border-color: {{ uc.photocard.get_color_hex }};">
                 
-                <img src="{{ uc.photocard.image.url }}" class="absolute inset-0 w-full h-full object-cover">
+                {% if uc.safe_image_url %}
+                    <img src="{{ uc.safe_image_url }}" class="absolute inset-0 w-full h-full object-cover">
+                {% else %}
+                    <div class="absolute inset-0 flex items-center justify-center text-xs bg-stone-900 text-stone-500">🎴</div>
+                {% endif %}
+
                 <div class="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent pointer-events-none"></div>
 
                 <div class="relative z-10 bg-black/65 backdrop-blur-sm p-1.5 rounded-xl border border-white/10 flex flex-col">
@@ -215,13 +223,15 @@
                     <span class="text-[8.5px] text-yellow-300 font-bold truncate">{{ uc.photocard.display_idol_name }}</span>
                 </div>
             </div>
+            {% empty %}
+                <p class="col-span-2 text-center text-xs text-stone-500 py-6">Tu álbum está vacío.</p>
             {% endfor %}
         </div>
     </div>
 
 </div>
 
-<!-- 🔍 MODAL DE ACCIÓN DE CARTA CON GUÍA DE REPETIDAS -->
+<!-- 🔍 MODAL DE ACCIÓN DE CARTA -->
 <div id="card-action-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
     <div class="vip-panel p-5 max-w-sm w-full max-h-[85vh] overflow-y-auto border-2 rounded-3xl relative flex flex-col items-center text-center shadow-2xl bg-gradient-to-b from-[#1a0928] to-black" id="modal-card-container">
         
@@ -236,12 +246,10 @@
         <h3 class="font-serif text-sm font-black text-white" id="modal-card-title"></h3>
         <span class="text-xs text-yellow-400 font-bold mb-2" id="modal-card-idol"></span>
 
-        <!-- Aviso si es repetida -->
         <div id="modal-copies-info" class="hidden mb-3 px-3 py-1 bg-yellow-500/20 border border-yellow-500/40 rounded-xl text-[10px] text-yellow-300 font-mono">
             Tienes <span id="modal-copies-num" class="font-bold text-white"></span> copias de esta carta. ¡La original sigue en tu álbum!
         </div>
 
-        <!-- Si está a la venta -->
         <div id="modal-is-for-sale-box" class="hidden w-full flex flex-col gap-2">
             <p class="text-xs text-yellow-300 font-mono bg-yellow-950/60 p-2.5 rounded-xl border border-yellow-500/40">
                 Esta carta está publicada en el Mercado por <span id="modal-sale-price-label" class="font-bold text-white"></span> 🪙.
@@ -256,10 +264,7 @@
             </form>
         </div>
 
-        <!-- Opciones Vender o Intercambiar -->
         <div id="modal-actions-box" class="w-full flex flex-col gap-3">
-            
-            <!-- Vender en el Mercado -->
             <form id="sell-form" method="POST" action="" class="bg-black/60 p-3 rounded-2xl border border-white/10 flex flex-col gap-2">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
@@ -278,7 +283,6 @@
                 </div>
             </form>
 
-            <!-- Proponer Intercambio -->
             <form id="trade-form" method="POST" action="" class="bg-black/60 p-3 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
@@ -304,7 +308,6 @@
                     Enviar Propuesta
                 </button>
             </form>
-
         </div>
 
     </div>
@@ -332,7 +335,8 @@
         const btns = document.querySelectorAll('.flat-filter-btn');
 
         btns.forEach(b => { b.className = "py-1.5 rounded-xl text-stone-400 hover:text-white flat-filter-btn"; });
-        document.getElementById(`f-${rarity}`).className = "py-1.5 rounded-xl bg-vip-gold text-black font-bold flat-filter-btn";
+        const active = document.getElementById(`f-${rarity}`);
+        if (active) active.className = "py-1.5 rounded-xl bg-vip-gold text-black font-bold flat-filter-btn";
 
         cards.forEach(c => {
             c.style.display = (rarity === 'all' || c.getAttribute('data-rarity') === rarity) ? 'flex' : 'none';
@@ -345,7 +349,7 @@
         document.getElementById('modal-card-rarity').innerText = rarityDisplay;
         document.getElementById('modal-card-rarity').style.borderColor = colorHex;
         document.getElementById('modal-card-rarity').style.color = colorHex;
-        document.getElementById('modal-card-img').src = imgUrl;
+        document.getElementById('modal-card-img').src = imgUrl || '';
         document.getElementById('modal-card-box').style.borderColor = colorHex;
         document.getElementById('modal-card-box').style.boxShadow = `0 0 25px ${colorHex}`;
 
