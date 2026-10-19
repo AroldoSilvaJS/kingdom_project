@@ -367,197 +367,9 @@ def calculate_hand_value(hand):
         aces -= 1
     return total
 
-def blackjack_game(request):
-    tg_id = get_safe_tg_id(request)
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-    max_bet = profile.max_bet_allowed
-        
-    session_bj = request.session.get('blackjack_state')
-    resultado = None
-    ganancia = 0
-    
-    if request.method == 'POST':
-        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
-        action = request.POST.get('action')
-        
-        if action == 'deal':
-            try:
-                apuesta = int(request.POST.get('bet_amount', 25))
-                if apuesta <= 0:
-                    err = "La apuesta debe ser mayor a 0."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                    messages.error(request, err)
-                elif apuesta > max_bet:
-                    err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                    messages.error(request, err)
-                elif apuesta > wallet.balance:
-                    err = "No tienes suficiente oro en tu Bóveda."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                    messages.error(request, err)
-                else:
-                    wallet.remove_funds(apuesta)
-                    wallet.accumulate_patron_vault(apuesta)
-
-                    player_hand = [draw_card(), draw_card()]
-                    dealer_hand = [draw_card(), draw_card()]
-                    p_val = calculate_hand_value(player_hand)
-                    d_init_val = calculate_hand_value(dealer_hand)
-                    
-                    if p_val == 21:
-                        if d_init_val == 21:
-                            wallet.add_funds(apuesta)
-                            resultado = 'push'
-                            ganancia = apuesta
-                            xp_gain = 2
-                        else:
-                            ganancia = int(apuesta * 2.5)
-                            if pet and pet.species == 'panther':
-                                panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
-                                net = ganancia - apuesta
-                                ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
-                                
-                            wallet.add_funds(ganancia)
-                            resultado = 'blackjack'
-                            xp_gain = 6
-                        
-                        grant_user_xp(request, tg_id, xp_gain, reason="Blackjack")
-                        session_bj = {
-                            'bet': apuesta,
-                            'player_hand': player_hand,
-                            'dealer_hand': dealer_hand,
-                            'finished': True
-                        }
-                    else:
-                        session_bj = {
-                            'bet': apuesta,
-                            'player_hand': player_hand,
-                            'dealer_hand': dealer_hand,
-                            'finished': False
-                        }
-                    request.session['blackjack_state'] = session_bj
-            except ValueError:
-                err = "Monto inválido."
-                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                messages.error(request, err)
-                
-        elif action == 'hit' and session_bj and not session_bj.get('finished'):
-            session_bj['player_hand'].append(draw_card())
-            p_val = calculate_hand_value(session_bj['player_hand'])
-            
-            if p_val > 21:
-                resultado = 'bust'
-                ganancia = session_bj['bet']
-                session_bj['finished'] = True
-
-                # BUFF LOBO ESPECTRAL
-                wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
-                if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
-                    wallet.add_funds(session_bj['bet'])
-                    resultado = 'wolf_saved'
-                    ganancia = session_bj['bet']
-
-                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
-
-            request.session['blackjack_state'] = session_bj
-                
-        elif action == 'stand' and session_bj and not session_bj.get('finished'):
-            p_val = calculate_hand_value(session_bj['player_hand'])
-            d_hand = session_bj['dealer_hand']
-            
-            while calculate_hand_value(d_hand) < 17:
-                d_hand.append(draw_card())
-                
-            d_val = calculate_hand_value(d_hand)
-            apuesta = session_bj['bet']
-            
-            if d_val > 21 or p_val > d_val:
-                ganancia = apuesta * 2
-                if pet and pet.species == 'panther':
-                    panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
-                    net = ganancia - apuesta
-                    ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
-                    
-                wallet.add_funds(ganancia)
-                resultado = 'win'
-                grant_user_xp(request, tg_id, 4, reason="Victoria Blackjack")
-            elif p_val == d_val:
-                wallet.add_funds(apuesta)
-                resultado = 'push'
-                ganancia = apuesta
-                grant_user_xp(request, tg_id, 2, reason="Empate Blackjack")
-            else:
-                resultado = 'lose'
-                ganancia = apuesta
-
-                wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
-                if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
-                    wallet.add_funds(apuesta)
-                    resultado = 'wolf_saved'
-                    ganancia = apuesta
-
-                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
-                
-            session_bj['finished'] = True
-            request.session['blackjack_state'] = session_bj
-
-        if is_ajax:
-            p_cards = session_bj['player_hand'] if session_bj else []
-            d_cards = session_bj['dealer_hand'] if session_bj else []
-            in_game = session_bj is not None and not session_bj.get('finished', False)
-
-            dealer_visible = d_cards
-            dealer_score_visible = calculate_hand_value(d_cards) if d_cards else 0
-            if in_game and len(d_cards) >= 2:
-                dealer_visible = [d_cards[0], {'val': '?', 'suit': '👑', 'is_red': False, 'hidden': True}]
-                dealer_score_visible = calculate_hand_value([d_cards[0]])
-
-            resp = {
-                'success': True,
-                'in_game': in_game,
-                'resultado': resultado,
-                'ganancia': ganancia,
-                'player_cards': p_cards,
-                'dealer_cards': dealer_visible,
-                'player_score': calculate_hand_value(p_cards) if p_cards else 0,
-                'dealer_score': dealer_score_visible,
-                'nuevo_saldo': wallet.balance,
-                'patron_vault': wallet.patron_vault,
-                'current_bet': session_bj['bet'] if session_bj else 25,
-            }
-
-            if session_bj and session_bj.get('finished', False):
-                request.session['blackjack_state'] = None
-
-            return JsonResponse(resp)
-            
-    p_cards = session_bj['player_hand'] if session_bj else []
-    d_cards = session_bj['dealer_hand'] if session_bj else []
-    p_score = calculate_hand_value(p_cards) if p_cards else 0
-    d_score = calculate_hand_value(d_cards) if d_cards else 0
-    in_game = session_bj is not None and not session_bj.get('finished', False)
-    current_bet = session_bj['bet'] if session_bj else 25
-
-    if session_bj and session_bj.get('finished', False):
-        request.session['blackjack_state'] = None
-
-    return render(request, 'economy/blackjack.html', {
-        'tg_id': tg_id,
-        'wallet': wallet,
-        'profile': profile,
-        'max_bet': max_bet,
-        'player_cards': p_cards,
-        'dealer_cards': d_cards,
-        'player_score': p_score,
-        'dealer_score': d_score,
-        'in_game': in_game,
-        'resultado': resultado,
-        'ganancia': ganancia,
-        'current_bet': current_bet
-    })
-
+# ==========================================
+# MINAS DEL REINO: BALANCE JUSTO & PRIMER CLIC SEGURO
+# ==========================================
 
 def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     if revealed_count <= 0:
@@ -570,8 +382,9 @@ def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     if prob <= 0:
         return 1.0
     
-    raw_mult = 0.94 / prob
-    return max(1.02, round(raw_mult, 2))
+    # 👑 Margen equilibrado al 98% (en lugar de 94%)
+    raw_mult = 0.98 / prob
+    return max(1.04, round(raw_mult, 2))
 
 
 def mines_game(request):
@@ -639,6 +452,15 @@ def mines_game(request):
             try:
                 tile_idx = int(request.POST.get('tile_index', -1))
                 if 0 <= tile_idx <= 24 and tile_idx not in session_mines['revealed']:
+                    
+                    # 🛡️ MEJORA 1: PRIMER CLIC 100% SEGURO
+                    # Si es el primer toque y cayó en una mina, la trasladamos a una casilla libre
+                    if len(session_mines['revealed']) == 0 and tile_idx in session_mines['mines']:
+                        libres = [i for i in range(25) if i != tile_idx and i not in session_mines['mines']]
+                        if libres:
+                            session_mines['mines'].remove(tile_idx)
+                            session_mines['mines'].append(random.choice(libres))
+
                     if tile_idx in session_mines['mines']:
                         session_mines['in_game'] = False
                         all_mines = session_mines['mines']
@@ -661,7 +483,7 @@ def mines_game(request):
                         mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
 
                         if pet and pet.species == 'dragon':
-                            dragon_bonus = {1: 0.02, 2: 0.04, 3: 0.07}.get(pet.evolution_stage_number, 0.02)
+                            dragon_bonus = {1: 0.04, 2: 0.08, 3: 0.14}.get(pet.evolution_stage_number, 0.04)
                             mult = round(mult + dragon_bonus, 2)
 
                         session_mines['multiplier'] = mult
@@ -673,7 +495,7 @@ def mines_game(request):
                         if auto_win:
                             session_mines['in_game'] = False
                             if pet and pet.species == 'panther':
-                                panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                                panther_profit_bonus = {1: 0.05, 2: 0.10, 3: 0.18}.get(pet.evolution_stage_number, 0.05)
                                 net = cashout_val - session_mines['bet']
                                 cashout_val = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
                                 
@@ -705,7 +527,7 @@ def mines_game(request):
                 ganancia = int(session_mines['bet'] * mult)
 
                 if pet and pet.species == 'panther':
-                    panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                    panther_profit_bonus = {1: 0.05, 2: 0.10, 3: 0.18}.get(pet.evolution_stage_number, 0.05)
                     net = max(0, ganancia - session_mines['bet'])
                     ganancia = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
 
@@ -749,6 +571,232 @@ def mines_game(request):
         'current_cashout': current_cashout,
     })
 
+
+# ==========================================
+# BLACKJACK IMPERIAL: ANTIRRACHA & PROTECCIÓN NOBLE
+# ==========================================
+
+def blackjack_game(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+    max_bet = profile.max_bet_allowed
+        
+    session_bj = request.session.get('blackjack_state')
+    bj_loss_streak = request.session.get('bj_loss_streak', 0)
+    resultado = None
+    ganancia = 0
+    
+    if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+        action = request.POST.get('action')
+        
+        if action == 'deal':
+            try:
+                apuesta = int(request.POST.get('bet_amount', 25))
+                if apuesta <= 0:
+                    err = "La apuesta debe ser mayor a 0."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
+                elif apuesta > max_bet:
+                    err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
+                elif apuesta > wallet.balance:
+                    err = "No tienes suficiente oro en tu Bóveda."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
+                else:
+                    wallet.remove_funds(apuesta)
+                    wallet.accumulate_patron_vault(apuesta)
+
+                    player_hand = [draw_card(), draw_card()]
+                    dealer_hand = [draw_card(), draw_card()]
+
+                    # 🛡️ BENDICIÓN ANTIRRACHA: Si el usuario lleva 2 o más derrotas seguidas,
+                    # asegurar que su mano inicial no sea basura (evitar pares de 5 o 14 incómodos)
+                    if bj_loss_streak >= 2:
+                        p_check = calculate_hand_value(player_hand)
+                        if p_check < 14:
+                            # Reemplazar la 2da carta con una carta de alto valor (10, J, Q, K o As)
+                            high_vals = ['10', 'J', 'Q', 'K', 'A']
+                            suits = ['♠', '♥', '♦', '♣']
+                            s = random.choice(suits)
+                            v = random.choice(high_vals)
+                            player_hand[1] = {'val': v, 'suit': s, 'is_red': s in ['♥', '♦']}
+
+                    p_val = calculate_hand_value(player_hand)
+                    d_init_val = calculate_hand_value(dealer_hand)
+                    
+                    if p_val == 21:
+                        if d_init_val == 21:
+                            wallet.add_funds(apuesta)
+                            resultado = 'push'
+                            ganancia = apuesta
+                            xp_gain = 2
+                        else:
+                            ganancia = int(apuesta * 2.5)
+                            if pet and pet.species == 'panther':
+                                panther_rates = {1: 0.05, 2: 0.10, 3: 0.15}
+                                net = ganancia - apuesta
+                                ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.05))))
+                                
+                            wallet.add_funds(ganancia)
+                            resultado = 'blackjack'
+                            xp_gain = 6
+                            request.session['bj_loss_streak'] = 0
+                        
+                        grant_user_xp(request, tg_id, xp_gain, reason="Blackjack")
+                        session_bj = {
+                            'bet': apuesta,
+                            'player_hand': player_hand,
+                            'dealer_hand': dealer_hand,
+                            'finished': True
+                        }
+                    else:
+                        session_bj = {
+                            'bet': apuesta,
+                            'player_hand': player_hand,
+                            'dealer_hand': dealer_hand,
+                            'finished': False
+                        }
+                    request.session['blackjack_state'] = session_bj
+            except ValueError:
+                err = "Monto inválido."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
+                
+        elif action == 'hit' and session_bj and not session_bj.get('finished'):
+            session_bj['player_hand'].append(draw_card())
+            p_val = calculate_hand_value(session_bj['player_hand'])
+            
+            if p_val > 21:
+                resultado = 'bust'
+                ganancia = session_bj['bet']
+                session_bj['finished'] = True
+                
+                # Aumentar racha de derrota
+                bj_loss_streak += 1
+                request.session['bj_loss_streak'] = bj_loss_streak
+
+                # BUFF LOBO ESPECTRAL
+                wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
+                if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
+                    wallet.add_funds(session_bj['bet'])
+                    resultado = 'wolf_saved'
+                    ganancia = session_bj['bet']
+                elif bj_loss_streak >= 3:
+                    # 🛡️ CONSOLACIÓN DE LA CORONA TRAS 3 DERROTAS
+                    rebate = max(1, int(round(session_bj['bet'] * 0.25)))
+                    wallet.add_funds(rebate)
+
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
+
+            request.session['blackjack_state'] = session_bj
+                
+        elif action == 'stand' and session_bj and not session_bj.get('finished'):
+            p_val = calculate_hand_value(session_bj['player_hand'])
+            d_hand = session_bj['dealer_hand']
+            
+            while calculate_hand_value(d_hand) < 17:
+                d_hand.append(draw_card())
+                
+            d_val = calculate_hand_value(d_hand)
+            apuesta = session_bj['bet']
+            
+            if d_val > 21 or p_val > d_val:
+                ganancia = apuesta * 2
+                if pet and pet.species == 'panther':
+                    panther_rates = {1: 0.05, 2: 0.10, 3: 0.15}
+                    net = ganancia - apuesta
+                    ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.05))))
+                    
+                wallet.add_funds(ganancia)
+                resultado = 'win'
+                request.session['bj_loss_streak'] = 0
+                grant_user_xp(request, tg_id, 4, reason="Victoria Blackjack")
+            elif p_val == d_val:
+                wallet.add_funds(apuesta)
+                resultado = 'push'
+                ganancia = apuesta
+                grant_user_xp(request, tg_id, 2, reason="Empate Blackjack")
+            else:
+                resultado = 'lose'
+                ganancia = apuesta
+
+                bj_loss_streak += 1
+                request.session['bj_loss_streak'] = bj_loss_streak
+
+                wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
+                if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
+                    wallet.add_funds(apuesta)
+                    resultado = 'wolf_saved'
+                    ganancia = apuesta
+                elif bj_loss_streak >= 3:
+                    # 🛡️ CONSOLACIÓN DE LA CORONA TRAS 3 DERROTAS
+                    rebate = max(1, int(round(apuesta * 0.25)))
+                    wallet.add_funds(rebate)
+
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
+                
+            session_bj['finished'] = True
+            request.session['blackjack_state'] = session_bj
+
+        if is_ajax:
+            p_cards = session_bj['player_hand'] if session_bj else []
+            d_cards = session_bj['dealer_hand'] if session_bj else []
+            in_game = session_bj is not None and not session_bj.get('finished', False)
+
+            dealer_visible = d_cards
+            dealer_score_visible = calculate_hand_value(d_cards) if d_cards else 0
+            if in_game and len(d_cards) >= 2:
+                dealer_visible = [d_cards[0], {'val': '?', 'suit': '👑', 'is_red': False, 'hidden': True}]
+                dealer_score_visible = calculate_hand_value([d_cards[0]])
+
+            resp = {
+                'success': True,
+                'in_game': in_game,
+                'resultado': resultado,
+                'ganancia': ganancia,
+                'player_cards': p_cards,
+                'dealer_cards': dealer_visible,
+                'player_score': calculate_hand_value(p_cards) if p_cards else 0,
+                'dealer_score': dealer_score_visible,
+                'nuevo_saldo': wallet.balance,
+                'patron_vault': wallet.patron_vault,
+                'current_bet': session_bj['bet'] if session_bj else 25,
+            }
+
+            if session_bj and session_bj.get('finished', False):
+                request.session['blackjack_state'] = None
+
+            return JsonResponse(resp)
+            
+    p_cards = session_bj['player_hand'] if session_bj else []
+    d_cards = session_bj['dealer_hand'] if session_bj else []
+    p_score = calculate_hand_value(p_cards) if p_cards else 0
+    d_score = calculate_hand_value(d_cards) if d_cards else 0
+    in_game = session_bj is not None and not session_bj.get('finished', False)
+    current_bet = session_bj['bet'] if session_bj else 25
+
+    if session_bj and session_bj.get('finished', False):
+        request.session['blackjack_state'] = None
+
+    return render(request, 'economy/blackjack.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'max_bet': max_bet,
+        'player_cards': p_cards,
+        'dealer_cards': d_cards,
+        'player_score': p_score,
+        'dealer_score': d_score,
+        'in_game': in_game,
+        'resultado': resultado,
+        'ganancia': ganancia,
+        'current_bet': current_bet
+    })
 
 def bazar_shop(request):
     tg_id = get_safe_tg_id(request)

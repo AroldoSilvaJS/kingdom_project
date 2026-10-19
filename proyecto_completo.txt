@@ -3897,6 +3897,7 @@ from core.models import UserProfile, UserRole, KingdomSetting
 from core.utils import grant_user_xp
 from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
+from collections import Counter
 
 ADMIN_CORONA_ID = '7474444797'
 
@@ -4962,93 +4963,117 @@ def open_photocard_box_ajax(request, box_id):
 
 
 def my_photocards_album(request):
-    tg_id = resolve_safe_tg(request)
-    if not tg_id:
-        return redirect('/')
+    try:
+        tg_id = resolve_safe_tg(request)
+        if not tg_id:
+            return redirect('/')
 
-    user_cards = list(UserPhotocard.objects.filter(
-        telegram_user_id=tg_id
-    ).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at'))
+        # 🛡️ Filtro seguro: ignorar cualquier registro huérfano sin photocard válida
+        raw_user_cards = list(UserPhotocard.objects.filter(
+            telegram_user_id=tg_id,
+            photocard__isnull=False
+        ).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at'))
 
-    total = len(user_cards)
-    legendaries = sum(1 for uc in user_cards if uc.photocard.rarity == 'legendary')
-    epics = sum(1 for uc in user_cards if uc.photocard.rarity == 'epic')
+        user_cards = [uc for uc in raw_user_cards if getattr(uc, 'photocard', None) is not None]
 
-    # 1. Contar ocurrencias de cada carta para detectar Repetidas
-    cards_by_photocard = {}
-    for uc in user_cards:
-        cards_by_photocard.setdefault(uc.photocard_id, []).append(uc)
+        # Inyectar atributos seguros a prueba de errores para el template
+        for uc in user_cards:
+            try:
+                uc.safe_image_url = uc.photocard.image.url if (uc.photocard and uc.photocard.image) else ''
+            except Exception:
+                uc.safe_image_url = ''
 
-    duplicates_list = []
-    duplicate_cards_count = 0
-    for p_id, ucs in cards_by_photocard.items():
-        if len(ucs) > 1:
-            rep_obj = ucs[0]
-            rep_obj.copies_total = len(ucs)
-            rep_obj.copies_extra = len(ucs) - 1
-            duplicates_list.append(rep_obj)
-            duplicate_cards_count += (len(ucs) - 1)
+        total = len(user_cards)
+        legendaries = sum(1 for uc in user_cards if getattr(uc.photocard, 'rarity', '') == 'legendary')
+        epics = sum(1 for uc in user_cards if getattr(uc.photocard, 'rarity', '') == 'epic')
 
-    # 2. Agrupar por Colecciones / Cajas oficiales con porcentaje de completitud
-    all_boxes = list(PhotocardBox.objects.all().prefetch_related('cards').order_by('name'))
-    collections_data = []
+        # 1. Contar ocurrencias de cada carta para detectar Repetidas
+        cards_by_photocard = {}
+        for uc in user_cards:
+            cards_by_photocard.setdefault(uc.photocard_id, []).append(uc)
 
-    for box in all_boxes:
-        total_in_box = box.cards.count()
-        box_ucs = [uc for uc in user_cards if uc.photocard.box_id == box.id]
-        
-        distinct_cards_owned = {}
-        for uc in box_ucs:
-            if uc.photocard_id not in distinct_cards_owned:
-                uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
-                distinct_cards_owned[uc.photocard_id] = uc
-        
-        owned_count = len(distinct_cards_owned)
-        percent = int((owned_count / total_in_box) * 100) if total_in_box > 0 else 0
-        
-        if owned_count > 0 or total_in_box > 0:
+        duplicates_list = []
+        duplicate_cards_count = 0
+        for p_id, ucs in cards_by_photocard.items():
+            if len(ucs) > 1:
+                rep_obj = ucs[0]
+                rep_obj.copies_total = len(ucs)
+                rep_obj.copies_extra = len(ucs) - 1
+                duplicates_list.append(rep_obj)
+                duplicate_cards_count += (len(ucs) - 1)
+
+        # 2. Agrupar por Colecciones / Cajas oficiales
+        all_boxes = list(PhotocardBox.objects.all().prefetch_related('cards').order_by('name'))
+        collections_data = []
+
+        for box in all_boxes:
+            total_in_box = len(box.cards.all())
+            box_ucs = [uc for uc in user_cards if getattr(uc.photocard, 'box_id', None) == box.id]
+            
+            distinct_cards_owned = {}
+            for uc in box_ucs:
+                if uc.photocard_id not in distinct_cards_owned:
+                    uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
+                    distinct_cards_owned[uc.photocard_id] = uc
+            
+            owned_count = len(distinct_cards_owned)
+            percent = int((owned_count / total_in_box) * 100) if total_in_box > 0 else 0
+            
+            if owned_count > 0 or total_in_box > 0:
+                collections_data.append({
+                    'box': box,
+                    'total_cards': total_in_box,
+                    'owned_count': owned_count,
+                    'percent': percent,
+                    'is_complete': (owned_count == total_in_box and total_in_box > 0),
+                    'user_cards': list(distinct_cards_owned.values()),
+                })
+
+        # Cartas sin caja asignada (Caja especial Clandestina)
+        orphan_ucs = [uc for uc in user_cards if not getattr(uc.photocard, 'box_id', None)]
+        if orphan_ucs:
+            orphan_distinct = {}
+            for uc in orphan_ucs:
+                if uc.photocard_id not in orphan_distinct:
+                    uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
+                    orphan_distinct[uc.photocard_id] = uc
+
+            class OrphanBox:
+                id = 0
+                name = 'Colección Clandestina (Especial)'
+                cover_image = None
+
             collections_data.append({
-                'box': box,
-                'total_cards': total_in_box,
-                'owned_count': owned_count,
-                'percent': percent,
-                'is_complete': (owned_count == total_in_box and total_in_box > 0),
-                'user_cards': list(distinct_cards_owned.values()),
+                'box': OrphanBox(),
+                'total_cards': len(orphan_distinct),
+                'owned_count': len(orphan_distinct),
+                'percent': 100,
+                'is_complete': False,
+                'user_cards': list(orphan_distinct.values()),
             })
 
-    # Cartas sin caja asignada
-    orphan_ucs = [uc for uc in user_cards if not uc.photocard.box_id]
-    if orphan_ucs:
-        orphan_distinct = {}
-        for uc in orphan_ucs:
-            if uc.photocard_id not in orphan_distinct:
-                uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
-                orphan_distinct[uc.photocard_id] = uc
-        collections_data.append({
-            'box': {'name': 'Colección Clandestina (Especial)', 'cover_image': None},
-            'total_cards': len(orphan_distinct),
-            'owned_count': len(orphan_distinct),
-            'percent': 100,
-            'is_complete': False,
-            'user_cards': list(orphan_distinct.values()),
+        members = UserProfile.objects.exclude(
+            telegram_user_id=tg_id
+        ).order_by('-level')[:60]
+
+        return render(request, 'idols/photocards_album.html', {
+            'tg_id': tg_id,
+            'user_cards': user_cards,
+            'collections': collections_data,
+            'duplicates': duplicates_list,
+            'duplicate_cards_count': duplicate_cards_count,
+            'unique_count': len(cards_by_photocard),
+            'total': total,
+            'legendaries': legendaries,
+            'epics': epics,
+            'members': members,
         })
-
-    members = UserProfile.objects.exclude(
-        telegram_user_id=tg_id
-    ).order_by('-level')[:60]
-
-    return render(request, 'idols/photocards_album.html', {
-        'tg_id': tg_id,
-        'user_cards': user_cards,
-        'collections': collections_data,
-        'duplicates': duplicates_list,
-        'duplicate_cards_count': duplicate_cards_count,
-        'unique_count': len(cards_by_photocard),
-        'total': total,
-        'legendaries': legendaries,
-        'epics': epics,
-        'members': members,
-    })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        # En caso de cualquier anomalía, no tirar 500: redirigir y notificar
+        messages.error(request, f"Aviso del Álbum: {str(e)}")
+        return redirect('/idols/photocards/')
 
 
 def admin_photocards_manage(request):
@@ -5394,6 +5419,19 @@ def photocard_fusion(request):
                 messages.error(request, err)
                 return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
+            # 🛡️ BLINDAJE DE COLECCIÓN: Comprobar que siempre quede al menos 1 copia en el Álbum
+            sacrificed_counts = Counter(c.photocard_id for c in selected_cards)
+            for pid, count in sacrificed_counts.items():
+                total_owned = UserPhotocard.objects.filter(
+                    telegram_user_id=tg_id,
+                    photocard_id=pid
+                ).count()
+                if (total_owned - count) < 1:
+                    err = "⚠️ No puedes fundir tu única copia de una Photocard. La Corona protege tu Álbum."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
+                    return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
             # Probabilidad con buff de Conejo Lunar
             luck_prob = recipe['luck_chance']
             if pet and pet.species == 'rabbit':
@@ -5451,15 +5489,29 @@ def photocard_fusion(request):
             messages.success(request, f"✨ ¡Alquimia completada! Obtuviste «{new_card.name}» ({new_card.get_rarity_display()}).")
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-    # GET: Listado de cartas libres
-    available_cards = UserPhotocard.objects.filter(
+    # ==========================================
+    # GET: LISTADO EXCLUSIVO DE REPETIDAS
+    # ==========================================
+    # Obtenemos todas las cartas libres del usuario ordenadas por ID de carta
+    all_user_cards = UserPhotocard.objects.filter(
         telegram_user_id=tg_id,
         is_for_sale=False
-    ).exclude(photocard__rarity='legendary').select_related('photocard').order_by('-obtained_at')
+    ).exclude(photocard__rarity='legendary').select_related('photocard').order_by('photocard_id', 'id')
 
-    commons = [c for c in available_cards if c.photocard.rarity == 'common']
-    rares   = [c for c in available_cards if c.photocard.rarity == 'rare']
-    epics   = [c for c in available_cards if c.photocard.rarity == 'epic']
+    seen_photocard_ids = set()
+    duplicate_cards = []
+
+    for uc in all_user_cards:
+        if uc.photocard_id not in seen_photocard_ids:
+            # Primera copia: Se guarda sagradamente para el Álbum
+            seen_photocard_ids.add(uc.photocard_id)
+        else:
+            # 2ª, 3ª, 4ª copia: ¡Es repetida! Se puede fundir
+            duplicate_cards.append(uc)
+
+    commons = [c for c in duplicate_cards if c.photocard.rarity == 'common']
+    rares   = [c for c in duplicate_cards if c.photocard.rarity == 'rare']
+    epics   = [c for c in duplicate_cards if c.photocard.rarity == 'epic']
 
     return render(request, 'idols/photocard_fusion.html', {
         'tg_id': tg_id,
@@ -12614,7 +12666,7 @@ ARCHIVO: .\templates\idols\photocards_album.html
         </div>
     </div>
 
-    <!-- PESTAÑAS PRINCIPALES DEL ÁLBUM: COLECCIONES vs REPETIDAS vs TODAS -->
+    <!-- PESTAÑAS: COLECCIONES vs REPETIDAS vs TODAS -->
     <div class="grid grid-cols-3 gap-1 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl text-[10px] font-bold uppercase text-center shadow-inner">
         <button type="button" onclick="switchAlbumView('collections')" id="view-btn-collections" 
                 class="py-2.5 rounded-xl bg-vip-gold text-black font-black shadow transition-all album-tab-btn">
@@ -12630,14 +12682,11 @@ ARCHIVO: .\templates\idols\photocards_album.html
         </button>
     </div>
 
-    <!-- ========================================== -->
-    <!-- VISTA 1: COLECCIONES AGRUPADAS POR CAJA   -->
-    <!-- ========================================== -->
+    <!-- VISTA 1: COLECCIONES AGRUPADAS POR CAJA -->
     <div id="view-collections" class="flex flex-col gap-4">
         {% for col in collections %}
         <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-gradient-to-br from-[#160824] via-[#090212] to-black shadow-xl flex flex-col gap-3">
             
-            <!-- Cabecera de la Colección con Barra de Progreso -->
             <div class="flex flex-col gap-1.5 border-b border-white/10 pb-2.5">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2 min-w-0">
@@ -12658,7 +12707,6 @@ ARCHIVO: .\templates\idols\photocards_album.html
                     {% endif %}
                 </div>
 
-                <!-- Barra de Progreso de la Caja -->
                 <div class="flex items-center gap-2 mt-0.5">
                     <div class="flex-1 bg-black/80 h-1.5 rounded-full overflow-hidden border border-vip-gold/25 p-0.5">
                         <div class="bg-gradient-to-r from-yellow-600 via-vip-gold to-yellow-300 h-full rounded-full transition-all duration-500" 
@@ -12668,18 +12716,21 @@ ARCHIVO: .\templates\idols\photocards_album.html
                 </div>
             </div>
 
-            <!-- Cuadrícula de Cartas de esta Colección -->
             {% if col.user_cards %}
             <div class="grid grid-cols-3 gap-2">
                 {% for uc in col.user_cards %}
-                <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.photocard.image.url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_count }})"
+                <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_count|default:1 }})"
                      class="relative aspect-[5/7] rounded-xl overflow-hidden bg-black border-2 flex flex-col justify-end p-1.5 group cursor-pointer shadow active:scale-95 transition-all select-none"
                      style="border-color: {{ uc.photocard.get_color_hex }};">
                     
-                    <img src="{{ uc.photocard.image.url }}" alt="{{ uc.photocard.name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform">
+                    {% if uc.safe_image_url %}
+                        <img src="{{ uc.safe_image_url }}" alt="{{ uc.photocard.name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform">
+                    {% else %}
+                        <div class="absolute inset-0 flex items-center justify-center text-xs bg-stone-900 text-stone-500">🎴</div>
+                    {% endif %}
+                    
                     <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none"></div>
 
-                    <!-- Insignia de Copias x2, x3 si tiene repetidas -->
                     {% if uc.copies_count > 1 %}
                     <span class="absolute top-1.5 left-1.5 bg-yellow-400 text-black text-[9px] font-mono font-black px-1.5 py-0.2 rounded-md shadow-md z-10 border border-black">
                         x{{ uc.copies_count }}
@@ -12703,12 +12754,15 @@ ARCHIVO: .\templates\idols\photocards_album.html
             {% endif %}
 
         </div>
+        {% empty %}
+        <div class="vip-panel p-8 text-center rounded-3xl">
+            <span class="text-4xl my-2">🎴</span>
+            <p class="text-xs text-stone-400">No hay cartas en tu Álbum todavía.</p>
+        </div>
         {% endfor %}
     </div>
 
-    <!-- ========================================== -->
-    <!-- VISTA 2: SECCIÓN DEDICADA A REPETIDAS      -->
-    <!-- ========================================== -->
+    <!-- VISTA 2: SECCIÓN DEDICADA A REPETIDAS -->
     <div id="view-duplicates" class="hidden flex flex-col gap-3">
         <div class="p-3.5 bg-gradient-to-r from-amber-950/60 to-black rounded-2xl border border-yellow-500/40 flex items-center justify-between">
             <div>
@@ -12724,14 +12778,18 @@ ARCHIVO: .\templates\idols\photocards_album.html
         {% if duplicates %}
         <div class="grid grid-cols-2 gap-3">
             {% for uc in duplicates %}
-            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.photocard.image.url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_total }})"
+            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_total }})"
                  class="relative rounded-2xl overflow-hidden aspect-[5/7] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl cursor-pointer active:scale-95 transition-all select-none"
                  style="border-color: {{ uc.photocard.get_color_hex }};">
                 
-                <img src="{{ uc.photocard.image.url }}" class="absolute inset-0 w-full h-full object-cover">
+                {% if uc.safe_image_url %}
+                    <img src="{{ uc.safe_image_url }}" class="absolute inset-0 w-full h-full object-cover">
+                {% else %}
+                    <div class="absolute inset-0 flex items-center justify-center text-xs bg-stone-900 text-stone-500">🎴</div>
+                {% endif %}
+
                 <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none"></div>
 
-                <!-- Insignia destacada de repetidas -->
                 <div class="absolute top-2 left-2 z-10 flex flex-col gap-1">
                     <span class="bg-yellow-400 text-black text-[10px] font-mono font-black px-2 py-0.5 rounded-lg shadow-lg border border-black flex items-center gap-1">
                         <span>🔁</span> Total: x{{ uc.copies_total }}
@@ -12759,14 +12817,11 @@ ARCHIVO: .\templates\idols\photocards_album.html
                 ¡Tu colección es única! No tienes copias duplicadas en este momento.
             </p>
         </div>
-        {% endfor %}
+        {% endif %} 
     </div>
 
-    <!-- ========================================== -->
-    <!-- VISTA 3: TODAS (VISTA PLANA CON RAREZAS)   -->
-    <!-- ========================================== -->
+    <!-- VISTA 3: TODAS (VISTA PLANA CON FILTROS DE RAREZA) -->
     <div id="view-all" class="hidden flex flex-col gap-3">
-        <!-- Filtros Rápidos de Rareza -->
         <div class="grid grid-cols-5 gap-1 p-1 bg-black/70 border border-vip-gold/25 rounded-2xl text-[10px] font-bold uppercase text-center shadow-inner">
             <button type="button" onclick="filterFlatAlbum('all')" class="py-1.5 rounded-xl bg-vip-gold text-black flat-filter-btn" id="f-all">Todas</button>
             <button type="button" onclick="filterFlatAlbum('common')" class="py-1.5 rounded-xl text-stone-400 hover:text-white flat-filter-btn" id="f-common">Común</button>
@@ -12777,12 +12832,17 @@ ARCHIVO: .\templates\idols\photocards_album.html
 
         <div class="grid grid-cols-2 gap-3" id="flat-album-grid">
             {% for uc in user_cards %}
-            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.photocard.image.url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, 1)"
+            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, 1)"
                  class="flat-card-item relative rounded-2xl overflow-hidden aspect-[5/7] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl cursor-pointer active:scale-95 transition-all select-none"
                  data-rarity="{{ uc.photocard.rarity }}"
                  style="border-color: {{ uc.photocard.get_color_hex }};">
                 
-                <img src="{{ uc.photocard.image.url }}" class="absolute inset-0 w-full h-full object-cover">
+                {% if uc.safe_image_url %}
+                    <img src="{{ uc.safe_image_url }}" class="absolute inset-0 w-full h-full object-cover">
+                {% else %}
+                    <div class="absolute inset-0 flex items-center justify-center text-xs bg-stone-900 text-stone-500">🎴</div>
+                {% endif %}
+
                 <div class="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent pointer-events-none"></div>
 
                 <div class="relative z-10 bg-black/65 backdrop-blur-sm p-1.5 rounded-xl border border-white/10 flex flex-col">
@@ -12793,13 +12853,15 @@ ARCHIVO: .\templates\idols\photocards_album.html
                     <span class="text-[8.5px] text-yellow-300 font-bold truncate">{{ uc.photocard.display_idol_name }}</span>
                 </div>
             </div>
+            {% empty %}
+                <p class="col-span-2 text-center text-xs text-stone-500 py-6">Tu álbum está vacío.</p>
             {% endfor %}
         </div>
     </div>
 
 </div>
 
-<!-- 🔍 MODAL DE ACCIÓN DE CARTA CON GUÍA DE REPETIDAS -->
+<!-- 🔍 MODAL DE ACCIÓN DE CARTA -->
 <div id="card-action-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
     <div class="vip-panel p-5 max-w-sm w-full max-h-[85vh] overflow-y-auto border-2 rounded-3xl relative flex flex-col items-center text-center shadow-2xl bg-gradient-to-b from-[#1a0928] to-black" id="modal-card-container">
         
@@ -12814,12 +12876,10 @@ ARCHIVO: .\templates\idols\photocards_album.html
         <h3 class="font-serif text-sm font-black text-white" id="modal-card-title"></h3>
         <span class="text-xs text-yellow-400 font-bold mb-2" id="modal-card-idol"></span>
 
-        <!-- Aviso si es repetida -->
         <div id="modal-copies-info" class="hidden mb-3 px-3 py-1 bg-yellow-500/20 border border-yellow-500/40 rounded-xl text-[10px] text-yellow-300 font-mono">
             Tienes <span id="modal-copies-num" class="font-bold text-white"></span> copias de esta carta. ¡La original sigue en tu álbum!
         </div>
 
-        <!-- Si está a la venta -->
         <div id="modal-is-for-sale-box" class="hidden w-full flex flex-col gap-2">
             <p class="text-xs text-yellow-300 font-mono bg-yellow-950/60 p-2.5 rounded-xl border border-yellow-500/40">
                 Esta carta está publicada en el Mercado por <span id="modal-sale-price-label" class="font-bold text-white"></span> 🪙.
@@ -12834,10 +12894,7 @@ ARCHIVO: .\templates\idols\photocards_album.html
             </form>
         </div>
 
-        <!-- Opciones Vender o Intercambiar -->
         <div id="modal-actions-box" class="w-full flex flex-col gap-3">
-            
-            <!-- Vender en el Mercado -->
             <form id="sell-form" method="POST" action="" class="bg-black/60 p-3 rounded-2xl border border-white/10 flex flex-col gap-2">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
@@ -12856,7 +12913,6 @@ ARCHIVO: .\templates\idols\photocards_album.html
                 </div>
             </form>
 
-            <!-- Proponer Intercambio -->
             <form id="trade-form" method="POST" action="" class="bg-black/60 p-3 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
                 {% csrf_token %}
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
@@ -12882,7 +12938,6 @@ ARCHIVO: .\templates\idols\photocards_album.html
                     Enviar Propuesta
                 </button>
             </form>
-
         </div>
 
     </div>
@@ -12910,7 +12965,8 @@ ARCHIVO: .\templates\idols\photocards_album.html
         const btns = document.querySelectorAll('.flat-filter-btn');
 
         btns.forEach(b => { b.className = "py-1.5 rounded-xl text-stone-400 hover:text-white flat-filter-btn"; });
-        document.getElementById(`f-${rarity}`).className = "py-1.5 rounded-xl bg-vip-gold text-black font-bold flat-filter-btn";
+        const active = document.getElementById(`f-${rarity}`);
+        if (active) active.className = "py-1.5 rounded-xl bg-vip-gold text-black font-bold flat-filter-btn";
 
         cards.forEach(c => {
             c.style.display = (rarity === 'all' || c.getAttribute('data-rarity') === rarity) ? 'flex' : 'none';
@@ -12923,7 +12979,7 @@ ARCHIVO: .\templates\idols\photocards_album.html
         document.getElementById('modal-card-rarity').innerText = rarityDisplay;
         document.getElementById('modal-card-rarity').style.borderColor = colorHex;
         document.getElementById('modal-card-rarity').style.color = colorHex;
-        document.getElementById('modal-card-img').src = imgUrl;
+        document.getElementById('modal-card-img').src = imgUrl || '';
         document.getElementById('modal-card-box').style.borderColor = colorHex;
         document.getElementById('modal-card-box').style.boxShadow = `0 0 25px ${colorHex}`;
 
