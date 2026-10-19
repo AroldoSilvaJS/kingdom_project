@@ -1091,13 +1091,72 @@ def my_photocards_album(request):
     if not tg_id:
         return redirect('/')
 
-    user_cards = UserPhotocard.objects.filter(
+    user_cards = list(UserPhotocard.objects.filter(
         telegram_user_id=tg_id
-    ).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at')
+    ).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at'))
 
-    total = user_cards.count()
-    legendaries = user_cards.filter(photocard__rarity='legendary').count()
-    epics = user_cards.filter(photocard__rarity='epic').count()
+    total = len(user_cards)
+    legendaries = sum(1 for uc in user_cards if uc.photocard.rarity == 'legendary')
+    epics = sum(1 for uc in user_cards if uc.photocard.rarity == 'epic')
+
+    # 1. Contar ocurrencias de cada carta para detectar Repetidas
+    cards_by_photocard = {}
+    for uc in user_cards:
+        cards_by_photocard.setdefault(uc.photocard_id, []).append(uc)
+
+    duplicates_list = []
+    duplicate_cards_count = 0
+    for p_id, ucs in cards_by_photocard.items():
+        if len(ucs) > 1:
+            rep_obj = ucs[0]
+            rep_obj.copies_total = len(ucs)
+            rep_obj.copies_extra = len(ucs) - 1
+            duplicates_list.append(rep_obj)
+            duplicate_cards_count += (len(ucs) - 1)
+
+    # 2. Agrupar por Colecciones / Cajas oficiales con porcentaje de completitud
+    all_boxes = list(PhotocardBox.objects.all().prefetch_related('cards').order_by('name'))
+    collections_data = []
+
+    for box in all_boxes:
+        total_in_box = box.cards.count()
+        box_ucs = [uc for uc in user_cards if uc.photocard.box_id == box.id]
+        
+        distinct_cards_owned = {}
+        for uc in box_ucs:
+            if uc.photocard_id not in distinct_cards_owned:
+                uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
+                distinct_cards_owned[uc.photocard_id] = uc
+        
+        owned_count = len(distinct_cards_owned)
+        percent = int((owned_count / total_in_box) * 100) if total_in_box > 0 else 0
+        
+        if owned_count > 0 or total_in_box > 0:
+            collections_data.append({
+                'box': box,
+                'total_cards': total_in_box,
+                'owned_count': owned_count,
+                'percent': percent,
+                'is_complete': (owned_count == total_in_box and total_in_box > 0),
+                'user_cards': list(distinct_cards_owned.values()),
+            })
+
+    # Cartas sin caja asignada
+    orphan_ucs = [uc for uc in user_cards if not uc.photocard.box_id]
+    if orphan_ucs:
+        orphan_distinct = {}
+        for uc in orphan_ucs:
+            if uc.photocard_id not in orphan_distinct:
+                uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
+                orphan_distinct[uc.photocard_id] = uc
+        collections_data.append({
+            'box': {'name': 'Colección Clandestina (Especial)', 'cover_image': None},
+            'total_cards': len(orphan_distinct),
+            'owned_count': len(orphan_distinct),
+            'percent': 100,
+            'is_complete': False,
+            'user_cards': list(orphan_distinct.values()),
+        })
 
     members = UserProfile.objects.exclude(
         telegram_user_id=tg_id
@@ -1106,6 +1165,10 @@ def my_photocards_album(request):
     return render(request, 'idols/photocards_album.html', {
         'tg_id': tg_id,
         'user_cards': user_cards,
+        'collections': collections_data,
+        'duplicates': duplicates_list,
+        'duplicate_cards_count': duplicate_cards_count,
+        'unique_count': len(cards_by_photocard),
         'total': total,
         'legendaries': legendaries,
         'epics': epics,
