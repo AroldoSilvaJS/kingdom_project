@@ -107,7 +107,8 @@
     <!-- 📱 FEED DE PUBLICACIONES (CARDS DE ALTA COSTURA) -->
     <div class="flex flex-col gap-6" id="feed-container">
         {% for post in posts %}
-        <article class="feed-item rounded-[30px] overflow-hidden border-2 bg-gradient-to-b from-[#180a29] via-[#0d0417] to-black shadow-[0_15px_40px_rgba(0,0,0,0.9)] transition-all duration-300"
+        <article id="post-{{ post.id }}" 
+                 class="feed-item rounded-[30px] overflow-hidden border-2 bg-gradient-to-b from-[#180a29] via-[#0d0417] to-black shadow-[0_15px_40px_rgba(0,0,0,0.9)] transition-all duration-500"
                  data-network="{{ post.network }}"
                  style="border-color: {% if post.network == 'fans' %}rgba(168,85,247,0.45){% else %}rgba(212,175,55,0.35){% endif %};">
             
@@ -497,5 +498,23 @@
         ind.classList.remove('flex');
         input.placeholder = "Escribe tu comentario...";
     }
+
+    // Auto-desplazamiento a la publicación exacta con iluminación dorada
+    document.addEventListener("DOMContentLoaded", () => {
+        const hash = window.location.hash;
+        if (hash) {
+            setTimeout(() => {
+                const targetPost = document.querySelector(hash);
+                if (targetPost) {
+                    targetPost.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Destello de iluminación temporal para saber cuál es
+                    targetPost.classList.add('ring-4', 'ring-yellow-400', 'shadow-[0_0_35px_rgba(234,179,8,0.8)]');
+                    setTimeout(() => {
+                        targetPost.classList.remove('ring-4', 'ring-yellow-400', 'shadow-[0_0_35px_rgba(234,179,8,0.8)]');
+                    }, 2500);
+                }
+            }, 350);
+        }
+    });
 </script>
 {% endblock %}

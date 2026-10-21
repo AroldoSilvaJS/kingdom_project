@@ -282,8 +282,26 @@
             } catch(e) {}
 
             const user = getRealTelegramUser();
-            const cleanPath = targetPath.split('?')[0];
-            window.location.href = `${cleanPath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}`;
+            
+            // Conservar el ancla (#post-123) si existe
+            const hashIndex = targetPath.indexOf('#');
+            let hash = '';
+            let pathAndQuery = targetPath;
+            if (hashIndex !== -1) {
+                hash = targetPath.substring(hashIndex);
+                pathAndQuery = targetPath.substring(0, hashIndex);
+            }
+
+            // Conservar parámetros adicionales (?idol_id=...) si existen
+            const queryIndex = pathAndQuery.indexOf('?');
+            let basePath = pathAndQuery;
+            let extraParams = '';
+            if (queryIndex !== -1) {
+                basePath = pathAndQuery.substring(0, queryIndex);
+                extraParams = '&' + pathAndQuery.substring(queryIndex + 1);
+            }
+
+            window.location.href = `${basePath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}${extraParams}${hash}`;
         };
 
         window.navGo = window.universalNav;
