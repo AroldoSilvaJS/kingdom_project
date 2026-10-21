@@ -175,36 +175,51 @@
         </button>
     </div>
 
-    <!-- PESTAÑA A: MURO PRIVADO & FOTOS EXCLUSIVAS -->
+    <!-- PESTAÑA A: MURO PRIVADO & FOTOS EXCLUSIVAS (CLICKEABLE CON LIKES Y COMENTARIOS) -->
     <div id="id-tab-muro" class="flex flex-col gap-3">
         <div class="flex justify-between items-center px-1">
             <span class="text-xs font-black text-vip-gold uppercase tracking-wider">Galería Exclusiva de {{ idol.stage_name }}</span>
-            <button type="button" onclick="universalNav('{% url 'idols:social_feed' %}')" class="text-[11px] text-purple-300 hover:text-white font-bold">
-                Muro Completo ➔
+            <button type="button" onclick="universalNav('/idols/feed/?idol_id={{ idol.id }}')" class="text-[11px] text-purple-300 hover:text-white font-bold">
+                Ver solo sus posts ➔
             </button>
         </div>
 
         {% if recent_posts %}
         <div class="grid grid-cols-3 gap-2">
             {% for post in recent_posts %}
-            <div class="relative aspect-square rounded-2xl overflow-hidden border border-vip-gold/30 bg-black group shadow-lg">
-                {% if post.network == 'gram' or post.id in unlocked_ids %}
-                    {% if post.image %}
-                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+            <div onclick="universalNav('/idols/feed/?idol_id={{ idol.id }}#post-{{ post.id }}')"
+                 class="relative aspect-square rounded-2xl overflow-hidden border border-vip-gold/30 bg-black group shadow-lg cursor-pointer active:scale-95 transition-all select-none">
+                
+                {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
+                    {% if post.is_video %}
+                        <video src="{{ post.video.url }}" class="w-full h-full object-cover pointer-events-none"></video>
+                    {% elif post.image %}
+                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
                     {% endif %}
                 {% else %}
                     {% if post.image %}
                         <img src="{{ post.image.url }}" class="w-full h-full object-cover filter blur-lg brightness-50">
                     {% endif %}
-                    <button type="button" onclick="universalNav('{% url 'idols:social_feed' %}')" 
-                            class="absolute inset-0 flex flex-col items-center justify-center p-1 text-center bg-black/60">
+                    <div class="absolute inset-0 flex flex-col items-center justify-center p-1 text-center bg-black/60 pointer-events-none">
                         <span class="text-base">🔒</span>
                         <span class="text-[9px] font-black text-yellow-300 font-mono mt-0.5">🪙 {{ post.price }}</span>
-                    </button>
+                    </div>
                 {% endif %}
 
+                <!-- Tira de Likes y Comentarios superpuesta en la foto (Estilo Instagram) -->
+                <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-1.5 flex items-center justify-between text-[9.5px] font-mono font-bold text-white z-10 pointer-events-none">
+                    <span class="flex items-center gap-0.5 text-rose-400">
+                        <span>❤️</span> <span>{{ post.likes }}</span>
+                    </span>
+                    <span class="flex items-center gap-0.5 text-purple-300">
+                        <span>💬</span> <span>{{ post.comments.count }}</span>
+                    </span>
+                </div>
+
                 {% if post.network == 'fans' %}
-                    <span class="absolute top-1 right-1 bg-purple-950/90 border border-purple-500 text-purple-300 text-[8px] font-black px-1.5 py-0.2 rounded-full">VIP</span>
+                    <span class="absolute top-1 right-1 bg-purple-950/90 border border-purple-500 text-purple-300 text-[8px] font-black px-1.5 py-0.2 rounded-full z-10">VIP</span>
+                {% elif post.is_video %}
+                    <span class="absolute top-1 left-1 bg-black/80 text-yellow-400 text-[8px] font-bold px-1.5 py-0.2 rounded-full z-10">🎬</span>
                 {% endif %}
             </div>
             {% endfor %}

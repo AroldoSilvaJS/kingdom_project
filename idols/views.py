@@ -487,6 +487,15 @@ def social_feed(request):
     tg_username = request.GET.get('tg_username') or (profile.username if profile else 'Noble')
     
     posts = Post.objects.all().select_related('idol').prefetch_related('comments')
+
+    # 🌟 NUEVO: Si viene filtrado por una Musa específica (desde su perfil):
+    idol_filter_id = request.GET.get('idol_id')
+    filtered_idol = None
+    if idol_filter_id and str(idol_filter_id).isdigit():
+        filtered_idol = IdolProfile.objects.filter(id=int(idol_filter_id)).first()
+        if filtered_idol:
+            posts = posts.filter(idol=filtered_idol)
+
     unlocked_ids = []
     liked_ids = []
     is_admin = check_is_staff_or_admin(tg_id)
@@ -513,6 +522,7 @@ def social_feed(request):
         'tg_username': tg_username,
         'is_admin': is_admin,
         'feed_theme': feed_theme,
+        'filtered_idol': filtered_idol,  # 👈 Pasamos la Musa filtrada si existe
     })
 
 
