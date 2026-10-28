@@ -194,32 +194,37 @@ CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
 
 # ==========================================
-# ALMACENAMIENTO MULTIMEDIA (SUPABASE S3 / LOCAL)
+# ALMACENAMIENTO MULTIMEDIA (CLOUDFLARE R2 / S3)
 # ==========================================
-SUPABASE_ACCESS_KEY = os.environ.get('SUPABASE_ACCESS_KEY')
-SUPABASE_SECRET_KEY = os.environ.get('SUPABASE_SECRET_KEY')
-SUPABASE_STORAGE_URL = os.environ.get('SUPABASE_STORAGE_URL')
-SUPABASE_BUCKET_NAME = os.environ.get('SUPABASE_BUCKET_NAME', 'kingdom-media')
+R2_ACCESS_KEY = os.environ.get('R2_ACCESS_KEY')
+R2_SECRET_KEY = os.environ.get('R2_SECRET_KEY')
+R2_ENDPOINT_URL = os.environ.get('R2_ENDPOINT_URL')
+R2_BUCKET_NAME = os.environ.get('R2_BUCKET_NAME', 'kingdom-media')
+R2_PUBLIC_DOMAIN = os.environ.get('R2_PUBLIC_DOMAIN', 'pub-b0de6262434e4807b0b9364161a633bf.r2.dev')
 
-if SUPABASE_ACCESS_KEY and SUPABASE_SECRET_KEY:
-    # 🌟 PRODUCCIÓN: Guardar fotos y videos en Supabase Storage
-    AWS_ACCESS_KEY_ID = SUPABASE_ACCESS_KEY
-    AWS_SECRET_ACCESS_KEY = SUPABASE_SECRET_KEY
-    AWS_STORAGE_BUCKET_NAME = SUPABASE_BUCKET_NAME
-    AWS_S3_ENDPOINT_URL = SUPABASE_STORAGE_URL
-    AWS_S3_REGION_NAME = 'us-east-1'
+# Limpiar por si se coló algún 'https://' o '/' al copiar
+if R2_PUBLIC_DOMAIN:
+    R2_PUBLIC_DOMAIN = R2_PUBLIC_DOMAIN.replace('https://', '').replace('http://', '').strip('/')
+
+if R2_ACCESS_KEY and R2_SECRET_KEY and R2_ENDPOINT_URL:
+    # 🌟 PRODUCCIÓN: Guardar fotos en Cloudflare R2 ($0 egress ilimitado)
+    AWS_ACCESS_KEY_ID = R2_ACCESS_KEY
+    AWS_SECRET_ACCESS_KEY = R2_SECRET_KEY
+    AWS_STORAGE_BUCKET_NAME = R2_BUCKET_NAME
+    AWS_S3_ENDPOINT_URL = R2_ENDPOINT_URL
+    AWS_S3_REGION_NAME = 'auto'
     AWS_S3_SIGNATURE_VERSION = 's3v4'
     AWS_S3_FILE_OVERWRITE = False
     AWS_DEFAULT_ACL = None
     AWS_QUERYSTRING_AUTH = False
 
-    # ⚡ AÑADIR ESTE BLOQUE: Le dice a Telegram y al móvil que guarden las fotos por 30 días
+    # Le dice a Telegram y navegadores que almacenen en caché por 30 días
     AWS_S3_OBJECT_PARAMETERS = {
         'CacheControl': 'public, max-age=2592000, immutable',
     }
 
-    # 👈 Tu Project ID de Supabase
-    AWS_S3_CUSTOM_DOMAIN = f"btoemzqyzacbjfvjwpgv.supabase.co/storage/v1/object/public/{SUPABASE_BUCKET_NAME}"
+    # Dominio público directo de Cloudflare R2
+    AWS_S3_CUSTOM_DOMAIN = R2_PUBLIC_DOMAIN
     
     STORAGES = {
         "default": {
@@ -230,7 +235,7 @@ if SUPABASE_ACCESS_KEY and SUPABASE_SECRET_KEY:
         },
     }
 else:
-    # 💻 LOCAL: Guardar en disco duro de desarrollo
+    # 💻 LOCAL: Guardar en disco duro si no hay credenciales
     STORAGES = {
         "default": {
             "BACKEND": "django.core.files.storage.FileSystemStorage",
