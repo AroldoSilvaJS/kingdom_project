@@ -4,13 +4,12 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
-from .models import Wallet, UserInventoryItem, CourtJob
 from core.models import UserRole, UserProfile
 from idols.models import IdolProfile, IdolTribute
 from pets.models import Pet
 from core.utils import grant_user_xp
 from core.telegram_notify import send_telegram_msg
-from .models import Wallet, UserInventoryItem, CourtJob, BazarItem, UserCollectible
+from .models import Wallet, UserInventoryItem, CourtJob, BazarCollectible, UserCollectible
 from idols.views import optimize_uploaded_image, check_is_staff_or_admin
 from django.db import transaction
 
@@ -810,8 +809,8 @@ def bazar_shop(request):
     inv_market = UserInventoryItem.get_count(tg_id, 'free_market')
     inv_priority = UserInventoryItem.get_count(tg_id, 'priority_antojo')
 
-    # 🎎 Cargar Funkos y Coleccionables
-    bazar_items = BazarItem.objects.filter(is_active=True).order_by('-created_at')
+    # 🏺 Cargar Artículos de la Boutique Real y Vitrina del Usuario
+    boutique_items = BazarCollectible.objects.filter(is_active=True).order_by('-created_at')
     my_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item')
 
     return render(request, 'economy/bazar.html', {
@@ -826,7 +825,7 @@ def bazar_shop(request):
         'inv_lucky': inv_lucky,
         'inv_market': inv_market,
         'inv_priority': inv_priority,
-        'bazar_items': bazar_items,
+        'boutique_items': boutique_items,
         'my_collectibles': my_collectibles,
     })
 
@@ -1083,16 +1082,16 @@ def claim_court_job(request):
     return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
 def buy_collectible_action(request, item_id):
-    """Permite al usuario adquirir un Funko Pop o Coleccionable con su oro."""
+    """Permite al usuario adquirir un artículo de la boutique con su oro."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
 
     tg_id = get_safe_tg_id(request)
-    item = get_object_or_404(BazarItem, id=item_id, is_active=True)
+    item = get_object_or_404(BazarCollectible, id=item_id, is_active=True)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
     if not item.is_in_stock:
-        return JsonResponse({'success': False, 'error': f'«{item.name}» está agotado.'}, status=400)
+        return JsonResponse({'success': False, 'error': f'«{item.name}» está agotado actualmente.'}, status=400)
 
     if wallet.balance < item.price:
         return JsonResponse({'success': False, 'error': f'No tienes suficiente oro ({item.price} 🪙 necesarios).'}, status=400)
@@ -1113,9 +1112,9 @@ def buy_collectible_action(request, item_id):
             user_item.quantity += 1
             user_item.save(update_fields=['quantity'])
 
-        grant_user_xp(request, tg_id, max(10, item.price // 15), reason=f"Compra de {item.name}")
+        grant_user_xp(request, tg_id, max(10, item.price // 15), reason=f"Adquisición de {item.name}")
 
-    msg = f"🎉 ¡Has adquirido «{item.name}»! Ya forma parte de tu Vitrina de Coleccionables."
+    msg = f"🎉 ¡Has adquirido «{item.name}»! Ya forma parte de tu Vitrina Real."
     return JsonResponse({
         'success': True,
         'message': msg,
@@ -1125,7 +1124,7 @@ def buy_collectible_action(request, item_id):
 
 
 def admin_add_collectible(request):
-    """Permite a la Corona y Moderadores subir Funkos y artículos con foto desde la app."""
+    """Permite a la Corona y Staff subir cualquier artículo con foto desde la app."""
     tg_id = get_safe_tg_id(request)
     if not check_is_staff_or_admin(tg_id):
         messages.error(request, "Acción reservada al Staff del Reino.")
@@ -1133,7 +1132,7 @@ def admin_add_collectible(request):
 
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
-        category = request.POST.get('category', 'funko')
+        category = request.POST.get('category', 'figura')
         idol_name = request.POST.get('idol_name', '').strip()
         description = request.POST.get('description', '').strip()
         price = int(request.POST.get('price', 150))
@@ -1141,10 +1140,10 @@ def admin_add_collectible(request):
         raw_image = request.FILES.get('image')
 
         if not name or not raw_image:
-            messages.error(request, "Debes ingresar un nombre y adjuntar una fotografía.")
+            messages.error(request, "Debes ingresar un nombre y adjuntar una imagen del artículo.")
         else:
             optimized_img = optimize_uploaded_image(raw_image)
-            BazarItem.objects.create(
+            BazarCollectible.objects.create(
                 name=name,
                 category=category,
                 idol_name=idol_name,
@@ -1154,20 +1153,20 @@ def admin_add_collectible(request):
                 image=optimized_img,
                 is_active=True
             )
-            messages.success(request, f"✨ ¡Artículo «{name}» publicado en el Bazar con éxito!")
+            messages.success(request, f"✨ ¡Artículo «{name}» agregado a la Boutique Real!")
 
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
 def admin_delete_collectible(request, item_id):
-    """Desactiva o retira un artículo de la tienda."""
+    """Retira un artículo de la venta pública."""
     tg_id = get_safe_tg_id(request)
     if not check_is_staff_or_admin(tg_id):
         messages.error(request, "No tienes permisos de administración.")
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
     if request.method == 'POST':
-        item = get_object_or_404(BazarItem, id=item_id)
+        item = get_object_or_404(BazarCollectible, id=item_id)
         item_name = item.name
         item.is_active = False
         item.save(update_fields=['is_active'])

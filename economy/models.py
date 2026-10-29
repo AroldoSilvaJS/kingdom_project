@@ -162,33 +162,33 @@ class CourtJob(models.Model):
 
 
 # ==========================================
-# ARTÍCULOS COLECCIONABLES CON FOTO (FUNKOS & MERCH)
+# BOUTIQUE REAL: ARTÍCULOS & COLECCIONABLES CON FOTO
 # ==========================================
 
-class BazarItem(models.Model):
+class BazarCollectible(models.Model):
     CATEGORY_CHOICES = [
-        ('funko', '🎎 Funko Pop / Figura de Idol'),
-        ('reliquia', '💎 Reliquia / Joya Exclusiva'),
-        ('merch', '🎀 Merchandising VIP de la Corte'),
-        ('especial', '✨ Coleccionable Especial'),
+        ('figura', '🎎 Figura / Escultura de Colección'),
+        ('joya', '💎 Joyería & Reliquia Imperial'),
+        ('souvenir', '🎀 Merchandising & Recuerdos VIP'),
+        ('especial', '✨ Objeto de Edición Especial'),
     ]
 
     name = models.CharField("Nombre del Artículo", max_length=120)
-    category = models.CharField("Categoría", max_length=20, choices=CATEGORY_CHOICES, default='funko')
+    category = models.CharField("Categoría", max_length=20, choices=CATEGORY_CHOICES, default='figura')
     description = models.TextField("Descripción / Detalle", max_length=300, blank=True, null=True)
     price = models.PositiveIntegerField("Precio en Oro (🪙)", default=150)
-    image = models.ImageField("Fotografía del Artículo", upload_to='bazar_products/')
+    image = models.ImageField("Fotografía del Artículo", upload_to='bazar_collectibles/')
     
-    # Stock: -1 significa ilimitado; un número positivo define unidades limitadas
-    stock = models.IntegerField("Unidades Disponibles (-1 = Ilimitado)", default=-1)
+    # Stock: -1 = Ilimitado, o unidades fijas (ej: 5 para ediciones limitadas)
+    stock = models.IntegerField("Unidades en Existencia (-1 = Ilimitado)", default=-1)
     
-    idol_name = models.CharField("Idol Vinculada (Opcional)", max_length=100, blank=True, null=True)
+    idol_name = models.CharField("Idol o Personaje Asociado (Opcional)", max_length=100, blank=True, null=True)
     is_active = models.BooleanField("¿Disponible en Tienda?", default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = "Artículo de Tienda"
-        verbose_name_plural = "Artículos de Tienda"
+        verbose_name = "Artículo de Boutique"
+        verbose_name_plural = "Artículos de Boutique"
         ordering = ['-created_at']
 
     def __str__(self):
@@ -201,8 +201,8 @@ class BazarItem(models.Model):
 
 class UserCollectible(models.Model):
     telegram_user_id = models.BigIntegerField("ID del Propietario", db_index=True)
-    item = models.ForeignKey(BazarItem, on_delete=models.CASCADE, related_name='owners')
-    quantity = models.PositiveIntegerField("Cantidad Poseída", default=1)
+    item = models.ForeignKey(BazarCollectible, on_delete=models.CASCADE, related_name='owners')
+    quantity = models.PositiveIntegerField("Cantidad", default=1)
     purchased_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
