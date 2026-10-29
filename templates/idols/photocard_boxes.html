@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+<div class="flex flex-col gap-4 mt-2 pb-40 max-w-md mx-auto">
     
     <!-- ENCABEZADO Y ACCESOS RÁPIDOS -->
     <div class="flex justify-between items-center px-1">
@@ -40,7 +40,7 @@
                 Relicarios de la Corte
             </h2>
             <p class="text-[11px] text-vip-text/60 mt-1 max-w-[280px]">
-                Desbloquea cartas oficiales de tus Idols del K-Pop en el Riel Real.
+                Desbloquea photocards oficiales de tus Idols del K-Pop en el Riel Real.
             </p>
 
             <div class="mt-2.5 inline-flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3.5 py-1 rounded-full text-xs font-mono font-bold text-yellow-400 shadow-inner">
@@ -49,70 +49,50 @@
         </div>
     </div>
 
-    <!-- 🌟 BANNER CINEMATOGRÁFICO DE PRÓXIMO LANZAMIENTO (SNEAK PEEK VIP) -->
+    <!-- 🌟 BANNER DE PRÓXIMO LANZAMIENTO -->
     {% if upcoming.is_active %}
     <div class="relative rounded-3xl overflow-hidden border-2 border-purple-500/80 bg-gradient-to-b from-[#1b082e] via-[#0d0417] to-black shadow-[0_12px_35px_rgba(168,85,247,0.35)] flex flex-col group">
-        
-        <!-- Orbe Neón de Ambiente -->
-        <div class="absolute -top-12 -right-12 w-48 h-48 bg-fuchsia-600/25 rounded-full blur-3xl pointer-events-none"></div>
-
-        <!-- 1. Cabecera con Insignia y Fecha de Estreno -->
         <div class="p-3.5 pb-2.5 flex items-center justify-between relative z-10 bg-black/60 backdrop-blur-md border-b border-white/5">
             <span class="inline-flex items-center gap-1.5 text-[9.5px] font-mono font-black uppercase tracking-widest bg-gradient-to-r from-purple-950 to-fuchsia-950 text-purple-200 border border-purple-400 px-3 py-1 rounded-full shadow-[0_0_12px_rgba(168,85,247,0.4)]">
                 <span class="w-2 h-2 rounded-full bg-fuchsia-400 animate-ping"></span>
                 <span>Próximo Lanzamiento ⏳</span>
             </span>
-
             <span class="text-xs font-mono font-black text-amber-300 bg-amber-950/80 px-3 py-1 rounded-full border border-yellow-500/50 shadow-inner flex items-center gap-1">
                 <span>🗓️</span> <span>{{ upcoming.release_date|default:"Muy pronto" }}</span>
             </span>
         </div>
 
-        <!-- 2. Portada Panorámica en Ancho Completo (Sin recortes ni deformaciones) -->
         {% if upcoming.image_url %}
         <div class="w-full bg-black relative overflow-hidden border-b border-purple-500/30">
-            <img src="{{ upcoming.image_url }}" 
-                 alt="{{ upcoming.title }}" 
-                 class="w-full h-auto max-h-56 object-cover object-center group-hover:scale-[1.02] transition-transform duration-500 block">
-            <!-- Degradado sutil para fusionar con el fondo inferior -->
+            <img src="{{ upcoming.image_url }}" alt="{{ upcoming.title }}" class="w-full h-auto max-h-56 object-cover object-center group-hover:scale-[1.02] transition-transform duration-500 block">
             <div class="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[#0d0417] to-transparent pointer-events-none"></div>
         </div>
         {% endif %}
 
-        <!-- 3. Información del Lanzamiento (Título, Descripción y Tag) -->
         <div class="p-4 flex flex-col gap-1.5 relative z-10 bg-gradient-to-t from-black via-black/80 to-transparent">
             <div class="flex items-center justify-between gap-2">
                 <h3 class="font-serif text-base sm:text-lg font-black text-gold-gradient tracking-wide uppercase leading-tight">
                     {{ upcoming.title }}
                 </h3>
                 <span class="text-[9px] font-mono uppercase font-black text-yellow-400 bg-black/80 px-2 py-0.5 rounded-md border border-yellow-500/40 flex-shrink-0">
-                    👑 Edición Limitada
+                    👑 Limitada
                 </span>
             </div>
-
             <p class="text-xs text-stone-300 leading-relaxed font-normal">
                 {{ upcoming.description|default:"Una nueva colección mística se prepara para abrir sus puertas en la corte." }}
             </p>
-
-            <div class="mt-1 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono text-purple-300">
-                <span class="flex items-center gap-1">
-                    <span>✨</span> <span>Nuevas Photocards & Cajas temáticas</span>
-                </span>
-                <span class="text-stone-400 font-bold">Reserva tu oro</span>
-            </div>
         </div>
-
     </div>
     {% endif %}
 
-    <!-- LISTA DE CAJAS BLINDADAS (CS2 CASE DESIGN) -->
+    <!-- LISTA DE CAJAS DISPONIBLES -->
     <div class="flex flex-col gap-3.5">
         {% for box in boxes %}
-        <div class="vip-panel p-4 flex flex-col gap-3.5 border border-vip-gold/30 hover:border-yellow-400/70 transition-all duration-300 rounded-3xl shadow-xl bg-gradient-to-br from-[#160824] via-[#0d0416] to-black relative overflow-hidden group max-w-full">
+        <div class="vip-panel p-4 flex flex-col gap-3.5 border border-vip-gold/30 hover:border-yellow-400/80 transition-all duration-300 rounded-3xl shadow-xl bg-gradient-to-br from-[#160824] via-[#0d0416] to-black relative overflow-hidden group">
             
             <div class="flex items-center gap-3.5 min-w-0">
-                <!-- Portada Maletín de la Caja con Medidas Fijas -->
-                <div class="w-24 h-24 min-w-[96px] max-w-[96px] h-24 min-h-[96px] max-h-[96px] rounded-2xl bg-black/90 border-2 border-vip-gold/50 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_18px_rgba(212,175,55,0.25)] relative group-hover:scale-105 transition-transform p-1">
+                <!-- Portada Maletín -->
+                <div class="w-24 h-24 min-w-[96px] max-w-[96px] rounded-2xl bg-black/90 border-2 border-vip-gold/50 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_20px_rgba(212,175,55,0.25)] relative group-hover:scale-105 transition-transform p-1">
                     {% if box.cover_image %}
                         <img src="{{ box.cover_image.url }}" alt="{{ box.name }}" class="w-full h-full object-contain block drop-shadow">
                     {% else %}
@@ -125,14 +105,12 @@
 
                 <!-- Info de la Caja -->
                 <div class="flex flex-col min-w-0 flex-1 overflow-hidden">
-                    <div class="flex items-center gap-1.5">
-                        <h3 class="font-serif text-sm font-black text-white leading-tight truncate group-hover:text-vip-gold transition-colors">
-                            {{ box.name }}
-                        </h3>
-                    </div>
-                    <p class="text-[11px] text-vip-text/60 mt-1 line-clamp-2 leading-relaxed truncate">{{ box.description }}</p>
+                    <h3 class="font-serif text-sm font-black text-white leading-tight truncate group-hover:text-vip-gold transition-colors">
+                        {{ box.name }}
+                    </h3>
+                    <p class="text-[11px] text-vip-text/60 mt-1 line-clamp-2 leading-relaxed">{{ box.description }}</p>
 
-                    <!-- Rarezas representadas como en CS:GO / CS2 -->
+                    <!-- Probabilidades CS2 -->
                     <div class="flex items-center gap-2 mt-2 pt-1 border-t border-white/5 flex-wrap">
                         <span class="inline-flex items-center gap-1 text-[9px] font-mono text-stone-400 font-bold">
                             <span class="w-2 h-2 rounded-full bg-stone-400"></span> Común
@@ -150,7 +128,7 @@
                 </div>
             </div>
 
-            <!-- Botón de Abrir Estilo Llave CS -->
+            <!-- Botón Desbloquear -->
             <button type="button" onclick="startCaseOpening({{ box.id }}, '{{ box.name|escapejs }}', {{ box.price }})" 
                     class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_18px_rgba(212,175,55,0.35)] flex items-center justify-center gap-2 active:scale-95 transition-all">
                 <span>🗝️ Desbloquear Caja</span>
@@ -162,31 +140,40 @@
         <div class="vip-panel p-10 text-center flex flex-col items-center rounded-3xl">
             <span class="text-4xl my-2">📦</span>
             <h4 class="font-serif text-sm font-bold text-white">No hay cajas activas</h4>
-            <p class="text-xs text-vip-text/60 mt-1">El personal de la Corona anunciará pronto el próximo lanzamiento.</p>
+            <p class="text-xs text-vip-text/60 mt-1">La Corona anunciará pronto la siguiente colección.</p>
         </div>
         {% endfor %}
     </div>
 
 </div>
 
-<!-- 🎰 MODAL CINEMATOGRÁFICO DE APERTURA CS2 -->
-<div id="cs-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 select-none">
-    <div class="w-full max-w-sm bg-gradient-to-b from-[#1b0a2c] via-[#0b0314] to-black border-2 border-vip-gold/60 rounded-3xl p-5 shadow-[0_0_50px_rgba(0,0,0,0.95)] flex flex-col items-center relative overflow-hidden">
-        
-        <button id="cs-close-btn" onclick="closeCSModal()" class="absolute top-3.5 right-3.5 text-stone-400 hover:text-white text-2xl z-30 transition-transform active:scale-90">&times;</button>
+<!-- 🎰 MODAL CINEMATOGRÁFICO CS2 CON CANVAS DE CHISPAS -->
+<div id="cs-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 select-none">
+    
+    <!-- Canvas de partículas y fuegos dorados -->
+    <canvas id="cs-confetti-canvas" class="absolute inset-0 pointer-events-none z-40"></canvas>
 
-        <!-- FASE 1: RULETA HORIZONTAL -->
+    <div class="w-full max-w-sm bg-gradient-to-b from-[#1b0a2c] via-[#0b0314] to-black border-2 border-vip-gold/60 rounded-3xl p-5 shadow-[0_0_60px_rgba(212,175,55,0.3)] flex flex-col items-center relative overflow-hidden">
+        
+        <button id="cs-close-btn" onclick="closeCSModal()" class="absolute top-3.5 right-3.5 text-stone-400 hover:text-white text-2xl z-50 transition-transform active:scale-90">&times;</button>
+
+        <!-- FASE 1: RULETA HORIZONTAL CS2 -->
         <div id="cs-roulette-phase" class="w-full flex flex-col items-center">
             <h3 id="cs-box-title" class="font-serif text-sm font-black text-gold-gradient uppercase tracking-widest text-center mb-0.5">Abriendo Caja</h3>
-            <p class="text-[10px] text-stone-400 mb-3">La aguja central determina tu Photocard</p>
+            <p class="text-[10px] text-stone-400 mb-3 font-mono">La aguja central determina tu Photocard</p>
 
-            <div id="cs-viewport" class="w-full h-44 bg-[#08020e] border-2 border-vip-gold/40 rounded-2xl relative overflow-hidden flex items-center shadow-[inset_0_0_25px_rgba(0,0,0,0.9)]">
-                <div class="absolute inset-y-0 left-0 w-14 bg-gradient-to-r from-black via-black/80 to-transparent z-20 pointer-events-none"></div>
-                <div class="absolute inset-y-0 right-0 w-14 bg-gradient-to-l from-black via-black/80 to-transparent z-20 pointer-events-none"></div>
-                <div class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-rose-500 z-30 shadow-[0_0_15px_rgba(244,63,94,1)] pointer-events-none">
-                    <div class="absolute -top-1 left-1/2 -translate-x-1/2 text-rose-500 text-[10px]">▼</div>
-                    <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 text-rose-500 text-[10px]">▲</div>
+            <div id="cs-viewport" class="w-full h-48 bg-[#06010a] border-2 border-vip-gold/40 rounded-2xl relative overflow-hidden flex items-center shadow-[inset_0_0_35px_rgba(0,0,0,0.95)]">
+                <!-- Sombras de degradado en los extremos -->
+                <div class="absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-black via-black/85 to-transparent z-20 pointer-events-none"></div>
+                <div class="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-black via-black/85 to-transparent z-20 pointer-events-none"></div>
+                
+                <!-- Aguja Láser Central con brillo pulsante -->
+                <div class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-gradient-to-b from-yellow-400 via-rose-500 to-yellow-400 z-30 shadow-[0_0_18px_rgba(234,179,8,1)] pointer-events-none">
+                    <div class="absolute -top-1 left-1/2 -translate-x-1/2 text-yellow-400 text-xs animate-bounce leading-none">▼</div>
+                    <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 text-yellow-400 text-xs animate-bounce leading-none">▲</div>
                 </div>
+
+                <!-- Riel de Cartas -->
                 <div id="cs-reel" class="flex gap-2.5 px-4 will-change-transform" style="transform: translateX(0px);"></div>
             </div>
 
@@ -198,69 +185,161 @@
             </div>
         </div>
 
-        <!-- FASE 2: REVELACIÓN ELEGANTE -->
-        <div id="cs-reveal-phase" class="hidden w-full flex flex-col items-center py-2 relative">
-            <div id="cs-reveal-glow" class="absolute inset-0 rounded-full blur-3xl opacity-30 pointer-events-none"></div>
-            <span class="text-[10px] font-mono uppercase font-black px-3 py-0.5 rounded-full border mb-3 shadow z-10" id="cs-winner-rarity">Rareza</span>
+        <!-- FASE 2: REVELACIÓN GLORIOSA (SPOTLIGHT & HOLOGRÁFICO) -->
+        <div id="cs-reveal-phase" class="hidden w-full flex flex-col items-center py-2 relative z-30">
+            
+            <!-- Resplandor giratorio celestial -->
+            <div id="cs-sunburst" class="absolute w-72 h-72 rounded-full opacity-35 pointer-events-none animate-spin-slow"></div>
 
+            <span class="text-[10px] font-mono uppercase font-black px-3.5 py-1 rounded-full border mb-3 shadow-lg z-10" id="cs-winner-rarity">Rareza</span>
+
+            <!-- Carta Revelada con Bisel y Sombra Neón -->
             <div id="cs-card-reveal-box" 
-                 class="w-44 h-60 rounded-2xl border-3 overflow-hidden shadow-2xl bg-black relative transition-all duration-700 transform scale-95 opacity-0 z-10">
+                 class="w-48 h-64 rounded-2xl border-4 overflow-hidden shadow-2xl bg-black relative transition-all duration-700 transform scale-90 opacity-0 z-10">
                 <img id="cs-winner-img" src="" class="w-full h-full object-cover">
-                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent pointer-events-none"></div>
-                <div class="absolute bottom-2.5 inset-x-2.5 text-center bg-black/75 backdrop-blur-md py-1.5 px-2 rounded-xl border border-white/10">
+                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent pointer-events-none"></div>
+                
+                <div class="absolute bottom-2.5 inset-x-2.5 text-center bg-black/85 backdrop-blur-md py-2 px-2.5 rounded-xl border border-white/10">
                     <h4 class="font-serif text-xs font-black text-white leading-tight truncate" id="cs-winner-name">Nombre</h4>
-                    <span class="text-[10px] font-bold text-yellow-300 block truncate" id="cs-winner-idol">Musa</span>
+                    <span class="text-[10px] font-bold text-yellow-300 block truncate mt-0.5" id="cs-winner-idol">Musa</span>
                 </div>
             </div>
 
+            <!-- Botones de Acción Inmediata -->
             <div class="grid grid-cols-2 gap-2.5 w-full mt-4 z-10">
-                <button type="button" onclick="reopenCurrentBox()" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow">Abrir Otra</button>
-                <button type="button" onclick="universalNav('{% url 'idols:my_photocards_album' %}')" class="bg-purple-950 border border-purple-500 text-purple-200 hover:bg-purple-900 py-3 rounded-xl text-xs font-bold uppercase tracking-wider">Ver Álbum</button>
+                <button type="button" onclick="reopenCurrentBox()" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+                    🔁 Abrir Otra
+                </button>
+                <button type="button" onclick="universalNav('{% url 'idols:my_photocards_album' %}')" class="bg-purple-950 border border-purple-500 text-purple-200 hover:bg-purple-900 py-3 rounded-xl text-xs font-bold uppercase tracking-wider">
+                    📖 Ver Álbum
+                </button>
             </div>
         </div>
 
     </div>
 </div>
 
+<style>
+    @keyframes spinSlow {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    .animate-spin-slow {
+        animation: spinSlow 12s linear infinite;
+    }
+</style>
+
 <script>
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     let csAudioCtx = null;
 
-    function playCSTick() {
+    function getAudioCtx() {
+        if (!csAudioCtx) csAudioCtx = new AudioCtx();
+        if (csAudioCtx.state === 'suspended') csAudioCtx.resume();
+        return csAudioCtx;
+    }
+
+    // Tick CS2 dinámico modulado
+    function playCSTick(pitch = 320) {
         try {
-            if (!csAudioCtx) csAudioCtx = new AudioCtx();
-            if (csAudioCtx.state === 'suspended') csAudioCtx.resume();
-            const osc = csAudioCtx.createOscillator();
-            const gain = csAudioCtx.createGain();
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
             osc.type = 'triangle';
-            osc.frequency.setValueAtTime(320, csAudioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(70, csAudioCtx.currentTime + 0.035);
-            gain.gain.setValueAtTime(0.25, csAudioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, csAudioCtx.currentTime + 0.035);
+            osc.frequency.setValueAtTime(pitch, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(pitch * 0.4, ctx.currentTime + 0.035);
+            gain.gain.setValueAtTime(0.28, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.035);
             osc.connect(gain);
-            gain.connect(csAudioCtx.destination);
+            gain.connect(ctx.destination);
             osc.start();
-            osc.stop(csAudioCtx.currentTime + 0.035);
+            osc.stop(ctx.currentTime + 0.035);
         } catch(e) {}
     }
 
+    // Sonido de giro de cerradura mecánica
+    function playLockTurn() {
+        try {
+            const ctx = getAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(180, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(520, ctx.currentTime + 0.18);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.18);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.18);
+        } catch(e) {}
+    }
+
+    // Fanfarria orquestal triunfal
     function playWinFanfare(rarity) {
         try {
-            if (!csAudioCtx) csAudioCtx = new AudioCtx();
-            const freqs = (rarity === 'legendary') ? [523, 659, 783, 1046, 1318] : (rarity === 'epic' ? [440, 554, 659, 880] : [392, 523, 659]);
+            const ctx = getAudioCtx();
+            const freqs = (rarity === 'legendary') ? [523.25, 659.25, 783.99, 1046.50, 1318.51] : (rarity === 'epic' ? [440, 554.37, 659.25, 880] : [392, 523.25, 659.25]);
             freqs.forEach((freq, idx) => {
-                const osc = csAudioCtx.createOscillator();
-                const gain = csAudioCtx.createGain();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(freq, csAudioCtx.currentTime + (idx * 0.08));
-                gain.gain.setValueAtTime(0.35, csAudioCtx.currentTime + (idx * 0.08));
-                gain.gain.exponentialRampToValueAtTime(0.001, csAudioCtx.currentTime + (idx * 0.08) + 0.35);
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.08));
+                gain.gain.setValueAtTime(0.35, ctx.currentTime + (idx * 0.08));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.08) + 0.45);
                 osc.connect(gain);
-                gain.connect(csAudioCtx.destination);
-                osc.start(csAudioCtx.currentTime + (idx * 0.08));
-                osc.stop(csAudioCtx.currentTime + (idx * 0.08) + 0.35);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.08));
+                osc.stop(ctx.currentTime + (idx * 0.08) + 0.45);
             });
         } catch(e) {}
+    }
+
+    // Sistema de fuegos / chispas en Canvas
+    function launchConfetti(colorHex) {
+        const canvas = document.getElementById('cs-confetti-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const particles = [];
+        const count = 70;
+
+        for (let i = 0; i < count; i++) {
+            particles.push({
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                vx: (Math.random() - 0.5) * 14,
+                vy: (Math.random() - 0.7) * 14,
+                radius: Math.random() * 4 + 2,
+                color: Math.random() > 0.4 ? colorHex : '#F3E5AB',
+                alpha: 1,
+                decay: Math.random() * 0.015 + 0.012
+            });
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let alive = false;
+            particles.forEach(p => {
+                if (p.alpha > 0) {
+                    alive = true;
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.25; // gravedad
+                    p.alpha -= p.decay;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = Math.max(0, p.alpha);
+                    ctx.fill();
+                }
+            });
+            if (alive) requestAnimationFrame(animate);
+            else ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        animate();
     }
 
     let activeBoxId = null;
@@ -285,7 +364,7 @@
         const reel = document.getElementById('cs-reel');
         reel.style.transition = 'none';
         reel.style.transform = 'translateX(0px)';
-        reel.innerHTML = '<span class="text-xs text-stone-500 italic py-12 px-6">Pulsa Girar para activar la ruleta...</span>';
+        reel.innerHTML = '<span class="text-xs text-stone-500 italic py-16 px-8">Pulsa el botón dorado para desbloquear el cerrojo...</span>';
 
         document.getElementById('cs-modal').classList.remove('hidden');
     }
@@ -302,6 +381,9 @@
     async function confirmOpenCase() {
         if (isOpening) return;
 
+        playLockTurn();
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+
         const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
         const formData = new FormData();
         formData.append('tg_id', tgId);
@@ -313,7 +395,7 @@
         const viewport = document.getElementById('cs-viewport');
 
         btn.disabled = true;
-        btn.innerHTML = '<span>⏳</span> Abriendo Caja...';
+        btn.innerHTML = '<span>⏳</span> Girando Riel Real...';
         closeBtn.style.display = 'none';
         isOpening = true;
 
@@ -338,41 +420,44 @@
             const balanceElem = document.getElementById('user-gold-balance');
             if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
 
+            // Renderizar cartas en el riel
             reel.style.transition = 'none';
             reel.style.transform = 'translateX(0px)';
             reel.innerHTML = data.reel.map(c => `
-                <div class="w-[110px] h-[150px] rounded-xl flex-shrink-0 bg-[#12071d] border-2 flex flex-col justify-between p-1.5 relative overflow-hidden select-none shadow-md"
-                     style="border-color: ${c.color};">
-                    <img src="${c.image_url}" class="w-full h-[100px] object-cover rounded-lg">
-                    <div class="text-center flex flex-col mt-1">
-                        <span class="text-[9px] font-black text-white truncate">${c.name}</span>
-                        <span class="text-[8px] font-mono uppercase font-bold" style="color: ${c.color};">${c.rarity_display}</span>
+                <div class="w-[115px] h-[160px] rounded-xl flex-shrink-0 bg-[#12071d] border-2 flex flex-col justify-between p-1.5 relative overflow-hidden select-none shadow-lg"
+                     style="border-color: ${c.color}; box-shadow: 0 0 15px ${c.color}33;">
+                    <img src="${c.image_url}" class="w-full h-[108px] object-cover rounded-lg">
+                    <div class="text-center flex flex-col mt-0.5">
+                        <span class="text-[9px] font-black text-white truncate leading-tight">${c.name}</span>
+                        <span class="text-[8px] font-mono uppercase font-bold truncate mt-0.5" style="color: ${c.color};">${c.rarity_display}</span>
                     </div>
                     <div class="absolute bottom-0 inset-x-0 h-1.5" style="background-color: ${c.color};"></div>
                 </div>
             `).join('');
 
-            reel.offsetHeight;
+            reel.offsetHeight; // Forzar reflow
 
-            const cardPitch = 120;
+            const cardPitch = 125;
             const winningIndex = data.winning_index;
             const containerWidth = viewport.offsetWidth;
-            const cardCenter = (winningIndex * cardPitch) + 55;
-            const targetX = - (cardCenter - (containerWidth / 2) + (Math.random() * 20 - 10));
+            const cardCenter = (winningIndex * cardPitch) + 57.5;
+            const targetX = - (cardCenter - (containerWidth / 2) + (Math.random() * 24 - 12));
 
-            reel.style.transition = 'transform 4.8s cubic-bezier(0.1, 0.85, 0.2, 1)';
+            // Curva idéntica a CS2 con desaceleración dramática
+            reel.style.transition = 'transform 4.8s cubic-bezier(0.12, 0.88, 0.22, 1)';
             reel.style.transform = `translateX(${targetX}px)`;
 
             try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
 
+            // Tick sonoro que se desacelera progresivamente
             let ticks = 0;
-            let tickDelay = 90;
+            let tickDelay = 80;
             function scheduleTick() {
-                if (ticks > 26) return;
-                playCSTick();
+                if (ticks > 28) return;
+                playCSTick(340 - (ticks * 6));
                 try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
                 ticks++;
-                tickDelay += Math.floor(ticks * 5);
+                tickDelay += Math.floor(ticks * 4.8);
                 setTimeout(scheduleTick, tickDelay);
             }
             scheduleTick();
@@ -382,6 +467,7 @@
                 closeBtn.style.display = 'block';
 
                 playWinFanfare(data.winner.rarity);
+                launchConfetti(data.winner.color);
                 try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
 
                 document.getElementById('cs-roulette-phase').classList.add('hidden');
@@ -392,7 +478,7 @@
                 const winnerName = document.getElementById('cs-winner-name');
                 const winnerIdol = document.getElementById('cs-winner-idol');
                 const winnerRarity = document.getElementById('cs-winner-rarity');
-                const glow = document.getElementById('cs-reveal-glow');
+                const sunburst = document.getElementById('cs-sunburst');
 
                 winnerImg.src = data.winner.image_url;
                 winnerName.innerText = data.winner.name;
@@ -404,17 +490,17 @@
                 winnerRarity.style.backgroundColor = `${data.winner.color}22`;
 
                 winnerBox.style.borderColor = data.winner.color;
-                winnerBox.style.boxShadow = `0 0 35px ${data.winner.color}`;
-                glow.style.backgroundColor = data.winner.color;
+                winnerBox.style.boxShadow = `0 0 45px ${data.winner.color}`;
+                sunburst.style.background = `radial-gradient(circle, ${data.winner.color} 0%, transparent 65%)`;
 
                 revealPhase.classList.remove('hidden');
 
                 setTimeout(() => {
                     winnerBox.style.opacity = '1';
                     winnerBox.style.transform = 'scale(1)';
-                }, 50);
+                }, 60);
 
-            }, 4800);
+            }, 4850);
 
         } catch(e) {
             alert("Error de conexión al abrir la caja.");

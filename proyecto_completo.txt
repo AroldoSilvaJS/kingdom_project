@@ -249,32 +249,37 @@ CSRF_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SECURE = True
 
 # ==========================================
-# ALMACENAMIENTO MULTIMEDIA (SUPABASE S3 / LOCAL)
+# ALMACENAMIENTO MULTIMEDIA (CLOUDFLARE R2 / S3)
 # ==========================================
-SUPABASE_ACCESS_KEY = os.environ.get('SUPABASE_ACCESS_KEY')
-SUPABASE_SECRET_KEY = os.environ.get('SUPABASE_SECRET_KEY')
-SUPABASE_STORAGE_URL = os.environ.get('SUPABASE_STORAGE_URL')
-SUPABASE_BUCKET_NAME = os.environ.get('SUPABASE_BUCKET_NAME', 'kingdom-media')
+R2_ACCESS_KEY = os.environ.get('R2_ACCESS_KEY')
+R2_SECRET_KEY = os.environ.get('R2_SECRET_KEY')
+R2_ENDPOINT_URL = os.environ.get('R2_ENDPOINT_URL')
+R2_BUCKET_NAME = os.environ.get('R2_BUCKET_NAME', 'kingdom-media')
+R2_PUBLIC_DOMAIN = os.environ.get('R2_PUBLIC_DOMAIN', 'pub-b0de6262434e4807b0b9364161a633bf.r2.dev')
 
-if SUPABASE_ACCESS_KEY and SUPABASE_SECRET_KEY:
-    # 🌟 PRODUCCIÓN: Guardar fotos y videos en Supabase Storage
-    AWS_ACCESS_KEY_ID = SUPABASE_ACCESS_KEY
-    AWS_SECRET_ACCESS_KEY = SUPABASE_SECRET_KEY
-    AWS_STORAGE_BUCKET_NAME = SUPABASE_BUCKET_NAME
-    AWS_S3_ENDPOINT_URL = SUPABASE_STORAGE_URL
-    AWS_S3_REGION_NAME = 'us-east-1'
+# Limpiar por si se coló algún 'https://' o '/' al copiar
+if R2_PUBLIC_DOMAIN:
+    R2_PUBLIC_DOMAIN = R2_PUBLIC_DOMAIN.replace('https://', '').replace('http://', '').strip('/')
+
+if R2_ACCESS_KEY and R2_SECRET_KEY and R2_ENDPOINT_URL:
+    # 🌟 PRODUCCIÓN: Guardar fotos en Cloudflare R2 ($0 egress ilimitado)
+    AWS_ACCESS_KEY_ID = R2_ACCESS_KEY
+    AWS_SECRET_ACCESS_KEY = R2_SECRET_KEY
+    AWS_STORAGE_BUCKET_NAME = R2_BUCKET_NAME
+    AWS_S3_ENDPOINT_URL = R2_ENDPOINT_URL
+    AWS_S3_REGION_NAME = 'auto'
     AWS_S3_SIGNATURE_VERSION = 's3v4'
     AWS_S3_FILE_OVERWRITE = False
     AWS_DEFAULT_ACL = None
     AWS_QUERYSTRING_AUTH = False
 
-    # ⚡ AÑADIR ESTE BLOQUE: Le dice a Telegram y al móvil que guarden las fotos por 30 días
+    # Le dice a Telegram y navegadores que almacenen en caché por 30 días
     AWS_S3_OBJECT_PARAMETERS = {
         'CacheControl': 'public, max-age=2592000, immutable',
     }
 
-    # 👈 Tu Project ID de Supabase
-    AWS_S3_CUSTOM_DOMAIN = f"btoemzqyzacbjfvjwpgv.supabase.co/storage/v1/object/public/{SUPABASE_BUCKET_NAME}"
+    # Dominio público directo de Cloudflare R2
+    AWS_S3_CUSTOM_DOMAIN = R2_PUBLIC_DOMAIN
     
     STORAGES = {
         "default": {
@@ -285,7 +290,7 @@ if SUPABASE_ACCESS_KEY and SUPABASE_SECRET_KEY:
         },
     }
 else:
-    # 💻 LOCAL: Guardar en disco duro de desarrollo
+    # 💻 LOCAL: Guardar en disco duro si no hay credenciales
     STORAGES = {
         "default": {
             "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -2437,6 +2442,8 @@ def casino_game(request):
     
     max_bet = profile.max_bet_allowed
     ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
+    NEGROS = [n for n in range(1, 37) if n not in ROJOS]
+    roulette_streak = request.session.get('roulette_streak', 0)
         
     if request.method == 'POST':
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
@@ -2457,11 +2464,24 @@ def casino_game(request):
                 if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
                 messages.error(request, err_msg)
             else:
-                # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
                 wallet.accumulate_patron_vault(apuesta)
 
-                # Evaluación de la apuesta
-                numero_ganador = random.randint(0, 36)
+                # 🎲 ALTERNANCIA DINÁMICA: Si lleva 2 derrotas seguidas, favorecer la alternancia
+                force_win = False
+                if roulette_streak >= 2 and random.random() < 0.65:
+                    force_win = True
+
+                if force_win and eleccion in ['red', 'black', 'even', 'odd']:
+                    if eleccion == 'red':
+                        numero_ganador = random.choice(ROJOS)
+                    elif eleccion == 'black':
+                        numero_ganador = random.choice(NEGROS)
+                    elif eleccion == 'even':
+                        numero_ganador = random.choice([n for n in range(1, 37) if n % 2 == 0])
+                    else:
+                        numero_ganador = random.choice([n for n in range(1, 37) if n % 2 != 0])
+                else:
+                    numero_ganador = random.randint(0, 36)
                 
                 if numero_ganador == 0:
                     color_ganador = 'zero'
@@ -2487,19 +2507,18 @@ def casino_game(request):
                             gano = True
                             multiplicador = 2.0
 
-                # 3. Apuesta a Número Específico (Pleno del 0 al 36)
+                # 3. Apuesta a Número Específico (Pleno x30)
                 elif eleccion == 'number':
                     try:
                         num_apostado = int(request.POST.get('target_number', -1))
                         if num_apostado == numero_ganador:
                             gano = True
-                            multiplicador = 30.0  # 🎯 ¡Pleno de la Suerte x30!
+                            multiplicador = 30.0
                     except ValueError:
                         pass
 
                 if gano:
                     ganancia = int(round(apuesta * multiplicador))
-                    # Buff Pantera
                     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
                     if pet and pet.species == 'panther':
                         panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
@@ -2509,13 +2528,14 @@ def casino_game(request):
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "win"
                     xp_gain = 8 if multiplicador >= 20.0 else 3
+                    request.session['roulette_streak'] = 0  # Reiniciar racha
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
                     ganancia = apuesta
                     xp_gain = 1
+                    request.session['roulette_streak'] = roulette_streak + 1
 
-                # EXP balanceada
                 grant_user_xp(request, tg_id, xp_gain, reason="Ruleta Imperial")
 
                 if is_ajax:
@@ -2542,6 +2562,7 @@ def casino_game(request):
         'profile': profile,
         'max_bet': max_bet,
     })
+
 
 
 def claim_bonus(request):
@@ -2574,6 +2595,7 @@ def slots_game(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     max_bet = profile.max_bet_allowed
+    slots_losses = request.session.get('slots_losses', 0)
     resultado = None
     ganancia = 0
     reels = ['👑', '💎', '⭐']
@@ -2605,11 +2627,16 @@ def slots_game(request):
                 if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
                 messages.error(request, err)
             else:
-                # 👑 PILAR 1: Acumular automáticamente 8% en el Cofre del Mecenas
                 wallet.accumulate_patron_vault(apuesta)
-
                 pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                reels = [random.choice(WEIGHTED_SYMBOLS) for _ in range(3)]
+
+                # 🎰 ALTERNANCIA DINÁMICA: Si lleva 2 o más derrotas seguidas,
+                # dar un Par moderado (x1.2 o x1.6) para romper la mala racha sin descontrolar el oro
+                if slots_losses >= 2 and random.random() < 0.65:
+                    sym = random.choice(['🍇', '🍒', '🪙', '⭐'])
+                    reels = [sym, sym, random.choice(WEIGHTED_SYMBOLS)]
+                else:
+                    reels = [random.choice(WEIGHTED_SYMBOLS) for _ in range(3)]
 
                 # Buff Cuervo Abisal
                 if pet and pet.species == 'raven':
@@ -2622,24 +2649,10 @@ def slots_game(request):
                 # 1. TRÍOS
                 if reels[0] == reels[1] == reels[2]:
                     symbol = reels[0]
-                    if symbol == '👑':
-                        multiplicador = 25.0
-                        xp_gain = 12
-                    elif symbol == '💎':
-                        multiplicador = 15.0
-                        xp_gain = 8
-                    elif symbol == '⭐':
-                        multiplicador = 8.0
-                        xp_gain = 6
-                    elif symbol == '🪙':
-                        multiplicador = 5.0
-                        xp_gain = 4
-                    else:
-                        multiplicador = 3.5
-                        xp_gain = 3
+                    multiplicador = {'👑': 25.0, '💎': 15.0, '⭐': 8.0, '🪙': 5.0}.get(symbol, 3.5)
+                    xp_gain = 12 if symbol == '👑' else 4
 
                     ganancia = int(apuesta * multiplicador)
-                    
                     if pet and pet.species == 'panther':
                         panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
                         net = ganancia - apuesta
@@ -2647,6 +2660,7 @@ def slots_game(request):
                         
                     wallet.add_funds(ganancia - apuesta)
                     resultado = "jackpot" if symbol in ['👑', '💎'] else "trio"
+                    request.session['slots_losses'] = 0
 
                 # 2. PARES
                 elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
@@ -2661,28 +2675,30 @@ def slots_game(request):
                         resultado = "pair"
 
                     ganancia = int(round(apuesta * multiplicador))
-
                     if pet and pet.species == 'panther':
                         panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
                         net = max(0, ganancia - apuesta)
                         ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
 
                     wallet.add_funds(ganancia - apuesta)
+                    request.session['slots_losses'] = 0
 
-                # 👑 PILAR 2: TIRO DE AMORTIGUACIÓN
+                # 3. AMORTIGUACIÓN
                 elif '👑' in reels or '💎' in reels:
                     reintegro = max(1, int(round(apuesta * 0.5)))
                     wallet.remove_funds(apuesta - reintegro)
                     resultado = "cushion"
                     ganancia = reintegro
                     xp_gain = 2
+                    request.session['slots_losses'] = 0
 
-                # 3. DERROTA TOTAL
+                # 4. DERROTA
                 else:
                     wallet.remove_funds(apuesta)
                     resultado = "lose"
                     ganancia = apuesta
                     xp_gain = 1
+                    request.session['slots_losses'] = slots_losses + 1
 
                 grant_user_xp(request, tg_id, xp_gain, reason="Tragaperras Imperial")
 
@@ -2738,197 +2754,9 @@ def calculate_hand_value(hand):
         aces -= 1
     return total
 
-def blackjack_game(request):
-    tg_id = get_safe_tg_id(request)
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-    max_bet = profile.max_bet_allowed
-        
-    session_bj = request.session.get('blackjack_state')
-    resultado = None
-    ganancia = 0
-    
-    if request.method == 'POST':
-        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
-        action = request.POST.get('action')
-        
-        if action == 'deal':
-            try:
-                apuesta = int(request.POST.get('bet_amount', 25))
-                if apuesta <= 0:
-                    err = "La apuesta debe ser mayor a 0."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                    messages.error(request, err)
-                elif apuesta > max_bet:
-                    err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                    messages.error(request, err)
-                elif apuesta > wallet.balance:
-                    err = "No tienes suficiente oro en tu Bóveda."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                    messages.error(request, err)
-                else:
-                    wallet.remove_funds(apuesta)
-                    wallet.accumulate_patron_vault(apuesta)
-
-                    player_hand = [draw_card(), draw_card()]
-                    dealer_hand = [draw_card(), draw_card()]
-                    p_val = calculate_hand_value(player_hand)
-                    d_init_val = calculate_hand_value(dealer_hand)
-                    
-                    if p_val == 21:
-                        if d_init_val == 21:
-                            wallet.add_funds(apuesta)
-                            resultado = 'push'
-                            ganancia = apuesta
-                            xp_gain = 2
-                        else:
-                            ganancia = int(apuesta * 2.5)
-                            if pet and pet.species == 'panther':
-                                panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
-                                net = ganancia - apuesta
-                                ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
-                                
-                            wallet.add_funds(ganancia)
-                            resultado = 'blackjack'
-                            xp_gain = 6
-                        
-                        grant_user_xp(request, tg_id, xp_gain, reason="Blackjack")
-                        session_bj = {
-                            'bet': apuesta,
-                            'player_hand': player_hand,
-                            'dealer_hand': dealer_hand,
-                            'finished': True
-                        }
-                    else:
-                        session_bj = {
-                            'bet': apuesta,
-                            'player_hand': player_hand,
-                            'dealer_hand': dealer_hand,
-                            'finished': False
-                        }
-                    request.session['blackjack_state'] = session_bj
-            except ValueError:
-                err = "Monto inválido."
-                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                messages.error(request, err)
-                
-        elif action == 'hit' and session_bj and not session_bj.get('finished'):
-            session_bj['player_hand'].append(draw_card())
-            p_val = calculate_hand_value(session_bj['player_hand'])
-            
-            if p_val > 21:
-                resultado = 'bust'
-                ganancia = session_bj['bet']
-                session_bj['finished'] = True
-
-                # BUFF LOBO ESPECTRAL
-                wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
-                if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
-                    wallet.add_funds(session_bj['bet'])
-                    resultado = 'wolf_saved'
-                    ganancia = session_bj['bet']
-
-                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
-
-            request.session['blackjack_state'] = session_bj
-                
-        elif action == 'stand' and session_bj and not session_bj.get('finished'):
-            p_val = calculate_hand_value(session_bj['player_hand'])
-            d_hand = session_bj['dealer_hand']
-            
-            while calculate_hand_value(d_hand) < 17:
-                d_hand.append(draw_card())
-                
-            d_val = calculate_hand_value(d_hand)
-            apuesta = session_bj['bet']
-            
-            if d_val > 21 or p_val > d_val:
-                ganancia = apuesta * 2
-                if pet and pet.species == 'panther':
-                    panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
-                    net = ganancia - apuesta
-                    ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
-                    
-                wallet.add_funds(ganancia)
-                resultado = 'win'
-                grant_user_xp(request, tg_id, 4, reason="Victoria Blackjack")
-            elif p_val == d_val:
-                wallet.add_funds(apuesta)
-                resultado = 'push'
-                ganancia = apuesta
-                grant_user_xp(request, tg_id, 2, reason="Empate Blackjack")
-            else:
-                resultado = 'lose'
-                ganancia = apuesta
-
-                wolf_protect_rate = {1: 0.04, 2: 0.07, 3: 0.10}.get(pet.evolution_stage_number, 0.04) if (pet and pet.species == 'wolf') else 0.0
-                if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
-                    wallet.add_funds(apuesta)
-                    resultado = 'wolf_saved'
-                    ganancia = apuesta
-
-                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
-                
-            session_bj['finished'] = True
-            request.session['blackjack_state'] = session_bj
-
-        if is_ajax:
-            p_cards = session_bj['player_hand'] if session_bj else []
-            d_cards = session_bj['dealer_hand'] if session_bj else []
-            in_game = session_bj is not None and not session_bj.get('finished', False)
-
-            dealer_visible = d_cards
-            dealer_score_visible = calculate_hand_value(d_cards) if d_cards else 0
-            if in_game and len(d_cards) >= 2:
-                dealer_visible = [d_cards[0], {'val': '?', 'suit': '👑', 'is_red': False, 'hidden': True}]
-                dealer_score_visible = calculate_hand_value([d_cards[0]])
-
-            resp = {
-                'success': True,
-                'in_game': in_game,
-                'resultado': resultado,
-                'ganancia': ganancia,
-                'player_cards': p_cards,
-                'dealer_cards': dealer_visible,
-                'player_score': calculate_hand_value(p_cards) if p_cards else 0,
-                'dealer_score': dealer_score_visible,
-                'nuevo_saldo': wallet.balance,
-                'patron_vault': wallet.patron_vault,
-                'current_bet': session_bj['bet'] if session_bj else 25,
-            }
-
-            if session_bj and session_bj.get('finished', False):
-                request.session['blackjack_state'] = None
-
-            return JsonResponse(resp)
-            
-    p_cards = session_bj['player_hand'] if session_bj else []
-    d_cards = session_bj['dealer_hand'] if session_bj else []
-    p_score = calculate_hand_value(p_cards) if p_cards else 0
-    d_score = calculate_hand_value(d_cards) if d_cards else 0
-    in_game = session_bj is not None and not session_bj.get('finished', False)
-    current_bet = session_bj['bet'] if session_bj else 25
-
-    if session_bj and session_bj.get('finished', False):
-        request.session['blackjack_state'] = None
-
-    return render(request, 'economy/blackjack.html', {
-        'tg_id': tg_id,
-        'wallet': wallet,
-        'profile': profile,
-        'max_bet': max_bet,
-        'player_cards': p_cards,
-        'dealer_cards': d_cards,
-        'player_score': p_score,
-        'dealer_score': d_score,
-        'in_game': in_game,
-        'resultado': resultado,
-        'ganancia': ganancia,
-        'current_bet': current_bet
-    })
-
+# ==========================================
+# MINAS DEL REINO: BALANCE JUSTO & PRIMER CLIC SEGURO
+# ==========================================
 
 def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     if revealed_count <= 0:
@@ -2941,8 +2769,8 @@ def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     if prob <= 0:
         return 1.0
     
-    raw_mult = 0.94 / prob
-    return max(1.02, round(raw_mult, 2))
+    raw_mult = 0.98 / prob
+    return max(1.04, round(raw_mult, 2))
 
 
 def mines_game(request):
@@ -3010,6 +2838,14 @@ def mines_game(request):
             try:
                 tile_idx = int(request.POST.get('tile_index', -1))
                 if 0 <= tile_idx <= 24 and tile_idx not in session_mines['revealed']:
+                    
+                    # 🛡️ REGLA: PRIMER CLIC 100% SEGURO
+                    if len(session_mines['revealed']) == 0 and tile_idx in session_mines['mines']:
+                        libres = [i for i in range(25) if i != tile_idx and i not in session_mines['mines']]
+                        if libres:
+                            session_mines['mines'].remove(tile_idx)
+                            session_mines['mines'].append(random.choice(libres))
+
                     if tile_idx in session_mines['mines']:
                         session_mines['in_game'] = False
                         all_mines = session_mines['mines']
@@ -3032,7 +2868,7 @@ def mines_game(request):
                         mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
 
                         if pet and pet.species == 'dragon':
-                            dragon_bonus = {1: 0.02, 2: 0.04, 3: 0.07}.get(pet.evolution_stage_number, 0.02)
+                            dragon_bonus = {1: 0.04, 2: 0.08, 3: 0.14}.get(pet.evolution_stage_number, 0.04)
                             mult = round(mult + dragon_bonus, 2)
 
                         session_mines['multiplier'] = mult
@@ -3044,7 +2880,7 @@ def mines_game(request):
                         if auto_win:
                             session_mines['in_game'] = False
                             if pet and pet.species == 'panther':
-                                panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                                panther_profit_bonus = {1: 0.05, 2: 0.10, 3: 0.18}.get(pet.evolution_stage_number, 0.05)
                                 net = cashout_val - session_mines['bet']
                                 cashout_val = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
                                 
@@ -3076,7 +2912,7 @@ def mines_game(request):
                 ganancia = int(session_mines['bet'] * mult)
 
                 if pet and pet.species == 'panther':
-                    panther_profit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                    panther_profit_bonus = {1: 0.05, 2: 0.10, 3: 0.18}.get(pet.evolution_stage_number, 0.05)
                     net = max(0, ganancia - session_mines['bet'])
                     ganancia = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
 
@@ -3120,6 +2956,215 @@ def mines_game(request):
         'current_cashout': current_cashout,
     })
 
+
+# ==========================================
+# BLACKJACK IMPERIAL: ANTIRRACHA & PROTECCIÓN NOBLE
+# ==========================================
+
+def blackjack_game(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+    max_bet = profile.max_bet_allowed
+        
+    session_bj = request.session.get('blackjack_state')
+    bj_losses = request.session.get('bj_loss_streak', 0)
+    resultado = None
+    ganancia = 0
+    
+    if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+        action = request.POST.get('action')
+        
+        if action == 'deal':
+            try:
+                apuesta = int(request.POST.get('bet_amount', 25))
+                if apuesta <= 0:
+                    err = "La apuesta debe ser mayor a 0."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
+                elif apuesta > max_bet:
+                    err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
+                elif apuesta > wallet.balance:
+                    err = "No tienes suficiente oro en tu Bóveda."
+                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                    messages.error(request, err)
+                else:
+                    wallet.remove_funds(apuesta)
+                    wallet.accumulate_patron_vault(apuesta)
+
+                    player_hand = [draw_card(), draw_card()]
+                    dealer_hand = [draw_card(), draw_card()]
+
+                    # 🛡️ ALTERNANCIA: Si lleva 2 o más derrotas seguidas, asegurar mano sólida inicial
+                    if bj_losses >= 2:
+                        p_check = calculate_hand_value(player_hand)
+                        if p_check < 15:
+                            high_vals = ['10', 'J', 'Q', 'K', 'A']
+                            suits = ['♠', '♥', '♦', '♣']
+                            player_hand[1] = {'val': random.choice(high_vals), 'suit': random.choice(suits), 'is_red': False}
+
+                    p_val = calculate_hand_value(player_hand)
+                    d_init_val = calculate_hand_value(dealer_hand)
+                    
+                    if p_val == 21:
+                        if d_init_val == 21:
+                            wallet.add_funds(apuesta)
+                            resultado = 'push'
+                            ganancia = apuesta
+                            xp_gain = 2
+                        else:
+                            ganancia = int(apuesta * 2.5)
+                            if pet and pet.species == 'panther':
+                                panther_rates = {1: 0.05, 2: 0.10, 3: 0.15}
+                                net = ganancia - apuesta
+                                ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.05))))
+                                
+                            wallet.add_funds(ganancia)
+                            resultado = 'blackjack'
+                            xp_gain = 6
+                            request.session['bj_loss_streak'] = 0
+                        
+                        grant_user_xp(request, tg_id, xp_gain, reason="Blackjack")
+                        session_bj = {
+                            'bet': apuesta,
+                            'player_hand': player_hand,
+                            'dealer_hand': dealer_hand,
+                            'finished': True
+                        }
+                    else:
+                        session_bj = {
+                            'bet': apuesta,
+                            'player_hand': player_hand,
+                            'dealer_hand': dealer_hand,
+                            'finished': False
+                        }
+                    request.session['blackjack_state'] = session_bj
+            except ValueError:
+                err = "Monto inválido."
+                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+                messages.error(request, err)
+                
+        elif action == 'hit' and session_bj and not session_bj.get('finished'):
+            session_bj['player_hand'].append(draw_card())
+            p_val = calculate_hand_value(session_bj['player_hand'])
+            
+            if p_val > 21:
+                resultado = 'bust'
+                ganancia = session_bj['bet']
+                session_bj['finished'] = True
+                request.session['bj_loss_streak'] = bj_losses + 1
+
+                # Buff Lobo
+                wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
+                if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
+                    wallet.add_funds(session_bj['bet'])
+                    resultado = 'wolf_saved'
+                    ganancia = session_bj['bet']
+
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
+
+            request.session['blackjack_state'] = session_bj
+                
+        elif action == 'stand' and session_bj and not session_bj.get('finished'):
+            p_val = calculate_hand_value(session_bj['player_hand'])
+            d_hand = session_bj['dealer_hand']
+            
+            while calculate_hand_value(d_hand) < 17:
+                d_hand.append(draw_card())
+                
+            d_val = calculate_hand_value(d_hand)
+            apuesta = session_bj['bet']
+            
+            if d_val > 21 or p_val > d_val:
+                ganancia = apuesta * 2
+                if pet and pet.species == 'panther':
+                    panther_rates = {1: 0.05, 2: 0.10, 3: 0.15}
+                    net = ganancia - apuesta
+                    ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.05))))
+                    
+                wallet.add_funds(ganancia)
+                resultado = 'win'
+                request.session['bj_loss_streak'] = 0
+                grant_user_xp(request, tg_id, 4, reason="Victoria Blackjack")
+            elif p_val == d_val:
+                wallet.add_funds(apuesta)
+                resultado = 'push'
+                ganancia = apuesta
+                grant_user_xp(request, tg_id, 2, reason="Empate Blackjack")
+            else:
+                resultado = 'lose'
+                ganancia = apuesta
+                request.session['bj_loss_streak'] = bj_losses + 1
+
+                wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
+                if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
+                    wallet.add_funds(apuesta)
+                    resultado = 'wolf_saved'
+                    ganancia = apuesta
+
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
+                
+            session_bj['finished'] = True
+            request.session['blackjack_state'] = session_bj
+
+        if is_ajax:
+            p_cards = session_bj['player_hand'] if session_bj else []
+            d_cards = session_bj['dealer_hand'] if session_bj else []
+            in_game = session_bj is not None and not session_bj.get('finished', False)
+
+            dealer_visible = d_cards
+            dealer_score_visible = calculate_hand_value(d_cards) if d_cards else 0
+            if in_game and len(d_cards) >= 2:
+                dealer_visible = [d_cards[0], {'val': '?', 'suit': '👑', 'is_red': False, 'hidden': True}]
+                dealer_score_visible = calculate_hand_value([d_cards[0]])
+
+            resp = {
+                'success': True,
+                'in_game': in_game,
+                'resultado': resultado,
+                'ganancia': ganancia,
+                'player_cards': p_cards,
+                'dealer_cards': dealer_visible,
+                'player_score': calculate_hand_value(p_cards) if p_cards else 0,
+                'dealer_score': dealer_score_visible,
+                'nuevo_saldo': wallet.balance,
+                'patron_vault': wallet.patron_vault,
+                'current_bet': session_bj['bet'] if session_bj else 25,
+            }
+
+            if session_bj and session_bj.get('finished', False):
+                request.session['blackjack_state'] = None
+
+            return JsonResponse(resp)
+            
+    p_cards = session_bj['player_hand'] if session_bj else []
+    d_cards = session_bj['dealer_hand'] if session_bj else []
+    p_score = calculate_hand_value(p_cards) if p_cards else 0
+    d_score = calculate_hand_value(d_cards) if d_cards else 0
+    in_game = session_bj is not None and not session_bj.get('finished', False)
+    current_bet = session_bj['bet'] if session_bj else 25
+
+    if session_bj and session_bj.get('finished', False):
+        request.session['blackjack_state'] = None
+
+    return render(request, 'economy/blackjack.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'max_bet': max_bet,
+        'player_cards': p_cards,
+        'dealer_cards': d_cards,
+        'player_score': p_score,
+        'dealer_score': d_score,
+        'in_game': in_game,
+        'resultado': resultado,
+        'ganancia': ganancia,
+        'current_bet': current_bet
+    })
 
 def bazar_shop(request):
     tg_id = get_safe_tg_id(request)
@@ -4362,6 +4407,15 @@ def social_feed(request):
     tg_username = request.GET.get('tg_username') or (profile.username if profile else 'Noble')
     
     posts = Post.objects.all().select_related('idol').prefetch_related('comments')
+
+    # 🌟 NUEVO: Si viene filtrado por una Musa específica (desde su perfil):
+    idol_filter_id = request.GET.get('idol_id')
+    filtered_idol = None
+    if idol_filter_id and str(idol_filter_id).isdigit():
+        filtered_idol = IdolProfile.objects.filter(id=int(idol_filter_id)).first()
+        if filtered_idol:
+            posts = posts.filter(idol=filtered_idol)
+
     unlocked_ids = []
     liked_ids = []
     is_admin = check_is_staff_or_admin(tg_id)
@@ -4388,6 +4442,7 @@ def social_feed(request):
         'tg_username': tg_username,
         'is_admin': is_admin,
         'feed_theme': feed_theme,
+        'filtered_idol': filtered_idol,  # 👈 Pasamos la Musa filtrada si existe
     })
 
 
@@ -6563,8 +6618,26 @@ ARCHIVO: .\templates\base.html
             } catch(e) {}
 
             const user = getRealTelegramUser();
-            const cleanPath = targetPath.split('?')[0];
-            window.location.href = `${cleanPath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}`;
+            
+            // Conservar el ancla (#post-123) si existe
+            const hashIndex = targetPath.indexOf('#');
+            let hash = '';
+            let pathAndQuery = targetPath;
+            if (hashIndex !== -1) {
+                hash = targetPath.substring(hashIndex);
+                pathAndQuery = targetPath.substring(0, hashIndex);
+            }
+
+            // Conservar parámetros adicionales (?idol_id=...) si existen
+            const queryIndex = pathAndQuery.indexOf('?');
+            let basePath = pathAndQuery;
+            let extraParams = '';
+            if (queryIndex !== -1) {
+                basePath = pathAndQuery.substring(0, queryIndex);
+                extraParams = '&' + pathAndQuery.substring(queryIndex + 1);
+            }
+
+            window.location.href = `${basePath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}${extraParams}${hash}`;
         };
 
         window.navGo = window.universalNav;
@@ -11234,36 +11307,51 @@ ARCHIVO: .\templates\idols\detail.html
         </button>
     </div>
 
-    <!-- PESTAÑA A: MURO PRIVADO & FOTOS EXCLUSIVAS -->
+    <!-- PESTAÑA A: MURO PRIVADO & FOTOS EXCLUSIVAS (CLICKEABLE CON LIKES Y COMENTARIOS) -->
     <div id="id-tab-muro" class="flex flex-col gap-3">
         <div class="flex justify-between items-center px-1">
             <span class="text-xs font-black text-vip-gold uppercase tracking-wider">Galería Exclusiva de {{ idol.stage_name }}</span>
-            <button type="button" onclick="universalNav('{% url 'idols:social_feed' %}')" class="text-[11px] text-purple-300 hover:text-white font-bold">
-                Muro Completo ➔
+            <button type="button" onclick="universalNav('/idols/feed/?idol_id={{ idol.id }}')" class="text-[11px] text-purple-300 hover:text-white font-bold">
+                Ver solo sus posts ➔
             </button>
         </div>
 
         {% if recent_posts %}
         <div class="grid grid-cols-3 gap-2">
             {% for post in recent_posts %}
-            <div class="relative aspect-square rounded-2xl overflow-hidden border border-vip-gold/30 bg-black group shadow-lg">
-                {% if post.network == 'gram' or post.id in unlocked_ids %}
-                    {% if post.image %}
-                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+            <div onclick="universalNav('/idols/feed/?idol_id={{ idol.id }}#post-{{ post.id }}')"
+                 class="relative aspect-square rounded-2xl overflow-hidden border border-vip-gold/30 bg-black group shadow-lg cursor-pointer active:scale-95 transition-all select-none">
+                
+                {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
+                    {% if post.is_video %}
+                        <video src="{{ post.video.url }}" class="w-full h-full object-cover pointer-events-none"></video>
+                    {% elif post.image %}
+                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
                     {% endif %}
                 {% else %}
                     {% if post.image %}
                         <img src="{{ post.image.url }}" class="w-full h-full object-cover filter blur-lg brightness-50">
                     {% endif %}
-                    <button type="button" onclick="universalNav('{% url 'idols:social_feed' %}')" 
-                            class="absolute inset-0 flex flex-col items-center justify-center p-1 text-center bg-black/60">
+                    <div class="absolute inset-0 flex flex-col items-center justify-center p-1 text-center bg-black/60 pointer-events-none">
                         <span class="text-base">🔒</span>
                         <span class="text-[9px] font-black text-yellow-300 font-mono mt-0.5">🪙 {{ post.price }}</span>
-                    </button>
+                    </div>
                 {% endif %}
 
+                <!-- Tira de Likes y Comentarios superpuesta en la foto (Estilo Instagram) -->
+                <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-1.5 flex items-center justify-between text-[9.5px] font-mono font-bold text-white z-10 pointer-events-none">
+                    <span class="flex items-center gap-0.5 text-rose-400">
+                        <span>❤️</span> <span>{{ post.likes }}</span>
+                    </span>
+                    <span class="flex items-center gap-0.5 text-purple-300">
+                        <span>💬</span> <span>{{ post.comments.count }}</span>
+                    </span>
+                </div>
+
                 {% if post.network == 'fans' %}
-                    <span class="absolute top-1 right-1 bg-purple-950/90 border border-purple-500 text-purple-300 text-[8px] font-black px-1.5 py-0.2 rounded-full">VIP</span>
+                    <span class="absolute top-1 right-1 bg-purple-950/90 border border-purple-500 text-purple-300 text-[8px] font-black px-1.5 py-0.2 rounded-full z-10">VIP</span>
+                {% elif post.is_video %}
+                    <span class="absolute top-1 left-1 bg-black/80 text-yellow-400 text-[8px] font-bold px-1.5 py-0.2 rounded-full z-10">🎬</span>
                 {% endif %}
             </div>
             {% endfor %}
@@ -11608,7 +11696,8 @@ ARCHIVO: .\templates\idols\feed.html
     <!-- 📱 FEED DE PUBLICACIONES (CARDS DE ALTA COSTURA) -->
     <div class="flex flex-col gap-6" id="feed-container">
         {% for post in posts %}
-        <article class="feed-item rounded-[30px] overflow-hidden border-2 bg-gradient-to-b from-[#180a29] via-[#0d0417] to-black shadow-[0_15px_40px_rgba(0,0,0,0.9)] transition-all duration-300"
+        <article id="post-{{ post.id }}" 
+                 class="feed-item rounded-[30px] overflow-hidden border-2 bg-gradient-to-b from-[#180a29] via-[#0d0417] to-black shadow-[0_15px_40px_rgba(0,0,0,0.9)] transition-all duration-500"
                  data-network="{{ post.network }}"
                  style="border-color: {% if post.network == 'fans' %}rgba(168,85,247,0.45){% else %}rgba(212,175,55,0.35){% endif %};">
             
@@ -11998,6 +12087,24 @@ ARCHIVO: .\templates\idols\feed.html
         ind.classList.remove('flex');
         input.placeholder = "Escribe tu comentario...";
     }
+
+    // Auto-desplazamiento a la publicación exacta con iluminación dorada
+    document.addEventListener("DOMContentLoaded", () => {
+        const hash = window.location.hash;
+        if (hash) {
+            setTimeout(() => {
+                const targetPost = document.querySelector(hash);
+                if (targetPost) {
+                    targetPost.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Destello de iluminación temporal para saber cuál es
+                    targetPost.classList.add('ring-4', 'ring-yellow-400', 'shadow-[0_0_35px_rgba(234,179,8,0.8)]');
+                    setTimeout(() => {
+                        targetPost.classList.remove('ring-4', 'ring-yellow-400', 'shadow-[0_0_35px_rgba(234,179,8,0.8)]');
+                    }, 2500);
+                }
+            }, 350);
+        }
+    });
 </script>
 {% endblock %}
 

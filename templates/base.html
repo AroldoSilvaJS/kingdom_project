@@ -6,10 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Kingdom of Pleasure - VIP</title>
     
-    <!-- Fuentes Premium de Google: Cinzel y Plus Jakarta Sans -->
+    <!-- Fuentes Premium: Cinzel y Plus Jakarta Sans -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -24,13 +24,13 @@
                 extend: {
                     colors: {
                         vip: {
-                            base: '#08040E',      /* Negro obsidiana profundo */
-                            card: '#10081C',      /* Fondo de tarjetas */
-                            panel: '#150A24',     /* Paneles flotantes */
-                            gold: '#D4AF37',      /* Oro imperial clásico */
-                            lightgold: '#F3E5AB', /* Brillo de oro suave */
-                            accent: '#A855F7',    /* Púrpura místico neón */
-                            text: '#EAE6F0'       /* Blanco perla legible */
+                            base: '#08040E',
+                            card: '#10081C',
+                            panel: '#150A24',
+                            gold: '#D4AF37',
+                            lightgold: '#F3E5AB',
+                            accent: '#A855F7',
+                            text: '#EAE6F0'
                         }
                     },
                     fontFamily: {
@@ -42,61 +42,154 @@
         }
     </script>
 
-    <!-- Estilos de Alto Impacto Visual -->
+    <!-- Estilos de Alto Impacto Visual y Animaciones Fluidas -->
     <style>
         body {
             background: radial-gradient(circle at 50% -20%, #200E38 0%, #08040E 60%, #030106 100%);
             color: #EAE6F0;
             -webkit-tap-highlight-color: transparent;
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
+        /* Paneles con Glassmorphism noble */
         .vip-panel {
-            background: linear-gradient(135deg, rgba(21, 10, 36, 0.85) 0%, rgba(13, 6, 22, 0.95) 100%);
+            background: linear-gradient(135deg, rgba(21, 10, 36, 0.88) 0%, rgba(13, 6, 22, 0.96) 100%);
             border: 1px solid rgba(212, 175, 55, 0.28);
-            border-radius: 20px;
-            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8), 0 0 20px rgba(212, 175, 55, 0.08);
-            backdrop-filter: blur(12px);
+            border-radius: 24px;
+            box-shadow: 0 10px 35px -5px rgba(0, 0, 0, 0.85), 0 0 20px rgba(212, 175, 55, 0.08);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
+        /* Botón Dorado con Reflejo Shimmer continuo */
         .btn-gold {
+            position: relative;
             background: linear-gradient(135deg, #ECC440 0%, #D4AF37 50%, #9A7B1C 100%);
             color: #08040E;
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.35);
-            transition: all 0.25s ease;
+            box-shadow: 0 4px 18px rgba(212, 175, 55, 0.35);
+            overflow: hidden;
+            transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .btn-gold::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -60%;
+            width: 40%;
+            height: 200%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+            transform: rotate(25deg);
+            animation: shimmerSweep 3.5s infinite ease-in-out;
+            pointer-events-none;
+        }
+        @keyframes shimmerSweep {
+            0% { left: -60%; }
+            30% { left: 140%; }
+            100% { left: 140%; }
         }
         .btn-gold:active {
-            transform: scale(0.97);
+            transform: scale(0.96);
             box-shadow: 0 2px 8px rgba(212, 175, 55, 0.2);
+            filter: brightness(0.95);
         }
 
+        /* Texto degradado en oro */
         .text-gold-gradient {
             background: linear-gradient(135deg, #FFF0B8 0%, #D4AF37 50%, #AA820A 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .glow-title {
-            text-shadow: 0 0 20px rgba(212, 175, 55, 0.35);
+        /* Telón de transición suave entre páginas */
+        #page-transition-curtain {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #page-transition-curtain.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Entrada con rebote elástico para modales */
+        .modal-spring-in {
+            animation: springIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        @keyframes springIn {
+            0% { opacity: 0; transform: scale(0.88) translateY(20px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* Reflejo Holográfico para Photocards Legendarias y Épicas */
+        .holo-card {
+            position: relative;
+            overflow: hidden;
+        }
+        .holo-card::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(125deg, 
+                rgba(255,0,128,0.15) 0%, 
+                rgba(255,215,0,0.2) 25%, 
+                rgba(0,255,200,0.2) 50%, 
+                rgba(128,0,255,0.15) 75%, 
+                rgba(255,0,128,0.15) 100%);
+            mix-blend-mode: color-dodge;
+            opacity: 0.6;
+            pointer-events-none;
+            animation: holoShift 4s infinite linear alternate;
+        }
+        @keyframes holoShift {
+            0% { transform: translateY(-30%) rotate(0deg); opacity: 0.4; }
+            100% { transform: translateY(30%) rotate(5deg); opacity: 0.75; }
+        }
+
+        /* Barra de navegación inferior con brillo reactivo */
+        .nav-tab {
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .nav-tab:active {
+            transform: scale(0.85);
+        }
+
+        /* Desplazamiento suave */
+        html {
+            scroll-behavior: smooth;
         }
     </style>
 </head>
 
-
 <body class="font-sans antialiased flex flex-col items-center min-h-screen relative pb-28">
 
-    <!-- 📢 NOTIFICACIONES FLASH GLOBALES (SE MUESTRAN SIEMPRE EN LA PÁGINA ACTUAL Y DESAPARECEN SOLAS) -->
+    <!-- 🌌 TELÓN CINEMÁTICO DE NAVEGACIÓN (Evita parpadeos entre páginas) -->
+    <div id="page-transition-curtain" class="fixed inset-0 z-[9999999] bg-[#08040e]/95 backdrop-blur-md flex flex-col items-center justify-center">
+        <div class="relative w-20 h-20 flex items-center justify-center">
+            <div class="absolute inset-0 rounded-full border-2 border-vip-gold/30 animate-ping"></div>
+            <img src="/media/logo.png" alt="Kingdom" class="w-14 h-14 object-contain filter drop-shadow-[0_0_15px_rgba(212,175,55,0.8)]">
+        </div>
+        <span class="text-[10px] font-mono uppercase font-black tracking-widest text-vip-gold/80 mt-3 animate-pulse">
+            Cargando la Corte...
+        </span>
+    </div>
+
+    <!-- 📢 NOTIFICACIONES FLASH GLOBALES -->
     {% if messages %}
     <div id="django-messages-container" class="fixed top-3 inset-x-3 z-[999999] space-y-2 max-w-md mx-auto pointer-events-auto">
       {% for message in messages %}
-        <div class="p-3.5 rounded-2xl border backdrop-blur-md text-xs font-bold shadow-2xl flex justify-between items-center transition-all animate-bounce
-          {% if message.tags == 'success' %}bg-emerald-950/95 border-emerald-500 text-emerald-200
-          {% elif message.tags == 'warning' %}bg-amber-950/95 border-amber-500 text-amber-200
-          {% else %}bg-rose-950/95 border-rose-500 text-rose-200{% endif %}">
-          <span>{{ message }}</span>
+        <div class="p-3.5 rounded-2xl border backdrop-blur-md text-xs font-bold shadow-2xl flex justify-between items-center transition-all modal-spring-in
+          {% if message.tags == 'success' %}bg-emerald-950/95 border-emerald-500 text-emerald-200 shadow-[0_0_20px_rgba(16,185,129,0.3)]
+          {% elif message.tags == 'warning' %}bg-amber-950/95 border-amber-500 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.3)]
+          {% else %}bg-rose-950/95 border-rose-500 text-rose-200 shadow-[0_0_20px_rgba(244,63,94,0.3)]{% endif %}">
+          <span class="flex items-center gap-2">
+            <span>{% if message.tags == 'success' %}✨{% elif message.tags == 'warning' %}⚠️{% else %}⛔{% endif %}</span>
+            <span>{{ message }}</span>
+          </span>
           <button onclick="this.parentElement.remove()" class="ml-2 text-stone-400 hover:text-white text-base">&times;</button>
         </div>
       {% endfor %}
@@ -104,8 +197,13 @@
     <script>
       setTimeout(() => {
         const mc = document.getElementById('django-messages-container');
-        if (mc) mc.remove();
-      }, 4000);
+        if (mc) {
+            mc.style.opacity = '0';
+            mc.style.transform = 'translateY(-10px)';
+            mc.style.transition = 'all 0.4s ease';
+            setTimeout(() => mc.remove(), 400);
+        }
+      }, 4200);
     </script>
     {% endif %}
 
@@ -114,9 +212,9 @@
         
         {% if not hide_bottom_nav %}
         <button type="button" onclick="universalNav('/buzon/')" 
-                class="absolute right-3 top-3 bg-black/70 hover:bg-black border border-vip-gold/40 text-yellow-300 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-[0_0_12px_rgba(212,175,55,0.3)] active:scale-90 transition-all z-30 relative" 
+                class="absolute right-3 top-3 bg-black/70 hover:bg-black border border-vip-gold/40 text-yellow-300 w-9 h-9 rounded-full flex items-center justify-center text-sm shadow-[0_0_12px_rgba(212,175,55,0.3)] active:scale-90 transition-all z-30 relative group" 
                 title="Abrir Buzón Real">
-            <span>🔔</span>
+            <span class="group-hover:rotate-12 transition-transform">🔔</span>
             {% if unread_notifications_count > 0 %}
                 <span class="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] font-mono font-black w-4 h-4 rounded-full flex items-center justify-center border border-white shadow animate-pulse">
                     {{ unread_notifications_count }}
@@ -130,7 +228,8 @@
 
             <img src="/media/logo.png" 
                  alt="Kingdom of Pleasure" 
-                 class="h-28 sm:h-32 w-auto object-contain relative z-10 transition-transform duration-300 hover:scale-105 filter drop-shadow-[0_0_20px_rgba(212,175,55,0.6)]"
+                 class="h-28 sm:h-32 w-auto object-contain relative z-10 transition-transform duration-300 hover:scale-105 filter drop-shadow-[0_0_20px_rgba(212,175,55,0.6)] cursor-pointer select-none"
+                 onclick="universalNav('/')"
                  style="mix-blend-mode: screen;">
         </div>
         
@@ -139,7 +238,7 @@
 
     <!-- 📢 DECRETO IMPERIAL PÚBLICO DE LA CORONA -->
     {% if broadcast_active and broadcast_message %}
-    <div class="w-full max-w-md px-3 mb-2.5 z-20">
+    <div class="w-full max-w-md px-3 mb-2.5 z-20 animate-fade-in">
         <div class="p-3.5 rounded-2xl border-2 border-yellow-500/80 bg-gradient-to-r from-amber-950/95 via-black to-[#1a0c28] shadow-[0_0_25px_rgba(234,179,8,0.35)] flex items-start gap-3 relative overflow-hidden">
             <span class="text-xl flex-shrink-0 animate-bounce">📢</span>
             <div class="flex flex-col min-w-0">
@@ -155,12 +254,12 @@
     {% endif %}
 
     <!-- Contenedor Dinámico de Vistas -->
-    <main class="w-full max-w-md flex-1 px-4 z-10">
+    <main class="w-full max-w-md flex-1 px-4 z-10 transition-opacity duration-300">
         {% block content %}
         {% endblock %}
     </main>
 
-    <!-- 📱 BARRA DE NAVEGACIÓN INFERIOR DINÁMICA -->
+    <!-- 📱 BARRA DE NAVEGACIÓN INFERIOR DINÁMICA CON MICROINTERACCIÓN -->
     {% if not hide_bottom_nav %}
     <div class="fixed bottom-0 inset-x-0 z-[99999] pointer-events-none pb-[max(0.6rem,env(safe-area-inset-bottom))] px-2.5 pt-1.5">
         <nav class="max-w-md mx-auto pointer-events-auto bg-[#0a0514]/95 border border-vip-gold/40 backdrop-blur-xl rounded-2xl p-1.5 px-1 shadow-[0_10px_35px_rgba(0,0,0,0.95),0_0_18px_rgba(212,175,55,0.22)]">
@@ -168,42 +267,42 @@
                 
                 <!-- 1. Inicio -->
                 <button type="button" data-nav="/" onclick="universalNav('/')" 
-                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl">
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-vip-gold select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">🏛️</span>
                     <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Inicio</span>
                 </button>
 
                 <!-- 2. Feed VIP -->
                 <button type="button" data-nav="/idols/feed/" onclick="universalNav('/idols/feed/')" 
-                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-purple-300 active:scale-90 transition-all select-none rounded-xl">
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-purple-300 select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">📱</span>
                     <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Muro</span>
                 </button>
 
                 <!-- 3. Cajas CS -->
                 <button type="button" data-nav="/idols/photocards/" onclick="universalNav('/idols/photocards/')" 
-                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-yellow-400 active:scale-90 transition-all select-none rounded-xl">
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-yellow-400 select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">🎁</span>
                     <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Cajas</span>
                 </button>
 
                 <!-- 4. Elenco de Musas -->
                 <button type="button" data-nav="/idols/gallery/" onclick="universalNav('/idols/gallery/')" 
-                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl">
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-vip-gold select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">🎭</span>
                     <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Elenco</span>
                 </button>
 
                 <!-- 5. Santuario -->
                 <button type="button" data-nav="/pets/" onclick="universalNav('/pets/')" 
-                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-purple-300 active:scale-90 transition-all select-none rounded-xl">
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-purple-300 select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">🐾</span>
                     <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Santuario</span>
                 </button>
 
                 <!-- 6. Bóveda -->
                 <button type="button" data-nav="/economy/wallet/" onclick="universalNav('/economy/wallet/')" 
-                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-vip-gold active:scale-90 transition-all select-none rounded-xl">
+                        class="nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-stone-400 hover:text-vip-gold select-none rounded-xl">
                     <span class="text-base sm:text-lg leading-none">🪙</span>
                     <span class="text-[8px] sm:text-[8.5px] font-bold uppercase tracking-tight mt-1">Bóveda</span>
                 </button>
@@ -213,9 +312,9 @@
     </div>
     {% endif %}
 
-    <!-- MODAL VIP FLOTANTE UNIVERSAL -->
+    <!-- MODAL VIP FLOTANTE UNIVERSAL CON ANIMACIÓN SPRING -->
     <div id="vip-global-modal" class="hidden fixed inset-0 z-[999999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="vip-panel p-5 max-w-xs w-full text-center border-2 border-vip-gold/60 rounded-3xl shadow-2xl flex flex-col items-center bg-gradient-to-b from-[#1c0c2e] to-black">
+        <div class="vip-panel modal-spring-in p-5 max-w-xs w-full text-center border-2 border-vip-gold/60 rounded-3xl shadow-2xl flex flex-col items-center bg-gradient-to-b from-[#1c0c2e] to-black">
             <span id="vip-modal-icon" class="text-3xl mb-1">👑</span>
             <h4 id="vip-modal-title" class="font-serif text-sm font-black text-gold-gradient uppercase tracking-wider mb-1">Aviso Imperial</h4>
             <p id="vip-modal-text" class="text-xs text-stone-300 leading-relaxed mb-4"></p>
@@ -225,7 +324,22 @@
         </div>
     </div>
 
-    <!-- Script de Autenticación y Navegación Oficial de Telegram Mini App -->
+    <!-- 🖼️ VISOR MODAL LIGHTBOX PANTALLA COMPLETA CON ZOOM FLUIDO -->
+    <div id="image-lightbox-modal" class="hidden fixed inset-0 z-[999999] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-3 select-none" onclick="closeImageLightbox()">
+        <button type="button" onclick="closeImageLightbox()" 
+                class="absolute top-4 right-4 text-stone-300 hover:text-white bg-black/80 border border-vip-gold/50 rounded-full w-10 h-10 flex items-center justify-center text-xl z-20 shadow-lg active:scale-90 transition-all">
+            &times;
+        </button>
+
+        <div class="relative max-w-md w-full flex flex-col items-center modal-spring-in" onclick="event.stopPropagation()">
+            <div class="rounded-3xl overflow-hidden border-2 border-vip-gold/60 shadow-[0_0_50px_rgba(212,175,55,0.4)] bg-black max-h-[82vh] flex items-center justify-center">
+                <img id="lightbox-img" src="" alt="Foto VIP" class="w-full h-auto max-h-[80vh] object-contain block">
+            </div>
+            <p id="lightbox-caption" class="text-xs text-stone-200 text-center mt-3 px-4 italic font-medium leading-relaxed"></p>
+        </div>
+    </div>
+
+    <!-- SCRIPT DE NAVEGACIÓN Y PARTICULAS FLOTANTES -->
     <script>
         const tgApp = window.Telegram?.WebApp;
         if (tgApp) {
@@ -239,20 +353,14 @@
             const tgUser = tgApp?.initDataUnsafe?.user;
             if (tgUser && tgUser.id) {
                 const tgHandle = tgUser.username ? `@${tgUser.username}` : (tgUser.first_name || `Usuario_${tgUser.id}`);
-                return {
-                    id: String(tgUser.id),
-                    username: tgHandle
-                };
+                return { id: String(tgUser.id), username: tgHandle };
             }
 
             const urlParams = new URLSearchParams(window.location.search);
             const urlId = urlParams.get('tg_id');
             if (urlId && urlId !== 'None' && urlId !== 'undefined' && urlId.trim() !== '') {
                 const urlName = urlParams.get('tg_username') || `Noble_${urlId}`;
-                return {
-                    id: urlId,
-                    username: urlName.startsWith('@') ? urlName : `@${urlName}`
-                };
+                return { id: urlId, username: urlName.startsWith('@') ? urlName : `@${urlName}` };
             }
 
             return {
@@ -261,29 +369,18 @@
             };
         }
 
-        (function syncAccount() {
-            const currentUser = getRealTelegramUser();
-            const urlParams = new URLSearchParams(window.location.search);
-            const currentUrlId = urlParams.get('tg_id');
-            const currentUrlName = urlParams.get('tg_username');
-
-            localStorage.setItem('current_tg_id', currentUser.id);
-            localStorage.setItem('current_tg_user', currentUser.username);
-
-            if (tgApp?.initDataUnsafe?.user && (currentUrlId !== currentUser.id || !currentUrlName)) {
-                const targetPath = (window.location.pathname.includes('choose-role') && currentUrlId === '123456789') ? '/' : window.location.pathname;
-                window.location.replace(`${targetPath}?tg_id=${currentUser.id}&tg_username=${encodeURIComponent(currentUser.username)}`);
-            }
-        })();
-
+        // Navegación Fluida con Telón Anti-Flicker
         window.universalNav = function(targetPath) {
             try {
                 tgApp?.HapticFeedback?.impactOccurred('light');
             } catch(e) {}
 
             const user = getRealTelegramUser();
-            
-            // Conservar el ancla (#post-123) si existe
+            const curtain = document.getElementById('page-transition-curtain');
+            if (curtain) {
+                curtain.classList.add('active');
+            }
+
             const hashIndex = targetPath.indexOf('#');
             let hash = '';
             let pathAndQuery = targetPath;
@@ -292,7 +389,6 @@
                 pathAndQuery = targetPath.substring(0, hashIndex);
             }
 
-            // Conservar parámetros adicionales (?idol_id=...) si existen
             const queryIndex = pathAndQuery.indexOf('?');
             let basePath = pathAndQuery;
             let extraParams = '';
@@ -301,12 +397,35 @@
                 extraParams = '&' + pathAndQuery.substring(queryIndex + 1);
             }
 
-            window.location.href = `${basePath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}${extraParams}${hash}`;
+            setTimeout(() => {
+                window.location.href = `${basePath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}${extraParams}${hash}`;
+            }, 80);
         };
 
         window.navGo = window.universalNav;
         window.getGlobalTgId = function() { return getRealTelegramUser().id; };
         window.getGlobalTgUser = function() { return getRealTelegramUser().username; };
+
+        // Efecto flotante de recompensas (Oro / XP)
+        window.spawnRewardPill = function(text, x, y, isGold = true) {
+            const pill = document.createElement('div');
+            pill.innerText = text;
+            pill.className = `fixed pointer-events-none z-[999999] px-3 py-1 rounded-full text-xs font-black font-mono shadow-2xl border ${
+                isGold 
+                ? 'bg-amber-950/90 text-yellow-300 border-yellow-400 shadow-[0_0_15px_rgba(234,179,8,0.7)]' 
+                : 'bg-purple-950/90 text-purple-200 border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.7)]'
+            }`;
+            pill.style.left = `${(x || window.innerWidth / 2) - 40}px`;
+            pill.style.top = `${(y || window.innerHeight / 2) - 20}px`;
+            pill.style.transition = 'all 1.1s cubic-bezier(0.2, 0.9, 0.3, 1)';
+            document.body.appendChild(pill);
+
+            setTimeout(() => {
+                pill.style.transform = 'translateY(-65px) scale(1.15)';
+                pill.style.opacity = '0';
+            }, 25);
+            setTimeout(() => pill.remove(), 1150);
+        };
 
         (function highlightActiveTab() {
             const path = window.location.pathname;
@@ -315,7 +434,7 @@
                 const isActive = (tabPath === '/' && path === '/') || (tabPath !== '/' && path.startsWith(tabPath));
                 
                 if (isActive) {
-                    tab.className = "nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-vip-gold active:scale-90 transition-all select-none rounded-xl bg-gradient-to-b from-yellow-500/15 to-transparent border border-vip-gold/30 shadow-[0_0_10px_rgba(212,175,55,0.2)]";
+                    tab.className = "nav-tab w-full flex flex-col items-center justify-center py-1.5 px-0.5 text-vip-gold select-none rounded-xl bg-gradient-to-b from-yellow-500/20 via-yellow-500/10 to-transparent border border-vip-gold/40 shadow-[0_0_14px_rgba(212,175,55,0.3)]";
                     tab.querySelector('span:last-child').className = "text-[8px] sm:text-[8.5px] font-black uppercase tracking-tight mt-1 text-vip-gold";
                 }
             });
@@ -348,21 +467,5 @@
             if (modal) modal.classList.add('hidden');
         };
     </script>
-    <!-- 🖼️ VISOR MODAL LIGHTBOX PANTALLA COMPLETA -->
-    <div id="image-lightbox-modal" class="hidden fixed inset-0 z-[999999] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-3 select-none" onclick="closeImageLightbox()">
-        <!-- Botón Cerrar -->
-        <button type="button" onclick="closeImageLightbox()" 
-                class="absolute top-4 right-4 text-stone-300 hover:text-white bg-black/80 border border-vip-gold/50 rounded-full w-10 h-10 flex items-center justify-center text-xl z-20 shadow-lg active:scale-90 transition-all">
-            &times;
-        </button>
-
-        <div class="relative max-w-md w-full flex flex-col items-center" onclick="event.stopPropagation()">
-            <div class="rounded-3xl overflow-hidden border-2 border-vip-gold/60 shadow-[0_0_50px_rgba(212,175,55,0.4)] bg-black max-h-[82vh] flex items-center justify-center">
-                <img id="lightbox-img" src="" alt="Foto VIP" class="w-full h-auto max-h-[80vh] object-contain block">
-            </div>
-            <p id="lightbox-caption" class="text-xs text-stone-200 text-center mt-3 px-4 italic font-medium leading-relaxed"></p>
-        </div>
-    </div>
-
 </body>
 </html>
