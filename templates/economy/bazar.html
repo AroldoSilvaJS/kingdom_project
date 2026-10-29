@@ -39,24 +39,13 @@
     </div>
 
     <!-- PESTAÑAS DE LAS 4 VITRINAS -->
-    <div class="grid grid-cols-4 gap-1 p-1 bg-black/70 border border-vip-gold/30 rounded-2xl text-[9px] sm:text-[10px] font-bold uppercase text-center shadow-inner">
-        <button type="button" onclick="switchBazarTab('salvaguardas')" id="tab-btn-salvaguardas" 
-                class="py-2 rounded-xl bg-vip-gold text-black font-black">
-            🛡️ Escudos
-        </button>
-        <button type="button" onclick="switchBazarTab('estatus')" id="tab-btn-estatus" 
-                class="py-2 rounded-xl text-stone-400 hover:text-white">
-            👑 Estatus
-        </button>
-        <button type="button" onclick="switchBazarTab('musas')" id="tab-btn-musas" 
-                class="py-2 rounded-xl text-stone-400 hover:text-white">
-            🌹 Musas
-        </button>
-        <button type="button" onclick="switchBazarTab('juego')" id="tab-btn-juego" 
-                class="py-2 rounded-xl text-stone-400 hover:text-white">
-            🎴 Fortuna
-        </button>
-    </div>
+    <div class="grid grid-cols-5 gap-1 p-1 bg-black/70 border border-vip-gold/30 rounded-2xl text-[8px] sm:text-[9.5px] font-bold uppercase text-center shadow-inner">
+    <button type="button" onclick="switchBazarTab('salvaguardas')" id="tab-btn-salvaguardas" class="py-2 rounded-xl bg-vip-gold text-black font-black">🛡️ Escudos</button>
+    <button type="button" onclick="switchBazarTab('estatus')" id="tab-btn-estatus" class="py-2 rounded-xl text-stone-400 hover:text-white">👑 Estatus</button>
+    <button type="button" onclick="switchBazarTab('musas')" id="tab-btn-musas" class="py-2 rounded-xl text-stone-400 hover:text-white">🌹 Musas</button>
+    <button type="button" onclick="switchBazarTab('juego')" id="tab-btn-juego" class="py-2 rounded-xl text-stone-400 hover:text-white">🎴 Fortuna</button>
+    <button type="button" onclick="switchBazarTab('funkos')" id="tab-btn-funkos" class="py-2 rounded-xl text-yellow-300 hover:text-white">🎎 Funkos</button>
+</div>
 
     <!-- TOAST DE COMPRA EN VIVO -->
     <div id="bazar-toast-box" class="w-full"></div>
@@ -321,25 +310,227 @@
 
     </div>
 
+    <!-- 🎎 VITRINA 5: FUNKO POPS & COLECCIONABLES CON FOTO -->
+    <div id="vitrina-funkos" class="hidden flex flex-col gap-3.5">
+        
+        <!-- BOTÓN DE SUBIDA PARA ADMINS / STAFF -->
+        {% if is_admin %}
+        <div class="vip-panel p-4 rounded-3xl border border-yellow-500/50 bg-gradient-to-r from-amber-950/50 to-black shadow-lg">
+            <details class="text-xs">
+                <summary class="font-bold text-yellow-300 uppercase cursor-pointer flex items-center justify-between">
+                    <span>👑 Subir Nuevo Funko / Coleccionable</span>
+                    <span class="text-[10px] bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded-full border border-yellow-500/40">Staff Panel ▾</span>
+                </summary>
+                
+                <form action="{% url 'economy:add_collectible' %}" method="POST" enctype="multipart/form-data" class="mt-3 flex flex-col gap-2.5 pt-2 border-t border-white/10">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+                    <div>
+                        <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Nombre del Coleccionable *</label>
+                        <input type="text" name="name" required placeholder="Ej: Funko Pop Jennie 'Pink Venom' VIP"
+                               class="w-full bg-black/80 border border-white/20 rounded-xl p-2 text-xs text-white">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Categoría</label>
+                            <select name="category" class="w-full bg-black border border-white/20 rounded-xl p-2 text-xs text-white">
+                                <option value="funko">🎎 Funko Pop / Figura</option>
+                                <option value="reliquia">💎 Joya / Reliquia</option>
+                                <option value="merch">🎀 Merch VIP</option>
+                                <option value="especial">✨ Coleccionable Especial</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Idol Asociada</label>
+                            <input type="text" name="idol_name" placeholder="Ej: Jennie, Wonyoung..."
+                                   class="w-full bg-black border border-white/20 rounded-xl p-2 text-xs text-white">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Precio en Oro (🪙) *</label>
+                            <input type="number" name="price" value="150" min="10" required
+                                   class="w-full bg-black border border-white/20 rounded-xl p-2 text-xs text-yellow-300 font-mono font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Stock (-1 = Ilimitado)</label>
+                            <input type="number" name="stock" value="-1" required
+                                   class="w-full bg-black border border-white/20 rounded-xl p-2 text-xs text-white font-mono">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] text-stone-300 uppercase font-bold mb-1">Descripción</label>
+                        <input type="text" name="description" placeholder="Edición limitada, caja acrílica numerada..."
+                               class="w-full bg-black border border-white/20 rounded-xl p-2 text-xs text-white">
+                    </div>
+
+                    <div class="bg-black/60 p-2.5 rounded-xl border border-white/10">
+                        <label class="block text-[10px] text-stone-300 uppercase font-bold mb-1">Foto del Funko / Producto *</label>
+                        <input type="file" name="image" accept="image/*" required class="text-xs text-stone-300 file:mr-2 file:py-1 file:px-2.5 file:rounded file:bg-yellow-500 file:text-black font-bold">
+                    </div>
+
+                    <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
+                        Publicar Artículo en Tienda
+                    </button>
+                </form>
+            </details>
+        </div>
+        {% endif %}
+
+        <!-- 📦 VITRINA DEL USUARIO (MIS FUNKOS ADQUIRIDOS) -->
+        {% if my_collectibles %}
+        <div class="p-4 rounded-3xl bg-gradient-to-r from-purple-950/60 to-black border border-purple-500/40 shadow-xl">
+            <span class="text-xs font-black text-purple-200 uppercase tracking-wider flex items-center gap-1.5 mb-2.5">
+                <span>📦</span> Tu Estantería de Coleccionables ({{ my_collectibles.count }})
+            </span>
+            <div class="grid grid-cols-3 gap-2">
+                {% for uc in my_collectibles %}
+                <div class="bg-black/80 border border-purple-500/30 rounded-2xl p-1.5 flex flex-col items-center text-center shadow">
+                    <img src="{{ uc.item.image.url }}" alt="{{ uc.item.name }}" class="w-full aspect-square object-contain rounded-xl bg-black mb-1 p-1">
+                    <span class="text-[9px] font-black text-white truncate w-full block leading-tight">{{ uc.item.name }}</span>
+                    <span class="text-[8px] font-mono text-purple-300 font-bold">Posees: x{{ uc.quantity }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- CATÁLOGO DE ARTÍCULOS EN VENTA -->
+        <div class="grid grid-cols-2 gap-3" id="funkos-catalog-grid">
+            {% for item in bazar_items %}
+            <div class="vip-panel p-3 rounded-3xl border border-vip-gold/30 bg-black/60 flex flex-col justify-between shadow-xl relative overflow-hidden group">
+                
+                <!-- Stock Badge -->
+                <div class="absolute top-2.5 left-2.5 z-10">
+                    {% if item.stock == -1 %}
+                        <span class="bg-emerald-950/90 border border-emerald-500 text-emerald-300 text-[8px] font-mono font-bold px-2 py-0.5 rounded-full shadow">
+                            Disponible
+                        </span>
+                    {% elif item.stock > 0 %}
+                        <span class="bg-amber-950/90 border border-yellow-500 text-yellow-300 text-[8px] font-mono font-bold px-2 py-0.5 rounded-full shadow">
+                            Stock: {{ item.stock }}
+                        </span>
+                    {% else %}
+                        <span class="bg-rose-950/90 border border-rose-500 text-rose-300 text-[8px] font-mono font-bold px-2 py-0.5 rounded-full shadow">
+                            Agotado
+                        </span>
+                    {% endif %}
+                </div>
+
+                <!-- Foto del Funko en Caja / Vitrina con Zoom -->
+                <div class="w-full aspect-square rounded-2xl overflow-hidden bg-black/80 border border-white/10 mb-2 flex items-center justify-center p-2 relative group-hover:scale-105 transition-transform duration-300">
+                    <img src="{{ item.image.url }}" alt="{{ item.name }}" class="w-full h-full object-contain filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]">
+                </div>
+
+                <!-- Detalles -->
+                <div class="flex flex-col gap-0.5 mb-2">
+                    {% if item.idol_name %}
+                        <span class="text-[8.5px] font-mono uppercase font-bold text-yellow-400 truncate">Idol: {{ item.idol_name }}</span>
+                    {% endif %}
+                    <h4 class="text-xs font-black text-white leading-tight truncate">{{ item.name }}</h4>
+                    {% if item.description %}
+                        <p class="text-[9.5px] text-stone-400 line-clamp-2 mt-0.5 leading-snug">{{ item.description }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Precio y Botón Comprar -->
+                <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-1">
+                    <span class="text-xs font-mono font-black text-yellow-300">🪙 {{ item.price }}</span>
+                    
+                    {% if item.is_in_stock %}
+                        <button type="button" onclick="buyFunkoItem({{ item.id }}, '{{ item.name|escapejs }}', {{ item.price }})"
+                                class="btn-gold px-3 py-1.5 rounded-xl text-[9.5px] font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                            Comprar
+                        </button>
+                    {% else %}
+                        <button type="button" disabled class="bg-stone-900 border border-stone-700 text-stone-500 px-3 py-1.5 rounded-xl text-[9.5px] font-bold uppercase cursor-not-allowed">
+                            Agotado
+                        </button>
+                    {% endif %}
+                </div>
+
+                <!-- Borrar para Staff -->
+                {% if is_admin %}
+                <form action="{% url 'economy:delete_collectible' item.id %}" method="POST" class="m-0 mt-1.5 text-right" onsubmit="return confirm('¿Retirar este coleccionable de la tienda?')">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <button type="submit" class="text-[9px] text-rose-400 hover:text-rose-300 font-bold">🗑️ Retirar de venta</button>
+                </form>
+                {% endif %}
+
+            </div>
+            {% empty %}
+            <div class="col-span-2 vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
+                <span class="text-4xl my-2">🎎</span>
+                <p class="text-sm font-bold text-white mb-1">Próximamente en Vitrina</p>
+                <p class="text-xs text-stone-400 max-w-xs leading-relaxed">La Corona está preparando las primeras figuras y Funkos de las Idols para el Reino.</p>
+            </div>
+            {% endfor %}
+        </div>
+
+    </div>
+
 </div>
 
 <!-- SCRIPT AJAX DE COMPRA SIN PARPADEO -->
 <script>
     function switchBazarTab(tab) {
-        ['salvaguardas', 'estatus', 'musas', 'juego'].forEach(t => {
-            const v = document.getElementById(`vitrina-${t}`);
-            const b = document.getElementById(`tab-btn-${t}`);
-            if (v && b) {
-                if (t === tab) {
-                    v.classList.remove('hidden');
-                    b.className = "py-2 rounded-xl bg-vip-gold text-black font-black";
-                } else {
-                    v.classList.add('hidden');
-                    b.className = "py-2 rounded-xl text-stone-400 hover:text-white";
-                }
+    ['salvaguardas', 'estatus', 'musas', 'juego', 'funkos'].forEach(t => {
+        const v = document.getElementById(`vitrina-${t}`);
+        const b = document.getElementById(`tab-btn-${t}`);
+        if (v && b) {
+            if (t === tab) {
+                v.classList.remove('hidden');
+                b.className = "py-2 rounded-xl bg-vip-gold text-black font-black";
+            } else {
+                b.className = "py-2 rounded-xl text-stone-400 hover:text-white";
+                v.classList.add('hidden');
             }
+        }
+    });
+}
+
+async function buyFunkoItem(itemId, itemName, price) {
+    if (!confirm(`¿Confirmas comprar «${itemName}» por ${price} 🪙 para tu estantería?`)) return;
+    const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+    const formData = new FormData();
+    formData.append('tg_id', tgId);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    try {
+        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+        const resp = await fetch(`/economy/bazar/collectible/buy/${itemId}/`, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
+        const data = await resp.json();
+        const toast = document.getElementById('bazar-toast-box');
+
+        if (data.success) {
+            window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+            document.getElementById('bazar-user-balance').innerText = data.nuevo_saldo;
+            toast.innerHTML = `
+                <div class="p-3 bg-emerald-950/90 border border-emerald-500 rounded-2xl text-emerald-200 text-xs font-bold text-center shadow-lg">
+                    ${data.message}
+                </div>`;
+            setTimeout(() => { location.reload(); }, 1800);
+        } else {
+            window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
+            toast.innerHTML = `
+                <div class="p-3 bg-rose-950/90 border border-rose-500 rounded-2xl text-rose-200 text-xs font-bold text-center shadow-lg">
+                    ${data.error}
+                </div>`;
+            setTimeout(() => { toast.innerHTML = ''; }, 3500);
+        }
+    } catch(e) {
+        alert("Error de conexión al comprar el artículo.");
     }
+}
 
     async function executeBuy(formData) {
         const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';

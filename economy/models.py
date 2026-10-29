@@ -159,3 +159,57 @@ class CourtJob(models.Model):
         if self.is_finished():
             return 0
         return max(0, int((self.finishes_at - timezone.now()).total_seconds()))
+
+
+# ==========================================
+# ARTÍCULOS COLECCIONABLES CON FOTO (FUNKOS & MERCH)
+# ==========================================
+
+class BazarItem(models.Model):
+    CATEGORY_CHOICES = [
+        ('funko', '🎎 Funko Pop / Figura de Idol'),
+        ('reliquia', '💎 Reliquia / Joya Exclusiva'),
+        ('merch', '🎀 Merchandising VIP de la Corte'),
+        ('especial', '✨ Coleccionable Especial'),
+    ]
+
+    name = models.CharField("Nombre del Artículo", max_length=120)
+    category = models.CharField("Categoría", max_length=20, choices=CATEGORY_CHOICES, default='funko')
+    description = models.TextField("Descripción / Detalle", max_length=300, blank=True, null=True)
+    price = models.PositiveIntegerField("Precio en Oro (🪙)", default=150)
+    image = models.ImageField("Fotografía del Artículo", upload_to='bazar_products/')
+    
+    # Stock: -1 significa ilimitado; un número positivo define unidades limitadas
+    stock = models.IntegerField("Unidades Disponibles (-1 = Ilimitado)", default=-1)
+    
+    idol_name = models.CharField("Idol Vinculada (Opcional)", max_length=100, blank=True, null=True)
+    is_active = models.BooleanField("¿Disponible en Tienda?", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Artículo de Tienda"
+        verbose_name_plural = "Artículos de Tienda"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.price} 🪙)"
+
+    @property
+    def is_in_stock(self):
+        return self.stock == -1 or self.stock > 0
+
+
+class UserCollectible(models.Model):
+    telegram_user_id = models.BigIntegerField("ID del Propietario", db_index=True)
+    item = models.ForeignKey(BazarItem, on_delete=models.CASCADE, related_name='owners')
+    quantity = models.PositiveIntegerField("Cantidad Poseída", default=1)
+    purchased_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Coleccionable de Usuario"
+        verbose_name_plural = "Coleccionables de Usuarios"
+        unique_together = ('telegram_user_id', 'item')
+        ordering = ['-purchased_at']
+
+    def __str__(self):
+        return f"{self.telegram_user_id} posee {self.item.name} (x{self.quantity})"
