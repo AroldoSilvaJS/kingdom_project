@@ -2,7 +2,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+<div class="flex flex-col gap-4 mt-2 pb-40 max-w-md mx-auto">
     
     <!-- ENCABEZADO Y BALANCE DEL REINO -->
     <div class="flex justify-between items-center px-1">
@@ -18,7 +18,7 @@
         </div>
     </div>
 
-    <!-- NOTIFICACIONES Y TOASTS EN VIVO (Flotante fijo en pantalla) -->
+    <!-- NOTIFICACIONES Y TOASTS EN VIVO -->
     <div id="pet-toast-box" class="fixed top-4 inset-x-4 z-[9999] max-w-md mx-auto pointer-events-none"></div>
 
     {% if pet %}
@@ -31,10 +31,10 @@
         <!-- Barra Superior de la Ficha: Especie y Escudo de Nivel -->
         <div class="w-full flex items-center justify-between relative z-10 mb-1">
             <div class="flex flex-col text-left">
-                <span class="text-[9px] font-mono uppercase tracking-widest text-vip-gold font-bold">
+                <span id="pet-header-title" class="text-[9px] font-mono uppercase tracking-widest text-vip-gold font-bold">
                     {{ pet.stage_info.title }}
                 </span>
-                <span class="text-[11px] text-stone-300 font-bold truncate">
+                <span id="pet-header-name" class="text-[11px] text-stone-300 font-bold truncate">
                     {{ pet.stage_info.name }}
                 </span>
             </div>
@@ -46,33 +46,38 @@
             </div>
         </div>
 
-        <!-- Medallón Imperial & Avatar Táctil (Recorte Circular Hermético) -->
+        <!-- Medallón Imperial & Avatar Táctil (Sin recortes, cuerpo entero) -->
         <div onclick="triggerPetTouch(event)" 
-             class="relative my-3 flex items-center justify-center cursor-pointer select-none active:scale-95 transition-transform group"
+             class="relative my-4 flex flex-col items-center justify-center cursor-pointer select-none active:scale-95 transition-transform group"
              title="Toca para acariciar a tu criatura">
             
             <!-- Aura brillante de fondo -->
-            <div class="absolute w-40 h-40 bg-purple-600/30 rounded-full blur-2xl pointer-events-none group-hover:bg-purple-500/40 transition-colors"></div>
+            <div class="absolute w-48 h-48 bg-purple-600/30 rounded-full blur-3xl pointer-events-none group-hover:bg-purple-500/40 transition-colors"></div>
 
-            <!-- Marco Circular de Oro Pulido con Recorte Total -->
-            <div class="relative z-10 w-36 h-36 sm:w-40 sm:h-40 rounded-full p-[3px] bg-gradient-to-b from-yellow-300 via-vip-gold to-amber-700 shadow-[0_0_25px_rgba(212,175,55,0.45)] flex items-center justify-center">
-                <div class="w-full h-full rounded-full overflow-hidden bg-black flex items-center justify-center relative">
+            <!-- Marco Circular de Oro Pulido con Fondo de Pedestal -->
+            <div class="relative z-10 w-44 h-44 sm:w-48 sm:h-48 rounded-full p-[3px] bg-gradient-to-b from-yellow-300 via-vip-gold to-amber-700 shadow-[0_0_35px_rgba(212,175,55,0.45)] flex items-center justify-center">
+                <div class="w-full h-full rounded-full bg-gradient-to-b from-[#140624] via-black to-[#0a0214] flex items-center justify-center relative p-2.5 overflow-hidden">
+                    
+                    <!-- Resplandor interior -->
+                    <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(168,85,247,0.25)_0%,transparent_70%)] pointer-events-none"></div>
+
+                    <!-- IMAGEN COMPLETA DE CUERPO ENTERO (object-contain sin cortar patas ni cabeza) -->
                     <img src="{{ pet.get_image_url }}" 
                          alt="{{ pet.evolved_name }}" 
                          id="pet-avatar-img"
-                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                         class="w-full h-full object-contain filter drop-shadow-[0_8px_16px_rgba(0,0,0,0.9)] group-hover:scale-105 transition-transform duration-500 relative z-10">
                 </div>
             </div>
 
-            <!-- Insignia de Fase flotante inferior -->
+            <!-- Insignia de Fase reposicionada limpiamente sin tapar las patas -->
             <span id="pet-stage-badge" 
-                  class="absolute -bottom-2 z-20 bg-gradient-to-r from-vip-gold via-yellow-300 to-amber-500 text-black text-[9.5px] font-black uppercase px-3 py-0.5 rounded-full shadow-[0_0_12px_rgba(212,175,55,0.8)] font-mono tracking-tight">
+                  class="relative -mt-3.5 z-20 bg-gradient-to-r from-vip-gold via-yellow-300 to-amber-500 text-black text-[9.5px] font-black uppercase px-4 py-1 rounded-full shadow-[0_4px_15px_rgba(212,175,55,0.7)] font-mono tracking-tight border border-black/40">
                 Fase {{ pet.evolution_stage_number }}/3: {{ pet.evolved_name }}
             </span>
         </div>
 
         <!-- Título e Identidad -->
-        <div class="relative z-10 mt-2">
+        <div class="relative z-10 mt-1">
             <h3 class="font-serif text-xl font-black text-white leading-tight">
                 <span id="pet-custom-name">{{ pet.name }}</span>
             </h3>
@@ -89,7 +94,7 @@
             </p>
         </div>
 
-        <!-- Línea Temporal de Evolución (Progreso visual a Nivel 10 y 25) -->
+        <!-- Línea Temporal de Evolución -->
         <div class="w-full mt-2.5 px-2 py-1.5 bg-black/40 rounded-xl border border-white/5 flex items-center justify-between text-[9px] font-mono text-stone-400 relative z-10">
             <div class="flex items-center gap-1 {% if pet.evolution_stage_number >= 1 %}text-yellow-400 font-bold{% endif %}">
                 <span>●</span> <span>Fase 1 (Nv 1)</span>
@@ -104,7 +109,7 @@
             </div>
         </div>
 
-        <!-- 📊 PANEL TELEMÉTRICO DE ESTADO (3 MÉTRICAS ORGANIZADAS) -->
+        <!-- 📊 PANEL DE ESTADO -->
         <div class="w-full flex flex-col gap-2.5 my-3.5 bg-black/60 p-3.5 rounded-2xl border border-vip-gold/25 relative z-10 shadow-inner">
             
             <!-- 1. Vitalidad / Energía -->
@@ -151,7 +156,7 @@
 
         </div>
 
-        <!-- ⚡ DOCK DE ACCIÓN INMEDIATA (BOTONES PRINCIPALES) -->
+        <!-- ⚡ DOCK DE ACCIÓN INMEDIATA -->
         <div class="grid grid-cols-2 gap-2.5 w-full relative z-10">
             <button type="button" onclick="ajaxInteractPet('feed')" id="btn-feed-pet"
                     class="btn-gold py-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all">
@@ -166,7 +171,7 @@
 
     </div>
 
-    <!-- 🧭 SUB-NAV PRO DEL SANTUARIO -->
+    <!-- 🧭 SUB-NAV DEL SANTUARIO -->
     <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/60 border border-vip-gold/30 rounded-2xl text-xs font-bold uppercase text-center shadow-lg">
         <button type="button" onclick="switchSanctuaryTab('expeditions')" id="tab-btn-expeditions" 
                 class="py-2.5 rounded-xl bg-vip-gold text-black font-black flex items-center justify-center gap-1.5 shadow">
@@ -286,7 +291,6 @@
                 </span>
             </div>
             
-            <!-- ⚠️ AVISO VISUAL CLARO DE PÉRDIDA DE NIVEL -->
             <div class="p-3 mb-3 rounded-2xl bg-rose-950/70 border border-rose-500/60 text-rose-200 text-xs flex items-start gap-2.5 shadow">
                 <span class="text-base flex-shrink-0">⚠️</span>
                 <div class="leading-relaxed text-[11px]">
@@ -395,7 +399,7 @@
 
 </div>
 
-<!-- 🌟 MODAL CINEMATOGRÁFICO DE EVOLUCIÓN APEX -->
+<!-- 🌟 MODAL CINEMATOGRÁFICO DE EVOLUCIÓN APEX (Sin recortes) -->
 <div id="evolution-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 select-none">
     <div class="w-full max-w-sm bg-gradient-to-b from-[#2a0e4a] via-[#10041f] to-black border-2 border-yellow-400 rounded-3xl p-6 shadow-[0_0_60px_rgba(234,179,8,0.5)] flex flex-col items-center text-center relative overflow-hidden">
         
@@ -410,10 +414,12 @@
         </h3>
         <p id="evo-modal-title" class="text-xs text-purple-200 mb-4">Título de la Forma</p>
 
-        <!-- Avatar con Haz de Luz -->
-        <div class="relative w-44 h-44 my-2 flex items-center justify-center animate-bounce">
+        <!-- Avatar con Haz de Luz sin recortar -->
+        <div class="relative w-48 h-48 my-2 flex items-center justify-center">
             <div class="absolute inset-0 bg-yellow-400/30 rounded-full blur-2xl animate-pulse"></div>
-            <img id="evo-modal-img" src="" class="w-40 h-40 rounded-full object-cover border-4 border-yellow-400 shadow-[0_0_35px_rgba(234,179,8,0.8)] relative z-10">
+            <div class="w-44 h-44 rounded-full bg-gradient-to-b from-[#1c0830] to-black border-4 border-yellow-400 p-2.5 shadow-[0_0_35px_rgba(234,179,8,0.8)] relative z-10 flex items-center justify-center">
+                <img id="evo-modal-img" src="" class="w-full h-full object-contain filter drop-shadow-[0_8px_20px_rgba(0,0,0,0.9)]">
+            </div>
         </div>
 
         <div class="p-3 bg-black/70 rounded-2xl border border-yellow-500/40 w-full mt-3">
@@ -428,7 +434,7 @@
     </div>
 </div>
 
-<!-- 📦 MODAL DEL COFRE DEL TESORO (EXPEDICIONES CON FOTOCARTAS) -->
+<!-- 📦 MODAL DEL COFRE DEL TESORO (EXPEDICIONES) -->
 <div id="expedition-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-4 select-none">
     <div class="w-full max-w-sm bg-gradient-to-b from-[#1c0c2e] via-[#0d0417] to-black border-2 border-vip-gold/60 rounded-3xl p-6 shadow-[0_0_50px_rgba(0,0,0,0.95)] flex flex-col items-center text-center relative overflow-hidden">
         
@@ -659,6 +665,12 @@
         document.getElementById('pet-evolved-name').innerText = `${data.new_name}`;
         document.getElementById('pet-buff-text').innerText = data.new_buff;
         document.getElementById('pet-stage-badge').innerText = `Fase ${data.new_stage}/3: ${data.new_name}`;
+
+        // Sincronizar también los títulos superiores
+        const headTitle = document.getElementById('pet-header-title');
+        const headName = document.getElementById('pet-header-name');
+        if (headTitle && data.new_title) headTitle.innerText = data.new_title;
+        if (headName && data.new_name) headName.innerText = data.new_name;
 
         document.getElementById('evolution-modal').classList.remove('hidden');
     }
