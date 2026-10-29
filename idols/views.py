@@ -1482,7 +1482,7 @@ def photocard_buy_action(request, user_card_id):
 
 
 # ==========================================
-# EL CALDERO REAL: FUSIÓN DE PHOTOCARDS (BLINDADO)
+# EL CALDERO REAL: FUSIÓN INTELIGENTE (ANTI-REPETIDAS & LEGENDARIAS)
 # ==========================================
 
 def photocard_fusion(request):
@@ -1494,10 +1494,12 @@ def photocard_fusion(request):
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
 
+    # 👑 Recetas actualizadas: Ahora incluye Legendarias (2 repetidas -> 1 nueva)
     RECIPES = {
-        'common': {'required_count': 4, 'cost': 35, 'source_rarity': 'common', 'target_rarity': 'rare', 'luck_target': 'epic', 'luck_chance': 0.12},
-        'rare':   {'required_count': 3, 'cost': 75, 'source_rarity': 'rare',   'target_rarity': 'epic', 'luck_target': 'legendary', 'luck_chance': 0.15},
-        'epic':   {'required_count': 3, 'cost': 150, 'source_rarity': 'epic',  'target_rarity': 'epic', 'luck_target': 'legendary', 'luck_chance': 0.25},
+        'common':    {'required_count': 4, 'cost': 35,  'source_rarity': 'common',    'target_rarity': 'rare',      'luck_target': 'epic',      'luck_chance': 0.12},
+        'rare':      {'required_count': 3, 'cost': 75,  'source_rarity': 'rare',      'target_rarity': 'epic',      'luck_target': 'legendary', 'luck_chance': 0.15},
+        'epic':      {'required_count': 3, 'cost': 150, 'source_rarity': 'epic',      'target_rarity': 'epic',      'luck_target': 'legendary', 'luck_chance': 0.25},
+        'legendary': {'required_count': 2, 'cost': 200, 'source_rarity': 'legendary', 'target_rarity': 'legendary', 'luck_target': 'legendary', 'luck_chance': 0.0},
     }
 
     if request.method == 'POST':
@@ -1512,13 +1514,12 @@ def photocard_fusion(request):
             messages.error(request, err)
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-        # 🛡️ VALIDACIÓN 1: Verificar existencia de cartas objetivo ANTES de tocar oro o cartas
         target_rarity = recipe['target_rarity']
         target_pool_exists = Photocard.objects.filter(rarity=target_rarity).exists()
         luck_pool_exists = Photocard.objects.filter(rarity=recipe['luck_target']).exists()
 
         if not target_pool_exists and not luck_pool_exists:
-            err = f"⚠️ La Corona aún no ha forjado Photocards de rareza {target_rarity.upper()} en el Reino. Tus cartas y oro están a salvo."
+            err = f"⚠️ La Corona aún no ha forjado Photocards de rareza {target_rarity.upper()}."
             if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
             messages.error(request, err)
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
@@ -1554,7 +1555,7 @@ def photocard_fusion(request):
                 messages.error(request, err)
                 return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-            # 🛡️ BLINDAJE DE COLECCIÓN: Comprobar que siempre quede al menos 1 copia en el Álbum
+            # 🛡️ Protección de Álbum: nunca quemar la única copia
             sacrificed_counts = Counter(c.photocard_id for c in selected_cards)
             for pid, count in sacrificed_counts.items():
                 total_owned = UserPhotocard.objects.filter(
@@ -1567,7 +1568,7 @@ def photocard_fusion(request):
                     messages.error(request, err)
                     return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-            # Probabilidad con buff de Conejo Lunar
+            # Probabilidad de salto afortunado
             luck_prob = recipe['luck_chance']
             if pet and pet.species == 'rabbit':
                 rabbit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
@@ -1582,24 +1583,40 @@ def photocard_fusion(request):
             elif target_pool_exists:
                 awarded_rarity = recipe['target_rarity']
             else:
-                # Si no hay suerte y no hay target, salvaguardar con la misma rareza origen (¡NUNCA INFERIOR!)
                 awarded_rarity = recipe['source_rarity']
 
             pool = list(Photocard.objects.filter(rarity=awarded_rarity))
             if not pool:
-                # Salvaguarda estricta: buscar la rareza origen
                 pool = list(Photocard.objects.filter(rarity=recipe['source_rarity']))
                 if not pool:
                     pool = list(Photocard.objects.all())
 
-            # Descontar costo y destruir cartas consumidas
+            # Descontar oro y destruir cartas sacrificadas
             wallet.remove_funds(recipe['cost'])
             consumed_ids = [c.id for c in selected_cards]
             PhotocardTrade.objects.filter(sender_card_id__in=consumed_ids, status='pending').update(status='cancelled')
             PhotocardTrade.objects.filter(receiver_card_id__in=consumed_ids, status='pending').update(status='cancelled')
             UserPhotocard.objects.filter(id__in=consumed_ids).delete()
 
-            new_card = random.choice(pool)
+            # 🌟 SISTEMA INTELIGENTE ANTI-REPETIDAS (GARANTIZAR CARTA NUEVA)
+            # Cartas que el usuario ya tiene actualmente en su álbum (excluyendo las que acaba de quemar)
+            currently_owned_card_ids = set(
+                UserPhotocard.objects.filter(telegram_user_id=tg_id)
+                .values_list('photocard_id', flat=True)
+            )
+
+            # Buscar en la pool aquellas cartas que el usuario AÚN NO TIENE
+            unowned_in_pool = [c for c in pool if c.id not in currently_owned_card_ids]
+
+            if unowned_in_pool:
+                # 🎯 ¡Prioridad absoluta a darle una carta que le falte!
+                new_card = random.choice(unowned_in_pool)
+                is_new_discovery = True
+            else:
+                # Si el usuario ya posee todas las cartas existentes de esa rareza, elige al azar
+                new_card = random.choice(pool)
+                is_new_discovery = False
+
             new_user_card = UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=new_card)
 
             xp_map = {'rare': 15, 'epic': 30, 'legendary': 60}
@@ -1609,6 +1626,7 @@ def photocard_fusion(request):
                 return JsonResponse({
                     'success': True,
                     'is_lucky': is_lucky_jump,
+                    'is_new': is_new_discovery,
                     'nuevo_saldo': wallet.balance,
                     'card': {
                         'id': new_user_card.id,
@@ -1625,28 +1643,26 @@ def photocard_fusion(request):
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
     # ==========================================
-    # GET: LISTADO EXCLUSIVO DE REPETIDAS
+    # GET: LISTADO DE REPETIDAS (INCLUYENDO LEGENDARIAS)
     # ==========================================
-    # Obtenemos todas las cartas libres del usuario ordenadas por ID de carta
     all_user_cards = UserPhotocard.objects.filter(
         telegram_user_id=tg_id,
         is_for_sale=False
-    ).exclude(photocard__rarity='legendary').select_related('photocard').order_by('photocard_id', 'id')
+    ).select_related('photocard').order_by('photocard_id', 'id')
 
     seen_photocard_ids = set()
     duplicate_cards = []
 
     for uc in all_user_cards:
         if uc.photocard_id not in seen_photocard_ids:
-            # Primera copia: Se guarda sagradamente para el Álbum
             seen_photocard_ids.add(uc.photocard_id)
         else:
-            # 2ª, 3ª, 4ª copia: ¡Es repetida! Se puede fundir
             duplicate_cards.append(uc)
 
-    commons = [c for c in duplicate_cards if c.photocard.rarity == 'common']
-    rares   = [c for c in duplicate_cards if c.photocard.rarity == 'rare']
-    epics   = [c for c in duplicate_cards if c.photocard.rarity == 'epic']
+    commons     = [c for c in duplicate_cards if c.photocard.rarity == 'common']
+    rares       = [c for c in duplicate_cards if c.photocard.rarity == 'rare']
+    epics       = [c for c in duplicate_cards if c.photocard.rarity == 'epic']
+    legendaries = [c for c in duplicate_cards if c.photocard.rarity == 'legendary']
 
     return render(request, 'idols/photocard_fusion.html', {
         'tg_id': tg_id,
@@ -1656,6 +1672,7 @@ def photocard_fusion(request):
         'commons': commons,
         'rares': rares,
         'epics': epics,
+        'legendaries': legendaries,
     })
 
 
