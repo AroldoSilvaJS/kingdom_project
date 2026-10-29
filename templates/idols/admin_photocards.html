@@ -1,30 +1,32 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+<div class="flex flex-col gap-4 mt-2 pb-40 max-w-md mx-auto">
     
     <!-- ENCABEZADO Y VOLVER -->
     <div class="flex justify-between items-center px-1 border-b border-vip-gold/30 pb-3">
         <div>
-            <h2 class="text-lg font-bold font-serif text-yellow-400 tracking-wide">⚙️ Studio de Photocards</h2>
-            <p class="text-xs text-vip-text/60">Panel de creadores y administración de cartas</p>
+            <h2 class="text-lg font-bold font-serif text-yellow-400 tracking-wide flex items-center gap-1.5">
+                <span>⚙️</span> Studio de Photocards
+            </h2>
+            <p class="text-xs text-vip-text/60">Panel de creadores y gestión de relicarios</p>
         </div>
         <button type="button" onclick="universalNav('{% url 'idols:photocard_boxes' %}')" 
-           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3 py-1.5 rounded-full border border-vip-gold/30">
+           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/60 px-3.5 py-1.5 rounded-full border border-vip-gold/30 active:scale-95 transition-all">
             ⬅ Cajas
         </button>
     </div>
 
     <!-- PESTAÑAS DEL PANEL -->
-    <div class="grid grid-cols-4 gap-1 p-1 bg-black/70 border border-vip-gold/25 rounded-2xl text-[9.5px] font-bold uppercase text-center shadow-inner">
-        <button type="button" onclick="switchTab('subir')" id="tab-btn-subir" class="py-2 rounded-xl bg-vip-gold text-black font-black">Subir Carta</button>
-        <button type="button" onclick="switchTab('cajas')" id="tab-btn-cajas" class="py-2 rounded-xl text-stone-400 hover:text-white">Cajas ({{ boxes.count }})</button>
-        <button type="button" onclick="switchTab('proxima')" id="tab-btn-proxima" class="py-2 rounded-xl text-stone-400 hover:text-purple-300">📢 Próxima</button>
-        <button type="button" onclick="switchTab('cartas')" id="tab-btn-cartas" class="py-2 rounded-xl text-stone-400 hover:text-white">Cartas ({{ all_cards.count }})</button>
+    <div class="grid grid-cols-4 gap-1 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl text-[9.5px] font-bold uppercase text-center shadow-inner">
+        <button type="button" onclick="switchTab('subir')" id="tab-btn-subir" class="py-2.5 rounded-xl bg-vip-gold text-black font-black shadow transition-all">Subir</button>
+        <button type="button" onclick="switchTab('cajas')" id="tab-btn-cajas" class="py-2.5 rounded-xl text-stone-400 hover:text-white transition-all">Cajas ({{ boxes.count }})</button>
+        <button type="button" onclick="switchTab('proxima')" id="tab-btn-proxima" class="py-2.5 rounded-xl text-purple-300 hover:text-white transition-all">📢 Próxima</button>
+        <button type="button" onclick="switchTab('cartas')" id="tab-btn-cartas" class="py-2.5 rounded-xl text-stone-400 hover:text-white transition-all">Cartas ({{ all_cards.count }})</button>
     </div>
 
-    <!-- SECCIÓN 1: SUBIR NUEVA PHOTOCARD DE CANVA -->
-    <div id="tab-subir" class="vip-panel p-5 border border-purple-500/50 rounded-3xl shadow-xl flex flex-col gap-3 bg-gradient-to-br from-[#180828] to-black">
+    <!-- SECCIÓN 1: SUBIR NUEVA PHOTOCARD DE CANVA (CON PREVIEW MOCKUP) -->
+    <div id="tab-subir" class="vip-panel p-5 border border-purple-500/50 rounded-3xl shadow-xl flex flex-col gap-3.5 bg-gradient-to-br from-[#180828] to-black">
         <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-500/20 pb-2">
             <span>🎴</span> Subir Diseño de Canva
         </h3>
@@ -47,7 +49,7 @@
 
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Idol de K-Pop / Artista *</label>
-                <input type="text" name="idol_name" list="kpop-suggestions" required placeholder="Ej: Jennie, Karina, Wonyoung, Sana..."
+                <input type="text" name="idol_name" id="input_idol_name" list="kpop-suggestions" required placeholder="Ej: Jennie, Karina, Wonyoung, Sana..."
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
                 <datalist id="kpop-suggestions">
                     <option value="Jennie (BLACKPINK)">
@@ -70,13 +72,13 @@
 
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Carta *</label>
-                <input type="text" name="name" required placeholder="Ej: Traje de Gala, Special Holo..."
+                <input type="text" name="name" id="input_card_name" required placeholder="Ej: Traje de Gala, Special Holo..."
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
             </div>
 
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Rareza *</label>
-                <select name="rarity" required class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+                <select name="rarity" id="select_rarity" required class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
                     <option value="common">⚪ Común (Gris - ~60% probabilidad)</option>
                     <option value="rare">🔵 Rara (Azul - ~25% probabilidad)</option>
                     <option value="epic">🟣 Épica (Púrpura - ~12% probabilidad)</option>
@@ -84,14 +86,14 @@
                 </select>
             </div>
 
-            <div class="bg-black/40 p-3 rounded-2xl border border-vip-gold/20 flex flex-col gap-1">
+            <div class="bg-black/50 p-3 rounded-2xl border border-vip-gold/25 flex flex-col gap-1">
                 <label class="block text-[11px] text-yellow-400 uppercase font-bold">Archivo de Canva (Imagen) *</label>
                 <input type="file" name="image" accept="image/*" required
                        class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
             </div>
 
-            <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
-                Subir Photocard
+            <button type="submit" class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all mt-1">
+                Subir Photocard al Sistema
             </button>
         </form>
     </div>
@@ -173,7 +175,7 @@
         </div>
     </div>
 
-    <!-- 📢 SECCIÓN 3: CONFIGURAR ANUNCIO DE PRÓXIMA CAJA (NUEVA) -->
+    <!-- SECCIÓN 3: CONFIGURAR ANUNCIO DE PRÓXIMA CAJA -->
     <div id="tab-proxima" class="hidden vip-panel p-5 border border-purple-500/60 rounded-3xl shadow-xl flex flex-col gap-3 bg-gradient-to-br from-[#1d0b30] to-black">
         <div class="flex items-center justify-between border-b border-purple-500/30 pb-2">
             <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -191,7 +193,6 @@
             <input type="hidden" name="action" value="save_upcoming_box">
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
-            <!-- Switch Activo / Desactivado -->
             <div class="p-3 bg-black/60 rounded-2xl border border-white/10 flex items-center justify-between">
                 <div>
                     <span class="text-xs font-bold text-white block">¿Mostrar Anuncio en la Tienda?</span>
@@ -274,7 +275,7 @@
 
 <!-- MODAL FLOTANTE PARA EDITAR PHOTOCARD -->
 <div id="edit-card-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="vip-panel p-5 max-w-sm w-full border border-yellow-400/60 rounded-3xl relative">
+    <div class="vip-panel modal-spring-in p-5 max-w-sm w-full border border-yellow-400/60 rounded-3xl relative">
         <button onclick="closeEditCardModal()" class="absolute top-3 right-3 text-stone-400 hover:text-white text-xl">&times;</button>
         <h4 class="font-serif text-sm font-black text-yellow-400 uppercase tracking-wider mb-2">Editar Photocard</h4>
 
@@ -330,10 +331,10 @@
             if (p && b) {
                 if (t === tab) {
                     p.classList.remove('hidden');
-                    b.className = "py-2 rounded-xl bg-vip-gold text-black font-black";
+                    b.className = "py-2.5 rounded-xl bg-vip-gold text-black font-black shadow transition-all";
                 } else {
                     p.classList.add('hidden');
-                    b.className = "py-2 rounded-xl text-stone-400 hover:text-white";
+                    b.className = "py-2.5 rounded-xl text-stone-400 hover:text-white transition-all";
                 }
             }
         });
