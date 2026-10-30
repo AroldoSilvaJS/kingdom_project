@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.db.models import F, Sum, Count
 from django.utils import timezone
 from datetime import timedelta
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 
@@ -178,7 +178,6 @@ def my_profile(request):
         profile.title = request.POST.get('title', profile.title)
         profile.bio = request.POST.get('bio', '').strip()
         
-        # 🌟 BLINDAJE REAL DEL MARCO CARMESÍ DEL BAZAR
         desired_frame = request.POST.get('avatar_frame', profile.avatar_frame)
         if desired_frame == 'flame' and not profile.has_custom_avatar_frame:
             messages.error(request, "⚠️ El Marco Llama Carmesí está reservado para quienes lo adquieran en el Bazar.")
@@ -313,7 +312,9 @@ def leaderboard(request):
 def admin_panel(request, admin_tg_id):
     if request.method == "POST":
         accion = request.POST.get('accion')
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
 
+        # 1. AJUSTAR ORO (SOPORTE TOTAL AJAX Y MONTO LIBRE)
         if accion == 'adjust_gold':
             target_id = int(request.POST.get('target_id'))
             mode = request.POST.get('mode', 'add')
@@ -332,6 +333,10 @@ def admin_panel(request, admin_tg_id):
                 msg = f"Saldo fijado en {amount} 🪙 para {target_id}"
             
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='gold_adjust', target_tg_id=target_id, details=msg)
+
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'target_id': target_id, 'new_balance': wallet.balance})
+
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -353,6 +358,10 @@ def admin_panel(request, admin_tg_id):
 
             msg = f"🔄 Progreso de {target_id} restablecido a {wallet.balance} 🪙 y Nivel {prof.level} (0 EXP)."
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='reset_user_progress', target_tg_id=target_id, details=msg)
+
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'target_id': target_id, 'new_balance': wallet.balance, 'new_level': prof.level})
+
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -361,6 +370,10 @@ def admin_panel(request, admin_tg_id):
             new_role = request.POST.get('new_role')
             UserRole.objects.filter(telegram_id=target_id).update(role=new_role)
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='game_role_change', target_tg_id=target_id, details=f"Rol de juego cambiado a {new_role}")
+            
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': f"Rol cambiado a {new_role.upper()}"})
+
             messages.success(request, f"🎭 Rol de juego de {target_id} actualizado a {new_role.upper()}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -369,18 +382,11 @@ def admin_panel(request, admin_tg_id):
             new_staff = request.POST.get('new_staff')
             UserRole.objects.filter(telegram_id=target_id).update(staff_role=new_staff)
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='staff_role_change', target_tg_id=target_id, details=f"Cargo de staff: {new_staff}")
-            messages.success(request, f"🛡️ Cargo de Staff de {target_id} actualizado a {new_staff.upper()}.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+            
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': f"Cargo cambiado a {new_staff.upper()}"})
 
-        elif accion == 'change_role':
-            target_id = int(request.POST.get('target_id'))
-            new_val = request.POST.get('new_role')
-            if new_val in ['admin', 'moderador', 'none']:
-                UserRole.objects.filter(telegram_id=target_id).update(staff_role=new_val)
-            else:
-                UserRole.objects.filter(telegram_id=target_id).update(role=new_val)
-            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='role_change', target_tg_id=target_id, details=f"Rol/Staff cambiado a {new_val}")
-            messages.success(request, f"👑 Asignación de {target_id} actualizada a {new_val.upper()}.")
+            messages.success(request, f"🛡️ Cargo de Staff de {target_id} actualizado a {new_staff.upper()}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
         elif accion == 'toggle_ban':
@@ -392,6 +398,10 @@ def admin_panel(request, admin_tg_id):
             
             estado_txt = "BANEADO (Mazmorra)" if user.is_banned else "LIBERADO"
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='ban_toggle', target_tg_id=target_id, details=estado_txt)
+
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': f"Usuario {estado_txt}", 'is_banned': user.is_banned})
+
             messages.warning(request, f"⚖️ Usuario {target_id}: {estado_txt}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -404,6 +414,10 @@ def admin_panel(request, admin_tg_id):
             prof.save()
             msg = f"🛡️ Salvoconducto concedido a {target_id} por +{days} días."
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='grant_shield', target_tg_id=target_id, details=msg)
+
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'days': prof.days_of_shield_remaining})
+
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
