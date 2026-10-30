@@ -21,7 +21,6 @@ from core.telegram_auth import is_user_in_group
 from core.telegram_notify import send_telegram_msg
 import threading
 
-
 ADMIN_TG_ID = '7474444797'
 
 
@@ -64,7 +63,6 @@ def admin_required(view_func):
 @csrf_exempt
 def main_menu(request):
     tg_id = resolve_secure_tg_id(request)
-
     interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/')
 
     if str(tg_id) != ADMIN_TG_ID and not is_user_in_group(tg_id):
@@ -108,7 +106,6 @@ def main_menu(request):
 
 def choose_role(request):
     tg_id = resolve_secure_tg_id(request)
-
     interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/')
 
     if str(tg_id) != ADMIN_TG_ID and not is_user_in_group(tg_id):
@@ -180,7 +177,14 @@ def my_profile(request):
         profile.username = request.POST.get('username', profile.username).strip()
         profile.title = request.POST.get('title', profile.title)
         profile.bio = request.POST.get('bio', '').strip()
-        profile.avatar_frame = request.POST.get('avatar_frame', profile.avatar_frame)
+        
+        # 🌟 BLINDAJE REAL DEL MARCO CARMESÍ DEL BAZAR
+        desired_frame = request.POST.get('avatar_frame', profile.avatar_frame)
+        if desired_frame == 'flame' and not profile.has_custom_avatar_frame:
+            messages.error(request, "⚠️ El Marco Llama Carmesí está reservado para quienes lo adquieran en el Bazar.")
+        else:
+            profile.avatar_frame = desired_frame
+
         profile.motto = request.POST.get('motto', profile.motto).strip()
         profile.profile_theme = request.POST.get('profile_theme', profile.profile_theme)
         profile.vip_badge = request.POST.get('vip_badge', profile.vip_badge)
@@ -205,7 +209,6 @@ def my_profile(request):
     pet_level = pet.level if pet else 0
     pet_has_expedition = pet and pet.last_expedition is not None
     
-    # --- ÁRBOL DE 12 LOGROS DINÁMICOS REBALANCEADOS ---
     if is_idol:
         achievements = [
             {'id': 'idol_born', 'name': 'Primera Huella', 'desc': 'Consagrar tu primer perfil de Idol en el Reino', 'icon': '🎭', 'unlocked': mis_idols.count() >= 1, 'progress': f"{mis_idols.count()}/1 Ficha"},
@@ -266,7 +269,6 @@ def leaderboard(request):
     user_ids = [w.telegram_user_id for w in top_wallets]
     profiles_dict = {p.telegram_user_id: p for p in UserProfile.objects.filter(telegram_user_id__in=user_ids)}
     
-    # También buscamos si alguna billetera pertenece a una dueña de Idol para rescatar su @username
     idols_dict = {}
     for i in IdolProfile.objects.filter(telegram_user_id__in=user_ids):
         if i.owner_username and not i.owner_username.startswith('Noble_'):
@@ -275,15 +277,12 @@ def leaderboard(request):
     magnates = []
     for w in top_wallets:
         prof = profiles_dict.get(w.telegram_user_id)
-        
-        # Rescatar el mejor nombre disponible
         display_name = None
         if prof and prof.username and not str(prof.username).lower().startswith('noble_'):
             display_name = prof.username
         elif w.telegram_user_id in idols_dict:
             display_name = idols_dict[w.telegram_user_id]
         
-        # Si aún no tiene alias, mostramos un identificador noble limpio
         if not display_name:
             display_name = f"Noble #{str(w.telegram_user_id)[-4:]}"
 
@@ -315,7 +314,6 @@ def admin_panel(request, admin_tg_id):
     if request.method == "POST":
         accion = request.POST.get('accion')
 
-        # 1. AJUSTAR ORO MANUALMENTE
         if accion == 'adjust_gold':
             target_id = int(request.POST.get('target_id'))
             mode = request.POST.get('mode', 'add')
@@ -337,7 +335,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 🌟 NUEVA ACCIÓN: RESETEAR DINERO Y EXPERIENCIA A UN USUARIO ESPECÍFICO
         elif accion == 'reset_user_progress':
             target_id = int(request.POST.get('target_id'))
             custom_gold = int(request.POST.get('custom_gold', 100))
@@ -359,7 +356,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 2. CAMBIO DE ROL DE JUEGO (IDOL vs CLIENTE)
         elif accion == 'change_game_role':
             target_id = int(request.POST.get('target_id'))
             new_role = request.POST.get('new_role')
@@ -368,7 +364,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, f"🎭 Rol de juego de {target_id} actualizado a {new_role.upper()}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 3. CAMBIO DE CARGO DE STAFF (ADMIN / MODERADOR / SIN STAFF)
         elif accion == 'change_staff_role':
             target_id = int(request.POST.get('target_id'))
             new_staff = request.POST.get('new_staff')
@@ -377,7 +372,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, f"🛡️ Cargo de Staff de {target_id} actualizado a {new_staff.upper()}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # COMPATIBILIDAD CON ACCIONES PREVIAS
         elif accion == 'change_role':
             target_id = int(request.POST.get('target_id'))
             new_val = request.POST.get('new_role')
@@ -389,7 +383,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, f"👑 Asignación de {target_id} actualizada a {new_val.upper()}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 4. MAZMORRA (BAN / DESBAN)
         elif accion == 'toggle_ban':
             target_id = int(request.POST.get('target_id'))
             user = get_object_or_404(UserRole, telegram_id=target_id)
@@ -402,7 +395,6 @@ def admin_panel(request, admin_tg_id):
             messages.warning(request, f"⚖️ Usuario {target_id}: {estado_txt}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 5. CONCEDER SALVOCONDUCTO MANUAL (INMUNIDAD)
         elif accion == 'grant_shield':
             target_id = int(request.POST.get('target_id'))
             days = int(request.POST.get('shield_days', 15))
@@ -415,7 +407,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 6. LLUVIA DE ORO MASIVA
         elif accion == 'mass_gold':
             amount = int(request.POST.get('amount', 0))
             if amount > 0:
@@ -426,7 +417,6 @@ def admin_panel(request, admin_tg_id):
                 messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 7. RESETEAR COOLDOWN DE RULETA
         elif accion == 'reset_bonus':
             target_id = int(request.POST.get('target_id'))
             Wallet.objects.filter(telegram_user_id=target_id).update(last_bonus_claim=None)
@@ -438,7 +428,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🎉 Cooldown de bono reseteado para todo el reino.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 8. ENVIAR MENSAJE AL GRUPO DE TELEGRAM
         elif accion == 'telegram_broadcast':
             text = request.POST.get('tg_message_text', '').strip()
             if text:
@@ -452,7 +441,6 @@ def admin_panel(request, admin_tg_id):
                 messages.success(request, "📢 Mensaje enviado exitosamente al grupo oficial de Telegram.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 9. MARQUESINA DE LA APP
         elif accion == 'broadcast_message':
             txt = request.POST.get('broadcast_text', '').strip()
             KingdomSetting.set_val('broadcast_message', txt)
@@ -460,7 +448,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "📢 Decreto público de la app actualizado.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 10. PURGA NUCLEAR DE DATOS
         elif accion == 'purge_test_data':
             UserInventoryItem.objects.all().delete()
             PhotocardTrade.objects.all().delete()
@@ -526,7 +513,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🧹 Purga total completada. Datos reseteados al 100%. Elige tu destino.")
             return redirect(f"/choose-role/?tg_id={admin_tg_id}&force=1")
 
-        # 11. TEMÁTICA SEMANAL DEL MURO (GUARDAR O DESACTIVAR)
         elif accion == 'save_feed_theme':
             title = request.POST.get('theme_title', '').strip()
             msg = request.POST.get('theme_message', '').strip()
@@ -547,7 +533,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🎭 ¡Temática semanal del Muro actualizada con éxito!")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-        # 👈 AÑADIR ESTA NUEVA ACCIÓN: DESACTIVAR Y BORRAR DE UN CLIC
         elif accion == 'delete_feed_theme':
             KingdomSetting.set_val('feed_theme_active', 'false')
             KingdomSetting.set_val('feed_theme_title', '')
@@ -556,7 +541,6 @@ def admin_panel(request, admin_tg_id):
             messages.success(request, "🗑️ Temática del Muro desactivada y eliminada con éxito.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
-    # 🔄 AUTO-SINCRONIZACIÓN GARANTIZADA:
     all_known_ids = set(UserProfile.objects.values_list('telegram_user_id', flat=True)).union(
         set(IdolProfile.objects.values_list('telegram_user_id', flat=True)),
         set(Wallet.objects.values_list('telegram_user_id', flat=True))
@@ -574,7 +558,6 @@ def admin_panel(request, admin_tg_id):
         UserProfile.objects.get_or_create(telegram_user_id=m_id, defaults={'username': f'Noble_{str(m_id)[-4:]}'})
         Wallet.objects.get_or_create(telegram_user_id=m_id, defaults={'balance': 100})
 
-    # Consultas optimizadas para el Dashboard
     usuarios_roles = list(UserRole.objects.all().order_by('-id'))
     user_ids = [u.telegram_id for u in usuarios_roles]
 

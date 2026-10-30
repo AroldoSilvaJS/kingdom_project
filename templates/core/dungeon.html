@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Mazmorra Imperial | Kingdom of Pleasure</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body {
+            background: radial-gradient(circle at 50% 20%, #1a0508 0%, #080204 60%, #000000 100%);
+            color: #EAE6F0;
+            min-height: 100vh;
+        }
+        .btn-gold {
+            background: linear-gradient(135deg, #ECC440 0%, #D4AF37 50%, #9A7B1C 100%);
+            color: #08040E;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body class="font-sans antialiased flex flex-col items-center justify-center min-h-screen p-4 select-none">
+
+    <div class="p-7 max-w-sm w-full text-center flex flex-col items-center rounded-3xl border-2 border-rose-600/70 bg-gradient-to-b from-[#220509] to-black shadow-[0_0_50px_rgba(244,63,94,0.35)] relative">
+        
+        <span class="text-6xl mb-2 filter drop-shadow-[0_0_20px_rgba(244,63,94,0.8)] animate-pulse">⛓️</span>
+        
+        <h1 class="font-serif text-xl font-black text-rose-400 uppercase tracking-widest mt-1">
+            Mazmorras del Reino
+        </h1>
+
+        <p class="text-xs text-stone-300 mt-2 leading-relaxed">
+            Has sido conducido a las celdas subterráneas por orden de la Corona Imperial.
+        </p>
+
+        <!-- Motivo de la Sanción -->
+        <div class="my-3.5 p-3 w-full bg-black/70 border border-rose-500/40 rounded-2xl text-[11px] text-rose-200 text-left">
+            <span class="block text-[9px] font-mono uppercase font-black text-rose-400 mb-0.5">Motivo del Calabozo:</span>
+            <i>«{{ user_role.ban_reason|default:"Sanción disciplinaria de la corte" }}»</i>
+        </div>
+
+        <div class="w-full bg-black/60 p-2.5 rounded-2xl border border-white/10 mb-4 flex justify-between items-center text-xs font-mono">
+            <span class="text-stone-400">Tu Oro en Bóveda:</span>
+            <span class="text-yellow-400 font-bold">{{ wallet.balance }} 🪙</span>
+        </div>
+
+        <!-- Botón para Pagar Fianza del Bazar (500 🪙) -->
+        {% if wallet.balance >= 500 %}
+            <button type="button" onclick="payBail()" id="btn-pay-bail"
+                    class="w-full btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
+                ⚖️ Pagar Fianza Real (500 🪙)
+            </button>
+            <span class="text-[9.5px] text-stone-400 mt-2 block">La fianza te liberará y restaurará tu acceso de inmediato.</span>
+        {% else %}
+            <div class="w-full bg-rose-950/40 border border-rose-700/50 p-3 rounded-2xl text-[11px] text-stone-400">
+                Fianza de liberación: <strong class="text-yellow-400">500 🪙</strong>.<br>
+                No posees suficiente oro. Debes solicitar un indulto a la administración.
+            </div>
+        {% endif %}
+
+        <span class="text-[9px] font-mono text-stone-600 mt-4 block">ID Prisionero: {{ tg_id }}</span>
+    </div>
+
+    <script>
+        async function payBail() {
+            if (!confirm("¿Pagar 500 🪙 de fianza para salir de la mazmorra y recuperar tu honor?")) return;
+            const btn = document.getElementById('btn-pay-bail');
+            btn.disabled = true;
+            btn.innerText = "Tramitando indulto...";
+
+            const formData = new FormData();
+            formData.append('tg_id', '{{ tg_id }}');
+            formData.append('item_key', 'dungeon_bail');
+
+            try {
+                const resp = await fetch("/economy/bazar/buy/", {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    alert(data.message);
+                    window.location.replace(`/?tg_id={{ tg_id }}`);
+                } else {
+                    alert(data.error);
+                    btn.disabled = false;
+                    btn.innerText = "⚖️ Pagar Fianza Real (500 🪙)";
+                }
+            } catch(e) {
+                alert("Error de conexión al procesar fianza.");
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

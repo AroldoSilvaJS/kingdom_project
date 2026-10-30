@@ -19,10 +19,8 @@
         </div>
     </div>
 
-    <!-- 🔍 BARRA DE BÚSQUEDA Y FILTRADO POR USUARIO CREADOR (EN VIVO SIN RECARGA) -->
+    <!-- 🔍 BÚSQUEDA Y FILTRADO POR CREADORA -->
     <div class="bg-black/70 border border-vip-gold/30 rounded-2xl p-2.5 flex flex-col gap-2 shadow-lg">
-        
-        <!-- Buscador en tiempo real por Musa o por @Creadora -->
         <div class="relative w-full">
             <span class="absolute inset-y-0 left-3 flex items-center text-xs opacity-50">🔍</span>
             <input type="text" id="gallerySearchInput" onkeyup="filterGalleryLive()" 
@@ -30,10 +28,7 @@
                    class="w-full bg-black/90 border border-white/10 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
         </div>
 
-        <!-- Selectores de Orden y Filtro por Creadora -->
         <div class="grid grid-cols-2 gap-2">
-            
-            <!-- Selector de Orden Instantáneo -->
             <select id="gallerySortSelect" onchange="applySortLive(this.value)"
                     class="bg-black border border-vip-gold/40 rounded-xl px-2.5 py-1.5 text-[10.5px] font-bold text-yellow-300 cursor-pointer focus:outline-none">
                 <option value="rating">⭐ Mejor Calificadas</option>
@@ -42,7 +37,6 @@
                 <option value="recent">✨ Recién Llegadas</option>
             </select>
 
-            <!-- Filtro Directo por Creadora Específica -->
             <select id="galleryOwnerFilter" onchange="filterGalleryLive()"
                     class="bg-black border border-purple-500/40 rounded-xl px-2.5 py-1.5 text-[10.5px] font-bold text-purple-200 cursor-pointer focus:outline-none truncate">
                 <option value="">👤 Todas las Creadoras</option>
@@ -50,11 +44,10 @@
                     <option value="{{ o|lower }}">{{ o }}</option>
                 {% endfor %}
             </select>
-
         </div>
     </div>
 
-    <!-- PESTAÑAS DE FILTRO RÁPIDO POR ESTADO -->
+    <!-- FILTRO RÁPIDO -->
     <div class="grid grid-cols-4 gap-1 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl text-[9.5px] font-bold uppercase text-center shadow-inner">
         <button type="button" onclick="setQuickFilter('all')" id="g-filter-all" 
                 class="py-2 rounded-xl bg-vip-gold text-black font-black shadow transition-all quick-filter-btn">
@@ -74,22 +67,22 @@
         </button>
     </div>
 
-    <!-- CUADRÍCULA DE RETRATOS DE ALTO IMPACTO (2 COLUMNAS) -->
+    <!-- RETRATOS DE LA GALERÍA -->
     <div class="grid grid-cols-2 gap-3.5" id="gallery-grid">
         {% for idol in all_idols %}
         <div onclick="universalNav('/idols/{{ idol.id }}/')" 
-             class="idol-card relative rounded-[26px] overflow-hidden border-2 aspect-[3/4.4] group cursor-pointer active:scale-95 transition-all duration-300 bg-black shadow-[0_12px_35px_rgba(0,0,0,0.85)] flex flex-col justify-end"
+             class="idol-card relative rounded-[26px] overflow-hidden border-2 aspect-[3/4.4] group cursor-pointer active:scale-95 transition-all duration-300 bg-black shadow-[0_12px_35px_rgba(0,0,0,0.85)] flex flex-col justify-end {% if idol.is_featured %}ring-2 ring-yellow-400 shadow-[0_0_25px_rgba(234,179,8,0.4)]{% endif %}"
              data-name="{{ idol.stage_name|lower }}"
              data-owner="{{ idol.get_display_owner|lower }}"
              data-rating="{{ idol.rating }}"
              data-services="{{ idol.services_done }}"
              data-created="{{ idol.created_at|date:'U' }}"
              data-status="{{ idol.status }}"
+             data-featured="{% if idol.is_featured %}1{% else %}0{% endif %}"
              data-top="{% if idol.is_top_rated %}1{% else %}0{% endif %}"
              data-trending="{% if idol.is_trending %}1{% else %}0{% endif %}"
-             style="border-color: {% if idol.aura_color == 'gold' %}#F59E0B{% elif idol.aura_color == 'ruby' %}#F43F5E{% elif idol.aura_color == 'emerald' %}#10B981{% else %}#A855F7{% endif %}; box-shadow: 0 0 20px {% if idol.aura_color == 'gold' %}rgba(245,158,11,0.25){% elif idol.aura_color == 'ruby' %}rgba(244,63,94,0.25){% elif idol.aura_color == 'emerald' %}rgba(16,185,129,0.25){% else %}rgba(168,85,247,0.25){% endif %};">
+             style="border-color: {% if idol.is_featured %}#FBBF24{% elif idol.aura_color == 'gold' %}#F59E0B{% elif idol.aura_color == 'ruby' %}#F43F5E{% elif idol.aura_color == 'emerald' %}#10B981{% else %}#A855F7{% endif %};">
             
-            <!-- Fotografía de Portada con Zoom Fluido -->
             {% if idol.photo %}
                 <img src="{{ idol.photo.url }}" alt="{{ idol.stage_name }}" 
                      class="absolute inset-0 w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-700">
@@ -99,13 +92,16 @@
                 </div>
             {% endif %}
 
-            <!-- Degradado Sombra Profundo -->
             <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none"></div>
 
-            <!-- Insignias Superiores Flotantes -->
+            <!-- INSIGNIAS SUPERIORES: MUSA DESTACADA DEL BAZAR -->
             <div class="absolute top-2.5 inset-x-2.5 flex justify-between items-start z-10 pointer-events-none">
-                <div>
-                    {% if idol.is_trending %}
+                <div class="flex flex-col gap-1">
+                    {% if idol.is_featured %}
+                        <span class="bg-gradient-to-r from-yellow-500 via-amber-300 to-yellow-500 text-black text-[8px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-[0_0_15px_rgba(234,179,8,0.9)] font-mono tracking-wider animate-bounce">
+                            ⭐ DESTACADA
+                        </span>
+                    {% elif idol.is_trending %}
                         <span class="bg-gradient-to-r from-yellow-600 via-amber-400 to-yellow-600 text-black text-[8px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg font-mono tracking-wider animate-pulse">
                             🔥 Favorita
                         </span>
@@ -116,16 +112,13 @@
                     {% endif %}
                 </div>
 
-                <!-- Rating de Estrellas -->
                 <span class="bg-black/85 backdrop-blur-md text-yellow-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border border-yellow-500/40 shadow flex items-center gap-1">
                     <span class="text-[9px]">⭐</span> {{ idol.rating }}
                 </span>
             </div>
 
-            <!-- Tarjeta Flotante Inferior de Información -->
+            <!-- INFO INFERIOR -->
             <div class="relative z-10 p-3 bg-gradient-to-t from-black via-black/90 to-transparent flex flex-col">
-                
-                <!-- Estado en Vivo -->
                 <div class="flex items-center gap-1.5 mb-1">
                     {% if idol.status == 'online' %}
                         <span class="inline-flex items-center gap-1 text-[8.5px] font-black text-emerald-300 uppercase tracking-wider bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/50 shadow">
@@ -142,7 +135,6 @@
                     {% endif %}
                 </div>
 
-                <!-- Nombre y Grupo de Rol -->
                 <h3 class="font-serif font-black text-white text-sm leading-tight truncate group-hover:text-vip-gold transition-colors">
                     {{ idol.stage_name }}
                 </h3>
@@ -150,14 +142,12 @@
                     {{ idol.group|default:"Musa Solista" }}
                 </span>
 
-                <!-- Detalle de Roles y Dueña Oficial -->
                 <div class="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] text-stone-400 font-mono">
                     <span class="text-stone-300">{{ idol.services_done }} roles</span>
                     <span class="text-yellow-400 font-bold truncate max-w-[85px]" title="Creadora: {{ idol.get_display_owner }}">
                         {{ idol.get_display_owner }}
                     </span>
                 </div>
-
             </div>
 
         </div>
@@ -184,12 +174,16 @@
         filterGalleryLive();
     }
 
-    // ⚡ REORDENAMIENTO INSTANTÁNEO EN EL DOM (SIN RECARGA NI PARPADEO)
     function applySortLive(sortMode) {
         const grid = document.getElementById('gallery-grid');
         const cards = Array.from(grid.querySelectorAll('.idol-card'));
 
         cards.sort((a, b) => {
+            // 🌟 MUSA DESTACADA SIEMPRE PRIMERA
+            const featA = a.getAttribute('data-featured') === '1' ? 1 : 0;
+            const featB = b.getAttribute('data-featured') === '1' ? 1 : 0;
+            if (featA !== featB) return featB - featA;
+
             if (sortMode === 'owner') {
                 const ownerA = a.getAttribute('data-owner') || '';
                 const ownerB = b.getAttribute('data-owner') || '';
@@ -202,7 +196,7 @@
                 const dA = parseInt(a.getAttribute('data-created') || '0', 10);
                 const dB = parseInt(b.getAttribute('data-created') || '0', 10);
                 return dB - dA;
-            } else { // 'rating'
+            } else {
                 const rA = parseFloat(a.getAttribute('data-rating') || '0');
                 const rB = parseFloat(b.getAttribute('data-rating') || '0');
                 return rB - rA;
@@ -213,7 +207,6 @@
         filterGalleryLive();
     }
 
-    // ⚡ FILTRADO INTERACTIVO INSTANTÁNEO
     function filterGalleryLive() {
         const query = (document.getElementById('gallerySearchInput')?.value || '').toLowerCase().trim();
         const selectedOwner = (document.getElementById('galleryOwnerFilter')?.value || '').toLowerCase().trim();

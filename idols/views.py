@@ -365,8 +365,6 @@ def idol_delete(request, idol_id):
 
 def idol_gallery(request):
     tg_id = resolve_safe_tg(request)
-    
-    # 👑 Orden y filtro por dueña/usuario (Punto 5)
     sort_by = request.GET.get('sort', 'rating')
     owner_filter = request.GET.get('owner', '').strip()
 
@@ -377,23 +375,28 @@ def idol_gallery(request):
     if owner_filter:
         query = query.filter(owner_username__icontains=owner_filter)
 
-    if sort_by == 'owner':
-        all_idols = query.order_by('owner_username', 'stage_name')
-    elif sort_by == 'services':
-        all_idols = query.order_by('-services_done', '-rating')
-    elif sort_by == 'recent':
-        all_idols = query.order_by('-created_at')
-    else:  # rating
-        all_idols = query.order_by('-rating', '-total_unlocks')
-
-    all_idols = list(all_idols)
+    all_idols = list(query)
     max_unlocks = max([i.total_unlocks for i in all_idols], default=0)
 
     for idol in all_idols:
         idol.is_trending = (max_unlocks > 0 and idol.total_unlocks == max_unlocks)
         idol.is_top_rated = (idol.rating >= 4.80 and idol.services_done >= 2)
 
-    # Lista única de dueñas para el selector
+    # 🌟 APLICACIÓN REAL DE MUSA DESTACADA DEL BAZAR:
+    # Las destacadas van SIEMPRE al tope, respetando luego el orden elegido
+    def get_sort_key(item):
+        is_feat = 1 if item.is_featured else 0
+        if sort_by == 'owner':
+            return (is_feat, str(item.owner_username).lower(), item.stage_name.lower())
+        elif sort_by == 'services':
+            return (is_feat, item.services_done, float(item.rating))
+        elif sort_by == 'recent':
+            return (is_feat, item.created_at)
+        else: # rating
+            return (is_feat, float(item.rating), item.total_unlocks)
+
+    all_idols.sort(key=get_sort_key, reverse=True)
+
     all_owners = list(IdolProfile.objects.exclude(owner_username__isnull=True).exclude(owner_username='').values_list('owner_username', flat=True).distinct())
 
     return render(request, 'idols/gallery.html', {
@@ -882,6 +885,10 @@ def create_custom_request(request, idol_id):
         if not client_wallet.remove_funds(bounty):
             messages.error(request, f"No tienes suficiente oro ({bounty} 🪙) en tu Bóveda.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+        # 🌟 CONSUMO REAL DEL SELLO DE ANTOJO PRIORITARIO DEL BAZAR
+        from economy.models import UserInventoryItem
+        has_priority_stamp = UserInventoryItem.consume_item(tg_id, 'priority_antojo', 1)
             
         CustomRequest.objects.create(
             idol=idol,
@@ -889,22 +896,26 @@ def create_custom_request(request, idol_id):
             client_username=tg_username,
             description=description,
             bounty=bounty,
+            is_priority=has_priority_stamp,  # 👈 Sello activo
             status='pending'
         )
+
+        extra_pri_msg = "⚡ (¡Sello Prioritario aplicado! Tu solicitud aparecerá primera en su bandeja)" if has_priority_stamp else ""
 
         send_telegram_msg(
             chat_id=idol.telegram_user_id,
             text=(
-                f"📬 <b>¡Nueva Petición Especial para tu Musa {idol.stage_name}!</b> 🌹\n\n"
+                f"{'⚡ <b>¡PETICIÓN PRIORITARIA DE ANTOJO!</b> ⚡' if has_priority_stamp else '📬 <b>¡Nueva Petición Especial!</b>'}\n\n"
+                f"🌹 <b>Para tu Musa:</b> {idol.stage_name}\n"
                 f"👤 <b>Solicitante:</b> {tg_username}\n"
                 f"🪙 <b>Recompensa en custodia:</b> <b>+{bounty} 🪙</b>\n"
                 f"📝 <b>Detalle:</b> <i>«{description}»</i>\n\n"
-                f"Ingresa a tu panel de Idols para entregar la foto o rechazarla."
+                f"Ingresa a tu panel de Idols para atenderla."
             ),
             button_text=f"📸 Atender Petición de {idol.stage_name}",
             button_url=f"https://kingdom-pleasure-app.onrender.com/idols/?tg_id={idol.telegram_user_id}"
         )
-        messages.success(request, f"¡Petición enviada a {idol.stage_name}! Tu oro quedó en custodia.")
+        messages.success(request, f"¡Petición enviada a {idol.stage_name}! Tu oro quedó en custodia. {extra_pri_msg}")
         
     return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
 
@@ -925,16 +936,20 @@ def add_comment(request, post_id):
             if parent_id and str(parent_id).isdigit():
                 parent_comment = PostComment.objects.filter(id=int(parent_id), post=post).first()
 
+            # 🌟 VERIFICACIÓN REAL DEL DISTINTIVO VIP DEL BAZAR
+            is_vip = bool(profile and profile.has_vip_badge)
+
             PostComment.objects.create(
                 post=post,
                 parent=parent_comment,
                 author_telegram_id=tg_id if tg_id else 0,
                 author_name=nombre_final,
+                is_vip_author=is_vip,  # 👈 Guardado real
                 text=text
             )
             grant_user_xp(request, tg_id, 3, reason="Comentario en Muro")
+            
 
-            # 1. Si es respuesta a otro usuario, avisar por Telegram a quien escribió el comentario original
             if parent_comment and parent_comment.author_telegram_id and parent_comment.author_telegram_id != tg_id:
                 send_telegram_msg(
                     chat_id=parent_comment.author_telegram_id,

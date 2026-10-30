@@ -42,25 +42,33 @@
         {% endfor %}
     {% endif %}
 
-    <!-- 📬 BANDEJA DE ANTOJOS PENDIENTES (Si hay solicitudes con oro en custodia) -->
+    <!-- 📬 BANDEJA DE ANTOJOS (CON PRIORIDAD ACTIVA REAL) -->
     {% if pending_requests %}
     <div class="flex flex-col gap-2.5">
         <div class="flex items-center justify-between px-1">
             <h3 class="text-xs font-black text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-                <span class="animate-bounce">📬</span> Antojos Pendientes de Entrega ({{ pending_requests|length }})
+                <span class="animate-bounce">📬</span> Antojos Pendientes ({{ pending_requests|length }})
             </h3>
             <span class="text-[9.5px] font-mono text-yellow-400 font-bold">Oro en Custodia</span>
         </div>
 
         {% for req in pending_requests %}
-        <div class="vip-panel p-4 rounded-3xl border-2 border-rose-500/70 bg-gradient-to-br from-[#240815] via-[#10030a] to-black shadow-xl flex flex-col gap-3">
+        <div class="vip-panel p-4 rounded-3xl border-2 {% if req.is_priority %}border-yellow-400 bg-gradient-to-br from-[#291804] via-black to-[#1a0a28] shadow-[0_0_25px_rgba(234,179,8,0.45)]{% else %}border-rose-500/70 bg-gradient-to-br from-[#240815] via-[#10030a] to-black shadow-xl{% endif %} flex flex-col gap-3">
             <div class="flex justify-between items-start">
                 <div class="flex items-center gap-2.5">
-                    <div class="w-9 h-9 rounded-xl bg-rose-950 border border-rose-500/50 flex items-center justify-center text-lg">
-                        🌹
+                    <div class="w-9 h-9 rounded-xl {% if req.is_priority %}bg-yellow-500 text-black font-black{% else %}bg-rose-950 border border-rose-500/50 text-white{% endif %} flex items-center justify-center text-lg shadow">
+                        {% if req.is_priority %}⚡{% else %}🌹{% endif %}
                     </div>
                     <div>
-                        <span class="text-xs font-black text-white">Para: {{ req.idol.stage_name }}</span>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-xs font-black text-white">Para: {{ req.idol.stage_name }}</span>
+                            <!-- 🌟 INDICADOR PRIORITARIO DEL BAZAR -->
+                            {% if req.is_priority %}
+                                <span class="bg-yellow-400 text-black text-[8px] font-mono font-black uppercase px-2 py-0.2 rounded shadow animate-pulse">
+                                    ⚡ PRIORITARIO
+                                </span>
+                            {% endif %}
+                        </div>
                         <p class="text-[10px] text-stone-400">Noble: <strong class="text-yellow-300">{{ req.client_username }}</strong></p>
                     </div>
                 </div>
@@ -69,7 +77,6 @@
                 </span>
             </div>
 
-            <!-- Detalle del deseo -->
             <p class="text-xs text-stone-200 bg-black/60 p-3 rounded-2xl border border-white/10 italic leading-relaxed">
                 «{{ req.description }}»
             </p>
@@ -81,9 +88,15 @@
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
                 <div class="bg-black/50 p-2.5 rounded-2xl border border-dashed border-rose-500/40">
-                    <label class="block text-[10px] text-rose-300 uppercase font-black mb-1">Adjuntar Foto Exclusiva:</label>
+                    <label class="block text-[10px] text-rose-300 uppercase font-black mb-1">Adjuntar Foto Exclusiva *</label>
                     <input type="file" name="delivered_photo" accept="image/*" required
                            class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-rose-600 file:text-white cursor-pointer">
+                </div>
+
+                <div>
+                    <label class="block text-[10px] text-yellow-400 uppercase font-black mb-1">Mensaje / Dedicatoria para el Noble (Opcional):</label>
+                    <input type="text" name="delivery_note" placeholder="Ej: Espero que te deleite esta sesión..."
+                           class="w-full bg-black border border-white/20 rounded-xl px-3 py-1.5 text-xs text-white placeholder-stone-500">
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 mt-1">
@@ -106,9 +119,7 @@
     <div class="flex flex-col gap-3.5">
         {% for idol in idols %}
         <div class="vip-panel p-4 rounded-3xl border border-purple-500/40 bg-gradient-to-br from-[#160824] via-[#090212] to-black shadow-xl flex flex-col gap-3">
-            
             <div class="flex items-center justify-between">
-                <!-- Avatar y Datos -->
                 <div class="flex items-center gap-3.5 min-w-0">
                     <div class="w-14 h-14 rounded-2xl border-2 border-vip-gold/60 overflow-hidden bg-black flex-shrink-0 shadow-lg relative">
                         {% if idol.photo %}
@@ -124,11 +135,10 @@
                             <span class="text-xs text-yellow-400 font-mono font-bold bg-black/60 px-1.5 rounded">⭐ {{ idol.rating }}</span>
                         </div>
                         <span class="text-[10px] text-purple-300 font-semibold truncate">{{ idol.group|default:"Musa Solista" }}</span>
-                        <span class="text-[9px] text-stone-400 mt-0.5">{{ idol.services_done }} roles • {{ idol.posts.count }} publicaciones</span>
+                        <span class="text-[9px] text-stone-400 mt-0.5">{{ idol.services_done }} roles • {{ idol.posts.count }} posts</span>
                     </div>
                 </div>
 
-                <!-- Botones Editar y Borrar -->
                 <div class="flex items-center gap-1 flex-shrink-0">
                     <button type="button" onclick="goToEdit({{ idol.id }})" 
                             class="w-8 h-8 rounded-xl bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 flex items-center justify-center text-xs shadow active:scale-90 transition-all" title="Editar">
@@ -141,7 +151,6 @@
                 </div>
             </div>
 
-            <!-- Modulador de Estado Rápido en Vivo -->
             <div class="border-t border-white/5 pt-2 flex items-center justify-between gap-1">
                 <span class="text-[9.5px] font-mono text-stone-400 uppercase font-bold">Estado:</span>
                 
@@ -164,20 +173,18 @@
                     </button>
                 </form>
             </div>
-
         </div>
         {% empty %}
         <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
             <span class="text-4xl my-2">🎭</span>
             <h4 class="font-serif text-sm font-bold text-white">Sin Fichas Artísticas</h4>
             <p class="text-xs text-stone-400 mt-1 max-w-xs leading-relaxed">
-                Aún no has registrado a tu primera Musa en el Reino. Da el primer paso para ofrecer contenido y ganar oro.
+                Aún no has registrado a tu primera Musa en el Reino.
             </p>
         </div>
         {% endfor %}
     </div>
 
-    <!-- BOTÓN DE NUEVA FICHA -->
     {% if can_add_more %}
         <button type="button" onclick="goToCreate()" 
                 class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_18px_rgba(212,175,55,0.35)] flex items-center justify-center gap-2 active:scale-95 transition-all mt-1">

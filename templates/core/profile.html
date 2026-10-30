@@ -108,7 +108,6 @@
                 </div>
             {% endif %}
         </div>
-
     </div>
 
     <!-- PESTAÑAS: LOGROS vs PERSONALIZACIÓN -->
@@ -189,7 +188,7 @@
                        class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
 
-            <!-- SELECTOR VISUAL DE MARCOS DE AVATAR -->
+            <!-- SELECTOR VISUAL DE MARCOS DE AVATAR (CON BLINDAJE REAL) -->
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5">Marco Cosmético de Avatar</label>
                 <div class="grid grid-cols-2 gap-2">
@@ -205,10 +204,18 @@
                         <input type="radio" name="avatar_frame" value="diamond" {% if profile.avatar_frame == 'diamond' %}checked{% endif %}>
                         <span class="text-xs font-bold text-cyan-300">💎 Diamante</span>
                     </label>
-                    <label class="flex items-center gap-2 p-2 rounded-xl bg-black/60 border border-rose-500/40 cursor-pointer hover:border-rose-300">
+                    
+                    <!-- 🌟 MARCO CARMESÍ PROTEGIDO: SOLO SI LO ADQUIRIÓ EN EL BAZAR -->
+                    {% if profile.has_custom_avatar_frame %}
+                    <label class="flex items-center gap-2 p-2 rounded-xl bg-black/60 border border-rose-500/50 cursor-pointer hover:border-rose-400">
                         <input type="radio" name="avatar_frame" value="flame" {% if profile.avatar_frame == 'flame' %}checked{% endif %}>
                         <span class="text-xs font-bold text-rose-300">🔥 Carmesí</span>
                     </label>
+                    {% else %}
+                    <div class="flex items-center gap-2 p-2 rounded-xl bg-black/40 border border-stone-800 opacity-60">
+                        <span class="text-xs text-stone-500 font-mono">🔒 Carmesí (Bazar)</span>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -235,7 +242,6 @@
                 </div>
             </div>
 
-            <!-- Solo clientes: Musa favorita -->
             {% if not is_idol %}
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Musa / Idol Favorita</label>

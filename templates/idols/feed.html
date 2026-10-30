@@ -19,14 +19,11 @@
         </button>
     </div>
 
-    <!-- 🎃 CARTEL DE LA TEMÁTICA DE LA SEMANA -->
+    <!-- 🎭 CARTEL DE LA TEMÁTICA DE LA SEMANA -->
     {% if feed_theme.is_active %}
     <div class="relative rounded-3xl overflow-hidden border-2 border-amber-500/60 bg-gradient-to-b from-[#200b28] via-[#0d0414] to-black shadow-[0_8px_30px_rgba(212,175,55,0.25)] flex flex-col group my-1">
-        
-        <!-- Orbe luminoso de ambiente -->
         <div class="absolute -top-10 -right-10 w-40 h-40 bg-amber-500/20 rounded-full blur-3xl pointer-events-none"></div>
 
-        <!-- Barra de Insignia Superior -->
         <div class="p-3 pb-2 flex items-center justify-between relative z-10 bg-black/60 backdrop-blur-md border-b border-white/5">
             <span class="inline-flex items-center gap-1.5 text-[9px] font-mono font-black uppercase tracking-widest bg-amber-950/80 text-amber-300 border border-amber-500/50 px-3 py-0.5 rounded-full shadow">
                 <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-ping"></span>
@@ -38,7 +35,6 @@
             </span>
         </div>
 
-        <!-- Banner Visual (Si se subió imagen) -->
         {% if feed_theme.banner_url %}
         <div class="w-full bg-black relative overflow-hidden border-b border-amber-500/30">
             <img src="{{ feed_theme.banner_url }}" alt="{{ feed_theme.title }}" 
@@ -48,7 +44,6 @@
         </div>
         {% endif %}
 
-        <!-- Título y Mensaje de la Semana -->
         <div class="p-3.5 flex flex-col gap-1 relative z-10">
             <h3 class="font-serif text-sm font-black text-gold-gradient tracking-wide uppercase leading-tight">
                 {{ feed_theme.title }}
@@ -60,17 +55,15 @@
             </p>
             {% endif %}
         </div>
-
     </div>
     {% endif %}
 
-    <!-- 🎭 CARRUSEL DE HISTORIAS DE MUSAS (STORIES VIP) -->
+    <!-- CARRUSEL DE STORIES DE MUSAS -->
     <div class="w-full flex gap-3 overflow-x-auto py-1 px-1 no-scrollbar select-none">
         {% for post in posts|slice:":8" %}
             <div onclick="universalNav('{% url 'idols:detail' post.idol.id %}')" 
                  class="flex flex-col items-center flex-shrink-0 cursor-pointer active:scale-90 transition-transform group">
                 
-                <!-- Aro de Luz Neón según el Aura de la Musa -->
                 <div class="w-14 h-14 rounded-full p-[2px] shadow-lg relative flex items-center justify-center transition-all duration-300 group-hover:scale-105"
                      style="background: linear-gradient(135deg, {% if post.idol.aura_color == 'gold' %}#F59E0B, #FBBF24{% elif post.idol.aura_color == 'ruby' %}#F43F5E, #FB7185{% elif post.idol.aura_color == 'emerald' %}#10B981, #34D399{% else %}#A855F7, #C084FC{% endif %});">
                     <div class="w-full h-full rounded-full overflow-hidden bg-black p-[1.5px]">
@@ -81,7 +74,6 @@
                         {% endif %}
                     </div>
 
-                    <!-- Punto de estado -->
                     <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-black {% if post.idol.status == 'online' %}bg-emerald-400 animate-pulse{% elif post.idol.status == 'antojos' %}bg-purple-400{% else %}bg-stone-500{% endif %}"></span>
                 </div>
 
@@ -92,7 +84,7 @@
         {% endfor %}
     </div>
 
-    <!-- 🌐 SELECTOR DE FILTRO DE CONTENIDO (ESTILO CRISTAL AHUMADO) -->
+    <!-- SELECTOR DE FILTRO DE CONTENIDO -->
     <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl shadow-inner text-xs font-bold uppercase text-center">
         <button type="button" onclick="filterFeed('all')" id="btn-filter-all"
                 class="py-2.5 rounded-xl text-xs font-black tracking-wider transition-all bg-vip-gold text-black shadow">
@@ -104,7 +96,7 @@
         </button>
     </div>
 
-    <!-- 📱 FEED DE PUBLICACIONES (CARDS DE ALTA COSTURA) -->
+    <!-- FEED DE PUBLICACIONES -->
     <div class="flex flex-col gap-6" id="feed-container">
         {% for post in posts %}
         <article id="post-{{ post.id }}" 
@@ -112,10 +104,8 @@
                  data-network="{{ post.network }}"
                  style="border-color: {% if post.network == 'fans' %}rgba(168,85,247,0.45){% else %}rgba(212,175,55,0.35){% endif %};">
             
-            <!-- 1. CABECERA DEL POST -->
+            <!-- CABECERA DEL POST -->
             <div class="p-4 flex items-center justify-between border-b border-white/10 bg-black/60 backdrop-blur-md">
-                
-                <!-- Musa Info -->
                 <div onclick="universalNav('{% url 'idols:detail' post.idol.id %}')" 
                      class="flex items-center gap-3 cursor-pointer group min-w-0">
                     
@@ -141,7 +131,6 @@
                     </div>
                 </div>
 
-                <!-- Insignia de Red y Acciones de Autor/Admin -->
                 <div class="flex items-center gap-2 flex-shrink-0">
                     {% if post.network == 'fans' %}
                         <span class="bg-gradient-to-r from-purple-950 via-purple-900 to-fuchsia-950 border border-purple-400 text-purple-200 text-[9px] font-black uppercase px-3 py-1 rounded-full shadow-[0_0_12px_rgba(168,85,247,0.4)] flex items-center gap-1 font-mono">
@@ -169,14 +158,11 @@
                         </form>
                     {% endif %}
                 </div>
-
             </div>
 
-            <!-- 2. MULTIMEDIA PRINCIPAL: FOTO O VIDEO (DESBLOQUEADO vs VIP BLOQUEADO) -->
+            <!-- MULTIMEDIA DEL POST -->
             <div class="relative w-full bg-black min-h-[380px] max-h-[580px] flex items-center justify-center overflow-hidden">
-                
                 {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
-                    <!-- CONTENIDO DESBLOQUEADO (VIDEO O FOTO CON LAZY LOADING Y LIGHTBOX) -->
                     {% if post.is_video %}
                         <video src="{{ post.video.url }}" 
                                controls 
@@ -199,7 +185,6 @@
                         </span>
                     {% endif %}
                 {% else %}
-                    <!-- NIEBLA DE OBSIDIANA: MULTIMEDIA VIP BLOQUEADO (CON CENSURA BLUR-3XL HERMÉTICA) -->
                     {% if post.is_video %}
                         <video src="{{ post.video.url }}" muted loop autoplay playsinline class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.15] scale-110 pointer-events-none"></video>
                     {% elif post.image %}
@@ -208,10 +193,8 @@
                              class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.18] scale-110 pointer-events-none">
                     {% endif %}
 
-                    <!-- Tarjeta Flotante de Desbloqueo VIP -->
                     <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
                         <div class="vip-panel p-6 max-w-xs w-full flex flex-col items-center rounded-3xl border-2 border-purple-500/60 shadow-[0_0_35px_rgba(168,85,247,0.35)] bg-gradient-to-b from-[#1e0a33]/95 to-black/95">
-                            
                             <div class="w-16 h-16 rounded-2xl bg-black border-2 border-purple-400 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(168,85,247,0.6)] mb-3 animate-pulse">
                                 {% if post.is_video %}🎬{% else %}🔒{% endif %}
                             </div>
@@ -225,7 +208,7 @@
                             </h4>
                             
                             <p class="text-[11px] text-stone-300 mb-4 leading-relaxed">
-                                Este {% if post.is_video %}video privado{% else %}contenido{% endif %} se guardará para siempre en tu Colección Privada.
+                                Este contenido se guardará para siempre en tu Colección Privada.
                             </p>
 
                             <form action="{% url 'idols:unlock_post' post.id %}" method="POST" class="w-full m-0">
@@ -240,52 +223,44 @@
                         </div>
                     </div>
                 {% endif %}
-
             </div>
 
-            <!-- 3. BARRA DE REACCIONES VIP (LIKE, COMENTARIO & BRINDIS) -->
+            <!-- BARRA DE REACCIONES -->
             <div class="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-black/60 backdrop-blur-md">
                 <div class="flex items-center gap-3">
-                    
-                    <!-- Botón Like -->
                     <button type="button" onclick="handleLike({{ post.id }})" id="like-btn-{{ post.id }}"
                             class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-black/70 transition-all active:scale-125 select-none {% if post.id in liked_ids %}border-rose-500/60 text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.3)]{% else %}border-white/10 text-stone-400 hover:text-white{% endif %}">
                         <span id="like-icon-{{ post.id }}" class="text-sm">{% if post.id in liked_ids %}❤️{% else %}🤍{% endif %}</span>
                         <span id="like-count-{{ post.id }}" class="text-xs font-mono font-black">{{ post.likes }}</span>
                     </button>
 
-                    <!-- Botón Comentarios -->
                     <button type="button" onclick="toggleComments({{ post.id }})" 
                             class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 bg-black/70 text-stone-300 hover:text-purple-300 active:scale-95 transition-all select-none">
                         <span class="text-sm">💬</span>
                         <span class="text-xs font-mono font-bold" id="comment-count-{{ post.id }}">{{ post.comments.count }}</span>
                     </button>
 
-                    <!-- Botón Invitar Trago con Oro -->
                     <button type="button" onclick="openTipModal('{{ post.id }}', '{{ post.idol.stage_name }}')" 
                             class="flex items-center gap-1 text-yellow-300 hover:text-white text-xs font-black bg-gradient-to-r from-amber-950/80 to-yellow-950/80 border border-yellow-500/50 px-3 py-1.5 rounded-full active:scale-95 transition-all shadow-[0_0_10px_rgba(212,175,55,0.2)]">
                         <span>🥂</span> <span>Invitar Trago</span>
                     </button>
-
                 </div>
 
-                <!-- Enlace al Perfil -->
                 <button type="button" onclick="universalNav('{% url 'idols:detail' post.idol.id %}')" 
                         class="text-[10px] text-vip-gold font-bold uppercase tracking-wider flex items-center gap-1 hover:underline">
                     <span>Ficha</span> <span>➔</span>
                 </button>
             </div>
 
-            <!-- 4. TEXTO DE DESCRIPCIÓN Y COMENTARIOS -->
+            <!-- DESCRIPCIÓN Y COMENTARIOS -->
             <div class="p-4 flex flex-col gap-2.5 bg-gradient-to-t from-black via-black/80 to-transparent">
-                
                 {% if post.caption %}
                     <p class="text-xs text-stone-200 leading-relaxed font-normal">
                         <strong class="font-serif text-yellow-300 font-bold mr-1">{{ post.idol.stage_name }}</strong>{{ post.caption }}
                     </p>
                 {% endif %}
 
-                <!-- SECCIÓN DE COMENTARIOS DESPLEGABLE CON HILOS DE RESPUESTA -->
+                <!-- SECCIÓN DE COMENTARIOS CON INSIGNIA DORADA VIP REAL -->
                 <div id="comments-section-{{ post.id }}" class="hidden mt-2 pt-3 border-t border-white/10 flex flex-col gap-3">
                     
                     <div class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
@@ -294,8 +269,16 @@
                             <!-- Comentario Principal -->
                             <div class="bg-black/70 border border-white/10 p-3 rounded-2xl text-xs flex flex-col gap-1 shadow">
                                 <div class="flex justify-between items-center text-[10px]">
-                                    <span class="font-bold text-yellow-300 flex items-center gap-1">
-                                        <span>💬</span> {{ c.author_name }}
+                                    <span class="font-bold text-yellow-300 flex items-center gap-1.5 flex-wrap">
+                                        <span>💬</span> 
+                                        <span>{{ c.author_name }}</span>
+
+                                        <!-- 🌟 INSIGNIA DORADA REAL DEL BAZAR -->
+                                        {% if c.is_vip_author %}
+                                        <span class="bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[8px] font-mono font-black uppercase px-2 py-0.2 rounded-full shadow-[0_0_10px_rgba(234,179,8,0.7)] tracking-wider">
+                                            👑 NOBLE VIP
+                                        </span>
+                                        {% endif %}
                                     </span>
                                     <span class="text-stone-500 font-mono text-[9px]">{{ c.created_at|timesince }} atrás</span>
                                 </div>
@@ -308,14 +291,19 @@
                                     </button>
                                 </div>
 
-                                <!-- Respuestas Anidadas (Hilo) -->
+                                <!-- Respuestas Anidadas -->
                                 {% if c.replies.all %}
                                 <div class="flex flex-col gap-1.5 mt-1.5 pl-3 border-l-2 border-purple-500/40">
                                     {% for rep in c.replies.all %}
                                     <div class="bg-purple-950/20 border border-purple-500/20 p-2 rounded-xl flex flex-col gap-0.5">
                                         <div class="flex justify-between items-center text-[9px]">
-                                            <span class="font-bold {% if '(Idol)' in rep.author_name %}text-yellow-300{% else %}text-purple-200{% endif %}">
+                                            <span class="font-bold flex items-center gap-1 flex-wrap {% if '(Idol)' in rep.author_name %}text-yellow-300{% else %}text-purple-200{% endif %}">
                                                 {% if '(Idol)' in rep.author_name %}👑 {{ rep.author_name }}{% else %}↳ {{ rep.author_name }}{% endif %}
+                                                {% if rep.is_vip_author %}
+                                                <span class="bg-yellow-500 text-black text-[7.5px] font-mono font-black px-1.5 rounded-full">
+                                                    👑 VIP
+                                                </span>
+                                                {% endif %}
                                             </span>
                                             <span class="text-stone-500 font-mono">{{ rep.created_at|timesince }}</span>
                                         </div>
@@ -333,13 +321,11 @@
                         {% endfor %}
                     </div>
 
-                    <!-- Indicador Flotante de Respuesta -->
                     <div id="reply-indicator-{{ post.id }}" class="hidden items-center justify-between bg-purple-950/80 border border-purple-500/50 px-3 py-1 rounded-xl text-[10px] text-purple-200">
                         <span id="reply-text-{{ post.id }}">Respondiendo a: </span>
                         <button type="button" onclick="cancelReply({{ post.id }})" class="text-rose-400 font-bold hover:text-white">&times; Cancelar</button>
                     </div>
 
-                    <!-- Input para Comentar o Responder -->
                     <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 m-0 mt-0.5">
                         {% csrf_token %}
                         <input type="hidden" name="tg_id" value="{{ tg_id }}">
@@ -354,18 +340,15 @@
                             Enviar
                         </button>
                     </form>
-
                 </div>
-
             </div>
-
         </article>
         {% empty %}
         <div class="vip-panel p-10 text-center flex flex-col items-center rounded-3xl">
             <span class="text-5xl my-2">📭</span>
             <h4 class="font-serif text-sm font-bold text-white uppercase tracking-wider">Muro en Calma</h4>
             <p class="text-xs text-stone-400 mt-1 max-w-xs leading-relaxed">
-                Aún no hay publicaciones en la corte. ¡Consagra tu primer momento o anima a las Musas a publicar!
+                Aún no hay publicaciones en la corte.
             </p>
         </div>
         {% endfor %}
@@ -373,10 +356,9 @@
 
 </div>
 
-<!-- 🥂 MODAL ARISTOCRÁTICO PARA INVITAR UN TRAGO (CON FICHAS DE ORO) -->
+<!-- MODAL PARA INVITAR UN TRAGO -->
 <div id="tip-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 select-none">
     <div class="vip-panel max-w-sm w-full p-6 relative border-2 border-yellow-400/70 shadow-[0_0_40px_rgba(212,175,55,0.3)] rounded-3xl bg-gradient-to-b from-[#200d35] via-[#0d0417] to-black">
-        
         <button onclick="closeTipModal()" class="absolute top-4 right-4 text-stone-400 hover:text-white text-2xl active:scale-90">&times;</button>
         
         <div class="text-center flex flex-col items-center">
@@ -395,8 +377,6 @@
 
             <div>
                 <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1.5 text-center">Selecciona tu Ofrenda (🪙)</label>
-                
-                <!-- Fichas Rápidas -->
                 <div class="grid grid-cols-4 gap-1.5">
                     <button type="button" onclick="setTipAmount(20)" class="bg-black border border-vip-gold/40 hover:border-vip-gold text-yellow-300 py-2 rounded-xl text-xs font-mono font-bold active:scale-95">20🪙</button>
                     <button type="button" onclick="setTipAmount(50)" class="bg-black border border-vip-gold/40 hover:border-vip-gold text-yellow-300 py-2 rounded-xl text-xs font-mono font-bold active:scale-95">50🪙</button>
@@ -468,13 +448,8 @@
         document.getElementById('tip-modal').classList.remove('hidden');
     }
 
-    function closeTipModal() { 
-        document.getElementById('tip-modal').classList.add('hidden'); 
-    }
-    
-    function setTipAmount(val) { 
-        document.getElementById('tip-amount-input').value = val; 
-    }
+    function closeTipModal() { document.getElementById('tip-modal').classList.add('hidden'); }
+    function setTipAmount(val) { document.getElementById('tip-amount-input').value = val; }
 
     function setReplyTarget(postId, commentId, authorName) {
         document.getElementById(`parent-input-${postId}`).value = commentId;
@@ -499,7 +474,6 @@
         input.placeholder = "Escribe tu comentario...";
     }
 
-    // Auto-desplazamiento a la publicación exacta con iluminación dorada
     document.addEventListener("DOMContentLoaded", () => {
         const hash = window.location.hash;
         if (hash) {
@@ -507,11 +481,8 @@
                 const targetPost = document.querySelector(hash);
                 if (targetPost) {
                     targetPost.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    // Destello de iluminación temporal para saber cuál es
                     targetPost.classList.add('ring-4', 'ring-yellow-400', 'shadow-[0_0_35px_rgba(234,179,8,0.8)]');
-                    setTimeout(() => {
-                        targetPost.classList.remove('ring-4', 'ring-yellow-400', 'shadow-[0_0_35px_rgba(234,179,8,0.8)]');
-                    }, 2500);
+                    setTimeout(() => { targetPost.classList.remove('ring-4', 'ring-yellow-400', 'shadow-[0_0_35px_rgba(234,179,8,0.8)]'); }, 2500);
                 }
             }, 350);
         }

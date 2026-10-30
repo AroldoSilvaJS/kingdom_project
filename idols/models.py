@@ -218,23 +218,32 @@ class CustomRequest(models.Model):
     bounty = models.PositiveIntegerField("Oro Ofrecido", default=100)
     status = models.CharField("Estado", max_length=10, choices=STATUS_CHOICES, default='pending')
     
+    # 🌟 NUEVO: Sello de prioridad del Bazar
+    is_priority = models.BooleanField("¿Prioritario?", default=False)
+    
     delivered_photo = models.ImageField("Foto Entregada", upload_to='custom_antojos/', blank=True, null=True)
+    delivery_note = models.TextField("Mensaje / Dedicatoria", max_length=250, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "Petición de Antojo"
         verbose_name_plural = "Peticiones de Antojos"
-        ordering = ['-created_at']
+        ordering = ['-is_priority', '-created_at']  # 👈 Las prioritarias van PRIMERO
 
     def __str__(self):
-        return f"Antojo para {self.idol.stage_name} de {self.client_username} ({self.bounty} 🪙)"
+        pri = "⚡ [PRIORITARIO] " if self.is_priority else ""
+        return f"{pri}Antojo para {self.idol.stage_name} de {self.client_username} ({self.bounty} 🪙)"
 
 
 class PostComment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
-    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies', verbose_name="Respuesta a") # 👈 NUEVO CAMPO
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies', verbose_name="Respuesta a")
     author_telegram_id = models.BigIntegerField("ID del Autor", db_index=True)
     author_name = models.CharField("Nombre o @ de Usuario", max_length=100)
+    
+    # 🌟 NUEVO: Insignia real del Bazar [👑 NOBLE VIP]
+    is_vip_author = models.BooleanField("¿Autor con Distintivo VIP?", default=False)
+    
     text = models.TextField("Comentario", max_length=250)
     created_at = models.DateTimeField(auto_now_add=True)
 
