@@ -1126,12 +1126,31 @@ def my_photocards_album(request):
 
         user_cards = [uc for uc in raw_user_cards if getattr(uc, 'photocard', None) is not None]
 
-        # Inyectar atributos seguros a prueba de errores para el template
+        # 👑 Jerarquía canónica de coleccionismo nobiliario:
+        # Legendaria (1) > Épica (2) > Rara (3) > Común (4)
+        RARITY_PRIORITY = {
+            'legendary': 1,
+            'epic': 2,
+            'rare': 3,
+            'common': 4,
+        }
+
+        def card_canonical_sort_key(uc):
+            p = getattr(uc, 'photocard', None)
+            if not p:
+                return (99, '', '', 0)
+            r_val = RARITY_PRIORITY.get(getattr(p, 'rarity', 'common'), 5)
+            idol_name = (getattr(p, 'display_idol_name', '') or '').lower().strip()
+            card_name = (getattr(p, 'name', '') or '').lower().strip()
+            return (r_val, idol_name, card_name, p.id)
+
+        # Inyectar atributos seguros y peso de rareza para templates y scripts
         for uc in user_cards:
             try:
                 uc.safe_image_url = uc.photocard.image.url if (uc.photocard and uc.photocard.image) else ''
             except Exception:
                 uc.safe_image_url = ''
+            uc.rarity_weight = RARITY_PRIORITY.get(getattr(uc.photocard, 'rarity', 'common'), 5)
 
         total = len(user_cards)
         legendaries = sum(1 for uc in user_cards if getattr(uc.photocard, 'rarity', '') == 'legendary')
@@ -1152,6 +1171,9 @@ def my_photocards_album(request):
                 duplicates_list.append(rep_obj)
                 duplicate_cards_count += (len(ucs) - 1)
 
+        # Ordenar repetidas por valor de colección (Legendarias duplicadas primero)
+        duplicates_list.sort(key=card_canonical_sort_key)
+
         # 2. Agrupar por Colecciones / Cajas oficiales
         all_boxes = list(PhotocardBox.objects.all().prefetch_related('cards').order_by('name'))
         collections_data = []
@@ -1159,16 +1181,20 @@ def my_photocards_album(request):
         for box in all_boxes:
             total_in_box = len(box.cards.all())
             box_ucs = [uc for uc in user_cards if getattr(uc.photocard, 'box_id', None) == box.id]
-            
+
             distinct_cards_owned = {}
             for uc in box_ucs:
                 if uc.photocard_id not in distinct_cards_owned:
                     uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
                     distinct_cards_owned[uc.photocard_id] = uc
-            
+
+            # 🌟 Ordenar las cartas de la caja estrictamente por rareza e idol
+            box_cards_sorted = list(distinct_cards_owned.values())
+            box_cards_sorted.sort(key=card_canonical_sort_key)
+
             owned_count = len(distinct_cards_owned)
             percent = int((owned_count / total_in_box) * 100) if total_in_box > 0 else 0
-            
+
             if owned_count > 0 or total_in_box > 0:
                 collections_data.append({
                     'box': box,
@@ -1176,7 +1202,7 @@ def my_photocards_album(request):
                     'owned_count': owned_count,
                     'percent': percent,
                     'is_complete': (owned_count == total_in_box and total_in_box > 0),
-                    'user_cards': list(distinct_cards_owned.values()),
+                    'user_cards': box_cards_sorted,
                 })
 
         # Cartas sin caja asignada (Caja especial Clandestina)
@@ -1187,6 +1213,9 @@ def my_photocards_album(request):
                 if uc.photocard_id not in orphan_distinct:
                     uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
                     orphan_distinct[uc.photocard_id] = uc
+
+            orphan_cards_sorted = list(orphan_distinct.values())
+            orphan_cards_sorted.sort(key=card_canonical_sort_key)
 
             class OrphanBox:
                 id = 0
@@ -1199,8 +1228,12 @@ def my_photocards_album(request):
                 'owned_count': len(orphan_distinct),
                 'percent': 100,
                 'is_complete': False,
-                'user_cards': list(orphan_distinct.values()),
+                'user_cards': orphan_cards_sorted,
             })
+
+        # Ordenar también el catálogo plano "Todas" por rareza y musa
+        sorted_all_cards = list(user_cards)
+        sorted_all_cards.sort(key=card_canonical_sort_key)
 
         members = UserProfile.objects.exclude(
             telegram_user_id=tg_id
@@ -1208,7 +1241,7 @@ def my_photocards_album(request):
 
         return render(request, 'idols/photocards_album.html', {
             'tg_id': tg_id,
-            'user_cards': user_cards,
+            'user_cards': sorted_all_cards,
             'collections': collections_data,
             'duplicates': duplicates_list,
             'duplicate_cards_count': duplicate_cards_count,
@@ -1221,7 +1254,6 @@ def my_photocards_album(request):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        # En caso de cualquier anomalía, no tirar 500: redirigir y notificar
         messages.error(request, f"Aviso del Álbum: {str(e)}")
         return redirect('/idols/photocards/')
 

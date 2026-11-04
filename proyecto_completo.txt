@@ -1262,7 +1262,7 @@ from django.contrib import messages
 from django.db.models import F, Sum, Count
 from django.utils import timezone
 from datetime import timedelta
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 
@@ -1435,7 +1435,6 @@ def my_profile(request):
         profile.title = request.POST.get('title', profile.title)
         profile.bio = request.POST.get('bio', '').strip()
         
-        # 🌟 BLINDAJE REAL DEL MARCO CARMESÍ DEL BAZAR
         desired_frame = request.POST.get('avatar_frame', profile.avatar_frame)
         if desired_frame == 'flame' and not profile.has_custom_avatar_frame:
             messages.error(request, "⚠️ El Marco Llama Carmesí está reservado para quienes lo adquieran en el Bazar.")
@@ -1570,7 +1569,9 @@ def leaderboard(request):
 def admin_panel(request, admin_tg_id):
     if request.method == "POST":
         accion = request.POST.get('accion')
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
 
+        # 1. AJUSTAR ORO (SOPORTE TOTAL AJAX Y MONTO LIBRE)
         if accion == 'adjust_gold':
             target_id = int(request.POST.get('target_id'))
             mode = request.POST.get('mode', 'add')
@@ -1589,6 +1590,10 @@ def admin_panel(request, admin_tg_id):
                 msg = f"Saldo fijado en {amount} 🪙 para {target_id}"
             
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='gold_adjust', target_tg_id=target_id, details=msg)
+
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'target_id': target_id, 'new_balance': wallet.balance})
+
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -1610,6 +1615,10 @@ def admin_panel(request, admin_tg_id):
 
             msg = f"🔄 Progreso de {target_id} restablecido a {wallet.balance} 🪙 y Nivel {prof.level} (0 EXP)."
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='reset_user_progress', target_tg_id=target_id, details=msg)
+
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'target_id': target_id, 'new_balance': wallet.balance, 'new_level': prof.level})
+
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -1618,6 +1627,10 @@ def admin_panel(request, admin_tg_id):
             new_role = request.POST.get('new_role')
             UserRole.objects.filter(telegram_id=target_id).update(role=new_role)
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='game_role_change', target_tg_id=target_id, details=f"Rol de juego cambiado a {new_role}")
+            
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': f"Rol cambiado a {new_role.upper()}"})
+
             messages.success(request, f"🎭 Rol de juego de {target_id} actualizado a {new_role.upper()}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -1626,18 +1639,11 @@ def admin_panel(request, admin_tg_id):
             new_staff = request.POST.get('new_staff')
             UserRole.objects.filter(telegram_id=target_id).update(staff_role=new_staff)
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='staff_role_change', target_tg_id=target_id, details=f"Cargo de staff: {new_staff}")
-            messages.success(request, f"🛡️ Cargo de Staff de {target_id} actualizado a {new_staff.upper()}.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+            
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': f"Cargo cambiado a {new_staff.upper()}"})
 
-        elif accion == 'change_role':
-            target_id = int(request.POST.get('target_id'))
-            new_val = request.POST.get('new_role')
-            if new_val in ['admin', 'moderador', 'none']:
-                UserRole.objects.filter(telegram_id=target_id).update(staff_role=new_val)
-            else:
-                UserRole.objects.filter(telegram_id=target_id).update(role=new_val)
-            AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='role_change', target_tg_id=target_id, details=f"Rol/Staff cambiado a {new_val}")
-            messages.success(request, f"👑 Asignación de {target_id} actualizada a {new_val.upper()}.")
+            messages.success(request, f"🛡️ Cargo de Staff de {target_id} actualizado a {new_staff.upper()}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
         elif accion == 'toggle_ban':
@@ -1649,6 +1655,10 @@ def admin_panel(request, admin_tg_id):
             
             estado_txt = "BANEADO (Mazmorra)" if user.is_banned else "LIBERADO"
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='ban_toggle', target_tg_id=target_id, details=estado_txt)
+
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': f"Usuario {estado_txt}", 'is_banned': user.is_banned})
+
             messages.warning(request, f"⚖️ Usuario {target_id}: {estado_txt}.")
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -1661,6 +1671,10 @@ def admin_panel(request, admin_tg_id):
             prof.save()
             msg = f"🛡️ Salvoconducto concedido a {target_id} por +{days} días."
             AdminAuditLog.objects.create(admin_tg_id=admin_tg_id, action='grant_shield', target_tg_id=target_id, details=msg)
+
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg, 'days': prof.days_of_shield_remaining})
+
             messages.success(request, msg)
             return redirect(f"{request.path}?tg_id={admin_tg_id}")
 
@@ -7120,7 +7134,6 @@ ARCHIVO: .\templates\core\admin_panel.html
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Sala del Trono | Kingdom of Pleasure</title>
   
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
@@ -7143,13 +7156,23 @@ ARCHIVO: .\templates\core\admin_panel.html
       text-transform: uppercase;
       letter-spacing: 0.05em;
     }
+    .flash-gold {
+      animation: flashBorder 1.2s ease-out;
+    }
+    @keyframes flashBorder {
+      0% { border-color: #facc15; box-shadow: 0 0 25px rgba(250, 204, 21, 0.9); }
+      100% { border-color: rgba(255, 255, 255, 0.1); box-shadow: none; }
+    }
   </style>
 </head>
 <body class="font-sans antialiased p-3 sm:p-5 max-w-2xl mx-auto pb-28">
 
+  <!-- TOAST FLOTANTE EN VIVO (CERO RECARGAS) -->
+  <div id="admin-toast" class="fixed top-4 inset-x-4 z-50 max-w-md mx-auto pointer-events-none transition-all duration-300 opacity-0 translate-y-[-20px]"></div>
+
   <!-- NOTIFICACIONES FLASH -->
   {% if messages %}
-    <div class="fixed top-3 inset-x-3 z-50 space-y-2 max-w-md mx-auto">
+    <div class="fixed top-3 inset-x-3 z-40 space-y-2 max-w-md mx-auto">
       {% for message in messages %}
         <div class="p-3.5 rounded-2xl border backdrop-blur-md text-xs font-bold shadow-2xl flex justify-between items-center
           {% if message.tags == 'success' %}bg-emerald-950/95 border-emerald-500 text-emerald-200
@@ -7175,7 +7198,7 @@ ARCHIVO: .\templates\core\admin_panel.html
     </div>
   </div>
 
-  <!-- 📊 CUADRO DE MANDO IMPERIAL (MÉTRICAS CLAVE) -->
+  <!-- 📊 CUADRO DE MANDO IMPERIAL -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
     <div class="admin-card p-3 rounded-2xl border border-purple-500/40 text-center shadow">
       <span class="text-[9.5px] text-purple-300 uppercase font-bold tracking-wider">Población</span>
@@ -7184,7 +7207,7 @@ ARCHIVO: .\templates\core\admin_panel.html
     </div>
     <div class="admin-card p-3 rounded-2xl border border-yellow-500/40 text-center shadow">
       <span class="text-[9.5px] text-yellow-400 uppercase font-bold tracking-wider">Tesoro Real</span>
-      <p class="text-xl font-black text-yellow-300 mt-0.5">{{ total_oro }} 🪙</p>
+      <p class="text-xl font-black text-yellow-300 mt-0.5" id="stat-total-oro">{{ total_oro }} 🪙</p>
       <span class="text-[8.5px] text-stone-400 font-mono">En Bóvedas</span>
     </div>
     <div class="admin-card p-3 rounded-2xl border border-emerald-500/40 text-center shadow">
@@ -7199,7 +7222,7 @@ ARCHIVO: .\templates\core\admin_panel.html
     </div>
   </div>
 
-  <!-- PESTAÑAS DEL PANEL DE CONTROL -->
+  <!-- PESTAÑAS DEL PANEL -->
   <div class="grid grid-cols-4 gap-1 p-1 bg-black/70 border border-yellow-500/30 rounded-2xl text-[10px] font-bold uppercase text-center mb-4 shadow-inner">
     <button type="button" onclick="switchAdminTab('censo')" id="adm-tab-censo" 
             class="py-2.5 rounded-xl bg-yellow-500 text-black font-black">
@@ -7219,19 +7242,17 @@ ARCHIVO: .\templates\core\admin_panel.html
     </button>
   </div>
 
-  <!-- 👥 PESTAÑA 1: CENSO DE SÚBDITOS CON RESET DE PROGRESO INDIVIDUAL -->
+  <!-- 👥 PESTAÑA 1: CENSO DE SÚBDITOS -->
   <div id="adm-panel-censo" class="admin-card p-4 rounded-3xl space-y-3.5 shadow-xl">
     
-    <!-- ENCABEZADO Y BUSCADOR -->
     <div class="flex flex-col sm:flex-row justify-between items-center gap-2 border-b border-white/10 pb-3">
       <div>
         <h2 class="text-sm font-black text-yellow-400 uppercase tracking-wider">
           Censo de Nobles & Musas ({{ total_usuarios }})
         </h2>
-        <p class="text-[10px] text-stone-400">Control de roles, permisos y reseteo individual de saldo/nivel</p>
+        <p class="text-[10px] text-stone-400">Edición rápida sin recargas de página</p>
       </div>
 
-      <!-- Buscador en tiempo real -->
       <div class="relative w-full sm:w-64">
         <span class="absolute inset-y-0 left-2.5 flex items-center text-xs opacity-50">🔍</span>
         <input type="text" id="searchInput" onkeyup="filtrarUsuarios()" 
@@ -7240,46 +7261,13 @@ ARCHIVO: .\templates\core\admin_panel.html
       </div>
     </div>
 
-    <!-- 🎯 HERRAMIENTA RÁPIDA: RESETEO O CALIBRACIÓN EXACTA POR TELEGRAM ID -->
-    <details class="bg-black/60 border border-purple-500/40 p-3 rounded-2xl text-xs">
-      <summary class="font-bold text-purple-300 uppercase cursor-pointer flex items-center justify-between">
-        <span>🎯 Ajuste Quirúrgico / Reset de Progreso por ID</span>
-        <span class="text-[10px] text-yellow-400">Abrir ▾</span>
-      </summary>
-      <form method="POST" class="mt-3 flex flex-col gap-2.5 pt-2 border-t border-white/10">
-        {% csrf_token %}
-        <input type="hidden" name="accion" value="reset_user_progress">
-        <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-        
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <div>
-            <label class="block text-[9.5px] uppercase font-bold text-stone-400 mb-1">Telegram ID del Usuario *</label>
-            <input type="number" name="target_id" required placeholder="Ej: 123456789" class="w-full bg-black border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono">
-          </div>
-          <div>
-            <label class="block text-[9.5px] uppercase font-bold text-yellow-400 mb-1">Fijar Oro (🪙)</label>
-            <input type="number" name="custom_gold" value="100" min="0" class="w-full bg-black border border-yellow-500/40 rounded-xl px-2.5 py-1.5 text-xs text-yellow-300 font-mono font-bold">
-          </div>
-          <div>
-            <label class="block text-[9.5px] uppercase font-bold text-purple-300 mb-1">Fijar Nivel (1 a 100)</label>
-            <input type="number" name="custom_level" value="1" min="1" max="100" class="w-full bg-black border border-purple-500/40 rounded-xl px-2.5 py-1.5 text-xs text-purple-200 font-mono font-bold">
-          </div>
-        </div>
-
-        <button type="submit" onclick="return confirm('¿Confirmas aplicar este ajuste de saldo y nivel a este usuario?')"
-                class="btn-gold py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-          Aplicar Ajuste de Saldo & Nivel
-        </button>
-      </form>
-    </details>
-
     <!-- Lista de Usuarios -->
     <div class="flex flex-col gap-2.5" id="userListContainer">
       {% for u in usuarios %}
-      <div class="user-item bg-black/60 border border-white/10 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow hover:border-yellow-500/50 transition-all"
+      <div id="user-row-{{ u.telegram_id }}" 
+           class="user-item bg-black/60 border border-white/10 p-3.5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow transition-all duration-300"
            data-search="{{ u.display_name|lower }} {{ u.display_username|lower }} {{ u.telegram_id }} {{ u.role }} {{ u.staff_role }}">
         
-        <!-- Info Usuario -->
         <div class="flex items-center gap-3">
           <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow flex-shrink-0
             {% if u.is_user_admin and u.is_user_idol %}bg-gradient-to-br from-amber-900 to-purple-900 border-2 border-yellow-400 text-yellow-300
@@ -7300,7 +7288,6 @@ ARCHIVO: .\templates\core\admin_panel.html
                 {{ u.display_username }}
               </span>
 
-              <!-- Distintivos Visuales -->
               {% if u.is_user_admin %}
                 <span class="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/50 px-1.5 py-0.2 rounded font-black uppercase">Corona</span>
               {% elif u.is_user_mod %}
@@ -7313,18 +7300,22 @@ ARCHIVO: .\templates\core\admin_panel.html
                 <span class="text-[9px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 px-1.5 py-0.2 rounded font-bold uppercase">Noble 🥂</span>
               {% endif %}
 
-              {% if u.is_shield_active %}
-                <span class="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-500 px-1.5 py-0.2 rounded font-black">🛡️ Inmune ({{ u.shield_days }}d)</span>
-              {% endif %}
-              {% if u.is_banned %}
-                <span class="text-[9px] bg-rose-950 text-rose-300 border border-rose-700 px-1.5 py-0.2 rounded font-black">BANEADO</span>
-              {% endif %}
+              <span id="shield-badge-{{ u.telegram_id }}" class="{% if not u.is_shield_active %}hidden{% endif %} text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-500 px-1.5 py-0.2 rounded font-black">
+                🛡️ Inmune (<span id="shield-days-{{ u.telegram_id }}">{{ u.shield_days }}</span>d)
+              </span>
+
+              <span id="ban-badge-{{ u.telegram_id }}" class="{% if not u.is_banned %}hidden{% endif %} text-[9px] bg-rose-950 text-rose-300 border border-rose-700 px-1.5 py-0.2 rounded font-black">
+                BANEADO
+              </span>
             </div>
 
             <div class="flex items-center gap-2 text-[10px] text-stone-400 mt-0.5">
-              <span class="font-mono text-yellow-400 font-bold">{{ u.balance }} 🪙</span>
+              <!-- SALDO DINÁMICO CON ID PARA ACTUALIZACIÓN INSTANTÁNEA -->
+              <span class="font-mono text-yellow-400 font-black text-xs" id="user-balance-{{ u.telegram_id }}">
+                {{ u.balance }} 🪙
+              </span>
               <span>•</span>
-              <span class="truncate">{{ u.user_rank }} (L{{ u.user_level }})</span>
+              <span class="truncate" id="user-rank-{{ u.telegram_id }}">{{ u.user_rank }} (L{{ u.user_level }})</span>
               <span>•</span>
               <span class="font-mono text-stone-500 text-[9px]">ID: {{ u.telegram_id }}</span>
             </div>
@@ -7338,91 +7329,43 @@ ARCHIVO: .\templates\core\admin_panel.html
           </div>
         </div>
 
-        <!-- Acciones en Vivo -->
+        <!-- ACCIONES RÁPIDAS (AJAX EN TIEMPO REAL) -->
         <div class="flex items-center justify-between sm:justify-end gap-1.5 border-t sm:border-t-0 border-white/10 pt-2 sm:pt-0 flex-wrap">
           
-          <!-- 1. Rol de Juego (Idol vs Cliente) -->
-          <form method="POST" class="m-0">
-            {% csrf_token %}
-            <input type="hidden" name="accion" value="change_game_role">
-            <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
-            <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-            <select name="new_role" onchange="this.form.submit()"
-                    class="bg-black border border-pink-700/60 rounded-lg px-2 py-1 text-[10px] font-bold text-pink-300 cursor-pointer shadow-sm"
-                    title="Rol de Juego (Idol o Cliente)">
-              <option value="idol" {% if u.role == 'idol' %}selected{% endif %}>🌹 Idol</option>
-              <option value="cliente" {% if u.role == 'cliente' or u.role == 'vip' %}selected{% endif %}>🥂 Cliente</option>
-            </select>
-          </form>
+          <!-- 1. Rol de Juego -->
+          <select onchange="ajaxChangeGameRole({{ u.telegram_id }}, this.value)"
+                  class="bg-black border border-pink-700/60 rounded-lg px-2 py-1 text-[10px] font-bold text-pink-300 cursor-pointer shadow-sm">
+            <option value="idol" {% if u.role == 'idol' %}selected{% endif %}>🌹 Idol</option>
+            <option value="cliente" {% if u.role == 'cliente' or u.role == 'vip' %}selected{% endif %}>🥂 Cliente</option>
+          </select>
 
-          <!-- 2. Cargo de Staff (Admin / Moderador / Súbdito) -->
-          <form method="POST" class="m-0">
-            {% csrf_token %}
-            <input type="hidden" name="accion" value="change_staff_role">
-            <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
-            <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-            <select name="new_staff" onchange="this.form.submit()"
-                    class="bg-black border border-purple-700 rounded-lg px-2 py-1 text-[10px] font-bold text-yellow-300 cursor-pointer shadow-sm"
-                    title="Cargo Administrativo">
-              <option value="none" {% if u.staff_role == 'none' or not u.staff_role %}selected{% endif %}>👤 Súbdito</option>
-              <option value="moderador" {% if u.staff_role == 'moderador' or u.role == 'moderador' %}selected{% endif %}>🛡️ Mod</option>
-              <option value="admin" {% if u.staff_role == 'admin' or u.role == 'admin' %}selected{% endif %}>👑 Admin</option>
-            </select>
-          </form>
+          <!-- 2. Cargo de Staff -->
+          <select onchange="ajaxChangeStaffRole({{ u.telegram_id }}, this.value)"
+                  class="bg-black border border-purple-700 rounded-lg px-2 py-1 text-[10px] font-bold text-yellow-300 cursor-pointer shadow-sm">
+            <option value="none" {% if u.staff_role == 'none' or not u.staff_role %}selected{% endif %}>👤 Súbdito</option>
+            <option value="moderador" {% if u.staff_role == 'moderador' or u.role == 'moderador' %}selected{% endif %}>🛡️ Mod</option>
+            <option value="admin" {% if u.staff_role == 'admin' or u.role == 'admin' %}selected{% endif %}>👑 Admin</option>
+          </select>
 
-          <!-- 3. Dar Oro (+100) -->
-          <form method="POST" class="m-0">
-            {% csrf_token %}
-            <input type="hidden" name="accion" value="adjust_gold">
-            <input type="hidden" name="mode" value="add">
-            <input type="hidden" name="amount" value="100">
-            <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
-            <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-            <button type="submit" class="px-2 py-1 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/40 text-[10px] font-black" title="Otorgar +100 oro">
-              +100🪙
-            </button>
-          </form>
+          <!-- 🌟 3. BOTÓN DE ORO LIBRE Y PERSONALIZADO (CERO RECARGAS) -->
+          <button type="button" 
+                  onclick="openGoldModal({{ u.telegram_id }}, '{{ u.display_name|escapejs }}', {{ u.balance }})"
+                  class="btn-gold px-2.5 py-1 rounded-lg text-[10px] font-black uppercase shadow active:scale-95 transition-all">
+            🪙 Oro
+          </button>
 
-          <!-- 🌟 4. RESETEAR PROGRESO (Oro a 100 🪙, Lvl 1, 0 EXP) -->
-          <form method="POST" class="m-0">
-            {% csrf_token %}
-            <input type="hidden" name="accion" value="reset_user_progress">
-            <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
-            <input type="hidden" name="custom_gold" value="100">
-            <input type="hidden" name="custom_level" value="1">
-            <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-            <button type="submit" 
-                    onclick="return confirm('⚠️ ¿Resetear el oro a 100 🪙 y el nivel a Nivel 1 (0 EXP) para {{ u.display_name|escapejs }} (ID: {{ u.telegram_id }})? Sus fichas de Idol, cartas y mascotas NO se borrarán.')"
-                    class="px-2 py-1 rounded-lg bg-red-950/70 hover:bg-red-900 border border-red-500/50 text-red-200 text-[10px] font-black"
-                    title="Restablecer a 100 🪙, Nivel 1, 0 EXP">
-              🔄 Reset
-            </button>
-          </form>
+          <!-- 4. Salvoconducto (+15 días) -->
+          <button type="button" onclick="ajaxGrantShield({{ u.telegram_id }}, 15)"
+                  class="px-2 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500 text-[10px] font-black active:scale-95 transition-all" 
+                  title="Otorgar +15 días de Salvoconducto">
+            🛡️+15d
+          </button>
 
-          <!-- 5. Salvoconducto (+15 días) -->
-          <form method="POST" class="m-0">
-            {% csrf_token %}
-            <input type="hidden" name="accion" value="grant_shield">
-            <input type="hidden" name="shield_days" value="15">
-            <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
-            <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-            <button type="submit" title="Otorgar +15 días de Salvoconducto manual"
-                    class="px-2 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-500 text-[10px] font-black">
-              🛡️+15d
-            </button>
-          </form>
-
-          <!-- 6. Ban / Desban (Mazmorra) -->
-          <form method="POST" class="m-0">
-            {% csrf_token %}
-            <input type="hidden" name="accion" value="toggle_ban">
-            <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
-            <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-            <button type="submit" onclick="return confirm('¿Cambiar estado de mazmorra para este usuario?')"
-                    class="px-2 py-1 rounded-lg text-[10px] font-bold border {% if u.is_banned %}bg-emerald-950 text-emerald-200 border-emerald-600{% else %}bg-rose-950 text-rose-300 border-rose-700{% endif %}">
-              {% if u.is_banned %}Soltar{% else %}Mazmorra{% endif %}
-            </button>
-          </form>
+          <!-- 5. Ban / Desban (Mazmorra) -->
+          <button type="button" id="ban-btn-{{ u.telegram_id }}" onclick="ajaxToggleBan({{ u.telegram_id }})"
+                  class="px-2 py-1 rounded-lg text-[10px] font-bold border active:scale-95 transition-all {% if u.is_banned %}bg-emerald-950 text-emerald-200 border-emerald-600{% else %}bg-rose-950 text-rose-300 border-rose-700{% endif %}">
+            {% if u.is_banned %}Soltar{% else %}Mazmorra{% endif %}
+          </button>
 
         </div>
 
@@ -7431,15 +7374,14 @@ ARCHIVO: .\templates\core\admin_panel.html
     </div>
   </div>
 
-  <!-- ⚡ PESTAÑA 2: DECRETOS IMPERIALES & COMUNICACIÓN -->
+  <!-- ⚡ PESTAÑA 2: DECRETOS IMPERIALES -->
   <div id="adm-panel-decretos" class="hidden space-y-4">
-    
-    <!-- 1. Enviar Mensaje Oficial al Grupo de Telegram -->
+    <!-- Mensaje Telegram -->
     <div class="admin-card p-4 rounded-3xl space-y-2.5 border border-purple-500/40">
       <h3 class="text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-white/10 pb-2">
         <span>📢</span> Mensaje Directo al Grupo Oficial de Telegram
       </h3>
-      <p class="text-[10px] text-stone-400">El bot enviará este mensaje al chat de Telegram con botón de acceso al Reino.</p>
+      <p class="text-[10px] text-stone-400">El bot enviará este mensaje al chat con botón de acceso.</p>
       
       <form method="POST" class="flex flex-col gap-2">
         {% csrf_token %}
@@ -7456,17 +7398,15 @@ ARCHIVO: .\templates\core\admin_panel.html
       </form>
     </div>
 
-    <!-- 2. Decretos Globales de Economía -->
+    <!-- Lluvia y Cooldowns -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      
-      <!-- Lluvia de Oro -->
       <form method="POST" class="admin-card p-4 rounded-2xl flex flex-col justify-between gap-2.5">
         {% csrf_token %}
         <input type="hidden" name="accion" value="mass_gold">
         <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
         <div>
           <span class="text-xs font-bold text-yellow-300 flex items-center gap-1"><span>🌧️</span> Lluvia de Oro Real</span>
-          <p class="text-[10px] text-stone-400 mt-0.5">Otorga oro a todos los súbditos activos (no baneados).</p>
+          <p class="text-[10px] text-stone-400 mt-0.5">Otorga oro a todos los súbditos activos.</p>
         </div>
         <div class="flex gap-2">
           <input type="number" name="amount" value="50" min="1" class="w-24 bg-black border border-yellow-500/40 rounded-xl px-2 py-1.5 text-xs text-yellow-300 font-mono font-bold text-center">
@@ -7477,7 +7417,6 @@ ARCHIVO: .\templates\core\admin_panel.html
         </div>
       </form>
 
-      <!-- Perdón de Ruleta -->
       <form method="POST" class="admin-card p-4 rounded-2xl flex flex-col justify-between gap-2.5">
         {% csrf_token %}
         <input type="hidden" name="accion" value="reset_all_bonuses">
@@ -7491,10 +7430,9 @@ ARCHIVO: .\templates\core\admin_panel.html
           Resetear Cooldowns
         </button>
       </form>
-
     </div>
 
-    <!-- 3. Marquesina Pública en la App -->
+    <!-- Marquesina -->
     <form method="POST" class="admin-card p-4 rounded-2xl flex flex-col gap-2">
       {% csrf_token %}
       <input type="hidden" name="accion" value="broadcast_message">
@@ -7511,7 +7449,7 @@ ARCHIVO: .\templates\core\admin_panel.html
       </button>
     </form>
 
-    <!-- 🎭 GESTOR DE LA TEMÁTICA DE LA SEMANA DEL MURO -->
+    <!-- Temática de la Semana -->
     <div class="admin-card p-4 rounded-3xl space-y-2.5 border border-amber-500/40">
       <div class="flex justify-between items-center border-b border-white/10 pb-2">
         <h3 class="text-xs font-black text-yellow-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -7534,22 +7472,20 @@ ARCHIVO: .\templates\core\admin_panel.html
 
         <div>
           <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Título de la Temática *</label>
-          <input type="text" name="theme_title" value="{{ feed_theme.title }}" placeholder="Ej: 🎃 Especial Halloween: Seducción Prohibida"
+          <input type="text" name="theme_title" value="{{ feed_theme.title }}" placeholder="Ej: 🎃 Especial Halloween"
                  class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
         </div>
 
         <div>
-          <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Mensaje / Pautas para las Musas</label>
-          <textarea name="theme_message" rows="2" placeholder="Ej: Esta semana las Musas subirán fotos con disfraces y atuendos oscuros..."
-                    class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white resize-none">{{ feed_theme.message }}</textarea>
+          <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Mensaje para las Musas</label>
+          <textarea name="theme_message" rows="2" class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white resize-none">{{ feed_theme.message }}</textarea>
         </div>
 
         <div class="bg-black/50 p-2.5 rounded-xl border border-white/10 flex flex-col gap-1">
-          <label class="block text-[10px] text-stone-300 uppercase font-bold">Banner / Imagen Temática (Opcional)</label>
+          <label class="block text-[10px] text-stone-300 uppercase font-bold">Banner (Opcional)</label>
           {% if feed_theme.banner_url %}
             <div class="flex items-center gap-2 my-1">
               <img src="{{ feed_theme.banner_url }}" class="h-10 w-24 object-cover rounded border border-yellow-500/40">
-              <span class="text-[9.5px] text-stone-400">Banner actual cargado.</span>
             </div>
           {% endif %}
           <input type="file" name="theme_banner" accept="image/*" class="text-xs text-stone-400">
@@ -7559,37 +7495,28 @@ ARCHIVO: .\templates\core\admin_panel.html
           <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
             💾 Guardar Temática
           </button>
-          
-          <button type="submit" name="accion" value="delete_feed_theme" onclick="return confirm('¿Retirar y borrar la temática del Muro ahora mismo?')"
-                  class="bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider active:scale-95 transition-all">
-            🚫 Retirar del Muro
+          <button type="submit" name="accion" value="delete_feed_theme" onclick="return confirm('¿Retirar y borrar la temática del Muro?')"
+                  class="bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider">
+            🚫 Retirar
           </button>
         </div>
       </form>
     </div>
-
   </div>
 
-  <!-- 🛡️ PESTAÑA 3: GESTOR DE PURGAS Y MAZMORRAS -->
+  <!-- 🛡️ PESTAÑA 3: PURGAS -->
   <div id="adm-panel-purgas" class="hidden space-y-4">
-    
-    <!-- Aviso de Inmunidades para Telegram -->
     <div class="p-3.5 bg-emerald-950/40 border border-emerald-500/50 rounded-2xl flex items-start gap-2.5">
       <span class="text-xl">🛡️</span>
       <div class="text-[11px] text-stone-300 leading-relaxed">
-        <strong>Guía de Purga de Telegram:</strong> Los usuarios marcados con <span class="text-emerald-300 font-bold">🛡️ Inmune</span> han adquirido su Salvoconducto en el Bazar. <strong>NO deben ser expulsados</strong> del grupo durante las limpiezas de inactividad.
+        <strong>Guía de Purga:</strong> Los usuarios con <span class="text-emerald-300 font-bold">🛡️ Inmune</span> compraron Salvoconducto. <strong>NO deben ser expulsados</strong> del grupo de Telegram.
       </div>
     </div>
 
-    <!-- Lista de Candidatos a Purga (Sin Inmunidad) -->
     <div class="admin-card p-4 rounded-3xl space-y-3">
-      <div class="flex justify-between items-center border-b border-white/10 pb-2">
-        <h3 class="text-xs font-black text-rose-400 uppercase tracking-wider">
-          Súbditos Sin Salvoconducto (Candidatos a Purga)
-        </h3>
-        <span class="text-[9px] font-mono text-stone-400">Verificar antes de limpiar</span>
-      </div>
-
+      <h3 class="text-xs font-black text-rose-400 uppercase tracking-wider border-b border-white/10 pb-2">
+        Súbditos Sin Salvoconducto (Candidatos a Purga)
+      </h3>
       <div class="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
         {% for u in usuarios %}
           {% if not u.is_shield_active and not u.is_user_admin %}
@@ -7601,35 +7528,22 @@ ARCHIVO: .\templates\core\admin_panel.html
                 <span class="text-[9px] text-stone-500 font-mono">ID: {{ u.telegram_id }} • {{ u.balance }} 🪙</span>
               </div>
             </div>
-            
-            <form method="POST" class="m-0 flex-shrink-0">
-              {% csrf_token %}
-              <input type="hidden" name="accion" value="grant_shield">
-              <input type="hidden" name="shield_days" value="15">
-              <input type="hidden" name="target_id" value="{{ u.telegram_id }}">
-              <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
-              <button type="submit" class="text-[9.5px] bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600 text-emerald-300 px-2 py-1 rounded-lg font-bold">
-                Indultar 🛡️
-              </button>
-            </form>
+            <button type="button" onclick="ajaxGrantShield({{ u.telegram_id }}, 15)" class="text-[9.5px] bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600 text-emerald-300 px-2 py-1 rounded-lg font-bold">
+              Indultar 🛡️
+            </button>
           </div>
           {% endif %}
         {% endfor %}
       </div>
     </div>
-
   </div>
 
-  <!-- 📜 PESTAÑA 4: LIBRO DE AUDITORÍA DE LA CORONA -->
+  <!-- 📜 PESTAÑA 4: AUDITORÍA -->
   <div id="adm-panel-auditoria" class="hidden space-y-3">
     <div class="admin-card p-4 rounded-3xl space-y-3">
-      <div class="flex justify-between items-center border-b border-white/10 pb-2">
-        <h3 class="text-xs font-black text-yellow-400 uppercase tracking-wider">
-          Libro de Auditoría de la Corona (Últimos 20 Eventos)
-        </h3>
-        <span class="text-[9px] text-stone-400 font-mono">Transparencia Imperial</span>
-      </div>
-
+      <h3 class="text-xs font-black text-yellow-400 uppercase tracking-wider border-b border-white/10 pb-2">
+        Libro de Auditoría Imperial (Últimos 20 Eventos)
+      </h3>
       <div class="flex flex-col gap-2 max-h-96 overflow-y-auto pr-1">
         {% for log in audit_logs %}
         <div class="p-2.5 rounded-xl bg-black/60 border border-white/5 flex items-start justify-between text-xs">
@@ -7648,23 +7562,252 @@ ARCHIVO: .\templates\core\admin_panel.html
       </div>
     </div>
 
-    <!-- Purga de Datos Peligrosa -->
     <form method="POST" class="p-4 rounded-3xl bg-rose-950/30 border border-rose-600/50 flex items-center justify-between">
       {% csrf_token %}
       <input type="hidden" name="accion" value="purge_test_data">
       <input type="hidden" name="tg_id" value="{{ admin_tg_id }}">
       <div>
-        <span class="text-xs font-black text-rose-400">🧹 Purga de Pruebas (Zona Peligrosa)</span>
-        <p class="text-[10px] text-stone-400">Elimina súbditos, fichas y fotos viejas. Solo sobrevive tu Corona.</p>
+        <span class="text-xs font-black text-rose-400">🧹 Purga de Pruebas (Peligrosa)</span>
+        <p class="text-[10px] text-stone-400">Elimina súbditos, fichas y fotos. Solo sobrevive tu Corona.</p>
       </div>
-      <button type="submit" onclick="return confirm('⚠️ ¿ELIMINAR TODOS los datos de prueba? Solo sobrevivirá tu cuenta.')" 
+      <button type="submit" onclick="return confirm('⚠️ ¿ELIMINAR TODOS los datos de prueba?')" 
               class="px-3.5 py-2 bg-rose-950 border border-rose-500 text-rose-200 font-black text-xs rounded-xl uppercase">
         Purgar Todo
       </button>
     </form>
   </div>
 
+  <!-- 🪙 MODAL FLOTANTE DE AJUSTE DE ORO PERSONALIZADO (CERO RECARGAS) -->
+  <div id="gold-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 select-none">
+    <div class="admin-card p-5 max-w-sm w-full rounded-3xl border-2 border-yellow-500/80 shadow-2xl relative flex flex-col gap-3">
+      <button onclick="closeGoldModal()" class="absolute top-3.5 right-3.5 text-stone-400 hover:text-white text-2xl">&times;</button>
+
+      <div class="text-center">
+        <span class="text-3xl">🪙</span>
+        <h3 class="font-serif text-sm font-black text-yellow-300 uppercase tracking-wider mt-1">
+          Ajuste Real de Oro
+        </h3>
+        <p class="text-xs text-stone-300 mt-0.5">
+          Para: <strong id="modal-gold-target-name" class="text-white"></strong> 
+          <span class="font-mono text-[10px] text-stone-400">(ID: <span id="modal-gold-target-id"></span>)</span>
+        </p>
+        <span class="text-[11px] font-mono font-bold text-yellow-400 block mt-1">
+          Saldo actual: <span id="modal-gold-current-balance">0</span> 🪙
+        </span>
+      </div>
+
+      <!-- Fichas de Monto Rápido -->
+      <div class="grid grid-cols-4 gap-1.5 pt-1">
+        <button type="button" onclick="setModalGoldAmount(100)" class="bg-black border border-yellow-500/40 text-yellow-300 py-1.5 rounded-xl text-xs font-mono font-bold hover:bg-yellow-500/20 active:scale-95">+100</button>
+        <button type="button" onclick="setModalGoldAmount(500)" class="bg-black border border-yellow-500/40 text-yellow-300 py-1.5 rounded-xl text-xs font-mono font-bold hover:bg-yellow-500/20 active:scale-95">+500</button>
+        <button type="button" onclick="setModalGoldAmount(1000)" class="bg-black border border-yellow-500/40 text-yellow-300 py-1.5 rounded-xl text-xs font-mono font-bold hover:bg-yellow-500/20 active:scale-95">+1,000</button>
+        <button type="button" onclick="setModalGoldAmount(5000)" class="bg-black border border-yellow-500/40 text-yellow-300 py-1.5 rounded-xl text-xs font-mono font-bold hover:bg-yellow-500/20 active:scale-95">+5,000</button>
+      </div>
+
+      <!-- Input de Monto Libre -->
+      <div>
+        <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Monto a Operar (Escribe el valor deseado):</label>
+        <input type="number" id="modal-gold-amount" min="1" value="500" 
+               class="w-full bg-black border border-yellow-500/50 rounded-xl p-2.5 text-center font-mono font-black text-white text-base focus:outline-none focus:border-yellow-400 shadow-inner">
+      </div>
+
+      <!-- 3 Acciones: Sumar (+), Restar (-), Fijar (=) -->
+      <div class="grid grid-cols-3 gap-2 pt-1">
+        <button type="button" onclick="submitGoldAction('add')" 
+                class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider active:scale-95 transition-all">
+          ➕ Otorgar
+        </button>
+        <button type="button" onclick="submitGoldAction('subtract')" 
+                class="bg-rose-950 border border-rose-600 text-rose-200 hover:bg-rose-900 py-2.5 rounded-xl text-xs font-bold uppercase active:scale-95 transition-all">
+          ➖ Quitar
+        </button>
+        <button type="button" onclick="submitGoldAction('set')" 
+                class="bg-purple-950 border border-purple-500 text-purple-200 hover:bg-purple-900 py-2.5 rounded-xl text-xs font-bold uppercase active:scale-95 transition-all">
+          🎯 Fijar Saldo
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SCRIPT AJAX EN VIVO (CERO PARPADEOS NI SALTOS DE SCROLL) -->
   <script>
+    const adminId = '{{ admin_tg_id }}';
+    const csrfToken = '{{ csrf_token }}';
+
+    let currentModalTargetId = null;
+
+    function openGoldModal(targetId, targetName, currentBalance) {
+      currentModalTargetId = targetId;
+      document.getElementById('modal-gold-target-id').innerText = targetId;
+      document.getElementById('modal-gold-target-name').innerText = targetName;
+      document.getElementById('modal-gold-current-balance').innerText = currentBalance;
+      document.getElementById('modal-gold-amount').value = 500;
+      document.getElementById('gold-modal').classList.remove('hidden');
+    }
+
+    function closeGoldModal() {
+      document.getElementById('gold-modal').classList.add('hidden');
+    }
+
+    function setModalGoldAmount(val) {
+      document.getElementById('modal-gold-amount').value = val;
+    }
+
+    function showToast(msg, isSuccess = true) {
+      const toast = document.getElementById('admin-toast');
+      toast.innerHTML = `
+        <div class="p-3.5 rounded-2xl border text-xs font-bold shadow-2xl flex items-center justify-center gap-2 ${
+          isSuccess 
+          ? 'bg-emerald-950/95 border-emerald-500 text-emerald-200 shadow-[0_0_20px_rgba(16,185,129,0.5)]' 
+          : 'bg-rose-950/95 border-rose-500 text-rose-200 shadow-[0_0_20px_rgba(244,63,94,0.5)]'
+        }">
+          <span>${isSuccess ? '✨' : '⚠️'}</span>
+          <span>${msg}</span>
+        </div>`;
+      toast.classList.remove('opacity-0', 'translate-y-[-20px]');
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-[-20px]');
+      }, 3500);
+    }
+
+    // 🌟 ENVIAR AJUSTE DE ORO SIN RECARGAR LA PÁGINA
+    async function submitGoldAction(mode) {
+      const amount = parseInt(document.getElementById('modal-gold-amount').value, 10);
+      if (isNaN(amount) || amount < 0) {
+        alert("Ingresa un monto válido.");
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('accion', 'adjust_gold');
+      fd.append('mode', mode);
+      fd.append('amount', amount);
+      fd.append('target_id', currentModalTargetId);
+      fd.append('tg_id', adminId);
+      fd.append('ajax', '1');
+      fd.append('csrfmiddlewaretoken', csrfToken);
+
+      closeGoldModal();
+
+      try {
+        const resp = await fetch(window.location.href, {
+          method: 'POST',
+          body: fd,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+          // Actualizar saldo del usuario en la fila correspondiente
+          const balanceElem = document.getElementById(`user-balance-${data.target_id}`);
+          if (balanceElem) {
+            balanceElem.innerText = `${data.new_balance} 🪙`;
+          }
+
+          // Efecto de iluminación en la fila
+          const row = document.getElementById(`user-row-${data.target_id}`);
+          if (row) {
+            row.classList.add('flash-gold');
+            setTimeout(() => row.classList.remove('flash-gold'), 1200);
+          }
+
+          showToast(data.message, true);
+        } else {
+          showToast(data.error || "Error al procesar", false);
+        }
+      } catch(e) {
+        showToast("Error de conexión con el servidor", false);
+      }
+    }
+
+    // 🌟 CAMBIAR ROL SIN RECARGAR
+    async function ajaxChangeGameRole(targetId, newRole) {
+      const fd = new FormData();
+      fd.append('accion', 'change_game_role');
+      fd.append('new_role', newRole);
+      fd.append('target_id', targetId);
+      fd.append('tg_id', adminId);
+      fd.append('ajax', '1');
+      fd.append('csrfmiddlewaretoken', csrfToken);
+
+      try {
+        const resp = await fetch(window.location.href, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const data = await resp.json();
+        showToast(data.message, true);
+      } catch(e) {}
+    }
+
+    // 🌟 CAMBIAR STAFF SIN RECARGAR
+    async function ajaxChangeStaffRole(targetId, newStaff) {
+      const fd = new FormData();
+      fd.append('accion', 'change_staff_role');
+      fd.append('new_staff', newStaff);
+      fd.append('target_id', targetId);
+      fd.append('tg_id', adminId);
+      fd.append('ajax', '1');
+      fd.append('csrfmiddlewaretoken', csrfToken);
+
+      try {
+        const resp = await fetch(window.location.href, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const data = await resp.json();
+        showToast(data.message, true);
+      } catch(e) {}
+    }
+
+    // 🌟 CONCEDER SALVOCONDUCTO SIN RECARGAR
+    async function ajaxGrantShield(targetId, days) {
+      const fd = new FormData();
+      fd.append('accion', 'grant_shield');
+      fd.append('shield_days', days);
+      fd.append('target_id', targetId);
+      fd.append('tg_id', adminId);
+      fd.append('ajax', '1');
+      fd.append('csrfmiddlewaretoken', csrfToken);
+
+      try {
+        const resp = await fetch(window.location.href, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const data = await resp.json();
+        if (data.success) {
+          const badge = document.getElementById(`shield-badge-${targetId}`);
+          const daysSpan = document.getElementById(`shield-days-${targetId}`);
+          if (badge) badge.classList.remove('hidden');
+          if (daysSpan) daysSpan.innerText = data.days;
+          showToast(data.message, true);
+        }
+      } catch(e) {}
+    }
+
+    // 🌟 BAN / DESBAN SIN RECARGAR
+    async function ajaxToggleBan(targetId) {
+      if (!confirm("¿Cambiar estado de mazmorra para este usuario?")) return;
+      const fd = new FormData();
+      fd.append('accion', 'toggle_ban');
+      fd.append('target_id', targetId);
+      fd.append('tg_id', adminId);
+      fd.append('ajax', '1');
+      fd.append('csrfmiddlewaretoken', csrfToken);
+
+      try {
+        const resp = await fetch(window.location.href, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const data = await resp.json();
+        if (data.success) {
+          const btn = document.getElementById(`ban-btn-${targetId}`);
+          const badge = document.getElementById(`ban-badge-${targetId}`);
+          if (data.is_banned) {
+            btn.innerText = "Soltar";
+            btn.className = "px-2 py-1 rounded-lg text-[10px] font-bold border active:scale-95 transition-all bg-emerald-950 text-emerald-200 border-emerald-600";
+            if (badge) badge.classList.remove('hidden');
+          } else {
+            btn.innerText = "Mazmorra";
+            btn.className = "px-2 py-1 rounded-lg text-[10px] font-bold border active:scale-95 transition-all bg-rose-950 text-rose-300 border-rose-700";
+            if (badge) badge.classList.add('hidden');
+          }
+          showToast(data.message, true);
+        }
+      } catch(e) {}
+    }
+
     function switchAdminTab(tabName) {
       ['censo', 'decretos', 'purgas', 'auditoria'].forEach(t => {
         const panel = document.getElementById(`adm-panel-${t}`);
@@ -7691,7 +7834,6 @@ ARCHIVO: .\templates\core\admin_panel.html
     }
 
     function universalNav(targetPath) {
-      const adminId = '{{ admin_tg_id }}';
       window.location.href = `${targetPath}?tg_id=${adminId}`;
     }
   </script>
