@@ -3653,43 +3653,40 @@ def admin_delete_collectible(request, item_id):
 
 
 # ==========================================
-# 🎟️ SISTEMA DE RASCA Y GANA CLANDESTINO
+# 🎟️ SISTEMA DE RASCA Y GANA CLANDESTINO (CALIBRADO)
 # ==========================================
-
 SCRATCH_TIERS = {
     'bronze': {
         'name': 'Cartón de Bronce',
         'cost': 25,
         'badge': '🥉',
-        'max_win': 500,
         'min_level': 1,
-        'card_pool': ['common', 'rare'],
+        'card_pool': ['common'],
     },
     'silver': {
         'name': 'Cartón de Plata',
         'cost': 60,
         'badge': '🥈',
-        'max_win': 1500,
         'min_level': 3,
-        'card_pool': ['rare', 'epic'],
+        'card_pool': ['rare'],
     },
     'gold': {
         'name': 'Cartón Imperial de Oro',
         'cost': 150,
         'badge': '🥇',
-        'max_win': 5000,
         'min_level': 5,
-        'card_pool': ['epic', 'legendary'],
+        'card_pool': ['rare', 'epic', 'legendary'],
     },
 }
 
+# ⚖️ Símbolos con Pesos Probabilísticos Calibrados (RTP ~91%)
 SCRATCH_SYMBOLS = {
-    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 20, 'weight': 6, 'color': '#fbbf24'},
-    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 10, 'weight': 10, 'color': '#60a5fa'},
-    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 5, 'weight': 18, 'color': '#f59e0b'},
-    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 2, 'weight': 30, 'color': '#f43f5e'},
-    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.2, 'weight': 36, 'color': '#c084fc'},
-    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 3, 'weight': 8, 'color': '#e879f9'},
+    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.0, 'weight': 40, 'color': '#c084fc'},     # Recupera costo
+    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 1.5, 'weight': 28, 'color': '#f43f5e'},      # Ganancia moderada
+    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 3.0, 'weight': 16, 'color': '#f59e0b'},  # Buen premio
+    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 6.0, 'weight': 8, 'color': '#60a5fa'},   # Premio mayor
+    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 15.0, 'weight': 3, 'color': '#fbbf24'},  # Gran Jackpot
+    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 1.0, 'weight': 3, 'color': '#e879f9'}, # Muy exclusiva
 }
 
 def scratch_card_view(request):
@@ -3697,14 +3694,12 @@ def scratch_card_view(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-
     return render(request, 'economy/scratch.html', {
         'tg_id': tg_id,
         'wallet': wallet,
         'profile': profile,
         'tiers': SCRATCH_TIERS,
     })
-
 
 def scratch_card_play_ajax(request):
     """Compra y genera la cuadrícula 3x3 del cartón vía AJAX."""
@@ -3741,9 +3736,10 @@ def scratch_card_play_ajax(request):
             wallet.balance -= cost
             wallet.accumulate_patron_vault(cost)
             wallet.save()
+            balance_after_cost = wallet.balance
 
-            # 🎲 DETERMINAR RESULTADO CON PRD (Tasa de Victoria calibrada ~37%)
-            is_win = random.random() < 0.37
+            # 🎲 PROBABILIDAD CONTROLADA: 26% de victoria (RTP global saludable ~91%)
+            is_win = random.random() < 0.26
             symbols_keys = list(SCRATCH_SYMBOLS.keys())
             weights = [SCRATCH_SYMBOLS[k]['weight'] for k in symbols_keys]
 
@@ -3757,11 +3753,26 @@ def scratch_card_play_ajax(request):
                 mult = SCRATCH_SYMBOLS[winning_key]['mult']
                 payout = int(round(cost * mult))
 
-                # Otorgar Photocard real si cayó el símbolo de carta
+                # Otorgar Photocard real verificando existencia
                 if winning_key == 'photocard':
                     from idols.models import Photocard, UserPhotocard
-                    target_rarities = cfg['card_pool']
-                    available_cards = list(Photocard.objects.filter(rarity__in=target_rarities))
+                    
+                    # Probabilidad noble de rarezas en el tier Oro
+                    target_rarity = 'common'
+                    if tier_key == 'bronze':
+                        target_rarity = 'common'
+                    elif tier_key == 'silver':
+                        target_rarity = random.choices(['rare', 'epic'], weights=[90, 10], k=1)[0]
+                    elif tier_key == 'gold':
+                        # Solo 2% de probabilidad de legendaria en Oro Real
+                        target_rarity = random.choices(['rare', 'epic', 'legendary'], weights=[80, 18, 2], k=1)[0]
+
+                    available_cards = list(Photocard.objects.filter(rarity=target_rarity).exclude(image=''))
+                    
+                    # Fallback si no hay cartas de esa rareza
+                    if not available_cards:
+                        available_cards = list(Photocard.objects.exclude(image=''))
+
                     if available_cards:
                         awarded_card = random.choice(available_cards)
                         UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=awarded_card)
@@ -3773,10 +3784,19 @@ def scratch_card_play_ajax(request):
                             'color': awarded_card.get_color_hex(),
                         }
                         if awarded_card.rarity == 'legendary':
-                            send_telegram_msg(
-                                f"👑 <b>¡PHOTOCARD LEGENDARIA DESENTERRADA!</b>\n\n"
-                                f"Un noble ha raspado el <i>{cfg['name']}</i> y reveló a <b>{awarded_card.name}</b> de {awarded_card.display_idol_name} ✨"
-                            )
+                            from django.conf import settings
+                            group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
+                            if group_id:
+                                user_name = profile.username or f"Noble_{tg_id}"
+                                send_telegram_msg(
+                                    chat_id=group_id,
+                                    text=(
+                                        f"👑 <b>¡PHOTOCARD LEGENDARIA DESENTERRADA!</b>\n\n"
+                                        f"El noble <b>{user_name}</b> raspó el <i>{cfg['name']}</i> y reveló a <b>{awarded_card.name}</b> ({awarded_card.display_idol_name}) ✨"
+                                    ),
+                                    button_text="🎰 Ir a Rasca y Gana",
+                                    button_url="https://t.me/KingdomPleasure_bot?start=entrar"
+                                )
 
                 # Colocar exactamente 3 símbolos ganadores en 3 casillas aleatorias
                 win_indices = set(random.sample(range(9), 3))
@@ -3791,7 +3811,6 @@ def scratch_card_play_ajax(request):
                             'is_winner': True
                         })
                     else:
-                        # Rellenar con señuelos sin provocar otra tercia
                         decoy_pool = [k for k in symbols_keys if k != winning_key]
                         chosen_decoy = random.choice(decoy_pool)
                         s_data = SCRATCH_SYMBOLS[chosen_decoy]
@@ -3803,13 +3822,12 @@ def scratch_card_play_ajax(request):
                             'is_winner': False
                         })
 
-                # Acreditar premio a la Bóveda
                 wallet.balance += payout
                 wallet.save()
-                grant_user_xp(profile, random.randint(3, 7))
+                grant_user_xp(request, tg_id, random.randint(2, 4), reason="Rasca y Gana Clandestino")
 
             else:
-                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss" psicológico: 2 iguales para mantener el hype)
+                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss": 2 iguales para mantener el vicio)
                 near_miss_key = random.choices(symbols_keys, weights=weights, k=1)[0]
                 near_miss_indices = set(random.sample(range(9), 2))
                 other_pool = [k for k in symbols_keys if k != near_miss_key]
@@ -3835,7 +3853,7 @@ def scratch_card_play_ajax(request):
                             'is_winner': False
                         })
 
-                grant_user_xp(profile, 1)
+                grant_user_xp(request, tg_id, 1, reason="Rasca y Gana Clandestino")
 
             serial_num = f"KOP-{random.randint(10000, 99999)}"
 
@@ -3846,8 +3864,9 @@ def scratch_card_play_ajax(request):
                 'payout': payout,
                 'photocard_won': photocard_won_data,
                 'grid': grid,
+                'balance_after_cost': balance_after_cost,
                 'new_balance': wallet.balance,
-                'patron_vault': wallet.patron_vault_accumulated,
+                'patron_vault': wallet.patron_vault,
                 'serial': serial_num,
                 'tier_name': cfg['name'],
             })
@@ -10879,7 +10898,7 @@ ARCHIVO: .\templates\economy\scratch.html
         <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest flex items-center justify-center gap-2">
             <span>🎟️</span> El Raspe de la Corona <span>⚜️</span>
         </h2>
-        <p class="text-[11px] text-stone-400">Raspa con tu dedo la cera dorada. ¡3 símbolos iguales ganan!</p>
+        <p class="text-[11px] text-stone-400">Raspa la cera dorada con tu dedo. ¡3 iguales ganan el botín!</p>
     </div>
 
     <!-- SELECTOR DE CARTÓN (TIERS) -->
@@ -10889,20 +10908,23 @@ ARCHIVO: .\templates\economy\scratch.html
             <span class="text-xl">🥉</span>
             <span class="text-[10px] font-bold text-amber-200 mt-1 uppercase">Bronce</span>
             <span class="text-[11px] font-mono font-black text-yellow-400">25 🪙</span>
+            <span class="text-[8px] text-stone-400 font-mono">Nvl 1+</span>
         </button>
 
         <button type="button" onclick="selectTier('silver')" id="btn-tier-silver"
-                class="tier-btn p-2.5 rounded-2xl border-2 border-stone-400/40 bg-gradient-to-b from-stone-900/60 to-black flex flex-col items-center active:scale-95 transition-all shadow-lg">
+                class="tier-btn p-2.5 rounded-2xl border-2 border-stone-500/40 bg-gradient-to-b from-stone-900/60 to-black flex flex-col items-center active:scale-95 transition-all shadow-lg">
             <span class="text-xl">🥈</span>
             <span class="text-[10px] font-bold text-stone-200 mt-1 uppercase">Plata</span>
             <span class="text-[11px] font-mono font-black text-yellow-400">60 🪙</span>
+            <span class="text-[8px] text-stone-400 font-mono">Nvl 3+</span>
         </button>
 
         <button type="button" onclick="selectTier('gold')" id="btn-tier-gold"
-                class="tier-btn p-2.5 rounded-2xl border-2 border-vip-gold bg-gradient-to-b from-yellow-950/40 to-black flex flex-col items-center active:scale-95 transition-all shadow-lg">
+                class="tier-btn p-2.5 rounded-2xl border-2 border-vip-gold/40 bg-gradient-to-b from-yellow-950/40 to-black flex flex-col items-center active:scale-95 transition-all shadow-lg">
             <span class="text-xl">🥇</span>
             <span class="text-[10px] font-bold text-yellow-300 mt-1 uppercase">Oro Real</span>
             <span class="text-[11px] font-mono font-black text-yellow-400">150 🪙</span>
+            <span class="text-[8px] text-yellow-500/80 font-mono">Nvl 5+</span>
         </button>
     </div>
 
@@ -10913,9 +10935,9 @@ ARCHIVO: .\templates\economy\scratch.html
         <div class="w-full flex items-center justify-between border-b border-vip-gold/30 pb-2 mb-3">
             <div class="flex items-center gap-1.5">
                 <span class="text-sm">⚜️</span>
-                <span class="font-serif text-[11px] font-black uppercase text-yellow-400 tracking-wider" id="ticket-tier-name">Cartón Imperial de Oro</span>
+                <span class="font-serif text-[11px] font-black uppercase text-yellow-400 tracking-wider" id="ticket-tier-name">Cartón de Bronce</span>
             </div>
-            <span class="font-mono text-[9px] text-stone-500 bg-black/80 px-2 py-0.5 rounded-md border border-white/5" id="ticket-serial">#KOP-84920</span>
+            <span class="font-mono text-[9px] text-stone-500 bg-black/80 px-2 py-0.5 rounded-md border border-white/5" id="ticket-serial">#KOP-LISTO</span>
         </div>
 
         <!-- CONTENEDOR 3X3 CON CANVAS SUPERPUESTO -->
@@ -10929,19 +10951,19 @@ ARCHIVO: .\templates\economy\scratch.html
             <!-- CAPA SUPERIOR: CANVAS RASPABLE DE TINTA DORADA -->
             <canvas id="scratch-canvas" width="280" height="280" class="absolute inset-0 cursor-crosshair z-20 touch-none"></canvas>
 
-            <!-- MENSAJE DE ESTADO / BLOQUEADO ANTES DE COMPRAR -->
+            <!-- CAPA DE COMPRA INICIAL -->
             <div id="buy-prompt-overlay" class="absolute inset-0 bg-black/85 backdrop-blur-sm z-30 flex flex-col items-center justify-center p-4 text-center">
                 <span class="text-4xl mb-2 animate-bounce">🪙</span>
                 <h3 class="font-serif text-sm font-black text-white uppercase tracking-wider">Cartón Listo para Raspar</h3>
-                <p class="text-xs text-stone-400 mt-1 mb-3">Toca para adquirir tu billete oficial</p>
+                <p class="text-xs text-stone-400 mt-1 mb-3">Toca para comprar tu billete oficial</p>
                 <button type="button" onclick="purchaseTicket()" id="btn-buy-ticket"
                         class="btn-gold px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-xl active:scale-95 transition-all">
-                    Comprar Billete (<span id="ticket-cost-label">150</span> 🪙)
+                    Comprar Billete (<span id="ticket-cost-label">25</span> 🪙)
                 </button>
             </div>
         </div>
 
-        <!-- BARRA DE ACCIONES POST-COMPRA -->
+        <!-- BARRA DE ACCIONES POST-COMPRA (DURANTE EL RASPADO) -->
         <div class="w-full flex items-center justify-between gap-2 mt-3 pt-2 border-t border-white/10" id="action-controls" style="display: none;">
             <div class="flex items-center gap-1.5 text-[10px] text-stone-400 font-mono">
                 <span>Raspado:</span>
@@ -10950,6 +10972,18 @@ ARCHIVO: .\templates\economy\scratch.html
             <button type="button" onclick="autoRevealTicket()" 
                     class="bg-purple-950 border border-purple-500 text-purple-200 hover:text-white px-3.5 py-1.5 rounded-xl text-[10px] font-bold uppercase active:scale-95 transition-all shadow">
                 ⚡ Revelar Todo
+            </button>
+        </div>
+
+        <!-- BANNER DE RESULTADO AL NO GANAR (NO TAPA LOS SÍMBOLOS) -->
+        <div id="loss-verdict-banner" class="w-full mt-3 p-2.5 rounded-2xl bg-stone-900/90 border border-stone-700/60 flex flex-col items-center text-center gap-2" style="display: none;">
+            <div class="flex items-center gap-1.5 text-stone-300 text-xs font-medium">
+                <span>💔</span>
+                <span>¡Por poco! Te faltó un símbolo para la tercia.</span>
+            </div>
+            <button type="button" onclick="resetToBuyState()" 
+                    class="w-full btn-gold py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                🎟️ Raspar Otro Billete (<span id="loss-retry-cost">25</span> 🪙)
             </button>
         </div>
 
@@ -10963,24 +10997,23 @@ ARCHIVO: .\templates\economy\scratch.html
             <div>🎴 +Photocard</div>
         </div>
     </div>
-
 </div>
 
 <!-- MODAL DE VICTORIA CON EFECTO DE ORO -->
 <div id="win-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
     <div class="vip-panel modal-spring-in p-6 max-w-xs w-full text-center border-2 border-yellow-400 rounded-3xl bg-gradient-to-b from-[#240a33] to-black shadow-2xl relative">
-        <span class="text-5xl my-2 block">🎉</span>
+        <span class="text-5xl my-2 block animate-bounce">🎉</span>
         <h3 class="font-serif text-lg font-black text-yellow-400 uppercase tracking-wider">¡PREMIO DE LA CORONA!</h3>
-        <p class="text-xs text-stone-300 mt-1">Has encontrado 3 símbolos de <strong id="win-symbol-name" class="text-white"></strong></p>
+        <p class="text-xs text-stone-300 mt-1">¡Tercia conseguida de <strong id="win-symbol-name" class="text-white"></strong>!</p>
         
-        <div class="my-4 py-3 bg-yellow-500/20 border border-yellow-500/40 rounded-2xl flex flex-col items-center">
-            <span class="text-[10px] font-mono text-yellow-300 uppercase">Ganancia Neta</span>
+        <div class="my-4 py-3 bg-yellow-500/20 border border-yellow-500/40 rounded-2xl flex flex-col items-center shadow-[0_0_20px_rgba(234,179,8,0.3)]">
+            <span class="text-[10px] font-mono text-yellow-300 uppercase font-bold">Premio Cobrado</span>
             <span class="font-mono text-2xl font-black text-yellow-400 mt-0.5" id="win-payout-label">+0 🪙</span>
         </div>
 
         <!-- REVELACIÓN DE PHOTOCARD SI GANÓ UNA -->
         <div id="win-photocard-box" class="hidden my-3 p-3 bg-purple-950/80 border border-purple-500 rounded-2xl flex flex-col items-center">
-            <span class="text-[9px] font-mono text-purple-300 font-bold uppercase mb-1">¡Recompensa Adicional!</span>
+            <span class="text-[9px] font-mono text-purple-300 font-bold uppercase mb-1">¡Photocard Desenterrada!</span>
             <img id="win-photocard-img" src="" class="w-24 h-32 object-cover rounded-xl border-2 border-purple-400 shadow-lg mb-1">
             <span class="text-xs font-black text-white" id="win-photocard-name"></span>
             <span class="text-[9px] font-bold text-yellow-300" id="win-photocard-idol"></span>
@@ -10994,23 +11027,27 @@ ARCHIVO: .\templates\economy\scratch.html
 </div>
 
 <script>
-    let activeTier = 'gold';
+    const userLevel = {{ profile.level|default:1 }};
     const tierCosts = { 'bronze': 25, 'silver': 60, 'gold': 150 };
     const tierNames = { 'bronze': 'Cartón de Bronce', 'silver': 'Cartón de Plata', 'gold': 'Cartón Imperial de Oro' };
+    
+    // Seleccionar automáticamente el tier más alto que el usuario puede jugar
+    let activeTier = (userLevel >= 5) ? 'gold' : ((userLevel >= 3) ? 'silver' : 'bronze');
 
     let isDrawing = false;
+    let lastPos = null;
     let canvas, ctx;
     let ticketActive = false;
     let currentTicketData = null;
-    let scratchedPixels = 0;
     let totalPixels = 0;
     let audioCtx = null;
+    let currentDisplayedBalance = parseInt(document.getElementById('user-balance').innerText) || 0;
+    let progressCheckTimeout = null;
 
-    // Inicializar Web Audio API para síntesis realista de raspado
     function playScratchSound() {
         try {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const bufferSize = audioCtx.sampleRate * 0.05;
+            const bufferSize = audioCtx.sampleRate * 0.04;
             const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
             const data = buffer.getChannelData(0);
             for (let i = 0; i < bufferSize; i++) {
@@ -11020,12 +11057,10 @@ ARCHIVO: .\templates\economy\scratch.html
             noise.buffer = buffer;
             const filter = audioCtx.createBiquadFilter();
             filter.type = 'bandpass';
-            filter.frequency.value = 1800 + Math.random() * 600;
-            filter.Q.value = 3.0;
-
+            filter.frequency.value = 2000 + Math.random() * 800;
+            filter.Q.value = 2.5;
             const gain = audioCtx.createGain();
-            gain.gain.value = 0.08;
-
+            gain.gain.value = 0.06;
             noise.connect(filter);
             filter.connect(gain);
             gain.connect(audioCtx.destination);
@@ -11045,6 +11080,7 @@ ARCHIVO: .\templates\economy\scratch.html
         });
         document.getElementById('ticket-cost-label').innerText = tierCosts[tier];
         document.getElementById('ticket-tier-name').innerText = tierNames[tier];
+        document.getElementById('loss-retry-cost').innerText = tierCosts[tier];
         try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch(e) {}
     }
 
@@ -11052,24 +11088,25 @@ ARCHIVO: .\templates\economy\scratch.html
         canvas = document.getElementById('scratch-canvas');
         ctx = canvas.getContext('2d');
         totalPixels = canvas.width * canvas.height;
+        ctx.globalCompositeOperation = 'source-over';
 
-        // Dibujar textura de lámina de oro con patrón y reflejo
+        // Lámina de oro con degradado realista
         const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
         grad.addColorStop(0, '#785012');
-        grad.addColorStop(0.25, '#d4af37');
-        grad.addColorStop(0.5, '#fff3a8');
-        grad.addColorStop(0.75, '#b8860b');
+        grad.addColorStop(0.2, '#d4af37');
+        grad.addColorStop(0.45, '#fff6bd');
+        grad.addColorStop(0.7, '#b8860b');
         grad.addColorStop(1, '#543807');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Motas de brillo y texto de agua de seguridad
-        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        // Estampado de seguridad
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
         ctx.font = 'bold 12px serif';
         ctx.textAlign = 'center';
-        ctx.fillText('👑 REINO DEL PLACER 👑', canvas.width / 2, canvas.height / 2 - 20);
-        ctx.font = '10px monospace';
-        ctx.fillText('RASPA CON EL DEDO AQUÍ', canvas.width / 2, canvas.height / 2 + 10);
+        ctx.fillText('👑 REINO DEL PLACER 👑', canvas.width / 2, canvas.height / 2 - 18);
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText('✨ RASPA CON TU DEDO ✨', canvas.width / 2, canvas.height / 2 + 12);
     }
 
     async function purchaseTicket() {
@@ -11090,7 +11127,7 @@ ARCHIVO: .\templates\economy\scratch.html
                 body: formData
             });
             const data = await res.json();
-
+            
             if (!data.success) {
                 alert(data.error || 'No se pudo comprar el cartón.');
                 btn.disabled = false;
@@ -11099,15 +11136,18 @@ ARCHIVO: .\templates\economy\scratch.html
             }
 
             currentTicketData = data;
-            document.getElementById('user-balance').innerText = data.new_balance;
+
+            // ✅ Anti-Spoiler: Solo descuenta el costo en el saldo visual inicial
+            currentDisplayedBalance = data.balance_after_cost !== undefined ? data.balance_after_cost : (currentDisplayedBalance - tierCosts[activeTier]);
+            document.getElementById('user-balance').innerText = currentDisplayedBalance;
             document.getElementById('ticket-serial').innerText = `#${data.serial}`;
 
-            // Llenar cuadrícula 3x3 oculta
+            // Llenar cuadrícula oculta
             const gridContainer = document.getElementById('grid-container');
             gridContainer.innerHTML = '';
             data.grid.forEach(cell => {
                 const cellEl = document.createElement('div');
-                cellEl.className = `flex flex-col items-center justify-center rounded-xl p-1 bg-black/60 border border-white/10 ${cell.is_winner ? 'ring-2 ring-yellow-400 bg-yellow-950/30 animate-pulse' : ''}`;
+                cellEl.className = `flex flex-col items-center justify-center rounded-xl p-1 bg-black/60 border border-white/10 ${cell.is_winner ? 'win-pulse-cell' : ''}`;
                 cellEl.innerHTML = `
                     <span class="text-2xl">${cell.symbol}</span>
                     <span class="text-[7.5px] font-mono uppercase font-bold truncate mt-0.5" style="color: ${cell.color};">${cell.name}</span>
@@ -11118,12 +11158,12 @@ ARCHIVO: .\templates\economy\scratch.html
             // Preparar lámina de raspado
             initCanvasFoil();
             document.getElementById('buy-prompt-overlay').style.display = 'none';
+            document.getElementById('loss-verdict-banner').style.display = 'none';
             document.getElementById('action-controls').style.display = 'flex';
             document.getElementById('scratch-percent').innerText = '0%';
             ticketActive = true;
 
             try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
-
         } catch(err) {
             alert('Error de conexión con la Corona.');
             btn.disabled = false;
@@ -11131,18 +11171,30 @@ ARCHIVO: .\templates\economy\scratch.html
         }
     }
 
-    function scratch(x, y) {
+    // ✅ Trazado continuo suave (anti-círculos cortados)
+    function scratchStroke(fromX, fromY, toX, toY) {
         if (!ticketActive) return;
         ctx.globalCompositeOperation = 'destination-out';
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 42;
+
         ctx.beginPath();
-        ctx.arc(x, y, 22, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        ctx.stroke();
 
         playScratchSound();
-
-        // Háptica cada varios trazos
-        if (Math.random() < 0.35) {
+        if (Math.random() < 0.25) {
             try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+        }
+
+        // Programar cálculo de porcentaje optimizado
+        if (!progressCheckTimeout) {
+            progressCheckTimeout = setTimeout(() => {
+                checkScratchProgress();
+                progressCheckTimeout = null;
+            }, 80);
         }
     }
 
@@ -11150,14 +11202,14 @@ ARCHIVO: .\templates\economy\scratch.html
         if (!ticketActive) return;
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         let clearCount = 0;
-        // Muestreo optimizado cada 16 pixeles
+        // Muestreo cada 16 bytes (1 de cada 4 píxeles)
         for (let i = 3; i < imgData.data.length; i += 16) {
             if (imgData.data[i] === 0) clearCount++;
         }
         const percent = Math.min(100, Math.round((clearCount / (totalPixels / 4)) * 100));
         document.getElementById('scratch-percent').innerText = `${percent}%`;
 
-        if (percent >= 55) {
+        if (percent >= 52) {
             autoRevealTicket();
         }
     }
@@ -11167,19 +11219,47 @@ ARCHIVO: .\templates\economy\scratch.html
         ticketActive = false;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         document.getElementById('scratch-percent').innerText = '100%';
-
         setTimeout(() => {
             finishTicketVerdict();
-        }, 300);
+        }, 250);
+    }
+
+    function animateBalanceCount(start, end) {
+        const el = document.getElementById('user-balance');
+        const diff = end - start;
+        const steps = 15;
+        let currentStep = 0;
+        const interval = setInterval(() => {
+            currentStep++;
+            const progress = currentStep / steps;
+            const val = Math.round(start + diff * progress);
+            el.innerText = val;
+            if (currentStep >= steps) {
+                clearInterval(interval);
+                el.innerText = end;
+            }
+        }, 30);
     }
 
     function finishTicketVerdict() {
         if (!currentTicketData) return;
+        document.getElementById('action-controls').style.display = 'none';
+
         if (currentTicketData.is_win) {
             try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+            
+            // Efecto visual a las 3 celdas ganadoras
+            document.querySelectorAll('.win-pulse-cell').forEach(c => {
+                c.classList.add('ring-2', 'ring-yellow-400', 'bg-yellow-950/40', 'animate-pulse');
+            });
+
+            // Animación de saldo sumando el premio
+            animateBalanceCount(currentDisplayedBalance, currentTicketData.new_balance);
+            currentDisplayedBalance = currentTicketData.new_balance;
+
             document.getElementById('win-symbol-name').innerText = currentTicketData.winning_symbol;
             document.getElementById('win-payout-label').innerText = `+${currentTicketData.payout} 🪙`;
-
+            
             if (currentTicketData.photocard_won) {
                 const pc = currentTicketData.photocard_won;
                 document.getElementById('win-photocard-name').innerText = pc.name;
@@ -11189,67 +11269,95 @@ ARCHIVO: .\templates\economy\scratch.html
             } else {
                 document.getElementById('win-photocard-box').classList.add('hidden');
             }
+            
+            setTimeout(() => {
+                document.getElementById('win-modal').classList.remove('hidden');
+            }, 400);
 
-            document.getElementById('win-modal').classList.remove('hidden');
         } else {
-            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
-            // Mostrar botón para raspar otro billete
-            document.getElementById('buy-prompt-overlay').style.display = 'flex';
-            document.getElementById('action-controls').style.display = 'none';
-            const btn = document.getElementById('btn-buy-ticket');
-            btn.disabled = false;
-            btn.innerHTML = `🎟️ Probar Otro Billete (${tierCosts[activeTier]} 🪙)`;
+            // ✅ Pérdida: NO tapamos el cartón, dejamos ver los símbolos y mostramos banner abajo
+            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+            document.getElementById('loss-verdict-banner').style.display = 'flex';
         }
     }
 
-    function closeWinModalAndPlayAgain() {
-        document.getElementById('win-modal').classList.add('hidden');
+    function resetToBuyState() {
+        document.getElementById('loss-verdict-banner').style.display = 'none';
+        initCanvasFoil();
         document.getElementById('buy-prompt-overlay').style.display = 'flex';
-        document.getElementById('action-controls').style.display = 'none';
         const btn = document.getElementById('btn-buy-ticket');
         btn.disabled = false;
         btn.innerHTML = `Comprar Billete (${tierCosts[activeTier]} 🪙)`;
     }
 
-    // Eventos táctiles y ratón en el Canvas
+    function closeWinModalAndPlayAgain() {
+        document.getElementById('win-modal').classList.add('hidden');
+        resetToBuyState();
+    }
+
+    // ✅ Listeners con soporte táctil hermético (bloquea scroll móvil en el canvas)
     window.addEventListener('DOMContentLoaded', () => {
         initCanvasFoil();
-        selectTier('gold');
+        selectTier(activeTier);
 
         const getPos = (e) => {
             const rect = canvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
             return {
                 x: (clientX - rect.left) * (canvas.width / rect.width),
                 y: (clientY - rect.top) * (canvas.height / rect.height)
             };
         };
 
-        const onDown = (e) => {
+        const onStart = (e) => {
+            if (!ticketActive) return;
             isDrawing = true;
-            const p = getPos(e);
-            scratch(p.x, p.y);
+            lastPos = getPos(e);
+            scratchStroke(lastPos.x, lastPos.y, lastPos.x, lastPos.y);
         };
+
         const onMove = (e) => {
-            if (!isDrawing) return;
-            const p = getPos(e);
-            scratch(p.x, p.y);
+            if (!isDrawing || !ticketActive) return;
+            const currentPos = getPos(e);
+            if (lastPos) {
+                scratchStroke(lastPos.x, lastPos.y, currentPos.x, currentPos.y);
+            }
+            lastPos = currentPos;
         };
-        const onUp = () => {
+
+        const onEnd = () => {
             if (isDrawing) {
                 isDrawing = false;
+                lastPos = null;
                 checkScratchProgress();
             }
         };
 
-        canvas.addEventListener('mousedown', onDown);
-        canvas.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
+        // Eventos de ratón
+        canvas.addEventListener('mousedown', onStart);
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onEnd);
 
-        canvas.addEventListener('touchstart', onDown, { passive: false });
-        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); onMove(e); }, { passive: false });
-        window.addEventListener('touchend', onUp);
+        // Eventos táctiles móviles (bloquean scroll con preventDefault)
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            onStart(e);
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            onMove(e);
+        }, { passive: false });
+
+        window.addEventListener('touchend', onEnd);
+        window.addEventListener('touchcancel', onEnd);
     });
 </script>
 {% endblock %}

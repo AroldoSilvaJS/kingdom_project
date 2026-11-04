@@ -1225,7 +1225,7 @@ def scratch_card_view(request):
     })
 
 def scratch_card_play_ajax(request):
-    """Compra y genera la cuadrícula 3x3 del cartón vía AJAX."""
+    """Compra y genera la cuadrícula 3x3 del cartón vía AJAX con blindaje anti-bugs."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
 
@@ -1240,7 +1240,7 @@ def scratch_card_play_ajax(request):
 
     try:
         with transaction.atomic():
-            wallet = Wallet.objects.select_for_update().get(telegram_user_id=tg_id)
+            wallet, _ = Wallet.objects.select_for_update().get_or_create(telegram_user_id=tg_id)
             profile, _ = UserProfile.objects.select_for_update().get_or_create(telegram_user_id=tg_id)
 
             if profile.level < cfg['min_level']:
@@ -1255,13 +1255,13 @@ def scratch_card_play_ajax(request):
                     'error': f"Oro insuficiente. Este cartón cuesta {cost} 🪙."
                 }, status=400)
 
-            # Descontar costo y abonar al Cofre del Mecenas (8%)
+            # Descontar costo y acumular 8% en el Cofre del Mecenas
             wallet.balance -= cost
             wallet.accumulate_patron_vault(cost)
             wallet.save()
             balance_after_cost = wallet.balance
 
-            # 🎲 PROBABILIDAD CONTROLADA: 26% de victoria (RTP global saludable ~91%)
+            # 🎲 Probabilidad controlada: 26% de victoria
             is_win = random.random() < 0.26
             symbols_keys = list(SCRATCH_SYMBOLS.keys())
             weights = [SCRATCH_SYMBOLS[k]['weight'] for k in symbols_keys]
@@ -1276,23 +1276,16 @@ def scratch_card_play_ajax(request):
                 mult = SCRATCH_SYMBOLS[winning_key]['mult']
                 payout = int(round(cost * mult))
 
-                # Otorgar Photocard real verificando existencia
+                # Entrega de Photocard si sale 🎴
                 if winning_key == 'photocard':
                     from idols.models import Photocard, UserPhotocard
-                    
-                    # Probabilidad noble de rarezas en el tier Oro
                     target_rarity = 'common'
-                    if tier_key == 'bronze':
-                        target_rarity = 'common'
-                    elif tier_key == 'silver':
+                    if tier_key == 'silver':
                         target_rarity = random.choices(['rare', 'epic'], weights=[90, 10], k=1)[0]
                     elif tier_key == 'gold':
-                        # Solo 2% de probabilidad de legendaria en Oro Real
                         target_rarity = random.choices(['rare', 'epic', 'legendary'], weights=[80, 18, 2], k=1)[0]
 
                     available_cards = list(Photocard.objects.filter(rarity=target_rarity).exclude(image=''))
-                    
-                    # Fallback si no hay cartas de esa rareza
                     if not available_cards:
                         available_cards = list(Photocard.objects.exclude(image=''))
 
@@ -1320,61 +1313,55 @@ def scratch_card_play_ajax(request):
                                     button_text="🎰 Ir a Rasca y Gana",
                                     button_url="https://t.me/KingdomPleasure_bot?start=entrar"
                                 )
-
-                # Colocar exactamente 3 símbolos ganadores en 3 casillas aleatorias
-                win_indices = set(random.sample(range(9), 3))
-                for i in range(9):
-                    if i in win_indices:
-                        s_data = SCRATCH_SYMBOLS[winning_key]
-                        grid.append({
-                            'key': winning_key,
-                            'symbol': s_data['symbol'],
-                            'name': s_data['name'],
-                            'color': s_data['color'],
-                            'is_winner': True
-                        })
                     else:
-                        decoy_pool = [k for k in symbols_keys if k != winning_key]
-                        chosen_decoy = random.choice(decoy_pool)
-                        s_data = SCRATCH_SYMBOLS[chosen_decoy]
-                        grid.append({
-                            'key': chosen_decoy,
-                            'symbol': s_data['symbol'],
-                            'name': s_data['name'],
-                            'color': s_data['color'],
-                            'is_winner': False
-                        })
+                        # Fallback si aún no hay photocards subidas en la base de datos
+                        bonus_gold = cost * 2
+                        payout += bonus_gold
+
+                # 🛡️ BLINDAJE: 3 del ganador + 6 casillas sin tercia accidental
+                other_symbols = [k for k in symbols_keys if k != winning_key]
+                random.shuffle(other_symbols)
+                # Máximo 2 de un símbolo y 1 del resto (2 + 2 + 1 + 1 = 6)
+                decoy_keys = [other_symbols[0], other_symbols[0], other_symbols[1], other_symbols[1], other_symbols[2], other_symbols[3]]
+                
+                # Armamos la lista completa de 9
+                board_keys = [winning_key, winning_key, winning_key] + decoy_keys
+                random.shuffle(board_keys)
+
+                for k in board_keys:
+                    s_data = SCRATCH_SYMBOLS[k]
+                    grid.append({
+                        'key': k,
+                        'symbol': s_data['symbol'],
+                        'name': s_data['name'],
+                        'color': s_data['color'],
+                        'is_winner': (k == winning_key)
+                    })
 
                 wallet.balance += payout
                 wallet.save()
                 grant_user_xp(request, tg_id, random.randint(2, 4), reason="Rasca y Gana Clandestino")
 
             else:
-                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss": 2 iguales para mantener el vicio)
-                near_miss_key = random.choices(symbols_keys, weights=weights, k=1)[0]
-                near_miss_indices = set(random.sample(range(9), 2))
-                other_pool = [k for k in symbols_keys if k != near_miss_key]
+                # 🛡️ BLINDAJE EN DERROTA: 3 pares y 3 individuales [2, 2, 2, 1, 1, 1] = 9 casillas
+                # IMPOSIBLE que salgan 3 iguales por error. Sensación perfecta de "por poco gano".
+                shuffled_pool = symbols_keys.copy()
+                random.shuffle(shuffled_pool)
+                pair1, pair2, pair3 = shuffled_pool[0], shuffled_pool[1], shuffled_pool[2]
+                single1, single2, single3 = shuffled_pool[3], shuffled_pool[4], shuffled_pool[5]
 
-                for i in range(9):
-                    if i in near_miss_indices:
-                        s_data = SCRATCH_SYMBOLS[near_miss_key]
-                        grid.append({
-                            'key': near_miss_key,
-                            'symbol': s_data['symbol'],
-                            'name': s_data['name'],
-                            'color': s_data['color'],
-                            'is_winner': False
-                        })
-                    else:
-                        chosen_other = random.choice(other_pool)
-                        s_data = SCRATCH_SYMBOLS[chosen_other]
-                        grid.append({
-                            'key': chosen_other,
-                            'symbol': s_data['symbol'],
-                            'name': s_data['name'],
-                            'color': s_data['color'],
-                            'is_winner': False
-                        })
+                loss_keys = [pair1, pair1, pair2, pair2, pair3, pair3, single1, single2, single3]
+                random.shuffle(loss_keys)
+
+                for k in loss_keys:
+                    s_data = SCRATCH_SYMBOLS[k]
+                    grid.append({
+                        'key': k,
+                        'symbol': s_data['symbol'],
+                        'name': s_data['name'],
+                        'color': s_data['color'],
+                        'is_winner': False
+                    })
 
                 grant_user_xp(request, tg_id, 1, reason="Rasca y Gana Clandestino")
 

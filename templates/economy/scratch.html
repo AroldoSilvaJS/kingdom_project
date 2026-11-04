@@ -112,11 +112,11 @@
 
         <!-- TABLA DE PREMIOS EN MINIATURA -->
         <div class="w-full grid grid-cols-3 gap-1 mt-3 bg-black/60 p-2 rounded-xl border border-white/5 text-[9px] text-center font-mono">
-            <div>👑 x20</div>
-            <div>💎 x10</div>
-            <div>🪙 x5</div>
-            <div>🍷 x2</div>
-            <div>⚜️ x1.2</div>
+            <div>👑 x15.0</div>
+            <div>💎 x6.0</div>
+            <div>🪙 x3.0</div>
+            <div>🍷 x1.5</div>
+            <div>⚜️ x1.0</div>
             <div>🎴 +Photocard</div>
         </div>
     </div>
@@ -167,9 +167,10 @@
     let currentDisplayedBalance = parseInt(document.getElementById('user-balance').innerText) || 0;
     let progressCheckTimeout = null;
 
-    function playScratchSound() {
+function playScratchSound() {
         try {
             if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             const bufferSize = audioCtx.sampleRate * 0.04;
             const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
             const data = buffer.getChannelData(0);
