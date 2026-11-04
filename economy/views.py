@@ -1176,43 +1176,40 @@ def admin_delete_collectible(request, item_id):
 
 
 # ==========================================
-# 🎟️ SISTEMA DE RASCA Y GANA CLANDESTINO
+# 🎟️ SISTEMA DE RASCA Y GANA CLANDESTINO (CALIBRADO)
 # ==========================================
-
 SCRATCH_TIERS = {
     'bronze': {
         'name': 'Cartón de Bronce',
         'cost': 25,
         'badge': '🥉',
-        'max_win': 500,
         'min_level': 1,
-        'card_pool': ['common', 'rare'],
+        'card_pool': ['common'],
     },
     'silver': {
         'name': 'Cartón de Plata',
         'cost': 60,
         'badge': '🥈',
-        'max_win': 1500,
         'min_level': 3,
-        'card_pool': ['rare', 'epic'],
+        'card_pool': ['rare'],
     },
     'gold': {
         'name': 'Cartón Imperial de Oro',
         'cost': 150,
         'badge': '🥇',
-        'max_win': 5000,
         'min_level': 5,
-        'card_pool': ['epic', 'legendary'],
+        'card_pool': ['rare', 'epic', 'legendary'],
     },
 }
 
+# ⚖️ Símbolos con Pesos Probabilísticos Calibrados (RTP ~91%)
 SCRATCH_SYMBOLS = {
-    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 20, 'weight': 6, 'color': '#fbbf24'},
-    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 10, 'weight': 10, 'color': '#60a5fa'},
-    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 5, 'weight': 18, 'color': '#f59e0b'},
-    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 2, 'weight': 30, 'color': '#f43f5e'},
-    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.2, 'weight': 36, 'color': '#c084fc'},
-    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 3, 'weight': 8, 'color': '#e879f9'},
+    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.0, 'weight': 40, 'color': '#c084fc'},     # Recupera costo
+    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 1.5, 'weight': 28, 'color': '#f43f5e'},      # Ganancia moderada
+    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 3.0, 'weight': 16, 'color': '#f59e0b'},  # Buen premio
+    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 6.0, 'weight': 8, 'color': '#60a5fa'},   # Premio mayor
+    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 15.0, 'weight': 3, 'color': '#fbbf24'},  # Gran Jackpot
+    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 1.0, 'weight': 3, 'color': '#e879f9'}, # Muy exclusiva
 }
 
 def scratch_card_view(request):
@@ -1220,14 +1217,12 @@ def scratch_card_view(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-
     return render(request, 'economy/scratch.html', {
         'tg_id': tg_id,
         'wallet': wallet,
         'profile': profile,
         'tiers': SCRATCH_TIERS,
     })
-
 
 def scratch_card_play_ajax(request):
     """Compra y genera la cuadrícula 3x3 del cartón vía AJAX."""
@@ -1266,8 +1261,8 @@ def scratch_card_play_ajax(request):
             wallet.save()
             balance_after_cost = wallet.balance
 
-            # 🎲 DETERMINAR RESULTADO CON PRD (Tasa de Victoria calibrada ~37%)
-            is_win = random.random() < 0.37
+            # 🎲 PROBABILIDAD CONTROLADA: 26% de victoria (RTP global saludable ~91%)
+            is_win = random.random() < 0.26
             symbols_keys = list(SCRATCH_SYMBOLS.keys())
             weights = [SCRATCH_SYMBOLS[k]['weight'] for k in symbols_keys]
 
@@ -1281,11 +1276,26 @@ def scratch_card_play_ajax(request):
                 mult = SCRATCH_SYMBOLS[winning_key]['mult']
                 payout = int(round(cost * mult))
 
-                # Otorgar Photocard real si cayó el símbolo de carta
+                # Otorgar Photocard real verificando existencia
                 if winning_key == 'photocard':
                     from idols.models import Photocard, UserPhotocard
-                    target_rarities = cfg['card_pool']
-                    available_cards = list(Photocard.objects.filter(rarity__in=target_rarities))
+                    
+                    # Probabilidad noble de rarezas en el tier Oro
+                    target_rarity = 'common'
+                    if tier_key == 'bronze':
+                        target_rarity = 'common'
+                    elif tier_key == 'silver':
+                        target_rarity = random.choices(['rare', 'epic'], weights=[90, 10], k=1)[0]
+                    elif tier_key == 'gold':
+                        # Solo 2% de probabilidad de legendaria en Oro Real
+                        target_rarity = random.choices(['rare', 'epic', 'legendary'], weights=[80, 18, 2], k=1)[0]
+
+                    available_cards = list(Photocard.objects.filter(rarity=target_rarity).exclude(image=''))
+                    
+                    # Fallback si no hay cartas de esa rareza
+                    if not available_cards:
+                        available_cards = list(Photocard.objects.exclude(image=''))
+
                     if available_cards:
                         awarded_card = random.choice(available_cards)
                         UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=awarded_card)
@@ -1335,13 +1345,12 @@ def scratch_card_play_ajax(request):
                             'is_winner': False
                         })
 
-                # Acreditar premio a la Bóveda
                 wallet.balance += payout
                 wallet.save()
-                grant_user_xp(request, tg_id, random.randint(3, 7), reason="Rasca y Gana Clandestino")
+                grant_user_xp(request, tg_id, random.randint(2, 4), reason="Rasca y Gana Clandestino")
 
             else:
-                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss": 2 iguales para alimentar el hype)
+                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss": 2 iguales para mantener el vicio)
                 near_miss_key = random.choices(symbols_keys, weights=weights, k=1)[0]
                 near_miss_indices = set(random.sample(range(9), 2))
                 other_pool = [k for k in symbols_keys if k != near_miss_key]
