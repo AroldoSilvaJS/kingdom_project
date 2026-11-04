@@ -20,4 +20,6 @@ urlpatterns = [
     path('bazar/collectible/buy/<int:item_id>/', views.buy_collectible_action, name='buy_collectible'),
     path('bazar/collectible/add/', views.admin_add_collectible, name='add_collectible'),
     path('bazar/collectible/delete/<int:item_id>/', views.admin_delete_collectible, name='delete_collectible'),
+    path('scratch/', views.scratch_card_view, name='scratch'),
+    path('scratch/play/', views.scratch_card_play_ajax, name='scratch_play'),
 ]

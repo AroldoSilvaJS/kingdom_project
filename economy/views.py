@@ -1173,3 +1173,209 @@ def admin_delete_collectible(request, item_id):
         messages.info(request, f"🗑️ «{item_name}» retirado de la tienda.")
 
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+# ==========================================
+# 🎟️ SISTEMA DE RASCA Y GANA CLANDESTINO
+# ==========================================
+
+SCRATCH_TIERS = {
+    'bronze': {
+        'name': 'Cartón de Bronce',
+        'cost': 25,
+        'badge': '🥉',
+        'max_win': 500,
+        'min_level': 1,
+        'card_pool': ['common', 'rare'],
+    },
+    'silver': {
+        'name': 'Cartón de Plata',
+        'cost': 60,
+        'badge': '🥈',
+        'max_win': 1500,
+        'min_level': 3,
+        'card_pool': ['rare', 'epic'],
+    },
+    'gold': {
+        'name': 'Cartón Imperial de Oro',
+        'cost': 150,
+        'badge': '🥇',
+        'max_win': 5000,
+        'min_level': 5,
+        'card_pool': ['epic', 'legendary'],
+    },
+}
+
+SCRATCH_SYMBOLS = {
+    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 20, 'weight': 6, 'color': '#fbbf24'},
+    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 10, 'weight': 10, 'color': '#60a5fa'},
+    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 5, 'weight': 18, 'color': '#f59e0b'},
+    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 2, 'weight': 30, 'color': '#f43f5e'},
+    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.2, 'weight': 36, 'color': '#c084fc'},
+    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 3, 'weight': 8, 'color': '#e879f9'},
+}
+
+def scratch_card_view(request):
+    """Muestra la interfaz del Rasca y Gana Clandestino."""
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+
+    return render(request, 'economy/scratch.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'tiers': SCRATCH_TIERS,
+    })
+
+
+def scratch_card_play_ajax(request):
+    """Compra y genera la cuadrícula 3x3 del cartón vía AJAX."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+
+    tg_id = get_safe_tg_id(request)
+    tier_key = request.POST.get('tier', 'bronze').strip().lower()
+
+    if tier_key not in SCRATCH_TIERS:
+        return JsonResponse({'success': False, 'error': 'Cartón no válido.'}, status=400)
+
+    cfg = SCRATCH_TIERS[tier_key]
+    cost = cfg['cost']
+
+    try:
+        with transaction.atomic():
+            wallet = Wallet.objects.select_for_update().get(telegram_user_id=tg_id)
+            profile, _ = UserProfile.objects.select_for_update().get_or_create(telegram_user_id=tg_id)
+
+            if profile.level < cfg['min_level']:
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Requiere Nivel {cfg['min_level']} o superior para raspar este cartón."
+                }, status=400)
+
+            if wallet.balance < cost:
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Oro insuficiente. Este cartón cuesta {cost} 🪙."
+                }, status=400)
+
+            # Descontar costo y abonar al Cofre del Mecenas (8%)
+            wallet.balance -= cost
+            wallet.accumulate_patron_vault(cost)
+            wallet.save()
+
+            # 🎲 DETERMINAR RESULTADO CON PRD (Tasa de Victoria calibrada ~37%)
+            is_win = random.random() < 0.37
+            symbols_keys = list(SCRATCH_SYMBOLS.keys())
+            weights = [SCRATCH_SYMBOLS[k]['weight'] for k in symbols_keys]
+
+            winning_key = None
+            grid = []
+            payout = 0
+            photocard_won_data = None
+
+            if is_win:
+                winning_key = random.choices(symbols_keys, weights=weights, k=1)[0]
+                mult = SCRATCH_SYMBOLS[winning_key]['mult']
+                payout = int(round(cost * mult))
+
+                # Otorgar Photocard real si cayó el símbolo de carta
+                if winning_key == 'photocard':
+                    from idols.models import Photocard, UserPhotocard
+                    target_rarities = cfg['card_pool']
+                    available_cards = list(Photocard.objects.filter(rarity__in=target_rarities))
+                    if available_cards:
+                        awarded_card = random.choice(available_cards)
+                        UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=awarded_card)
+                        photocard_won_data = {
+                            'name': awarded_card.name,
+                            'idol': awarded_card.display_idol_name,
+                            'rarity': awarded_card.get_rarity_display(),
+                            'image': awarded_card.image.url if awarded_card.image else '',
+                            'color': awarded_card.get_color_hex(),
+                        }
+                        if awarded_card.rarity == 'legendary':
+                            send_telegram_msg(
+                                f"👑 <b>¡PHOTOCARD LEGENDARIA DESENTERRADA!</b>\n\n"
+                                f"Un noble ha raspado el <i>{cfg['name']}</i> y reveló a <b>{awarded_card.name}</b> de {awarded_card.display_idol_name} ✨"
+                            )
+
+                # Colocar exactamente 3 símbolos ganadores en 3 casillas aleatorias
+                win_indices = set(random.sample(range(9), 3))
+                for i in range(9):
+                    if i in win_indices:
+                        s_data = SCRATCH_SYMBOLS[winning_key]
+                        grid.append({
+                            'key': winning_key,
+                            'symbol': s_data['symbol'],
+                            'name': s_data['name'],
+                            'color': s_data['color'],
+                            'is_winner': True
+                        })
+                    else:
+                        # Rellenar con señuelos sin provocar otra tercia
+                        decoy_pool = [k for k in symbols_keys if k != winning_key]
+                        chosen_decoy = random.choice(decoy_pool)
+                        s_data = SCRATCH_SYMBOLS[chosen_decoy]
+                        grid.append({
+                            'key': chosen_decoy,
+                            'symbol': s_data['symbol'],
+                            'name': s_data['name'],
+                            'color': s_data['color'],
+                            'is_winner': False
+                        })
+
+                # Acreditar premio a la Bóveda
+                wallet.balance += payout
+                wallet.save()
+                grant_user_xp(profile, random.randint(3, 7))
+
+            else:
+                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss" psicológico: 2 iguales para mantener el hype)
+                near_miss_key = random.choices(symbols_keys, weights=weights, k=1)[0]
+                near_miss_indices = set(random.sample(range(9), 2))
+                other_pool = [k for k in symbols_keys if k != near_miss_key]
+
+                for i in range(9):
+                    if i in near_miss_indices:
+                        s_data = SCRATCH_SYMBOLS[near_miss_key]
+                        grid.append({
+                            'key': near_miss_key,
+                            'symbol': s_data['symbol'],
+                            'name': s_data['name'],
+                            'color': s_data['color'],
+                            'is_winner': False
+                        })
+                    else:
+                        chosen_other = random.choice(other_pool)
+                        s_data = SCRATCH_SYMBOLS[chosen_other]
+                        grid.append({
+                            'key': chosen_other,
+                            'symbol': s_data['symbol'],
+                            'name': s_data['name'],
+                            'color': s_data['color'],
+                            'is_winner': False
+                        })
+
+                grant_user_xp(profile, 1)
+
+            serial_num = f"KOP-{random.randint(10000, 99999)}"
+
+            return JsonResponse({
+                'success': True,
+                'is_win': is_win,
+                'winning_symbol': SCRATCH_SYMBOLS[winning_key]['name'] if winning_key else None,
+                'payout': payout,
+                'photocard_won': photocard_won_data,
+                'grid': grid,
+                'new_balance': wallet.balance,
+                'patron_vault': wallet.patron_vault_accumulated,
+                'serial': serial_num,
+                'tier_name': cfg['name'],
+            })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': f"Error en la casa de juego: {str(e)}"}, status=500)
