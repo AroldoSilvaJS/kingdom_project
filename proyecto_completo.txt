@@ -2467,6 +2467,8 @@ urlpatterns = [
     path('bazar/collectible/buy/<int:item_id>/', views.buy_collectible_action, name='buy_collectible'),
     path('bazar/collectible/add/', views.admin_add_collectible, name='add_collectible'),
     path('bazar/collectible/delete/<int:item_id>/', views.admin_delete_collectible, name='delete_collectible'),
+    path('scratch/', views.scratch_card_view, name='scratch'),
+    path('scratch/play/', views.scratch_card_play_ajax, name='scratch_play'),
 ]
 
 ==================================================
@@ -3648,6 +3650,212 @@ def admin_delete_collectible(request, item_id):
         messages.info(request, f"🗑️ «{item_name}» retirado de la tienda.")
 
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+# ==========================================
+# 🎟️ SISTEMA DE RASCA Y GANA CLANDESTINO
+# ==========================================
+
+SCRATCH_TIERS = {
+    'bronze': {
+        'name': 'Cartón de Bronce',
+        'cost': 25,
+        'badge': '🥉',
+        'max_win': 500,
+        'min_level': 1,
+        'card_pool': ['common', 'rare'],
+    },
+    'silver': {
+        'name': 'Cartón de Plata',
+        'cost': 60,
+        'badge': '🥈',
+        'max_win': 1500,
+        'min_level': 3,
+        'card_pool': ['rare', 'epic'],
+    },
+    'gold': {
+        'name': 'Cartón Imperial de Oro',
+        'cost': 150,
+        'badge': '🥇',
+        'max_win': 5000,
+        'min_level': 5,
+        'card_pool': ['epic', 'legendary'],
+    },
+}
+
+SCRATCH_SYMBOLS = {
+    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 20, 'weight': 6, 'color': '#fbbf24'},
+    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 10, 'weight': 10, 'color': '#60a5fa'},
+    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 5, 'weight': 18, 'color': '#f59e0b'},
+    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 2, 'weight': 30, 'color': '#f43f5e'},
+    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.2, 'weight': 36, 'color': '#c084fc'},
+    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 3, 'weight': 8, 'color': '#e879f9'},
+}
+
+def scratch_card_view(request):
+    """Muestra la interfaz del Rasca y Gana Clandestino."""
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+
+    return render(request, 'economy/scratch.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'tiers': SCRATCH_TIERS,
+    })
+
+
+def scratch_card_play_ajax(request):
+    """Compra y genera la cuadrícula 3x3 del cartón vía AJAX."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+
+    tg_id = get_safe_tg_id(request)
+    tier_key = request.POST.get('tier', 'bronze').strip().lower()
+
+    if tier_key not in SCRATCH_TIERS:
+        return JsonResponse({'success': False, 'error': 'Cartón no válido.'}, status=400)
+
+    cfg = SCRATCH_TIERS[tier_key]
+    cost = cfg['cost']
+
+    try:
+        with transaction.atomic():
+            wallet = Wallet.objects.select_for_update().get(telegram_user_id=tg_id)
+            profile, _ = UserProfile.objects.select_for_update().get_or_create(telegram_user_id=tg_id)
+
+            if profile.level < cfg['min_level']:
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Requiere Nivel {cfg['min_level']} o superior para raspar este cartón."
+                }, status=400)
+
+            if wallet.balance < cost:
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Oro insuficiente. Este cartón cuesta {cost} 🪙."
+                }, status=400)
+
+            # Descontar costo y abonar al Cofre del Mecenas (8%)
+            wallet.balance -= cost
+            wallet.accumulate_patron_vault(cost)
+            wallet.save()
+
+            # 🎲 DETERMINAR RESULTADO CON PRD (Tasa de Victoria calibrada ~37%)
+            is_win = random.random() < 0.37
+            symbols_keys = list(SCRATCH_SYMBOLS.keys())
+            weights = [SCRATCH_SYMBOLS[k]['weight'] for k in symbols_keys]
+
+            winning_key = None
+            grid = []
+            payout = 0
+            photocard_won_data = None
+
+            if is_win:
+                winning_key = random.choices(symbols_keys, weights=weights, k=1)[0]
+                mult = SCRATCH_SYMBOLS[winning_key]['mult']
+                payout = int(round(cost * mult))
+
+                # Otorgar Photocard real si cayó el símbolo de carta
+                if winning_key == 'photocard':
+                    from idols.models import Photocard, UserPhotocard
+                    target_rarities = cfg['card_pool']
+                    available_cards = list(Photocard.objects.filter(rarity__in=target_rarities))
+                    if available_cards:
+                        awarded_card = random.choice(available_cards)
+                        UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=awarded_card)
+                        photocard_won_data = {
+                            'name': awarded_card.name,
+                            'idol': awarded_card.display_idol_name,
+                            'rarity': awarded_card.get_rarity_display(),
+                            'image': awarded_card.image.url if awarded_card.image else '',
+                            'color': awarded_card.get_color_hex(),
+                        }
+                        if awarded_card.rarity == 'legendary':
+                            send_telegram_msg(
+                                f"👑 <b>¡PHOTOCARD LEGENDARIA DESENTERRADA!</b>\n\n"
+                                f"Un noble ha raspado el <i>{cfg['name']}</i> y reveló a <b>{awarded_card.name}</b> de {awarded_card.display_idol_name} ✨"
+                            )
+
+                # Colocar exactamente 3 símbolos ganadores en 3 casillas aleatorias
+                win_indices = set(random.sample(range(9), 3))
+                for i in range(9):
+                    if i in win_indices:
+                        s_data = SCRATCH_SYMBOLS[winning_key]
+                        grid.append({
+                            'key': winning_key,
+                            'symbol': s_data['symbol'],
+                            'name': s_data['name'],
+                            'color': s_data['color'],
+                            'is_winner': True
+                        })
+                    else:
+                        # Rellenar con señuelos sin provocar otra tercia
+                        decoy_pool = [k for k in symbols_keys if k != winning_key]
+                        chosen_decoy = random.choice(decoy_pool)
+                        s_data = SCRATCH_SYMBOLS[chosen_decoy]
+                        grid.append({
+                            'key': chosen_decoy,
+                            'symbol': s_data['symbol'],
+                            'name': s_data['name'],
+                            'color': s_data['color'],
+                            'is_winner': False
+                        })
+
+                # Acreditar premio a la Bóveda
+                wallet.balance += payout
+                wallet.save()
+                grant_user_xp(profile, random.randint(3, 7))
+
+            else:
+                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss" psicológico: 2 iguales para mantener el hype)
+                near_miss_key = random.choices(symbols_keys, weights=weights, k=1)[0]
+                near_miss_indices = set(random.sample(range(9), 2))
+                other_pool = [k for k in symbols_keys if k != near_miss_key]
+
+                for i in range(9):
+                    if i in near_miss_indices:
+                        s_data = SCRATCH_SYMBOLS[near_miss_key]
+                        grid.append({
+                            'key': near_miss_key,
+                            'symbol': s_data['symbol'],
+                            'name': s_data['name'],
+                            'color': s_data['color'],
+                            'is_winner': False
+                        })
+                    else:
+                        chosen_other = random.choice(other_pool)
+                        s_data = SCRATCH_SYMBOLS[chosen_other]
+                        grid.append({
+                            'key': chosen_other,
+                            'symbol': s_data['symbol'],
+                            'name': s_data['name'],
+                            'color': s_data['color'],
+                            'is_winner': False
+                        })
+
+                grant_user_xp(profile, 1)
+
+            serial_num = f"KOP-{random.randint(10000, 99999)}"
+
+            return JsonResponse({
+                'success': True,
+                'is_win': is_win,
+                'winning_symbol': SCRATCH_SYMBOLS[winning_key]['name'] if winning_key else None,
+                'payout': payout,
+                'photocard_won': photocard_won_data,
+                'grid': grid,
+                'new_balance': wallet.balance,
+                'patron_vault': wallet.patron_vault_accumulated,
+                'serial': serial_num,
+                'tier_name': cfg['name'],
+            })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': f"Error en la casa de juego: {str(e)}"}, status=500)
 
 ==================================================
 ARCHIVO: .\economy\__init__.py
@@ -5257,12 +5465,31 @@ def my_photocards_album(request):
 
         user_cards = [uc for uc in raw_user_cards if getattr(uc, 'photocard', None) is not None]
 
-        # Inyectar atributos seguros a prueba de errores para el template
+        # 👑 Jerarquía canónica de coleccionismo nobiliario:
+        # Legendaria (1) > Épica (2) > Rara (3) > Común (4)
+        RARITY_PRIORITY = {
+            'legendary': 1,
+            'epic': 2,
+            'rare': 3,
+            'common': 4,
+        }
+
+        def card_canonical_sort_key(uc):
+            p = getattr(uc, 'photocard', None)
+            if not p:
+                return (99, '', '', 0)
+            r_val = RARITY_PRIORITY.get(getattr(p, 'rarity', 'common'), 5)
+            idol_name = (getattr(p, 'display_idol_name', '') or '').lower().strip()
+            card_name = (getattr(p, 'name', '') or '').lower().strip()
+            return (r_val, idol_name, card_name, p.id)
+
+        # Inyectar atributos seguros y peso de rareza para templates y scripts
         for uc in user_cards:
             try:
                 uc.safe_image_url = uc.photocard.image.url if (uc.photocard and uc.photocard.image) else ''
             except Exception:
                 uc.safe_image_url = ''
+            uc.rarity_weight = RARITY_PRIORITY.get(getattr(uc.photocard, 'rarity', 'common'), 5)
 
         total = len(user_cards)
         legendaries = sum(1 for uc in user_cards if getattr(uc.photocard, 'rarity', '') == 'legendary')
@@ -5283,6 +5510,9 @@ def my_photocards_album(request):
                 duplicates_list.append(rep_obj)
                 duplicate_cards_count += (len(ucs) - 1)
 
+        # Ordenar repetidas por valor de colección (Legendarias duplicadas primero)
+        duplicates_list.sort(key=card_canonical_sort_key)
+
         # 2. Agrupar por Colecciones / Cajas oficiales
         all_boxes = list(PhotocardBox.objects.all().prefetch_related('cards').order_by('name'))
         collections_data = []
@@ -5290,16 +5520,20 @@ def my_photocards_album(request):
         for box in all_boxes:
             total_in_box = len(box.cards.all())
             box_ucs = [uc for uc in user_cards if getattr(uc.photocard, 'box_id', None) == box.id]
-            
+
             distinct_cards_owned = {}
             for uc in box_ucs:
                 if uc.photocard_id not in distinct_cards_owned:
                     uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
                     distinct_cards_owned[uc.photocard_id] = uc
-            
+
+            # 🌟 Ordenar las cartas de la caja estrictamente por rareza e idol
+            box_cards_sorted = list(distinct_cards_owned.values())
+            box_cards_sorted.sort(key=card_canonical_sort_key)
+
             owned_count = len(distinct_cards_owned)
             percent = int((owned_count / total_in_box) * 100) if total_in_box > 0 else 0
-            
+
             if owned_count > 0 or total_in_box > 0:
                 collections_data.append({
                     'box': box,
@@ -5307,7 +5541,7 @@ def my_photocards_album(request):
                     'owned_count': owned_count,
                     'percent': percent,
                     'is_complete': (owned_count == total_in_box and total_in_box > 0),
-                    'user_cards': list(distinct_cards_owned.values()),
+                    'user_cards': box_cards_sorted,
                 })
 
         # Cartas sin caja asignada (Caja especial Clandestina)
@@ -5318,6 +5552,9 @@ def my_photocards_album(request):
                 if uc.photocard_id not in orphan_distinct:
                     uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
                     orphan_distinct[uc.photocard_id] = uc
+
+            orphan_cards_sorted = list(orphan_distinct.values())
+            orphan_cards_sorted.sort(key=card_canonical_sort_key)
 
             class OrphanBox:
                 id = 0
@@ -5330,8 +5567,12 @@ def my_photocards_album(request):
                 'owned_count': len(orphan_distinct),
                 'percent': 100,
                 'is_complete': False,
-                'user_cards': list(orphan_distinct.values()),
+                'user_cards': orphan_cards_sorted,
             })
+
+        # Ordenar también el catálogo plano "Todas" por rareza y musa
+        sorted_all_cards = list(user_cards)
+        sorted_all_cards.sort(key=card_canonical_sort_key)
 
         members = UserProfile.objects.exclude(
             telegram_user_id=tg_id
@@ -5339,7 +5580,7 @@ def my_photocards_album(request):
 
         return render(request, 'idols/photocards_album.html', {
             'tg_id': tg_id,
-            'user_cards': user_cards,
+            'user_cards': sorted_all_cards,
             'collections': collections_data,
             'duplicates': duplicates_list,
             'duplicate_cards_count': duplicate_cards_count,
@@ -5352,7 +5593,6 @@ def my_photocards_album(request):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        # En caso de cualquier anomalía, no tirar 500: redirigir y notificar
         messages.error(request, f"Aviso del Álbum: {str(e)}")
         return redirect('/idols/photocards/')
 
@@ -10613,6 +10853,408 @@ ARCHIVO: .\templates\economy\mines.html
 {% endblock %}
 
 ==================================================
+ARCHIVO: .\templates\economy\scratch.html
+==================================================
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col gap-4 mt-2 pb-44 max-w-md mx-auto select-none">
+    
+    <!-- ENCABEZADO Y VOLVER -->
+    <div class="flex justify-between items-center px-1">
+        <button type="button" onclick="universalNav('/economy/wallet/')"
+            class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
+            <span>⬅</span> <span>Bóveda</span>
+        </button>
+        <div class="flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3 py-1.5 rounded-full shadow-inner">
+            <span class="text-xs">🪙</span>
+            <span class="text-xs font-mono font-bold text-yellow-400" id="user-balance">{{ wallet.balance }}</span>
+            <span class="text-[9px] uppercase font-bold text-stone-400">Oro</span>
+        </div>
+    </div>
+
+    <!-- TÍTULO Y DESCRIPCIÓN -->
+    <div class="text-center">
+        <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest flex items-center justify-center gap-2">
+            <span>🎟️</span> El Raspe de la Corona <span>⚜️</span>
+        </h2>
+        <p class="text-[11px] text-stone-400">Raspa con tu dedo la cera dorada. ¡3 símbolos iguales ganan!</p>
+    </div>
+
+    <!-- SELECTOR DE CARTÓN (TIERS) -->
+    <div class="grid grid-cols-3 gap-2">
+        <button type="button" onclick="selectTier('bronze')" id="btn-tier-bronze"
+                class="tier-btn p-2.5 rounded-2xl border-2 border-amber-700/60 bg-gradient-to-b from-amber-950/40 to-black flex flex-col items-center active:scale-95 transition-all shadow-lg">
+            <span class="text-xl">🥉</span>
+            <span class="text-[10px] font-bold text-amber-200 mt-1 uppercase">Bronce</span>
+            <span class="text-[11px] font-mono font-black text-yellow-400">25 🪙</span>
+        </button>
+
+        <button type="button" onclick="selectTier('silver')" id="btn-tier-silver"
+                class="tier-btn p-2.5 rounded-2xl border-2 border-stone-400/40 bg-gradient-to-b from-stone-900/60 to-black flex flex-col items-center active:scale-95 transition-all shadow-lg">
+            <span class="text-xl">🥈</span>
+            <span class="text-[10px] font-bold text-stone-200 mt-1 uppercase">Plata</span>
+            <span class="text-[11px] font-mono font-black text-yellow-400">60 🪙</span>
+        </button>
+
+        <button type="button" onclick="selectTier('gold')" id="btn-tier-gold"
+                class="tier-btn p-2.5 rounded-2xl border-2 border-vip-gold bg-gradient-to-b from-yellow-950/40 to-black flex flex-col items-center active:scale-95 transition-all shadow-lg">
+            <span class="text-xl">🥇</span>
+            <span class="text-[10px] font-bold text-yellow-300 mt-1 uppercase">Oro Real</span>
+            <span class="text-[11px] font-mono font-black text-yellow-400">150 🪙</span>
+        </button>
+    </div>
+
+    <!-- CARTÓN NOBILIARIO PRINCIPAL -->
+    <div class="vip-panel p-4 rounded-3xl border-2 border-vip-gold/50 bg-gradient-to-b from-[#1c0b2c] via-[#0c0414] to-black shadow-2xl flex flex-col items-center relative overflow-hidden">
+        
+        <!-- CABECERA DEL BILLETE -->
+        <div class="w-full flex items-center justify-between border-b border-vip-gold/30 pb-2 mb-3">
+            <div class="flex items-center gap-1.5">
+                <span class="text-sm">⚜️</span>
+                <span class="font-serif text-[11px] font-black uppercase text-yellow-400 tracking-wider" id="ticket-tier-name">Cartón Imperial de Oro</span>
+            </div>
+            <span class="font-mono text-[9px] text-stone-500 bg-black/80 px-2 py-0.5 rounded-md border border-white/5" id="ticket-serial">#KOP-84920</span>
+        </div>
+
+        <!-- CONTENEDOR 3X3 CON CANVAS SUPERPUESTO -->
+        <div class="relative w-[280px] h-[280px] rounded-2xl overflow-hidden border-2 border-vip-gold/40 shadow-inner bg-black/90" id="scratch-board">
+            
+            <!-- CAPA INFERIOR: REJILLA DE SÍMBOLOS -->
+            <div class="absolute inset-0 grid grid-cols-3 grid-rows-3 gap-1.5 p-2 bg-[#0d0417]" id="grid-container">
+                <!-- Se llena dinámicamente con los 9 símbolos -->
+            </div>
+
+            <!-- CAPA SUPERIOR: CANVAS RASPABLE DE TINTA DORADA -->
+            <canvas id="scratch-canvas" width="280" height="280" class="absolute inset-0 cursor-crosshair z-20 touch-none"></canvas>
+
+            <!-- MENSAJE DE ESTADO / BLOQUEADO ANTES DE COMPRAR -->
+            <div id="buy-prompt-overlay" class="absolute inset-0 bg-black/85 backdrop-blur-sm z-30 flex flex-col items-center justify-center p-4 text-center">
+                <span class="text-4xl mb-2 animate-bounce">🪙</span>
+                <h3 class="font-serif text-sm font-black text-white uppercase tracking-wider">Cartón Listo para Raspar</h3>
+                <p class="text-xs text-stone-400 mt-1 mb-3">Toca para adquirir tu billete oficial</p>
+                <button type="button" onclick="purchaseTicket()" id="btn-buy-ticket"
+                        class="btn-gold px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-xl active:scale-95 transition-all">
+                    Comprar Billete (<span id="ticket-cost-label">150</span> 🪙)
+                </button>
+            </div>
+        </div>
+
+        <!-- BARRA DE ACCIONES POST-COMPRA -->
+        <div class="w-full flex items-center justify-between gap-2 mt-3 pt-2 border-t border-white/10" id="action-controls" style="display: none;">
+            <div class="flex items-center gap-1.5 text-[10px] text-stone-400 font-mono">
+                <span>Raspado:</span>
+                <span class="font-bold text-yellow-400" id="scratch-percent">0%</span>
+            </div>
+            <button type="button" onclick="autoRevealTicket()" 
+                    class="bg-purple-950 border border-purple-500 text-purple-200 hover:text-white px-3.5 py-1.5 rounded-xl text-[10px] font-bold uppercase active:scale-95 transition-all shadow">
+                ⚡ Revelar Todo
+            </button>
+        </div>
+
+        <!-- TABLA DE PREMIOS EN MINIATURA -->
+        <div class="w-full grid grid-cols-3 gap-1 mt-3 bg-black/60 p-2 rounded-xl border border-white/5 text-[9px] text-center font-mono">
+            <div>👑 x20</div>
+            <div>💎 x10</div>
+            <div>🪙 x5</div>
+            <div>🍷 x2</div>
+            <div>⚜️ x1.2</div>
+            <div>🎴 +Photocard</div>
+        </div>
+    </div>
+
+</div>
+
+<!-- MODAL DE VICTORIA CON EFECTO DE ORO -->
+<div id="win-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="vip-panel modal-spring-in p-6 max-w-xs w-full text-center border-2 border-yellow-400 rounded-3xl bg-gradient-to-b from-[#240a33] to-black shadow-2xl relative">
+        <span class="text-5xl my-2 block">🎉</span>
+        <h3 class="font-serif text-lg font-black text-yellow-400 uppercase tracking-wider">¡PREMIO DE LA CORONA!</h3>
+        <p class="text-xs text-stone-300 mt-1">Has encontrado 3 símbolos de <strong id="win-symbol-name" class="text-white"></strong></p>
+        
+        <div class="my-4 py-3 bg-yellow-500/20 border border-yellow-500/40 rounded-2xl flex flex-col items-center">
+            <span class="text-[10px] font-mono text-yellow-300 uppercase">Ganancia Neta</span>
+            <span class="font-mono text-2xl font-black text-yellow-400 mt-0.5" id="win-payout-label">+0 🪙</span>
+        </div>
+
+        <!-- REVELACIÓN DE PHOTOCARD SI GANÓ UNA -->
+        <div id="win-photocard-box" class="hidden my-3 p-3 bg-purple-950/80 border border-purple-500 rounded-2xl flex flex-col items-center">
+            <span class="text-[9px] font-mono text-purple-300 font-bold uppercase mb-1">¡Recompensa Adicional!</span>
+            <img id="win-photocard-img" src="" class="w-24 h-32 object-cover rounded-xl border-2 border-purple-400 shadow-lg mb-1">
+            <span class="text-xs font-black text-white" id="win-photocard-name"></span>
+            <span class="text-[9px] font-bold text-yellow-300" id="win-photocard-idol"></span>
+        </div>
+
+        <button type="button" onclick="closeWinModalAndPlayAgain()" 
+                class="w-full btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all">
+            🎟️ Raspar Otro Boleto
+        </button>
+    </div>
+</div>
+
+<script>
+    let activeTier = 'gold';
+    const tierCosts = { 'bronze': 25, 'silver': 60, 'gold': 150 };
+    const tierNames = { 'bronze': 'Cartón de Bronce', 'silver': 'Cartón de Plata', 'gold': 'Cartón Imperial de Oro' };
+
+    let isDrawing = false;
+    let canvas, ctx;
+    let ticketActive = false;
+    let currentTicketData = null;
+    let scratchedPixels = 0;
+    let totalPixels = 0;
+    let audioCtx = null;
+
+    // Inicializar Web Audio API para síntesis realista de raspado
+    function playScratchSound() {
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const bufferSize = audioCtx.sampleRate * 0.05;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.value = 1800 + Math.random() * 600;
+            filter.Q.value = 3.0;
+
+            const gain = audioCtx.createGain();
+            gain.gain.value = 0.08;
+
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+            noise.start();
+        } catch(e) {}
+    }
+
+    function selectTier(tier) {
+        activeTier = tier;
+        ['bronze', 'silver', 'gold'].forEach(t => {
+            const btn = document.getElementById(`btn-tier-${t}`);
+            if (t === tier) {
+                btn.classList.add('border-vip-gold', 'ring-2', 'ring-yellow-400/50');
+            } else {
+                btn.classList.remove('border-vip-gold', 'ring-2', 'ring-yellow-400/50');
+            }
+        });
+        document.getElementById('ticket-cost-label').innerText = tierCosts[tier];
+        document.getElementById('ticket-tier-name').innerText = tierNames[tier];
+        try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch(e) {}
+    }
+
+    function initCanvasFoil() {
+        canvas = document.getElementById('scratch-canvas');
+        ctx = canvas.getContext('2d');
+        totalPixels = canvas.width * canvas.height;
+
+        // Dibujar textura de lámina de oro con patrón y reflejo
+        const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+        grad.addColorStop(0, '#785012');
+        grad.addColorStop(0.25, '#d4af37');
+        grad.addColorStop(0.5, '#fff3a8');
+        grad.addColorStop(0.75, '#b8860b');
+        grad.addColorStop(1, '#543807');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Motas de brillo y texto de agua de seguridad
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.font = 'bold 12px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('👑 REINO DEL PLACER 👑', canvas.width / 2, canvas.height / 2 - 20);
+        ctx.font = '10px monospace';
+        ctx.fillText('RASPA CON EL DEDO AQUÍ', canvas.width / 2, canvas.height / 2 + 10);
+    }
+
+    async function purchaseTicket() {
+        const btn = document.getElementById('btn-buy-ticket');
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳ Comprando...</span>';
+
+        const formData = new FormData();
+        formData.append('tier', activeTier);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        formData.append('tg_id', tgId);
+
+        try {
+            const res = await fetch('/economy/scratch/play/', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+            const data = await res.json();
+
+            if (!data.success) {
+                alert(data.error || 'No se pudo comprar el cartón.');
+                btn.disabled = false;
+                btn.innerHTML = `Comprar Billete (${tierCosts[activeTier]} 🪙)`;
+                return;
+            }
+
+            currentTicketData = data;
+            document.getElementById('user-balance').innerText = data.new_balance;
+            document.getElementById('ticket-serial').innerText = `#${data.serial}`;
+
+            // Llenar cuadrícula 3x3 oculta
+            const gridContainer = document.getElementById('grid-container');
+            gridContainer.innerHTML = '';
+            data.grid.forEach(cell => {
+                const cellEl = document.createElement('div');
+                cellEl.className = `flex flex-col items-center justify-center rounded-xl p-1 bg-black/60 border border-white/10 ${cell.is_winner ? 'ring-2 ring-yellow-400 bg-yellow-950/30 animate-pulse' : ''}`;
+                cellEl.innerHTML = `
+                    <span class="text-2xl">${cell.symbol}</span>
+                    <span class="text-[7.5px] font-mono uppercase font-bold truncate mt-0.5" style="color: ${cell.color};">${cell.name}</span>
+                `;
+                gridContainer.appendChild(cellEl);
+            });
+
+            // Preparar lámina de raspado
+            initCanvasFoil();
+            document.getElementById('buy-prompt-overlay').style.display = 'none';
+            document.getElementById('action-controls').style.display = 'flex';
+            document.getElementById('scratch-percent').innerText = '0%';
+            ticketActive = true;
+
+            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+
+        } catch(err) {
+            alert('Error de conexión con la Corona.');
+            btn.disabled = false;
+            btn.innerHTML = `Comprar Billete (${tierCosts[activeTier]} 🪙)`;
+        }
+    }
+
+    function scratch(x, y) {
+        if (!ticketActive) return;
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.beginPath();
+        ctx.arc(x, y, 22, 0, Math.PI * 2);
+        ctx.fill();
+
+        playScratchSound();
+
+        // Háptica cada varios trazos
+        if (Math.random() < 0.35) {
+            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+        }
+    }
+
+    function checkScratchProgress() {
+        if (!ticketActive) return;
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let clearCount = 0;
+        // Muestreo optimizado cada 16 pixeles
+        for (let i = 3; i < imgData.data.length; i += 16) {
+            if (imgData.data[i] === 0) clearCount++;
+        }
+        const percent = Math.min(100, Math.round((clearCount / (totalPixels / 4)) * 100));
+        document.getElementById('scratch-percent').innerText = `${percent}%`;
+
+        if (percent >= 55) {
+            autoRevealTicket();
+        }
+    }
+
+    function autoRevealTicket() {
+        if (!ticketActive) return;
+        ticketActive = false;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById('scratch-percent').innerText = '100%';
+
+        setTimeout(() => {
+            finishTicketVerdict();
+        }, 300);
+    }
+
+    function finishTicketVerdict() {
+        if (!currentTicketData) return;
+        if (currentTicketData.is_win) {
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+            document.getElementById('win-symbol-name').innerText = currentTicketData.winning_symbol;
+            document.getElementById('win-payout-label').innerText = `+${currentTicketData.payout} 🪙`;
+
+            if (currentTicketData.photocard_won) {
+                const pc = currentTicketData.photocard_won;
+                document.getElementById('win-photocard-name').innerText = pc.name;
+                document.getElementById('win-photocard-idol').innerText = pc.idol;
+                document.getElementById('win-photocard-img').src = pc.image || '';
+                document.getElementById('win-photocard-box').classList.remove('hidden');
+            } else {
+                document.getElementById('win-photocard-box').classList.add('hidden');
+            }
+
+            document.getElementById('win-modal').classList.remove('hidden');
+        } else {
+            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
+            // Mostrar botón para raspar otro billete
+            document.getElementById('buy-prompt-overlay').style.display = 'flex';
+            document.getElementById('action-controls').style.display = 'none';
+            const btn = document.getElementById('btn-buy-ticket');
+            btn.disabled = false;
+            btn.innerHTML = `🎟️ Probar Otro Billete (${tierCosts[activeTier]} 🪙)`;
+        }
+    }
+
+    function closeWinModalAndPlayAgain() {
+        document.getElementById('win-modal').classList.add('hidden');
+        document.getElementById('buy-prompt-overlay').style.display = 'flex';
+        document.getElementById('action-controls').style.display = 'none';
+        const btn = document.getElementById('btn-buy-ticket');
+        btn.disabled = false;
+        btn.innerHTML = `Comprar Billete (${tierCosts[activeTier]} 🪙)`;
+    }
+
+    // Eventos táctiles y ratón en el Canvas
+    window.addEventListener('DOMContentLoaded', () => {
+        initCanvasFoil();
+        selectTier('gold');
+
+        const getPos = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
+        };
+
+        const onDown = (e) => {
+            isDrawing = true;
+            const p = getPos(e);
+            scratch(p.x, p.y);
+        };
+        const onMove = (e) => {
+            if (!isDrawing) return;
+            const p = getPos(e);
+            scratch(p.x, p.y);
+        };
+        const onUp = () => {
+            if (isDrawing) {
+                isDrawing = false;
+                checkScratchProgress();
+            }
+        };
+
+        canvas.addEventListener('mousedown', onDown);
+        canvas.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+
+        canvas.addEventListener('touchstart', onDown, { passive: false });
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); onMove(e); }, { passive: false });
+        window.addEventListener('touchend', onUp);
+    });
+</script>
+{% endblock %}
+
+==================================================
 ARCHIVO: .\templates\economy\slots.html
 ==================================================
 
@@ -11103,6 +11745,22 @@ ARCHIVO: .\templates\economy\wallet.html
                     <h4 class="font-bold text-white text-xs uppercase tracking-wider">Blackjack</h4>
                     <span class="text-[9.5px] text-yellow-400 font-mono font-bold">21 Real</span>
                 </div>
+            </button>
+
+            <!-- 5. Rasca y Gana Clandestino (NUEVO) -->
+            <button type="button" onclick="universalNav('/economy/scratch/')"
+                class="col-span-2 vip-panel p-3 rounded-2xl border-2 border-yellow-500/60 bg-gradient-to-r from-yellow-950/40 via-purple-950/30 to-black flex items-center justify-between text-left hover:border-yellow-400 active:scale-95 transition-all shadow-lg">
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl animate-bounce">🎟️</span>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <h4 class="font-bold text-yellow-300 text-xs uppercase tracking-wider">El Raspe de la Corona</h4>
+                            <span class="bg-yellow-400 text-black text-[8px] font-black uppercase px-1.5 py-0.2 rounded font-mono">¡Nuevo!</span>
+                        </div>
+                        <span class="text-[9.5px] text-stone-300 font-mono">Raspa con el dedo y gana hasta x20 + Photocards</span>
+                    </div>
+                </div>
+                <span class="text-stone-400 text-sm">➔</span>
             </button>
         </div>
     </div>
@@ -13527,7 +14185,7 @@ ARCHIVO: .\templates\idols\photocards_album.html
     <div class="relative w-full">
         <span class="absolute inset-y-0 left-3 flex items-center text-xs opacity-50">🔍</span>
         <input type="text" id="albumSearchInput" onkeyup="filterAlbumLive()" 
-               placeholder="Buscar por Idol (Jennie, Karina...) o carta..." 
+               placeholder="Buscar por Idol (Jennie, Karina...) o carta..."
                class="w-full bg-black/80 border border-vip-gold/30 rounded-2xl pl-8 pr-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
     </div>
 
@@ -13547,6 +14205,27 @@ ARCHIVO: .\templates\idols\photocards_album.html
         </button>
     </div>
 
+    <!-- BARRA DE ORDENAMIENTO EN VIVO -->
+    <div class="flex items-center justify-between gap-2 px-1 text-[10px]">
+        <span class="text-stone-400 font-bold uppercase tracking-wider flex items-center gap-1">
+            <span>⚖️</span> Ordenar:
+        </span>
+        <div class="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-vip-gold/20">
+            <button type="button" onclick="sortAlbum('rarity')" id="sort-btn-rarity"
+                    class="album-sort-btn px-2.5 py-1 rounded-lg bg-vip-gold text-black font-black shadow transition-all">
+                👑 Rareza
+            </button>
+            <button type="button" onclick="sortAlbum('name')" id="sort-btn-name"
+                    class="album-sort-btn px-2.5 py-1 rounded-lg text-stone-400 hover:text-white transition-all font-bold">
+                🔤 Idol A-Z
+            </button>
+            <button type="button" onclick="sortAlbum('recent')" id="sort-btn-recent"
+                    class="album-sort-btn px-2.5 py-1 rounded-lg text-stone-400 hover:text-white transition-all font-bold">
+                ⏱️ Recientes
+            </button>
+        </div>
+    </div>
+
     <!-- VISTA 1: COLECCIONES AGRUPADAS POR CAJA (BINDER SLEEVES) -->
     <div id="view-collections" class="flex flex-col gap-4">
         {% for col in collections %}
@@ -13560,7 +14239,6 @@ ARCHIVO: .\templates\idols\photocards_album.html
                             {{ col.box.name }}
                         </h3>
                     </div>
-
                     {% if col.is_complete %}
                         <span class="text-[9px] bg-gradient-to-r from-yellow-500 to-amber-500 text-black font-black uppercase px-2.5 py-0.5 rounded-full shadow animate-pulse font-mono">
                             👑 ¡Completa!
@@ -13582,11 +14260,15 @@ ARCHIVO: .\templates\idols\photocards_album.html
             </div>
 
             {% if col.user_cards %}
-            <div class="grid grid-cols-3 gap-2.5">
+            <div class="grid grid-cols-3 gap-2.5 album-card-grid">
                 {% for uc in col.user_cards %}
-                <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_count|default:1 }})"
-                     class="album-card-item relative aspect-[5/7.2] rounded-2xl overflow-hidden bg-black border-2 flex flex-col justify-end p-2 group cursor-pointer shadow-xl active:scale-95 transition-all select-none {% if uc.photocard.rarity == 'legendary' or uc.photocard.rarity == 'epic' %}holo-card{% endif %}"
-                     data-search="{{ uc.photocard.name|lower }} {{ uc.photocard.display_idol_name|lower }}"
+                <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_count|default:1 }})" 
+                     class="album-card-item relative aspect-[5/7.2] rounded-2xl overflow-hidden bg-black border-2 flex flex-col justify-end p-2 group cursor-pointer shadow-xl active:scale-95 transition-all select-none {% if uc.photocard.rarity == 'legendary' or uc.photocard.rarity == 'epic' %}holo-card{% endif %}" 
+                     data-search="{{ uc.photocard.name|lower }} {{ uc.photocard.display_idol_name|lower }}" 
+                     data-rarity-weight="{{ uc.rarity_weight|default:5 }}"
+                     data-rarity="{{ uc.photocard.rarity }}"
+                     data-name="{{ uc.photocard.display_idol_name|lower }} {{ uc.photocard.name|lower }}"
+                     data-date="{{ uc.obtained_at.isoformat }}"
                      style="border-color: {{ uc.photocard.get_color_hex }}; box-shadow: 0 0 16px {{ uc.photocard.get_color_hex }}33;">
                     
                     {% if uc.safe_image_url %}
@@ -13610,6 +14292,7 @@ ARCHIVO: .\templates\idols\photocards_album.html
                     {% endif %}
 
                     <div class="relative z-10 text-center truncate bg-black/80 backdrop-blur-sm p-1 rounded-xl border border-white/10">
+                        <span class="text-[7px] text-yellow-300 font-bold truncate block">{{ uc.photocard.display_idol_name }}</span>
                         <span class="text-[8.5px] font-black text-white truncate block leading-tight">{{ uc.photocard.name }}</span>
                     </div>
                 </div>
@@ -13621,32 +14304,39 @@ ARCHIVO: .\templates\idols\photocards_album.html
 
         </div>
         {% empty %}
-        <div class="vip-panel p-8 text-center rounded-3xl">
+        <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
             <span class="text-4xl my-2">🎴</span>
-            <p class="text-xs text-stone-400">No hay cartas en tu Álbum todavía.</p>
+            <h4 class="font-serif text-sm font-bold text-white uppercase tracking-wider">Sin Cajas Registradas</h4>
+            <p class="text-xs text-stone-400 mt-1 max-w-xs leading-relaxed">
+                Aún no hay colecciones activas disponibles en el reino.
+            </p>
         </div>
         {% endfor %}
     </div>
 
-    <!-- VISTA 2: SECCIÓN DE REPETIDAS -->
+    <!-- VISTA 2: REPETIDAS (LISTAS PARA EL MERCADO O CALDERO) -->
     <div id="view-duplicates" class="hidden flex flex-col gap-3">
-        <div class="p-3.5 bg-gradient-to-r from-amber-950/60 to-black rounded-2xl border border-yellow-500/40 flex items-center justify-between">
-            <div>
-                <span class="text-xs font-black text-yellow-300 uppercase tracking-wider block">Zona de Trueque & Alquimia</span>
-                <span class="text-[10px] text-stone-300">Cartas duplicadas para vender o transmutar.</span>
+        <div class="flex items-center justify-between p-3 bg-gradient-to-r from-yellow-950/40 via-purple-950/30 to-black rounded-2xl border border-yellow-500/30">
+            <div class="flex flex-col">
+                <span class="text-[10px] font-mono text-yellow-400 uppercase font-black">Copias Duplicadas</span>
+                <span class="text-xs text-stone-300">Total repetidas: <b class="text-white">{{ duplicate_cards_count }}</b></span>
             </div>
             <button type="button" onclick="universalNav('/idols/photocards/fusion/')" 
-                    class="btn-gold text-[9.5px] font-black uppercase px-3 py-1.5 rounded-xl shadow active:scale-95 transition-all">
+                    class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs px-3 py-1.5 rounded-xl shadow active:scale-95 transition-all">
                 🔮 Caldero
             </button>
         </div>
 
         {% if duplicates %}
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-3 album-card-grid">
             {% for uc in duplicates %}
-            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_total }})"
-                 class="album-card-item relative rounded-2xl overflow-hidden aspect-[5/7] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl cursor-pointer active:scale-95 transition-all select-none {% if uc.photocard.rarity == 'legendary' or uc.photocard.rarity == 'epic' %}holo-card{% endif %}"
-                 data-search="{{ uc.photocard.name|lower }} {{ uc.photocard.display_idol_name|lower }}"
+            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_total }})" 
+                 class="album-card-item relative rounded-2xl overflow-hidden aspect-[5/7] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl cursor-pointer active:scale-95 transition-all select-none {% if uc.photocard.rarity == 'legendary' or uc.photocard.rarity == 'epic' %}holo-card{% endif %}" 
+                 data-search="{{ uc.photocard.name|lower }} {{ uc.photocard.display_idol_name|lower }}" 
+                 data-rarity-weight="{{ uc.rarity_weight|default:5 }}"
+                 data-rarity="{{ uc.photocard.rarity }}"
+                 data-name="{{ uc.photocard.display_idol_name|lower }} {{ uc.photocard.name|lower }}"
+                 data-date="{{ uc.obtained_at.isoformat }}"
                  style="border-color: {{ uc.photocard.get_color_hex }};">
                 
                 {% if uc.safe_image_url %}
@@ -13697,12 +14387,15 @@ ARCHIVO: .\templates\idols\photocards_album.html
             <button type="button" onclick="filterFlatAlbum('legendary')" class="py-1.5 rounded-xl text-yellow-400 hover:text-white flat-filter-btn" id="f-legendary">👑</button>
         </div>
 
-        <div class="grid grid-cols-2 gap-3" id="flat-album-grid">
+        <div class="grid grid-cols-2 gap-3 album-card-grid" id="flat-album-grid">
             {% for uc in user_cards %}
-            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, 1)"
-                 class="flat-card-item album-card-item relative rounded-2xl overflow-hidden aspect-[5/7] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl cursor-pointer active:scale-95 transition-all select-none {% if uc.photocard.rarity == 'legendary' or uc.photocard.rarity == 'epic' %}holo-card{% endif %}"
-                 data-search="{{ uc.photocard.name|lower }} {{ uc.photocard.display_idol_name|lower }}"
-                 data-rarity="{{ uc.photocard.rarity }}"
+            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, 1)" 
+                 class="flat-card-item album-card-item relative rounded-2xl overflow-hidden aspect-[5/7] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl cursor-pointer active:scale-95 transition-all select-none {% if uc.photocard.rarity == 'legendary' or uc.photocard.rarity == 'epic' %}holo-card{% endif %}" 
+                 data-search="{{ uc.photocard.name|lower }} {{ uc.photocard.display_idol_name|lower }}" 
+                 data-rarity-weight="{{ uc.rarity_weight|default:5 }}"
+                 data-rarity="{{ uc.photocard.rarity }}" 
+                 data-name="{{ uc.photocard.display_idol_name|lower }} {{ uc.photocard.name|lower }}"
+                 data-date="{{ uc.obtained_at.isoformat }}"
                  style="border-color: {{ uc.photocard.get_color_hex }};">
                 
                 {% if uc.safe_image_url %}
@@ -13734,7 +14427,6 @@ ARCHIVO: .\templates\idols\photocards_album.html
     <div class="vip-panel modal-spring-in p-5 max-w-sm w-full max-h-[90vh] overflow-y-auto border-2 rounded-3xl relative flex flex-col items-center text-center shadow-2xl bg-gradient-to-b from-[#1a0928] to-black" id="modal-card-container">
         
         <button onclick="closeCardActionModal()" class="absolute top-3.5 right-3.5 text-stone-400 hover:text-white text-2xl z-30">&times;</button>
-
         <span class="text-[10px] font-mono uppercase font-black px-3 py-0.5 rounded-full border mb-2 shadow" id="modal-card-rarity"></span>
 
         <!-- CONTENEDOR 3D FLIP CARD -->
@@ -13866,6 +14558,8 @@ ARCHIVO: .\templates\idols\photocards_album.html
 </style>
 
 <script>
+    let currentSortCriteria = 'rarity';
+
     function toggleCardFlip() {
         const mesh = document.getElementById('flip-card-mesh');
         if (mesh) {
@@ -13888,12 +14582,50 @@ ARCHIVO: .\templates\idols\photocards_album.html
                 }
             }
         });
+        try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch(e) {}
+    }
+
+    function sortAlbum(criteria) {
+        currentSortCriteria = criteria;
+
+        try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch(e) {}
+
+        document.querySelectorAll('.album-sort-btn').forEach(b => {
+            b.className = "album-sort-btn px-2.5 py-1 rounded-lg text-stone-400 hover:text-white transition-all font-bold";
+        });
+        const activeBtn = document.getElementById(`sort-btn-${criteria}`);
+        if (activeBtn) {
+            activeBtn.className = "album-sort-btn px-2.5 py-1 rounded-lg bg-vip-gold text-black font-black shadow transition-all";
+        }
+
+        document.querySelectorAll('.album-card-grid').forEach(grid => {
+            const items = Array.from(grid.children).filter(el => el.classList.contains('album-card-item'));
+            items.sort((a, b) => {
+                if (criteria === 'rarity') {
+                    const rA = parseInt(a.getAttribute('data-rarity-weight') || '99');
+                    const rB = parseInt(b.getAttribute('data-rarity-weight') || '99');
+                    if (rA !== rB) return rA - rB; // Menor peso = Mayor rareza (1: Legendary)
+                    const nA = (a.getAttribute('data-name') || '').toLowerCase();
+                    const nB = (b.getAttribute('data-name') || '').toLowerCase();
+                    return nA.localeCompare(nB);
+                } else if (criteria === 'name') {
+                    const nA = (a.getAttribute('data-name') || '').toLowerCase();
+                    const nB = (b.getAttribute('data-name') || '').toLowerCase();
+                    return nA.localeCompare(nB);
+                } else if (criteria === 'recent') {
+                    const dA = a.getAttribute('data-date') || '';
+                    const dB = b.getAttribute('data-date') || '';
+                    return dB.localeCompare(dA); // Más recientes primero
+                }
+                return 0;
+            });
+            items.forEach(el => grid.appendChild(el));
+        });
     }
 
     function filterFlatAlbum(rarity) {
         const cards = document.querySelectorAll('.flat-card-item');
         const btns = document.querySelectorAll('.flat-filter-btn');
-
         btns.forEach(b => { b.className = "py-1.5 rounded-xl text-stone-400 hover:text-white flat-filter-btn"; });
         const active = document.getElementById(`f-${rarity}`);
         if (active) active.className = "py-1.5 rounded-xl bg-vip-gold text-black font-bold flat-filter-btn";
@@ -13906,7 +14638,6 @@ ARCHIVO: .\templates\idols\photocards_album.html
     function filterAlbumLive() {
         const query = (document.getElementById('albumSearchInput')?.value || '').toLowerCase().trim();
         const cards = document.querySelectorAll('.album-card-item');
-
         cards.forEach(c => {
             const searchData = c.getAttribute('data-search') || '';
             c.style.display = searchData.includes(query) ? 'flex' : 'none';
@@ -13922,11 +14653,11 @@ ARCHIVO: .\templates\idols\photocards_album.html
         document.getElementById('modal-card-rarity').innerText = rarityDisplay;
         document.getElementById('modal-card-rarity').style.borderColor = colorHex;
         document.getElementById('modal-card-rarity').style.color = colorHex;
+
         document.getElementById('modal-card-img').src = imgUrl || '';
         document.getElementById('modal-card-box').style.borderColor = colorHex;
         document.getElementById('modal-card-box').style.boxShadow = `0 0 25px ${colorHex}55`;
 
-        // Reiniciar giro a la cara frontal
         const mesh = document.getElementById('flip-card-mesh');
         if (mesh) mesh.classList.remove('is-flipped');
 
@@ -13956,6 +14687,7 @@ ARCHIVO: .\templates\idols\photocards_album.html
         }
 
         document.getElementById('card-action-modal').classList.remove('hidden');
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
     }
 
     function closeCardActionModal() {

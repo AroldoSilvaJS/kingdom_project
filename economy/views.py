@@ -1296,10 +1296,19 @@ def scratch_card_play_ajax(request):
                             'color': awarded_card.get_color_hex(),
                         }
                         if awarded_card.rarity == 'legendary':
-                            send_telegram_msg(
-                                f"👑 <b>¡PHOTOCARD LEGENDARIA DESENTERRADA!</b>\n\n"
-                                f"Un noble ha raspado el <i>{cfg['name']}</i> y reveló a <b>{awarded_card.name}</b> de {awarded_card.display_idol_name} ✨"
-                            )
+                            from django.conf import settings
+                            group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
+                            if group_id:
+                                user_name = profile.username or f"Noble_{tg_id}"
+                                send_telegram_msg(
+                                    chat_id=group_id,
+                                    text=(
+                                        f"👑 <b>¡PHOTOCARD LEGENDARIA DESENTERRADA!</b>\n\n"
+                                        f"El noble <b>{user_name}</b> raspó el <i>{cfg['name']}</i> y reveló a <b>{awarded_card.name}</b> ({awarded_card.display_idol_name}) ✨"
+                                    ),
+                                    button_text="🎰 Ir a Rasca y Gana",
+                                    button_url="https://t.me/KingdomPleasure_bot?start=entrar"
+                                )
 
                 # Colocar exactamente 3 símbolos ganadores en 3 casillas aleatorias
                 win_indices = set(random.sample(range(9), 3))
@@ -1329,7 +1338,9 @@ def scratch_card_play_ajax(request):
                 # Acreditar premio a la Bóveda
                 wallet.balance += payout
                 wallet.save()
-                grant_user_xp(profile, random.randint(3, 7))
+
+                # ✅ Corregido: pasar request, tg_id y cantidad de EXP
+                grant_user_xp(request, tg_id, random.randint(3, 7), reason="Rasca y Gana Clandestino")
 
             else:
                 # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss" psicológico: 2 iguales para mantener el hype)
@@ -1358,7 +1369,8 @@ def scratch_card_play_ajax(request):
                             'is_winner': False
                         })
 
-                grant_user_xp(profile, 1)
+                # ✅ Corregido: pasar request, tg_id y 1 de EXP
+                grant_user_xp(request, tg_id, 1, reason="Rasca y Gana Clandestino")
 
             serial_num = f"KOP-{random.randint(10000, 99999)}"
 
@@ -1370,7 +1382,7 @@ def scratch_card_play_ajax(request):
                 'photocard_won': photocard_won_data,
                 'grid': grid,
                 'new_balance': wallet.balance,
-                'patron_vault': wallet.patron_vault_accumulated,
+                'patron_vault': wallet.patron_vault,  # ✅ Corregido: atributo real del modelo Wallet
                 'serial': serial_num,
                 'tier_name': cfg['name'],
             })
