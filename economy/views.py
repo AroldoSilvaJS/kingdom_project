@@ -1264,6 +1264,7 @@ def scratch_card_play_ajax(request):
             wallet.balance -= cost
             wallet.accumulate_patron_vault(cost)
             wallet.save()
+            balance_after_cost = wallet.balance
 
             # 🎲 DETERMINAR RESULTADO CON PRD (Tasa de Victoria calibrada ~37%)
             is_win = random.random() < 0.37
@@ -1323,7 +1324,6 @@ def scratch_card_play_ajax(request):
                             'is_winner': True
                         })
                     else:
-                        # Rellenar con señuelos sin provocar otra tercia
                         decoy_pool = [k for k in symbols_keys if k != winning_key]
                         chosen_decoy = random.choice(decoy_pool)
                         s_data = SCRATCH_SYMBOLS[chosen_decoy]
@@ -1338,12 +1338,10 @@ def scratch_card_play_ajax(request):
                 # Acreditar premio a la Bóveda
                 wallet.balance += payout
                 wallet.save()
-
-                # ✅ Corregido: pasar request, tg_id y cantidad de EXP
                 grant_user_xp(request, tg_id, random.randint(3, 7), reason="Rasca y Gana Clandestino")
 
             else:
-                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss" psicológico: 2 iguales para mantener el hype)
+                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss": 2 iguales para alimentar el hype)
                 near_miss_key = random.choices(symbols_keys, weights=weights, k=1)[0]
                 near_miss_indices = set(random.sample(range(9), 2))
                 other_pool = [k for k in symbols_keys if k != near_miss_key]
@@ -1369,7 +1367,6 @@ def scratch_card_play_ajax(request):
                             'is_winner': False
                         })
 
-                # ✅ Corregido: pasar request, tg_id y 1 de EXP
                 grant_user_xp(request, tg_id, 1, reason="Rasca y Gana Clandestino")
 
             serial_num = f"KOP-{random.randint(10000, 99999)}"
@@ -1381,8 +1378,9 @@ def scratch_card_play_ajax(request):
                 'payout': payout,
                 'photocard_won': photocard_won_data,
                 'grid': grid,
+                'balance_after_cost': balance_after_cost,
                 'new_balance': wallet.balance,
-                'patron_vault': wallet.patron_vault,  # ✅ Corregido: atributo real del modelo Wallet
+                'patron_vault': wallet.patron_vault,
                 'serial': serial_num,
                 'tier_name': cfg['name'],
             })
