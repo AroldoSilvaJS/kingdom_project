@@ -1202,30 +1202,18 @@ SCRATCH_TIERS = {
     },
 }
 
-# ⚖️ Símbolos con Pesos Probabilísticos Calibrados (RTP ~91%)
+# ⚖️ Símbolos con Pesos Probabilísticos Calibrados (Más dinámicos y divertidos)
 SCRATCH_SYMBOLS = {
-    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.0, 'weight': 40, 'color': '#c084fc'},     # Recupera costo
-    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 1.5, 'weight': 28, 'color': '#f43f5e'},      # Ganancia moderada
-    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 3.0, 'weight': 16, 'color': '#f59e0b'},  # Buen premio
-    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 6.0, 'weight': 8, 'color': '#60a5fa'},   # Premio mayor
-    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 15.0, 'weight': 3, 'color': '#fbbf24'},  # Gran Jackpot
-    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 1.0, 'weight': 3, 'color': '#e879f9'}, # Muy exclusiva
+    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.0, 'weight': 46, 'color': '#c084fc'},     # Recupera costo (muy frecuente)
+    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 1.5, 'weight': 30, 'color': '#f43f5e'},      # Ganancia moderada
+    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 3.0, 'weight': 14, 'color': '#f59e0b'},  # Buen botín
+    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 6.0, 'weight': 6, 'color': '#60a5fa'},   # Gran premio
+    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 15.0, 'weight': 2, 'color': '#fbbf24'},  # Gran Jackpot
+    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 1.0, 'weight': 2, 'color': '#e879f9'}, # Carta al Álbum
 }
 
-def scratch_card_view(request):
-    """Muestra la interfaz del Rasca y Gana Clandestino."""
-    tg_id = get_safe_tg_id(request)
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    return render(request, 'economy/scratch.html', {
-        'tg_id': tg_id,
-        'wallet': wallet,
-        'profile': profile,
-        'tiers': SCRATCH_TIERS,
-    })
-
 def scratch_card_play_ajax(request):
-    """Compra y genera la cuadrícula 3x3 del cartón vía AJAX con blindaje anti-bugs."""
+    """Compra y genera la cuadrícula 3x3 del cartón vía AJAX con Sistema de Piedad."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
 
@@ -1261,8 +1249,21 @@ def scratch_card_play_ajax(request):
             wallet.save()
             balance_after_cost = wallet.balance
 
-            # 🎲 Probabilidad controlada: 26% de victoria
-            is_win = random.random() < 0.26
+            # 🛡️ SISTEMA DE PIEDAD (Anti-Mala Racha)
+            streak_key = f'scratch_loss_streak_{tg_id}'
+            consecutive_losses = request.session.get(streak_key, 0)
+
+            # Escalado de probabilidad de victoria según racha de derrotas
+            if consecutive_losses >= 4:
+                win_threshold = 1.00  # 🌟 ¡Victoria 100% garantizada tras 4-5 derrotas!
+            elif consecutive_losses == 3:
+                win_threshold = 0.80  # 80% de victoria
+            elif consecutive_losses == 2:
+                win_threshold = 0.55  # 55% de victoria
+            else:
+                win_threshold = 0.36  # 36% base (antes era 26%)
+
+            is_win = random.random() < win_threshold
             symbols_keys = list(SCRATCH_SYMBOLS.keys())
             weights = [SCRATCH_SYMBOLS[k]['weight'] for k in symbols_keys]
 
@@ -1272,6 +1273,9 @@ def scratch_card_play_ajax(request):
             photocard_won_data = None
 
             if is_win:
+                # Victoria conseguida: reiniciamos racha de derrotas
+                request.session[streak_key] = 0
+
                 winning_key = random.choices(symbols_keys, weights=weights, k=1)[0]
                 mult = SCRATCH_SYMBOLS[winning_key]['mult']
                 payout = int(round(cost * mult))
@@ -1314,17 +1318,12 @@ def scratch_card_play_ajax(request):
                                     button_url="https://t.me/KingdomPleasure_bot?start=entrar"
                                 )
                     else:
-                        # Fallback si aún no hay photocards subidas en la base de datos
-                        bonus_gold = cost * 2
-                        payout += bonus_gold
+                        payout += (cost * 2)
 
-                # 🛡️ BLINDAJE: 3 del ganador + 6 casillas sin tercia accidental
+                # 🛡️ Blindaje de cuadrícula ganadora (3 del ganador, sin tercias accidentales)
                 other_symbols = [k for k in symbols_keys if k != winning_key]
                 random.shuffle(other_symbols)
-                # Máximo 2 de un símbolo y 1 del resto (2 + 2 + 1 + 1 = 6)
                 decoy_keys = [other_symbols[0], other_symbols[0], other_symbols[1], other_symbols[1], other_symbols[2], other_symbols[3]]
-                
-                # Armamos la lista completa de 9
                 board_keys = [winning_key, winning_key, winning_key] + decoy_keys
                 random.shuffle(board_keys)
 
@@ -1343,8 +1342,10 @@ def scratch_card_play_ajax(request):
                 grant_user_xp(request, tg_id, random.randint(2, 4), reason="Rasca y Gana Clandestino")
 
             else:
-                # 🛡️ BLINDAJE EN DERROTA: 3 pares y 3 individuales [2, 2, 2, 1, 1, 1] = 9 casillas
-                # IMPOSIBLE que salgan 3 iguales por error. Sensación perfecta de "por poco gano".
+                # Incrementamos contador de derrotas para activar la piedad en el siguiente
+                request.session[streak_key] = consecutive_losses + 1
+
+                # 🛡️ Blindaje de derrota: 3 pares y 3 únicos [2, 2, 2, 1, 1, 1] = 9 casillas
                 shuffled_pool = symbols_keys.copy()
                 random.shuffle(shuffled_pool)
                 pair1, pair2, pair3 = shuffled_pool[0], shuffled_pool[1], shuffled_pool[2]
@@ -1379,6 +1380,8 @@ def scratch_card_play_ajax(request):
                 'patron_vault': wallet.patron_vault,
                 'serial': serial_num,
                 'tier_name': cfg['name'],
+                'cost': cost,
+                'tier': tier_key,
             })
 
     except Exception as e:
