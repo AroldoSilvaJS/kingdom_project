@@ -60,7 +60,6 @@ class IdolProfile(models.Model):
         return f"{self.stage_name} (Dueño: {self.telegram_user_id})"
 
     def clean(self):
-        # Validación de negocio: máximo 2 Idols por usuario
         if not self.pk:
             count = IdolProfile.objects.filter(telegram_user_id=self.telegram_user_id).count()
             if count >= 2:
@@ -129,7 +128,7 @@ class Post(models.Model):
     idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='posts')
     network = models.CharField("Red Social", max_length=10, choices=NETWORK_CHOICES, default='gram')
     
-    # Campo de Fotografía
+    # Campo de Fotografía Principal / Portada
     image = models.ImageField("Foto del Post", upload_to='social_posts/', blank=True, null=True)
     
     # Campo de Video (MP4 / WebM / QuickTime)
@@ -146,7 +145,7 @@ class Post(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        tipo = "Video" if self.is_video else "Foto"
+        tipo = "Video" if self.is_video else ("Carrusel" if self.is_carousel else "Foto")
         return f"{self.get_network_display()} ({tipo}) de {self.idol.stage_name}"
 
     @property
@@ -160,6 +159,22 @@ class Post(models.Model):
         elif self.image:
             return self.image.url
         return ""
+
+    @property
+    def all_images(self):
+        """Retorna la lista ordenada de URLs de imágenes del post (portada + galería extra)."""
+        urls = []
+        if self.image:
+            urls.append(self.image.url)
+        for extra in self.gallery.all().order_by('order', 'id'):
+            if extra.image:
+                urls.append(extra.image.url)
+        return urls
+
+    @property
+    def is_carousel(self):
+        """Indica si la publicación contiene 2 o más fotos deslizables."""
+        return len(self.all_images) > 1
 
     def save(self, *args, **kwargs):
         """Optimización y compresión solo si existe imagen y NO es video"""
@@ -179,6 +194,22 @@ class Post(models.Model):
                 pass
 
 
+class PostImage(models.Model):
+    """Fotos complementarias (de 2 a 5) para carruseles deslizables en el Muro VIP."""
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='gallery')
+    image = models.ImageField("Foto adicional", upload_to='social_posts/')
+    order = models.PositiveIntegerField("Orden", default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Foto de Galería"
+        verbose_name_plural = "Fotos de Galería"
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"Foto #{self.id} de Post #{self.post_id}"
+
+
 class PostUnlock(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='unlocks')
     client_telegram_id = models.BigIntegerField("ID del Cliente", db_index=True)
@@ -192,15 +223,24 @@ class PostUnlock(models.Model):
 
 
 class PostLike(models.Model):
+    REACTION_CHOICES = [
+        ('like', '❤️ Corazón'),
+        ('fire', '🔥 Fuego'),
+        ('crown', '👑 Corona'),
+        ('toast', '🥂 Brindis'),
+        ('drool', '🤤 Antojo'),
+    ]
+
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='user_likes')
     client_telegram_id = models.BigIntegerField("ID del Usuario", db_index=True)
+    reaction_type = models.CharField("Reacción", max_length=20, choices=REACTION_CHOICES, default='like')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ('post', 'client_telegram_id')
 
     def __str__(self):
-        return f"Like en Post #{self.post.id} por {self.client_telegram_id}"
+        return f"Reacción [{self.reaction_type}] en Post #{self.post.id} por {self.client_telegram_id}"
 
 
 class CustomRequest(models.Model):
@@ -218,7 +258,6 @@ class CustomRequest(models.Model):
     bounty = models.PositiveIntegerField("Oro Ofrecido", default=100)
     status = models.CharField("Estado", max_length=10, choices=STATUS_CHOICES, default='pending')
     
-    # 🌟 NUEVO: Sello de prioridad del Bazar
     is_priority = models.BooleanField("¿Prioritario?", default=False)
     
     delivered_photo = models.ImageField("Foto Entregada", upload_to='custom_antojos/', blank=True, null=True)
@@ -228,7 +267,7 @@ class CustomRequest(models.Model):
     class Meta:
         verbose_name = "Petición de Antojo"
         verbose_name_plural = "Peticiones de Antojos"
-        ordering = ['-is_priority', '-created_at']  # 👈 Las prioritarias van PRIMERO
+        ordering = ['-is_priority', '-created_at']
 
     def __str__(self):
         pri = "⚡ [PRIORITARIO] " if self.is_priority else ""
@@ -241,9 +280,7 @@ class PostComment(models.Model):
     author_telegram_id = models.BigIntegerField("ID del Autor", db_index=True)
     author_name = models.CharField("Nombre o @ de Usuario", max_length=100)
     
-    # 🌟 NUEVO: Insignia real del Bazar [👑 NOBLE VIP]
     is_vip_author = models.BooleanField("¿Autor con Distintivo VIP?", default=False)
-    
     text = models.TextField("Comentario", max_length=250)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -255,8 +292,17 @@ class PostComment(models.Model):
     def __str__(self):
         return f"Comentario de {self.author_name} en Post #{self.post.id}"
 
+    @property
+    def author_profile(self):
+        """Retorna el perfil nobiliario del autor para mostrar nivel, títulos y marco de avatar del Bazar."""
+        try:
+            from core.models import UserProfile
+            return UserProfile.objects.filter(telegram_user_id=self.author_telegram_id).first()
+        except Exception:
+            return None
 
-    # --- SISTEMA DE PHOTOCARDS Y CAJAS CS ---
+
+# --- SISTEMA DE PHOTOCARDS Y CAJAS CS ---
 
 class PhotocardBox(models.Model):
     name = models.CharField("Nombre de la Caja", max_length=100)

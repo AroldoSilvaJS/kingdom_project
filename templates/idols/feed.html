@@ -2,7 +2,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-1 pb-44 max-w-md mx-auto">
+<div class="flex flex-col gap-4 mt-1 pb-44 max-w-md mx-auto select-none">
     
     <!-- 👑 ENCABEZADO PRINCIPAL & PUBLICAR -->
     <div class="flex justify-between items-center px-1">
@@ -13,10 +13,16 @@
             </h1>
         </div>
         
-        <button type="button" onclick="universalNav('{% url 'idols:create_post' %}')" 
-           class="btn-gold text-[10px] font-black uppercase px-4 py-2 rounded-full flex items-center gap-1.5 shadow-[0_0_15px_rgba(212,175,55,0.35)] active:scale-95 transition-all">
-            <span>✨</span> <span>Publicar</span>
-        </button>
+        <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1 bg-black/80 border border-vip-gold/40 px-2.5 py-1 rounded-full shadow-inner">
+                <span class="text-xs">🪙</span>
+                <span class="text-xs font-mono font-bold text-yellow-400" id="feed-user-balance">{{ my_balance }}</span>
+            </div>
+            <button type="button" onclick="universalNav('{% url 'idols:create_post' %}')" 
+               class="btn-gold text-[10px] font-black uppercase px-3.5 py-1.5 rounded-full flex items-center gap-1 shadow-[0_0_15px_rgba(212,175,55,0.35)] active:scale-95 transition-all">
+                <span>✨</span> <span>Publicar</span>
+            </button>
+        </div>
     </div>
 
     <!-- 🎭 CARTEL DE LA TEMÁTICA DE LA SEMANA -->
@@ -29,7 +35,6 @@
                 <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-ping"></span>
                 <span>Temática de la Semana 🎭</span>
             </span>
-
             <span class="text-[10px] font-mono text-purple-300 font-bold bg-black/60 px-2 py-0.5 rounded-md border border-purple-500/30">
                 Evento Oficial
             </span>
@@ -48,7 +53,6 @@
             <h3 class="font-serif text-sm font-black text-gold-gradient tracking-wide uppercase leading-tight">
                 {{ feed_theme.title }}
             </h3>
-            
             {% if feed_theme.message %}
             <p class="text-[11.5px] text-stone-200 leading-relaxed font-normal">
                 {{ feed_theme.message }}
@@ -73,7 +77,6 @@
                             <div class="w-full h-full rounded-full bg-neutral-900 flex items-center justify-center text-xs">🎭</div>
                         {% endif %}
                     </div>
-
                     <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-black {% if post.idol.status == 'online' %}bg-emerald-400 animate-pulse{% elif post.idol.status == 'antojos' %}bg-purple-400{% else %}bg-stone-500{% endif %}"></span>
                 </div>
 
@@ -84,16 +87,39 @@
         {% endfor %}
     </div>
 
-    <!-- SELECTOR DE FILTRO DE CONTENIDO -->
-    <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl shadow-inner text-xs font-bold uppercase text-center">
-        <button type="button" onclick="filterFeed('all')" id="btn-filter-all"
-                class="py-2.5 rounded-xl text-xs font-black tracking-wider transition-all bg-vip-gold text-black shadow">
-            🌐 Todo el Muro
-        </button>
-        <button type="button" onclick="filterFeed('vip')" id="btn-filter-vip"
-                class="py-2.5 rounded-xl text-xs font-black tracking-wider text-stone-400 hover:text-white transition-all">
-            🔒 Solo Antojos VIP
-        </button>
+    <!-- 🔍 NUEVA BARRA DE FILTROS RÁPIDOS VIP -->
+    <div class="flex flex-col gap-2">
+        <div class="grid grid-cols-4 gap-1 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl shadow-inner text-[10px] font-bold uppercase text-center">
+            <button type="button" onclick="setFilter('all')" id="flt-all"
+                    class="filter-btn py-2 rounded-xl font-black transition-all bg-vip-gold text-black shadow">
+                🌐 Todo
+            </button>
+            <button type="button" onclick="setFilter('vip')" id="flt-vip"
+                    class="filter-btn py-2 rounded-xl text-stone-400 hover:text-white transition-all">
+                🔒 VIP
+            </button>
+            <button type="button" onclick="setFilter('my_unlocked')" id="flt-my"
+                    class="filter-btn py-2 rounded-xl text-stone-400 hover:text-white transition-all">
+                👑 Mías
+            </button>
+            <button type="button" onclick="setFilter('popular')" id="flt-pop"
+                    class="filter-btn py-2 rounded-xl text-stone-400 hover:text-white transition-all">
+                🔥 Top
+            </button>
+        </div>
+
+        <!-- Selector desplegable de Musa para filtro instantáneo -->
+        <div class="flex items-center gap-2 px-1">
+            <select id="musa-filter-select" onchange="filterByMusa(this.value)" 
+                    class="w-full bg-black/80 border border-vip-gold/30 rounded-xl px-3 py-1.5 text-xs text-yellow-300 font-bold focus:outline-none focus:border-yellow-400">
+                <option value="all">🌹 Todas las Musas del Reino</option>
+                {% for idol in all_idols %}
+                    <option value="{{ idol.id }}" {% if filtered_idol and filtered_idol.id == idol.id %}selected{% endif %}>
+                        🌹 {{ idol.stage_name }} ({{ idol.group|default:"Solista" }})
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
     </div>
 
     <!-- FEED DE PUBLICACIONES -->
@@ -102,6 +128,9 @@
         <article id="post-{{ post.id }}" 
                  class="feed-item rounded-[30px] overflow-hidden border-2 bg-gradient-to-b from-[#180a29] via-[#0d0417] to-black shadow-[0_15px_40px_rgba(0,0,0,0.9)] transition-all duration-500"
                  data-network="{{ post.network }}"
+                 data-idol-id="{{ post.idol.id }}"
+                 data-likes="{{ post.likes }}"
+                 data-unlocked="{% if post.id in unlocked_ids or post.network == 'gram' or is_admin or post.idol.telegram_user_id == tg_id %}true{% else %}false{% endif %}"
                  style="border-color: {% if post.network == 'fans' %}rgba(168,85,247,0.45){% else %}rgba(212,175,55,0.35){% endif %};">
             
             <!-- CABECERA DEL POST -->
@@ -147,22 +176,23 @@
                                 class="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-1 rounded-xl bg-black/80 border border-yellow-500/40 shadow active:scale-90" title="Editar">
                             ✏️
                         </button>
-                        <form action="{% url 'idols:delete_post' post.id %}" method="POST" class="m-0" 
-                              onsubmit="return confirm('¿Confirmas eliminar esta foto del Muro?');">
-                            {% csrf_token %}
-                            <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                            <button type="submit" 
-                                    class="text-rose-400 hover:text-rose-300 text-xs px-2 py-1 rounded-xl bg-rose-950/80 border border-rose-500/50 shadow active:scale-90" title="Eliminar">
-                                🗑️
-                            </button>
-                        </form>
                     {% endif %}
                 </div>
             </div>
 
-            <!-- MULTIMEDIA DEL POST -->
-            <div class="relative w-full bg-black min-h-[380px] max-h-[580px] flex items-center justify-center overflow-hidden">
+            <!-- CONTENEDOR MULTIMEDIA (SOPORTE CARRUSEL MULTI-FOTO + DOBLE TAP INSTAGRAM) -->
+            <div class="relative w-full bg-black min-h-[380px] max-h-[580px] flex items-center justify-center overflow-hidden" 
+                 id="media-container-{{ post.id }}"
+                 ondblclick="triggerDoubleTapLike({{ post.id }}, event)">
+                
+                <!-- Corazón Gigante Flotante (Animación Instagram) -->
+                <div id="heart-burst-{{ post.id }}" class="pointer-events-none absolute z-30 opacity-0 transform scale-50 transition-all duration-300 flex items-center justify-center">
+                    <span class="text-7xl filter drop-shadow-[0_0_25px_rgba(239,68,68,0.9)] animate-bounce">❤️</span>
+                </div>
+
+                <!-- CONTENIDO DESBLOQUEADO O PÚBLICO -->
                 {% if post.network == 'gram' or post.id in unlocked_ids or is_admin or post.idol.telegram_user_id == tg_id %}
+                    
                     {% if post.is_video %}
                         <video src="{{ post.video.url }}" 
                                controls 
@@ -172,65 +202,101 @@
                                loop 
                                class="w-full max-h-[580px] object-contain sm:object-cover bg-black">
                         </video>
-                    {% elif post.image %}
-                        <img src="{{ post.image.url }}" alt="{{ post.caption }}" 
-                             loading="lazy"
-                             onclick="openImageLightbox('{{ post.image.url }}', '{{ post.caption|escapejs }}')"
-                             class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-90 transition-opacity">
+                    {% else %}
+                        <!-- 📸 CARRUSEL DE FOTOS DESLIZABLE -->
+                        <div class="carousel-track w-full max-h-[580px] flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar relative"
+                             id="carousel-{{ post.id }}"
+                             onscroll="updateCarouselDots({{ post.id }})">
+                            {% for img_url in post.all_images %}
+                                <div class="w-full flex-shrink-0 snap-center flex items-center justify-center">
+                                    <img src="{{ img_url }}" alt="{{ post.caption }}" loading="lazy"
+                                         onclick="openImageLightbox('{{ img_url }}', '{{ post.caption|escapejs }}')"
+                                         class="w-full max-h-[580px] object-contain sm:object-cover cursor-zoom-in active:opacity-95">
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- Indicador de Puntos del Carrusel (si hay más de 1 foto) -->
+                        {% if post.all_images|length > 1 %}
+                        <div class="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 z-20 pointer-events-none" id="dots-{{ post.id }}">
+                            {% for img_url in post.all_images %}
+                                <span class="carousel-dot w-2 h-2 rounded-full border border-black/80 transition-all {% if forloop.first %}bg-yellow-400 w-4{% else %}bg-white/60{% endif %}"></span>
+                            {% endfor %}
+                        </div>
+                        <span class="absolute top-3 left-3 bg-black/80 border border-vip-gold/40 text-yellow-300 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full z-20">
+                            1/{{ post.all_images|length }}
+                        </span>
+                        {% endif %}
                     {% endif %}
 
-                    {% if post.network == 'fans' and post.id in unlocked_ids %}
+                    {% if post.network == 'fans' %}
                         <span class="absolute top-3 right-3 bg-emerald-950/95 border border-emerald-400 text-emerald-200 text-[9px] font-mono font-black uppercase px-3 py-1 rounded-full shadow-xl backdrop-blur-md z-20">
                             ✓ Desbloqueada
                         </span>
                     {% endif %}
-                {% else %}
-                    {% if post.is_video %}
-                        <video src="{{ post.video.url }}" muted loop autoplay playsinline class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.15] scale-110 pointer-events-none"></video>
-                    {% elif post.image %}
-                        <img src="{{ post.image.url }}" alt="VIP" 
-                             loading="lazy"
-                             class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.18] scale-110 pointer-events-none">
-                    {% endif %}
 
-                    <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10">
+                <!-- CONTENIDO BLOQUEADO (FANSLY VIP) -->
+                {% else %}
+                    <img src="{{ post.media_url }}" alt="VIP" loading="lazy"
+                         id="locked-blur-img-{{ post.id }}"
+                         class="w-full max-h-[580px] object-cover filter blur-3xl brightness-[0.18] scale-110 pointer-events-none transition-all duration-700">
+
+                    <!-- Overlay de compra AJAX -->
+                    <div class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center z-10" id="unlock-overlay-{{ post.id }}">
                         <div class="vip-panel p-6 max-w-xs w-full flex flex-col items-center rounded-3xl border-2 border-purple-500/60 shadow-[0_0_35px_rgba(168,85,247,0.35)] bg-gradient-to-b from-[#1e0a33]/95 to-black/95">
                             <div class="w-16 h-16 rounded-2xl bg-black border-2 border-purple-400 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(168,85,247,0.6)] mb-3 animate-pulse">
                                 {% if post.is_video %}🎬{% else %}🔒{% endif %}
                             </div>
 
                             <span class="text-[9px] font-mono font-bold uppercase tracking-widest text-purple-300 mb-1">
-                                KingdomFans • {% if post.is_video %}Video Exclusivo{% else %}Foto Exclusiva{% endif %}
+                                KingdomFans • {% if post.is_video %}Video Exclusivo{% else %}Sesión VIP ({{ post.all_images|length }} Fotos){% endif %}
                             </span>
 
                             <h4 class="font-serif text-sm font-black text-white uppercase tracking-wider mb-1">
-                                Sesión de {{ post.idol.stage_name }}
+                                {{ post.idol.stage_name }}
                             </h4>
                             
                             <p class="text-[11px] text-stone-300 mb-4 leading-relaxed">
-                                Este contenido se guardará para siempre en tu Colección Privada.
+                                Se guardará en tu Colección Privada para siempre.
                             </p>
 
-                            <form action="{% url 'idols:unlock_post' post.id %}" method="POST" class="w-full m-0">
-                                {% csrf_token %}
-                                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                                <button type="submit" 
-                                        class="w-full btn-gold py-3 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
-                                    <span>Desbloquear</span>
-                                    <span class="font-mono text-sm font-black">🪙 {{ post.price }}</span>
-                                </button>
-                            </form>
+                            <button type="button" onclick="unlockPostAjax({{ post.id }}, {{ post.price }})" id="btn-unlock-{{ post.id }}"
+                                    class="w-full btn-gold py-3 rounded-2xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
+                                <span>Desbloquear</span>
+                                <span class="font-mono text-sm font-black">🪙 {{ post.price }}</span>
+                            </button>
                         </div>
                     </div>
                 {% endif %}
             </div>
 
-            <!-- BARRA DE REACCIONES -->
-            <div class="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-black/60 backdrop-blur-md">
-                <div class="flex items-center gap-3">
-                    <button type="button" onclick="handleLike({{ post.id }})" id="like-btn-{{ post.id }}"
-                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-black/70 transition-all active:scale-125 select-none {% if post.id in liked_ids %}border-rose-500/60 text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.3)]{% else %}border-white/10 text-stone-400 hover:text-white{% endif %}">
-                        <span id="like-icon-{{ post.id }}" class="text-sm">{% if post.id in liked_ids %}❤️{% else %}🤍{% endif %}</span>
+            <!-- BARRA DE REACCIONES Y BRINDIS -->
+            <div class="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-black/60 backdrop-blur-md relative">
+                
+                <!-- DOCK FLOTANTE DE REACCIONES VIP (❤️ 🔥 👑 🥂 🤤) -->
+                <div id="reactions-dock-{{ post.id }}" class="hidden absolute -top-12 left-4 z-40 bg-black/90 border border-vip-gold/50 backdrop-blur-xl px-2 py-1 rounded-full shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-1.5 animate-bounce">
+                    <button type="button" onclick="submitReaction({{ post.id }}, 'like')" class="text-lg hover:scale-125 transition-transform p-1">❤️</button>
+                    <button type="button" onclick="submitReaction({{ post.id }}, 'fire')" class="text-lg hover:scale-125 transition-transform p-1">🔥</button>
+                    <button type="button" onclick="submitReaction({{ post.id }}, 'crown')" class="text-lg hover:scale-125 transition-transform p-1">👑</button>
+                    <button type="button" onclick="submitReaction({{ post.id }}, 'toast')" class="text-lg hover:scale-125 transition-transform p-1">🥂</button>
+                    <button type="button" onclick="submitReaction({{ post.id }}, 'drool')" class="text-lg hover:scale-125 transition-transform p-1">🤤</button>
+                </div>
+
+                <div class="flex items-center gap-2.5">
+                    <!-- Botón Principal de Reacción con soporte para abrir dock -->
+                    <button type="button" onclick="toggleReactionDock({{ post.id }})" id="react-btn-{{ post.id }}"
+                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-black/70 transition-all active:scale-125 select-none border-white/10 text-stone-300 hover:text-white">
+                        <span id="react-icon-{{ post.id }}" class="text-sm">
+                            {% with ur=user_reactions|default:None %}
+                                {% if post.id in user_reactions %}
+                                    {% if user_reactions|get_item:post.id == 'fire' %}🔥
+                                    {% elif user_reactions|get_item:post.id == 'crown' %}👑
+                                    {% elif user_reactions|get_item:post.id == 'toast' %}🥂
+                                    {% elif user_reactions|get_item:post.id == 'drool' %}🤤
+                                    {% else %}❤️{% endif %}
+                                {% else %}🤍{% endif %}
+                            {% endwith %}
+                        </span>
                         <span id="like-count-{{ post.id }}" class="text-xs font-mono font-black">{{ post.likes }}</span>
                     </button>
 
@@ -252,7 +318,7 @@
                 </button>
             </div>
 
-            <!-- DESCRIPCIÓN Y COMENTARIOS -->
+            <!-- DESCRIPCIÓN Y COMENTARIOS CON PRESUNCIÓN DEL BAZAR -->
             <div class="p-4 flex flex-col gap-2.5 bg-gradient-to-t from-black via-black/80 to-transparent">
                 {% if post.caption %}
                     <p class="text-xs text-stone-200 leading-relaxed font-normal">
@@ -260,50 +326,73 @@
                     </p>
                 {% endif %}
 
-                <!-- SECCIÓN DE COMENTARIOS CON INSIGNIA DORADA VIP REAL -->
+                <!-- 👑 SECCIÓN DE COMENTARIOS CON PRESUNCIÓN REAL -->
                 <div id="comments-section-{{ post.id }}" class="hidden mt-2 pt-3 border-t border-white/10 flex flex-col gap-3">
                     
-                    <div class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+                    <div class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1" id="comments-list-{{ post.id }}">
                         {% for c in post.comments.all %}
                             {% if not c.parent %}
-                            <!-- Comentario Principal -->
-                            <div class="bg-black/70 border border-white/10 p-3 rounded-2xl text-xs flex flex-col gap-1 shadow">
-                                <div class="flex justify-between items-center text-[10px]">
-                                    <span class="font-bold text-yellow-300 flex items-center gap-1.5 flex-wrap">
-                                        <span>💬</span> 
-                                        <span>{{ c.author_name }}</span>
+                            <!-- Tarjeta de Comentario con Marco del Bazar y Rango -->
+                            <div class="bg-black/70 border border-white/10 p-2.5 rounded-2xl text-xs flex flex-col gap-1.5 shadow" id="comment-node-{{ c.id }}">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <!-- Marco de Avatar Comprado en el Bazar -->
+                                        <div class="w-7 h-7 rounded-xl flex items-center justify-center text-xs flex-shrink-0 shadow
+                                            {% if c.author_profile.avatar_frame == 'flame' %}bg-rose-950/80 border-2 border-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.6)]
+                                            {% elif c.author_profile.avatar_frame == 'diamond' %}bg-cyan-950/80 border-2 border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.6)]
+                                            {% elif c.author_profile.avatar_frame == 'neon' %}bg-purple-950/80 border-2 border-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.6)]
+                                            {% elif c.author_profile.avatar_frame == 'gold' %}bg-yellow-950/80 border-2 border-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.6)]
+                                            {% else %}bg-stone-900 border border-white/20{% endif %}">
+                                            <span>{% if '(Idol)' in c.author_name %}🌹{% else %}🥂{% endif %}</span>
+                                        </div>
 
-                                        <!-- 🌟 INSIGNIA DORADA REAL DEL BAZAR -->
-                                        {% if c.is_vip_author %}
-                                        <span class="bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[8px] font-mono font-black uppercase px-2 py-0.2 rounded-full shadow-[0_0_10px_rgba(234,179,8,0.7)] tracking-wider">
-                                            👑 NOBLE VIP
-                                        </span>
-                                        {% endif %}
-                                    </span>
-                                    <span class="text-stone-500 font-mono text-[9px]">{{ c.created_at|timesince }} atrás</span>
+                                        <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+                                            <span class="font-bold text-[11px] {% if '(Idol)' in c.author_name %}text-yellow-300{% else %}text-white{% endif %} truncate">
+                                                {{ c.author_name }}
+                                            </span>
+                                            
+                                            <!-- Nivel Nobiliario -->
+                                            <span class="text-[8px] bg-purple-950/90 border border-purple-500/40 text-purple-200 px-1 rounded font-mono font-black">
+                                                L{{ c.author_profile.level|default:1 }}
+                                            </span>
+
+                                            <!-- Título Nobiliario -->
+                                            {% if c.author_profile.title %}
+                                            <span class="text-[8px] text-yellow-400 font-serif italic truncate hidden sm:inline">
+                                                {{ c.author_profile.get_title_display }}
+                                            </span>
+                                            {% endif %}
+
+                                            <!-- Insignia Dorada VIP -->
+                                            {% if c.is_vip_author %}
+                                            <span class="bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[7.5px] font-mono font-black uppercase px-1.5 rounded-full">
+                                                👑 VIP
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <span class="text-stone-500 font-mono text-[9px] flex-shrink-0">{{ c.created_at|timesince }}</span>
                                 </div>
-                                <p class="text-stone-200 leading-relaxed pl-1">{{ c.text }}</p>
 
-                                <div class="flex justify-end pt-1">
+                                <p class="text-stone-200 text-xs leading-relaxed pl-9">{{ c.text }}</p>
+
+                                <div class="flex justify-end pt-0.5">
                                     <button type="button" onclick="setReplyTarget({{ post.id }}, {{ c.id }}, '{{ c.author_name|escapejs }}')"
-                                            class="text-[9.5px] font-bold text-purple-300 hover:text-yellow-300 flex items-center gap-1 active:scale-95 transition-all">
-                                        <span>↩️</span> <span>Responder</span>
+                                            class="text-[9px] font-bold text-purple-300 hover:text-yellow-300 flex items-center gap-1 active:scale-95">
+                                        <span>↩️ Responder</span>
                                     </button>
                                 </div>
 
                                 <!-- Respuestas Anidadas -->
                                 {% if c.replies.all %}
-                                <div class="flex flex-col gap-1.5 mt-1.5 pl-3 border-l-2 border-purple-500/40">
+                                <div class="flex flex-col gap-1.5 mt-1 pl-3 border-l-2 border-purple-500/40" id="replies-{{ c.id }}">
                                     {% for rep in c.replies.all %}
                                     <div class="bg-purple-950/20 border border-purple-500/20 p-2 rounded-xl flex flex-col gap-0.5">
                                         <div class="flex justify-between items-center text-[9px]">
                                             <span class="font-bold flex items-center gap-1 flex-wrap {% if '(Idol)' in rep.author_name %}text-yellow-300{% else %}text-purple-200{% endif %}">
                                                 {% if '(Idol)' in rep.author_name %}👑 {{ rep.author_name }}{% else %}↳ {{ rep.author_name }}{% endif %}
-                                                {% if rep.is_vip_author %}
-                                                <span class="bg-yellow-500 text-black text-[7.5px] font-mono font-black px-1.5 rounded-full">
-                                                    👑 VIP
-                                                </span>
-                                                {% endif %}
+                                                <span class="text-[7.5px] bg-black/60 text-purple-300 px-1 rounded font-mono">L{{ rep.author_profile.level|default:1 }}</span>
                                             </span>
                                             <span class="text-stone-500 font-mono">{{ rep.created_at|timesince }}</span>
                                         </div>
@@ -311,31 +400,30 @@
                                     </div>
                                     {% endfor %}
                                 </div>
+                                {% else %}
+                                <div class="flex flex-col gap-1.5 mt-1 pl-3 border-l-2 border-purple-500/40 hidden" id="replies-{{ c.id }}"></div>
                                 {% endif %}
                             </div>
                             {% endif %}
                         {% empty %}
-                            <p class="text-center text-[11px] text-stone-500 py-2 italic">
+                            <p class="text-center text-[11px] text-stone-500 py-2 italic" id="empty-comment-msg-{{ post.id }}">
                                 Sé el primero en dejar un halago para la Musa...
                             </p>
                         {% endfor %}
                     </div>
 
+                    <!-- Indicador de Respuesta -->
                     <div id="reply-indicator-{{ post.id }}" class="hidden items-center justify-between bg-purple-950/80 border border-purple-500/50 px-3 py-1 rounded-xl text-[10px] text-purple-200">
                         <span id="reply-text-{{ post.id }}">Respondiendo a: </span>
                         <button type="button" onclick="cancelReply({{ post.id }})" class="text-rose-400 font-bold hover:text-white">&times; Cancelar</button>
                     </div>
 
-                    <form action="{% url 'idols:add_comment' post.id %}" method="POST" class="flex gap-2 m-0 mt-0.5">
-                        {% csrf_token %}
-                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                        <input type="hidden" name="tg_username" value="{{ tg_username }}">
-                        <input type="hidden" name="parent_id" id="parent-input-{{ post.id }}" value="">
-                        
-                        <input type="text" name="text" id="comment-input-{{ post.id }}" required placeholder="Escribe tu comentario..." 
+                    <!-- Formulario AJAX de Comentarios (Cero Recargas) -->
+                    <form onsubmit="submitCommentAjax({{ post.id }}, event)" class="flex gap-2 m-0 mt-0.5">
+                        <input type="hidden" id="parent-input-{{ post.id }}" value="">
+                        <input type="text" id="comment-input-{{ post.id }}" required placeholder="Escribe tu comentario de corte..." 
                                class="flex-1 bg-black border border-vip-gold/30 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-500 focus:outline-none focus:border-yellow-400">
-                        
-                        <button type="submit" 
+                        <button type="submit" id="btn-submit-comment-{{ post.id }}"
                                 class="btn-gold px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider active:scale-95 transition-all shadow">
                             Enviar
                         </button>
@@ -356,7 +444,7 @@
 
 </div>
 
-<!-- MODAL PARA INVITAR UN TRAGO -->
+<!-- MODAL PARA INVITAR UN TRAGO (CON LLUVIA DE ORO AJAX) -->
 <div id="tip-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 select-none">
     <div class="vip-panel max-w-sm w-full p-6 relative border-2 border-yellow-400/70 shadow-[0_0_40px_rgba(212,175,55,0.3)] rounded-3xl bg-gradient-to-b from-[#200d35] via-[#0d0417] to-black">
         <button onclick="closeTipModal()" class="absolute top-4 right-4 text-stone-400 hover:text-white text-2xl active:scale-90">&times;</button>
@@ -371,10 +459,8 @@
             <p class="text-xs text-stone-300 mt-1" id="tip-idol-target">Ofrenda directa a la Bóveda de la Musa.</p>
         </div>
 
-        <form id="tip-form" action="" method="POST" class="mt-4 flex flex-col gap-3">
-            {% csrf_token %}
-            <input type="hidden" name="tg_id" value="{{ tg_id }}">
-
+        <form onsubmit="submitTipAjax(event)" class="mt-4 flex flex-col gap-3">
+            <input type="hidden" id="tip-post-id" value="">
             <div>
                 <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1.5 text-center">Selecciona tu Ofrenda (🪙)</label>
                 <div class="grid grid-cols-4 gap-1.5">
@@ -383,80 +469,203 @@
                     <button type="button" onclick="setTipAmount(100)" class="bg-black border border-vip-gold/40 hover:border-vip-gold text-yellow-300 py-2 rounded-xl text-xs font-mono font-bold active:scale-95">100🪙</button>
                     <button type="button" onclick="setTipAmount(250)" class="bg-black border border-vip-gold/40 hover:border-vip-gold text-yellow-300 py-2 rounded-xl text-xs font-mono font-bold active:scale-95">250🪙</button>
                 </div>
-
-                <input type="number" id="tip-amount-input" name="tip_amount" min="10" value="50" required
+                <input type="number" id="tip-amount-input" min="10" value="50" required
                        class="mt-2.5 w-full bg-black/90 border border-vip-gold/50 rounded-xl p-2.5 text-center font-mono font-black text-white text-lg focus:outline-none focus:border-yellow-400 shadow-inner">
             </div>
 
-            <button type="submit" class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all mt-1">
+            <button type="submit" id="btn-submit-tip"
+                    class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all mt-1">
                 Brindar con la Musa (+EXP)
             </button>
         </form>
     </div>
 </div>
 
+<!-- CONTENEDOR FLOTANTE PARA LLUVIA DE MONEDAS -->
+<div id="coin-shower-container" class="pointer-events-none fixed inset-0 z-[99999] overflow-hidden"></div>
+
 <script>
-    async function handleLike(postId) {
-        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
-        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
-        const formData = new FormData();
-        formData.append('tg_id', tgId);
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    const csrfToken = '{{ csrf_token }}';
+    const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
 
+    // 🪙 Audio de Monedas Real
+    function playCoinChime() {
         try {
-            const resp = await fetch(`/idols/feed/like/${postId}/`, { method: 'POST', body: formData });
-            const data = await resp.json();
-            const btn = document.getElementById(`like-btn-${postId}`);
-            const icon = document.getElementById(`like-icon-${postId}`);
-            const count = document.getElementById(`like-count-${postId}`);
-
-            if (data.liked) {
-                icon.innerText = '❤️';
-                btn.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-rose-500/60 bg-black/70 text-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.3)] transition-all active:scale-125 select-none";
-            } else {
-                icon.innerText = '🤍';
-                btn.className = "flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/10 bg-black/70 text-stone-400 hover:text-white transition-all active:scale-125 select-none";
-            }
-            count.innerText = data.likes;
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioCtx();
+            [987, 1318, 1760, 2093].forEach((f, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(f, ctx.currentTime + (idx * 0.06));
+                gain.gain.setValueAtTime(0.2, ctx.currentTime + (idx * 0.06));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.06) + 0.2);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.06));
+                osc.stop(ctx.currentTime + (idx * 0.06) + 0.2);
+            });
         } catch(e) {}
     }
 
-    function toggleComments(postId) {
-        const section = document.getElementById(`comments-section-${postId}`);
-        if (section) section.classList.toggle('hidden');
-    }
+    // 🪙 Lluvia de Monedas en Pantalla
+    function spawnCoinShower() {
+        const container = document.getElementById('coin-shower-container');
+        for (let i = 0; i < 18; i++) {
+            const coin = document.createElement('div');
+            coin.innerText = '🪙';
+            coin.style.position = 'absolute';
+            coin.style.left = `${Math.random() * 90 + 5}%`;
+            coin.style.bottom = '10%';
+            coin.style.fontSize = `${Math.random() * 18 + 20}px`;
+            coin.style.transition = 'all 1.2s cubic-bezier(0.22, 1, 0.36, 1)';
+            coin.style.transform = `translateY(0) scale(0.5) rotate(0deg)`;
+            coin.style.opacity = '1';
+            container.appendChild(coin);
 
-    function filterFeed(type) {
-        const items = document.querySelectorAll('.feed-item');
-        const btnAll = document.getElementById('btn-filter-all');
-        const btnVip = document.getElementById('btn-filter-vip');
+            setTimeout(() => {
+                const xOffset = (Math.random() - 0.5) * 200;
+                const yOffset = -(Math.random() * 350 + 200);
+                coin.style.transform = `translate(${xOffset}px, ${yOffset}px) scale(1.4) rotate(${Math.random() * 360}deg)`;
+                coin.style.opacity = '0';
+            }, 20);
 
-        if (type === 'vip') {
-            btnVip.className = "py-2.5 rounded-xl text-xs font-black tracking-wider transition-all bg-gradient-to-r from-purple-800 to-fuchsia-700 text-white shadow";
-            btnAll.className = "py-2.5 rounded-xl text-xs font-black tracking-wider text-stone-400 hover:text-white transition-all";
-            items.forEach(el => { el.style.display = (el.dataset.network === 'fans') ? 'block' : 'none'; });
-        } else {
-            btnAll.className = "py-2.5 rounded-xl text-xs font-black tracking-wider transition-all bg-vip-gold text-black shadow";
-            btnVip.className = "py-2.5 rounded-xl text-xs font-black tracking-wider text-stone-400 hover:text-white transition-all";
-            items.forEach(el => el.style.display = 'block');
+            setTimeout(() => { coin.remove(); }, 1300);
         }
     }
 
-    function openTipModal(postId, idolName) {
-        document.getElementById('tip-form').action = `/idols/feed/tip/${postId}/`;
-        document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (80% neto para su Bóveda).`;
-        document.getElementById('tip-modal').classList.remove('hidden');
+    // ⚡ DESBLOQUEO AJAX EN VIVO (CERO RECARGAS)
+    async function unlockPostAjax(postId, price) {
+        const btn = document.getElementById(`btn-unlock-${postId}`);
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳ Desbloqueando...</span>';
+
+        const fd = new FormData();
+        fd.append('tg_id', tgId);
+        fd.append('ajax', '1');
+        fd.append('csrfmiddlewaretoken', csrfToken);
+
+        try {
+            const resp = await fetch(`/idols/feed/unlock/${postId}/`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: fd
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                playCoinChime();
+                spawnCoinShower();
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+
+                // Actualizar saldo visual
+                const balEl = document.getElementById('feed-user-balance');
+                if (balEl && data.new_balance !== undefined) balEl.innerText = data.new_balance;
+
+                // Transición fluida: desvanecer candado y desenfocar
+                const overlay = document.getElementById(`unlock-overlay-${postId}`);
+                if (overlay) {
+                    overlay.style.opacity = '0';
+                    overlay.style.transition = 'opacity 0.4s ease';
+                    setTimeout(() => overlay.remove(), 400);
+                }
+
+                const blurImg = document.getElementById(`locked-blur-img-${postId}`);
+                if (blurImg) {
+                    blurImg.classList.remove('blur-3xl', 'brightness-[0.18]', 'scale-110');
+                    blurImg.classList.add('cursor-zoom-in');
+                    blurImg.style.filter = 'none';
+                    blurImg.onclick = () => openImageLightbox(blurImg.src, '');
+                }
+
+                // Marcar tarjeta como desbloqueada en data-attribute
+                const article = document.getElementById(`post-${postId}`);
+                if (article) article.dataset.unlocked = 'true';
+
+            } else {
+                alert(data.error || 'No se pudo desbloquear.');
+                btn.disabled = false;
+                btn.innerHTML = `<span>Desbloquear</span> <span class="font-mono text-sm font-black">🪙 ${price}</span>`;
+            }
+        } catch(e) {
+            alert('Error de conexión.');
+            btn.disabled = false;
+            btn.innerHTML = `<span>Desbloquear</span> <span class="font-mono text-sm font-black">🪙 ${price}</span>`;
+        }
     }
 
-    function closeTipModal() { document.getElementById('tip-modal').classList.add('hidden'); }
-    function setTipAmount(val) { document.getElementById('tip-amount-input').value = val; }
+    // ❤️ DOBLE TAP LIKE ESTILO INSTAGRAM
+    let lastTapTime = 0;
+    function triggerDoubleTapLike(postId, e) {
+        const now = new Date().getTime();
+        const diff = now - lastTapTime;
+        lastTapTime = now;
+
+        if (diff < 350 && diff > 0) {
+            // Animación de corazón gigante en el centro
+            const burst = document.getElementById(`heart-burst-${postId}`);
+            if (burst) {
+                burst.classList.remove('opacity-0', 'scale-50');
+                burst.classList.add('opacity-100', 'scale-125');
+                try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+                setTimeout(() => {
+                    burst.classList.remove('opacity-100', 'scale-125');
+                    burst.classList.add('opacity-0', 'scale-50');
+                }, 600);
+            }
+            submitReaction(postId, 'like');
+        }
+    }
+
+    // 🔥 REACCIONES DE LA CORTE (❤️ 🔥 👑 🥂 🤤)
+    function toggleReactionDock(postId) {
+        const dock = document.getElementById(`reactions-dock-${postId}`);
+        if (dock) dock.classList.toggle('hidden');
+    }
+
+    async function submitReaction(postId, reactionCode) {
+        const dock = document.getElementById(`reactions-dock-${postId}`);
+        if (dock) dock.classList.add('hidden');
+
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+
+        const fd = new FormData();
+        fd.append('tg_id', tgId);
+        fd.append('reaction', reactionCode);
+        fd.append('csrfmiddlewaretoken', csrfToken);
+
+        try {
+            const resp = await fetch(`/idols/feed/react/${postId}/`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: fd
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                const countEl = document.getElementById(`like-count-${postId}`);
+                const iconEl = document.getElementById(`react-icon-${postId}`);
+                if (countEl) countEl.innerText = data.total_likes;
+
+                const emojis = {'like': '❤️', 'fire': '🔥', 'crown': '👑', 'toast': '🥂', 'drool': '🤤'};
+                if (iconEl) {
+                    iconEl.innerText = data.active_reaction ? emojis[data.active_reaction] : '🤍';
+                }
+            }
+        } catch(e) {}
+    }
+
+    // 💬 COMENTARIOS AJAX EN VIVO (CERO RECARGAS)
+    function toggleComments(postId) {
+        const sec = document.getElementById(`comments-section-${postId}`);
+        if (sec) sec.classList.toggle('hidden');
+    }
 
     function setReplyTarget(postId, commentId, authorName) {
         document.getElementById(`parent-input-${postId}`).value = commentId;
         const ind = document.getElementById(`reply-indicator-${postId}`);
         const txt = document.getElementById(`reply-text-${postId}`);
         const input = document.getElementById(`comment-input-${postId}`);
-
         txt.innerText = `Respondiendo a: ${authorName}`;
         ind.classList.remove('hidden');
         ind.classList.add('flex');
@@ -466,26 +675,222 @@
 
     function cancelReply(postId) {
         document.getElementById(`parent-input-${postId}`).value = '';
-        const ind = document.getElementById(`reply-indicator-${postId}`);
-        const input = document.getElementById(`comment-input-${postId}`);
-
-        ind.classList.add('hidden');
-        ind.classList.remove('flex');
-        input.placeholder = "Escribe tu comentario...";
+        document.getElementById(`reply-indicator-${postId}`).classList.add('hidden');
+        document.getElementById(`comment-input-${postId}`).placeholder = "Escribe tu comentario de corte...";
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
-        const hash = window.location.hash;
-        if (hash) {
-            setTimeout(() => {
-                const targetPost = document.querySelector(hash);
-                if (targetPost) {
-                    targetPost.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    targetPost.classList.add('ring-4', 'ring-yellow-400', 'shadow-[0_0_35px_rgba(234,179,8,0.8)]');
-                    setTimeout(() => { targetPost.classList.remove('ring-4', 'ring-yellow-400', 'shadow-[0_0_35px_rgba(234,179,8,0.8)]'); }, 2500);
+    async function submitCommentAjax(postId, e) {
+        e.preventDefault();
+        const input = document.getElementById(`comment-input-${postId}`);
+        const text = input.value.trim();
+        const parentId = document.getElementById(`parent-input-${postId}`).value;
+        const btn = document.getElementById(`btn-submit-comment-${postId}`);
+
+        if (!text) return;
+        btn.disabled = true;
+
+        const fd = new FormData();
+        fd.append('tg_id', tgId);
+        fd.append('text', text);
+        if (parentId) fd.append('parent_id', parentId);
+        fd.append('ajax', '1');
+        fd.append('csrfmiddlewaretoken', csrfToken);
+
+        try {
+            const resp = await fetch(`/idols/feed/comment/${postId}/`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: fd
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                input.value = '';
+                cancelReply(postId);
+                btn.disabled = false;
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+
+                // Actualizar contador
+                const cCount = document.getElementById(`comment-count-${postId}`);
+                if (cCount) cCount.innerText = data.total_comments;
+
+                const emptyMsg = document.getElementById(`empty-comment-msg-${postId}`);
+                if (emptyMsg) emptyMsg.remove();
+
+                const c = data.comment;
+                const frameClass = c.avatar_frame === 'flame' ? 'bg-rose-950/80 border-2 border-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.6)]' :
+                                  (c.avatar_frame === 'diamond' ? 'bg-cyan-950/80 border-2 border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.6)]' :
+                                  (c.avatar_frame === 'neon' ? 'bg-purple-950/80 border-2 border-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.6)]' :
+                                  'bg-yellow-950/80 border-2 border-yellow-400 shadow-[0_0_10px_rgba(234,179,8,0.6)]'));
+
+                if (c.is_reply && c.parent_id) {
+                    const repBox = document.getElementById(`replies-${c.parent_id}`);
+                    if (repBox) {
+                        repBox.classList.remove('hidden');
+                        const rDiv = document.createElement('div');
+                        rDiv.className = "bg-purple-950/20 border border-purple-500/20 p-2 rounded-xl flex flex-col gap-0.5 animate-fade-in";
+                        rDiv.innerHTML = `
+                            <div class="flex justify-between items-center text-[9px]">
+                                <span class="font-bold flex items-center gap-1 text-purple-200">
+                                    ↳ ${c.author_name}
+                                    <span class="text-[7.5px] bg-black/60 text-purple-300 px-1 rounded font-mono">L${c.level}</span>
+                                </span>
+                                <span class="text-stone-500 font-mono">ahora</span>
+                            </div>
+                            <p class="text-stone-300 text-[11px] leading-relaxed">${c.text}</p>
+                        `;
+                        repBox.appendChild(rDiv);
+                    }
+                } else {
+                    const list = document.getElementById(`comments-list-${postId}`);
+                    const cDiv = document.createElement('div');
+                    cDiv.className = "bg-black/70 border border-white/10 p-2.5 rounded-2xl text-xs flex flex-col gap-1.5 shadow animate-fade-in";
+                    cDiv.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <div class="w-7 h-7 rounded-xl flex items-center justify-center text-xs flex-shrink-0 shadow ${frameClass}">
+                                    <span>🥂</span>
+                                </div>
+                                <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+                                    <span class="font-bold text-[11px] text-white truncate">${c.author_name}</span>
+                                    <span class="text-[8px] bg-purple-950/90 border border-purple-500/40 text-purple-200 px-1 rounded font-mono font-black">L${c.level}</span>
+                                    <span class="text-[8px] text-yellow-400 font-serif italic truncate">${c.title}</span>
+                                    ${c.is_vip_author ? '<span class="bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[7.5px] font-mono font-black uppercase px-1.5 rounded-full">👑 VIP</span>' : ''}
+                                </div>
+                            </div>
+                            <span class="text-stone-500 font-mono text-[9px]">ahora</span>
+                        </div>
+                        <p class="text-stone-200 text-xs leading-relaxed pl-9">${c.text}</p>
+                    `;
+                    list.appendChild(cDiv);
+                    cDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
-            }, 350);
+            } else {
+                btn.disabled = false;
+            }
+        } catch(e) {
+            btn.disabled = false;
         }
-    });
+    }
+
+    // 🥂 INVITAR TRAGO CON LLUVIA DE ORO AJAX
+    function openTipModal(postId, idolName) {
+        document.getElementById('tip-post-id').value = postId;
+        document.getElementById('tip-idol-target').innerText = `Brinda con ${idolName} (oro directo a su Bóveda).`;
+        document.getElementById('tip-modal').classList.remove('hidden');
+    }
+
+    function closeTipModal() { document.getElementById('tip-modal').classList.add('hidden'); }
+    function setTipAmount(val) { document.getElementById('tip-amount-input').value = val; }
+
+    async function submitTipAjax(e) {
+        e.preventDefault();
+        const postId = document.getElementById('tip-post-id').value;
+        const amount = document.getElementById('tip-amount-input').value;
+        const btn = document.getElementById('btn-submit-tip');
+        btn.disabled = true;
+
+        const fd = new FormData();
+        fd.append('tg_id', tgId);
+        fd.append('tip_amount', amount);
+        fd.append('ajax', '1');
+        fd.append('csrfmiddlewaretoken', csrfToken);
+
+        try {
+            const resp = await fetch(`/idols/feed/tip/${postId}/`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: fd
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                closeTipModal();
+                btn.disabled = false;
+                playCoinChime();
+                spawnCoinShower();
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                
+                const balEl = document.getElementById('feed-user-balance');
+                if (balEl && data.new_balance !== undefined) balEl.innerText = data.new_balance;
+
+                alert(data.message);
+            } else {
+                alert(data.error || 'No se pudo enviar el brindis.');
+                btn.disabled = false;
+            }
+        } catch(e) {
+            btn.disabled = false;
+            alert('Error de conexión.');
+        }
+    }
+
+    // 🔍 FILTROS RÁPIDOS EN CLIENTE (TODO, VIP, MÍAS, POPULARES)
+    function setFilter(filterType) {
+        const items = document.querySelectorAll('.feed-item');
+        const container = document.getElementById('feed-container');
+
+        ['all', 'vip', 'my_unlocked', 'popular'].forEach(f => {
+            const btn = document.getElementById(`flt-${f === 'my_unlocked' ? 'my' : (f === 'popular' ? 'pop' : f)}`);
+            if (btn) {
+                if (f === filterType) {
+                    btn.className = "filter-btn py-2 rounded-xl font-black transition-all bg-vip-gold text-black shadow";
+                } else {
+                    btn.className = "filter-btn py-2 rounded-xl text-stone-400 hover:text-white transition-all";
+                }
+            }
+        });
+
+        if (filterType === 'popular') {
+            // Reordenar por likes descendente
+            const sorted = Array.from(items).sort((a, b) => parseInt(b.dataset.likes || 0) - parseInt(a.dataset.likes || 0));
+            sorted.forEach(el => {
+                el.style.display = 'block';
+                container.appendChild(el);
+            });
+            return;
+        }
+
+        items.forEach(el => {
+            if (filterType === 'all') {
+                el.style.display = 'block';
+            } else if (filterType === 'vip') {
+                el.style.display = (el.dataset.network === 'fans') ? 'block' : 'none';
+            } else if (filterType === 'my_unlocked') {
+                el.style.display = (el.dataset.unlocked === 'true' && el.dataset.network === 'fans') ? 'block' : 'none';
+            }
+        });
+    }
+
+    function filterByMusa(idolId) {
+        const items = document.querySelectorAll('.feed-item');
+        items.forEach(el => {
+            if (idolId === 'all') {
+                el.style.display = 'block';
+            } else {
+                el.style.display = (el.dataset.idolId === idolId) ? 'block' : 'none';
+            }
+        });
+    }
+
+    // 📸 Actualizador de puntos de carrusel
+    function updateCarouselDots(postId) {
+        const carousel = document.getElementById(`carousel-${postId}`);
+        const dotsBox = document.getElementById(`dots-${postId}`);
+        if (!carousel || !dotsBox) return;
+
+        const scrollPos = carousel.scrollLeft;
+        const width = carousel.offsetWidth;
+        const activeIdx = Math.round(scrollPos / width);
+
+        const dots = dotsBox.querySelectorAll('.carousel-dot');
+        dots.forEach((dot, idx) => {
+            if (idx === activeIdx) {
+                dot.className = "carousel-dot w-4 h-2 rounded-full border border-black/80 bg-yellow-400 transition-all";
+            } else {
+                dot.className = "carousel-dot w-2 h-2 rounded-full border border-black/80 bg-white/60 transition-all";
+            }
+        });
+    }
 </script>
 {% endblock %}

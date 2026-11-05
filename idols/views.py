@@ -14,7 +14,7 @@ from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import InMemoryUploadedFile
 
 from .models import (
-    IdolProfile, Review, Post, PostUnlock, PostLike, 
+    IdolProfile, Review, Post, PostImage, PostUnlock, PostLike, 
     CustomRequest, PostComment, PhotocardBox, Photocard, UserPhotocard, PhotocardTrade
 )
 from economy.models import Wallet
@@ -44,7 +44,7 @@ def check_is_staff_or_admin(tg_id):
 
 def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
     """
-    Comprime y convierte imágenes a WebP ultraligero antes de subir a Supabase.
+    Comprime y convierte imágenes a WebP ultraligero antes de guardar en almacenamiento.
     Reduce el peso de ~2.5MB a ~80-120KB manteniendo nitidez en móviles.
     """
     if not file_obj:
@@ -67,7 +67,6 @@ def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
         except Exception:
             pass
 
-        # 1080px es la resolución nativa perfecta para Telegram móvil
         if img.width > max_dimension or img.height > max_dimension:
             img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
 
@@ -142,7 +141,6 @@ def idol_list(request):
 
     sync_user_profile(tg_id, tg_username)
 
-    # Asegura que quien acceda al Camerino tenga UserRole con rol 'idol'
     UserRole.objects.get_or_create(telegram_id=tg_id, defaults={'role': 'idol', 'staff_role': 'none'})
 
     if request.method == 'POST':
@@ -157,7 +155,6 @@ def idol_list(request):
                     idol.status = new_status
                     idol.save(update_fields=['status'])
 
-                    # 📢 Avisar al grupo oficial de Telegram si se pone disponible o en antojos
                     group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
                     if group_id and new_status in ['online', 'antojos']:
                         if new_status == 'online':
@@ -290,13 +287,11 @@ def idol_create(request):
                 photo=photo,
                 banner=banner
             )
-            # Asegura que quede registrada en UserRole como 'idol' sin perder staff_role
             UserRole.objects.get_or_create(telegram_id=tg_id, defaults={'role': 'idol', 'staff_role': 'none'})
             UserRole.objects.filter(telegram_id=tg_id).update(role='idol')
 
             grant_user_xp(request, tg_id, 30, reason="Creación de Idol")
 
-            # 📢 Anuncio de Bienvenida al Grupo Oficial
             group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
             if group_id:
                 welcome_txt = (
@@ -382,8 +377,6 @@ def idol_gallery(request):
         idol.is_trending = (max_unlocks > 0 and idol.total_unlocks == max_unlocks)
         idol.is_top_rated = (idol.rating >= 4.80 and idol.services_done >= 2)
 
-    # 🌟 APLICACIÓN REAL DE MUSA DESTACADA DEL BAZAR:
-    # Las destacadas van SIEMPRE al tope, respetando luego el orden elegido
     def get_sort_key(item):
         is_feat = 1 if item.is_featured else 0
         if sort_by == 'owner':
@@ -396,7 +389,6 @@ def idol_gallery(request):
             return (is_feat, float(item.rating), item.total_unlocks)
 
     all_idols.sort(key=get_sort_key, reverse=True)
-
     all_owners = list(IdolProfile.objects.exclude(owner_username__isnull=True).exclude(owner_username='').values_list('owner_username', flat=True).distinct())
 
     return render(request, 'idols/gallery.html', {
@@ -489,9 +481,11 @@ def social_feed(request):
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
     tg_username = request.GET.get('tg_username') or (profile.username if profile else 'Noble')
     
-    posts = Post.objects.all().select_related('idol').prefetch_related('comments')
+    # Prefetch optimizado de comentarios, fotos de carrusel y likes
+    posts = Post.objects.all().select_related('idol').prefetch_related(
+        'comments', 'gallery', 'user_likes'
+    )
 
-    # 🌟 NUEVO: Si viene filtrado por una Musa específica (desde su perfil):
     idol_filter_id = request.GET.get('idol_id')
     filtered_idol = None
     if idol_filter_id and str(idol_filter_id).isdigit():
@@ -501,13 +495,17 @@ def social_feed(request):
 
     unlocked_ids = []
     liked_ids = []
+    user_reactions = {}
     is_admin = check_is_staff_or_admin(tg_id)
     
     if tg_id:
         pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
         propios = list(Post.objects.filter(idol__telegram_user_id=tg_id).values_list('id', flat=True))
         unlocked_ids = set(pagados + propios)
-        liked_ids = list(PostLike.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
+        
+        user_likes_objs = PostLike.objects.filter(client_telegram_id=tg_id)
+        liked_ids = list(user_likes_objs.values_list('post_id', flat=True))
+        user_reactions = {like.post_id: getattr(like, 'reaction_type', 'like') for like in user_likes_objs}
 
     theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
     feed_theme = {
@@ -522,10 +520,11 @@ def social_feed(request):
         'tg_id': tg_id,
         'unlocked_ids': list(unlocked_ids),
         'liked_ids': liked_ids,
+        'user_reactions': user_reactions,
         'tg_username': tg_username,
         'is_admin': is_admin,
         'feed_theme': feed_theme,
-        'filtered_idol': filtered_idol,  # 👈 Pasamos la Musa filtrada si existe
+        'filtered_idol': filtered_idol,
     })
 
 
@@ -596,11 +595,21 @@ def edit_post(request, post_id):
 
 
 def unlock_post(request, post_id):
+    """Desbloqueo de publicaciones VIP (soporta tanto envío normal como AJAX sin recarga)."""
     if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         tg_id = resolve_safe_tg(request)
         post = get_object_or_404(Post, id=post_id)
         
         if tg_id and tg_id == post.idol.telegram_user_id:
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'already_unlocked': True,
+                    'media_urls': post.all_images,
+                    'is_video': post.is_video,
+                    'video_url': post.video.url if post.video else ''
+                })
             messages.info(request, "Esta publicación es de tu Idol, ya la tienes desbloqueada.")
             return redirect(f'/idols/feed/?tg_id={tg_id}')
         
@@ -654,14 +663,36 @@ def unlock_post(request, post_id):
                 )
                 
                 desc_txt = f" (con descuento por tu {pet.evolved_name})" if (pet and pet.species == 'viper') else ""
+                
+                if is_ajax:
+                    return JsonResponse({
+                        'success': True,
+                        'new_balance': wallet.balance,
+                        'precio_pagado': precio_final,
+                        'media_urls': post.all_images,
+                        'is_video': post.is_video,
+                        'video_url': post.video.url if post.video else '',
+                        'message': f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt})"
+                    })
                 messages.success(request, f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt})")
             else:
+                if is_ajax:
+                    return JsonResponse({'success': False, 'error': 'No tienes suficiente oro en tu Bóveda.'}, status=400)
                 messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+        else:
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'media_urls': post.all_images,
+                    'is_video': post.is_video,
+                    'video_url': post.video.url if post.video else ''
+                })
                 
         return redirect(f'/idols/feed/?tg_id={tg_id}')
 
 
 def create_post(request):
+    """Creación de posts con soporte para carruseles de 1 a 5 fotografías."""
     tg_id = resolve_safe_tg(request)
     mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id)
     
@@ -677,7 +708,12 @@ def create_post(request):
         network = request.POST.get('network')
         caption = request.POST.get('caption', '').strip()
         media_type = request.POST.get('media_type', 'image')
-        raw_image = request.FILES.get('image')
+        
+        # Múltiples fotos para carrusel o foto simple tradicional
+        raw_images = request.FILES.getlist('images')
+        if not raw_images and request.FILES.get('image'):
+            raw_images = [request.FILES.get('image')]
+            
         raw_video = request.FILES.get('video')
         price = request.POST.get('price', 50)
 
@@ -694,16 +730,17 @@ def create_post(request):
                 post_image = None
                 post_video = raw_video
             else:
-                if not raw_image:
-                    messages.error(request, "Debes adjuntar una fotografía.")
+                if not raw_images:
+                    messages.error(request, "Debes adjuntar al menos una fotografía.")
                     return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
-                post_image = optimize_uploaded_image(raw_image)
+                # Primera foto como portada principal del post
+                post_image = optimize_uploaded_image(raw_images[0])
                 post_video = None
 
             if network == 'fans' and int(price) > max_price:
                 messages.error(request, f"Tu rango actual solo permite fijar precios de hasta {max_price} 🪙 por publicación.")
             else:
-                Post.objects.create(
+                new_post = Post.objects.create(
                     idol=idol,
                     network=network,
                     caption=caption,
@@ -711,16 +748,25 @@ def create_post(request):
                     video=post_video,
                     price=int(price) if network == 'fans' else 0
                 )
-                grant_user_xp(request, tg_id, 20 if media_type == 'video' else 15, reason="Nuevo Post Publicado")
+                
+                # Guardar fotos complementarias para el carrusel (fotos 2 a 5)
+                if media_type != 'video' and len(raw_images) > 1:
+                    for idx, extra_img in enumerate(raw_images[1:5], start=1):
+                        opt_extra = optimize_uploaded_image(extra_img)
+                        PostImage.objects.create(post=new_post, image=opt_extra, order=idx)
 
-                # 📢 Notificación al Grupo Oficial de Telegram (Punto 4)
+                xp_awarded = 25 if len(raw_images) > 1 else (20 if media_type == 'video' else 15)
+                grant_user_xp(request, tg_id, xp_awarded, reason="Nuevo Post Publicado")
+
+                # Notificación al Grupo Oficial de Telegram
                 group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
                 if group_id:
                     clean_caption = (caption[:110] + '...') if len(caption) > 110 else caption
+                    multi_tag = f" 📸 ({len(raw_images)} Fotos)" if len(raw_images) > 1 else ""
                     if network == 'fans':
                         post_text = (
                             f"🔞 <b>¡Nueva Sesión VIP en KingdomFans!</b> 💎\n\n"
-                            f"🌹 <b>Musa:</b> {idol.stage_name} ({idol.group or 'Solista'})\n"
+                            f"🌹 <b>Musa:</b> {idol.stage_name} ({idol.group or 'Solista'}){multi_tag}\n"
                             f"🪙 <b>Tarifa:</b> <b>{price} 🪙</b>\n"
                             f"📝 <i>«{clean_caption}»</i>\n\n"
                             f"Cruza el umbral para desbloquear el contenido exclusivo para tu Colección."
@@ -729,7 +775,7 @@ def create_post(request):
                     else:
                         post_text = (
                             f"📸 <b>¡Nueva Publicación en KingdomGram!</b> ✨\n\n"
-                            f"🌹 <b>Musa:</b> {idol.stage_name} ({idol.group or 'Solista'})\n"
+                            f"🌹 <b>Musa:</b> {idol.stage_name} ({idol.group or 'Solista'}){multi_tag}\n"
                             f"📝 <i>«{clean_caption}»</i>\n\n"
                             f"Visita el Muro para admirar la sesión y dejarle tus halagos."
                         )
@@ -754,6 +800,7 @@ def create_post(request):
 
 
 def toggle_like(request, post_id):
+    """Mantiene compatibilidad con el endpoint anterior de Like simple."""
     if request.method == 'POST':
         tg_id = resolve_safe_tg(request)
         if not tg_id:
@@ -769,12 +816,67 @@ def toggle_like(request, post_id):
                 post.save()
             liked = False
         else:
-            PostLike.objects.create(post=post, client_telegram_id=tg_id)
+            PostLike.objects.create(post=post, client_telegram_id=tg_id, reaction_type='like')
             post.likes += 1
             post.save()
             liked = True
+            grant_user_xp(request, tg_id, 2, reason="Me Gusta en Muro")
             
         return JsonResponse({'liked': liked, 'likes': post.likes})
+        
+    return JsonResponse({'error': 'Invalid method'}, status=405)
+
+
+def toggle_reaction(request, post_id):
+    """
+    Gestiona la Barra de Reacciones V.I.P de la Corte (❤️, 🔥, 👑, 🥂, 🤤).
+    Permite alternar o cambiar de reacción dinámicamente con respuesta JSON.
+    """
+    if request.method == 'POST':
+        tg_id = resolve_safe_tg(request)
+        if not tg_id:
+            return JsonResponse({'success': False, 'error': 'No user ID provided'}, status=400)
+            
+        post = get_object_or_404(Post, id=post_id)
+        reaction = request.POST.get('reaction', 'like').strip()
+        allowed = ['like', 'fire', 'crown', 'toast', 'drool']
+        if reaction not in allowed:
+            reaction = 'like'
+
+        existing_like = PostLike.objects.filter(post=post, client_telegram_id=tg_id).first()
+        
+        if existing_like:
+            if existing_like.reaction_type == reaction:
+                existing_like.delete()
+                if post.likes > 0:
+                    post.likes -= 1
+                    post.save()
+                active = False
+                current_reaction = None
+            else:
+                existing_like.reaction_type = reaction
+                existing_like.save()
+                active = True
+                current_reaction = reaction
+        else:
+            PostLike.objects.create(post=post, client_telegram_id=tg_id, reaction_type=reaction)
+            post.likes += 1
+            post.save()
+            active = True
+            current_reaction = reaction
+            grant_user_xp(request, tg_id, 2, reason="Reacción en Muro")
+
+        counts = {}
+        for r_code in allowed:
+            counts[r_code] = PostLike.objects.filter(post=post, reaction_type=r_code).count()
+
+        return JsonResponse({
+            'success': True,
+            'active': active,
+            'current_reaction': current_reaction,
+            'total_likes': post.likes,
+            'counts': counts
+        })
         
     return JsonResponse({'error': 'Invalid method'}, status=405)
 
@@ -803,7 +905,9 @@ def my_collection(request):
 
 
 def send_tip(request, post_id):
+    """Brindis / Propina para la Musa (soporta AJAX para lluvia de monedas en vivo)."""
     if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         tg_id = resolve_safe_tg(request)
         post = get_object_or_404(Post, id=post_id)
         
@@ -813,10 +917,14 @@ def send_tip(request, post_id):
             amount = 0
             
         if amount <= 0:
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': 'El monto del brindis debe ser mayor a 0.'}, status=400)
             messages.error(request, "El monto del brindis debe ser mayor a 0.")
             return redirect(f'/idols/feed/?tg_id={tg_id}')
             
         if tg_id and tg_id == post.idol.telegram_user_id:
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': 'No puedes enviarte ofrendas a ti mismo.'}, status=400)
             messages.info(request, "No puedes enviarte ofrendas a ti mismo.")
             return redirect(f'/idols/feed/?tg_id={tg_id}')
             
@@ -853,8 +961,18 @@ def send_tip(request, post_id):
                 button_text="🥂 Ver Mi Bóveda",
                 button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={post.idol.telegram_user_id}"
             )
-            messages.success(request, f"🥂 ¡Le has invitado un trago de {amount} 🪙 a {post.idol.stage_name}!")
+            msg = f"🥂 ¡Le has invitado un trago de {amount} 🪙 a {post.idol.stage_name}!"
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'new_balance': client_wallet.balance,
+                    'amount': amount,
+                    'message': msg
+                })
+            messages.success(request, msg)
         else:
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': 'No tienes suficiente oro en tu Bóveda.'}, status=400)
             messages.error(request, "No tienes suficiente oro en tu Bóveda.")
             
         return redirect(f'/idols/feed/?tg_id={tg_id}')
@@ -886,7 +1004,6 @@ def create_custom_request(request, idol_id):
             messages.error(request, f"No tienes suficiente oro ({bounty} 🪙) en tu Bóveda.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
 
-        # 🌟 CONSUMO REAL DEL SELLO DE ANTOJO PRIORITARIO DEL BAZAR
         from economy.models import UserInventoryItem
         has_priority_stamp = UserInventoryItem.consume_item(tg_id, 'priority_antojo', 1)
             
@@ -896,7 +1013,7 @@ def create_custom_request(request, idol_id):
             client_username=tg_username,
             description=description,
             bounty=bounty,
-            is_priority=has_priority_stamp,  # 👈 Sello activo
+            is_priority=has_priority_stamp,
             status='pending'
         )
 
@@ -921,7 +1038,9 @@ def create_custom_request(request, idol_id):
 
 
 def add_comment(request, post_id):
+    """Comentarios en el Muro (soporta inserción en vivo vía AJAX con insignias nobiliarias)."""
     if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         tg_id = resolve_safe_tg(request)
         profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
         tg_username = request.POST.get('tg_username') or (profile.username if profile else 'Noble')
@@ -936,19 +1055,17 @@ def add_comment(request, post_id):
             if parent_id and str(parent_id).isdigit():
                 parent_comment = PostComment.objects.filter(id=int(parent_id), post=post).first()
 
-            # 🌟 VERIFICACIÓN REAL DEL DISTINTIVO VIP DEL BAZAR
             is_vip = bool(profile and profile.has_vip_badge)
 
-            PostComment.objects.create(
+            new_comment = PostComment.objects.create(
                 post=post,
                 parent=parent_comment,
                 author_telegram_id=tg_id if tg_id else 0,
                 author_name=nombre_final,
-                is_vip_author=is_vip,  # 👈 Guardado real
+                is_vip_author=is_vip,
                 text=text
             )
             grant_user_xp(request, tg_id, 3, reason="Comentario en Muro")
-            
 
             if parent_comment and parent_comment.author_telegram_id and parent_comment.author_telegram_id != tg_id:
                 send_telegram_msg(
@@ -961,7 +1078,6 @@ def add_comment(request, post_id):
                     button_text="📱 Ver Respuesta",
                     button_url=f"https://kingdom-pleasure-app.onrender.com/idols/feed/?tg_id={parent_comment.author_telegram_id}"
                 )
-            # 2. Si es un comentario nuevo para la Idol, avisarle a la dueña de la Musa
             elif tg_id != post.idol.telegram_user_id:
                 send_telegram_msg(
                     chat_id=post.idol.telegram_user_id,
@@ -973,6 +1089,26 @@ def add_comment(request, post_id):
                     button_text="📱 Ver Publicación",
                     button_url=f"https://kingdom-pleasure-app.onrender.com/idols/feed/?tg_id={post.idol.telegram_user_id}"
                 )
+
+            if is_ajax:
+                author_title = getattr(profile, 'title', '') if profile else ''
+                author_level = getattr(profile, 'level', 1) if profile else 1
+                avatar_frame = getattr(profile, 'active_avatar_frame', '') if profile else ''
+                return JsonResponse({
+                    'success': True,
+                    'comment': {
+                        'id': new_comment.id,
+                        'parent_id': parent_comment.id if parent_comment else None,
+                        'author_name': new_comment.author_name,
+                        'is_vip_author': new_comment.is_vip_author,
+                        'author_level': author_level,
+                        'author_title': author_title,
+                        'avatar_frame': avatar_frame,
+                        'text': new_comment.text,
+                        'created_at': 'hace un instante'
+                    },
+                    'total_comments': post.comments.count()
+                })
 
             messages.success(request, "Comentario publicado (+3 EXP).")
             
@@ -992,7 +1128,6 @@ def photocard_boxes_view(request):
     boxes = PhotocardBox.objects.filter(is_active=True).prefetch_related('cards')
     
     is_admin = check_is_staff_or_admin(tg_id)
-
     my_cards_count = UserPhotocard.objects.filter(telegram_user_id=tg_id).count()
 
     upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
@@ -1064,7 +1199,6 @@ def open_photocard_box_ajax(request, box_id):
     xp_map = {'common': 5, 'rare': 12, 'epic': 25, 'legendary': 50}
     grant_user_xp(request, tg_id, xp_map.get(winner.rarity, 10), reason=f"Photocard {winner.get_rarity_display()}")
 
-    # 📢 Si desentierra una carta LEGENDARIA, notificar a todo el grupo oficial con fanfarria (Punto 4)
     if winner.rarity == 'legendary':
         group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
         if group_id:
@@ -1118,7 +1252,6 @@ def my_photocards_album(request):
         if not tg_id:
             return redirect('/')
 
-        # 🛡️ Filtro seguro: ignorar cualquier registro huérfano sin photocard válida
         raw_user_cards = list(UserPhotocard.objects.filter(
             telegram_user_id=tg_id,
             photocard__isnull=False
@@ -1126,8 +1259,6 @@ def my_photocards_album(request):
 
         user_cards = [uc for uc in raw_user_cards if getattr(uc, 'photocard', None) is not None]
 
-        # 👑 Jerarquía canónica de coleccionismo nobiliario:
-        # Legendaria (1) > Épica (2) > Rara (3) > Común (4)
         RARITY_PRIORITY = {
             'legendary': 1,
             'epic': 2,
@@ -1144,7 +1275,6 @@ def my_photocards_album(request):
             card_name = (getattr(p, 'name', '') or '').lower().strip()
             return (r_val, idol_name, card_name, p.id)
 
-        # Inyectar atributos seguros y peso de rareza para templates y scripts
         for uc in user_cards:
             try:
                 uc.safe_image_url = uc.photocard.image.url if (uc.photocard and uc.photocard.image) else ''
@@ -1156,7 +1286,6 @@ def my_photocards_album(request):
         legendaries = sum(1 for uc in user_cards if getattr(uc.photocard, 'rarity', '') == 'legendary')
         epics = sum(1 for uc in user_cards if getattr(uc.photocard, 'rarity', '') == 'epic')
 
-        # 1. Contar ocurrencias de cada carta para detectar Repetidas
         cards_by_photocard = {}
         for uc in user_cards:
             cards_by_photocard.setdefault(uc.photocard_id, []).append(uc)
@@ -1171,10 +1300,8 @@ def my_photocards_album(request):
                 duplicates_list.append(rep_obj)
                 duplicate_cards_count += (len(ucs) - 1)
 
-        # Ordenar repetidas por valor de colección (Legendarias duplicadas primero)
         duplicates_list.sort(key=card_canonical_sort_key)
 
-        # 2. Agrupar por Colecciones / Cajas oficiales
         all_boxes = list(PhotocardBox.objects.all().prefetch_related('cards').order_by('name'))
         collections_data = []
 
@@ -1188,7 +1315,6 @@ def my_photocards_album(request):
                     uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
                     distinct_cards_owned[uc.photocard_id] = uc
 
-            # 🌟 Ordenar las cartas de la caja estrictamente por rareza e idol
             box_cards_sorted = list(distinct_cards_owned.values())
             box_cards_sorted.sort(key=card_canonical_sort_key)
 
@@ -1205,7 +1331,6 @@ def my_photocards_album(request):
                     'user_cards': box_cards_sorted,
                 })
 
-        # Cartas sin caja asignada (Caja especial Clandestina)
         orphan_ucs = [uc for uc in user_cards if not getattr(uc.photocard, 'box_id', None)]
         if orphan_ucs:
             orphan_distinct = {}
@@ -1231,7 +1356,6 @@ def my_photocards_album(request):
                 'user_cards': orphan_cards_sorted,
             })
 
-        # Ordenar también el catálogo plano "Todas" por rareza y musa
         sorted_all_cards = list(user_cards)
         sorted_all_cards.sort(key=card_canonical_sort_key)
 
@@ -1450,7 +1574,7 @@ def photocard_sell_action(request, user_card_id):
         if mode == 'list':
             try:
                 price = int(request.POST.get('price', 50))
-                if price < 20:  # 👈 Mínimo de 20 monedas para evitar spam
+                if price < 20:
                     messages.error(request, "El precio mínimo de venta en el Mercado es de 20 🪙.")
                 else:
                     user_card.is_for_sale = True
@@ -1529,7 +1653,7 @@ def photocard_buy_action(request, user_card_id):
 
 
 # ==========================================
-# EL CALDERO REAL: FUSIÓN INTELIGENTE (ANTI-REPETIDAS & LEGENDARIAS)
+# EL CALDERO REAL: FUSIÓN INTELIGENTE
 # ==========================================
 
 def photocard_fusion(request):
@@ -1541,7 +1665,6 @@ def photocard_fusion(request):
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
 
-    # 👑 Recetas actualizadas: Ahora incluye Legendarias (2 repetidas -> 1 nueva)
     RECIPES = {
         'common':    {'required_count': 4, 'cost': 35,  'source_rarity': 'common',    'target_rarity': 'rare',      'luck_target': 'epic',      'luck_chance': 0.12},
         'rare':      {'required_count': 3, 'cost': 75,  'source_rarity': 'rare',      'target_rarity': 'epic',      'luck_target': 'legendary', 'luck_chance': 0.15},
@@ -1602,7 +1725,6 @@ def photocard_fusion(request):
                 messages.error(request, err)
                 return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-            # 🛡️ Protección de Álbum: nunca quemar la única copia
             sacrificed_counts = Counter(c.photocard_id for c in selected_cards)
             for pid, count in sacrificed_counts.items():
                 total_owned = UserPhotocard.objects.filter(
@@ -1615,7 +1737,6 @@ def photocard_fusion(request):
                     messages.error(request, err)
                     return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-            # Probabilidad de salto afortunado
             luck_prob = recipe['luck_chance']
             if pet and pet.species == 'rabbit':
                 rabbit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
@@ -1638,29 +1759,23 @@ def photocard_fusion(request):
                 if not pool:
                     pool = list(Photocard.objects.all())
 
-            # Descontar oro y destruir cartas sacrificadas
             wallet.remove_funds(recipe['cost'])
             consumed_ids = [c.id for c in selected_cards]
             PhotocardTrade.objects.filter(sender_card_id__in=consumed_ids, status='pending').update(status='cancelled')
             PhotocardTrade.objects.filter(receiver_card_id__in=consumed_ids, status='pending').update(status='cancelled')
             UserPhotocard.objects.filter(id__in=consumed_ids).delete()
 
-            # 🌟 SISTEMA INTELIGENTE ANTI-REPETIDAS (GARANTIZAR CARTA NUEVA)
-            # Cartas que el usuario ya tiene actualmente en su álbum (excluyendo las que acaba de quemar)
             currently_owned_card_ids = set(
                 UserPhotocard.objects.filter(telegram_user_id=tg_id)
                 .values_list('photocard_id', flat=True)
             )
 
-            # Buscar en la pool aquellas cartas que el usuario AÚN NO TIENE
             unowned_in_pool = [c for c in pool if c.id not in currently_owned_card_ids]
 
             if unowned_in_pool:
-                # 🎯 ¡Prioridad absoluta a darle una carta que le falte!
                 new_card = random.choice(unowned_in_pool)
                 is_new_discovery = True
             else:
-                # Si el usuario ya posee todas las cartas existentes de esa rareza, elige al azar
                 new_card = random.choice(pool)
                 is_new_discovery = False
 
@@ -1689,9 +1804,6 @@ def photocard_fusion(request):
             messages.success(request, f"✨ ¡Alquimia completada! Obtuviste «{new_card.name}» ({new_card.get_rarity_display()}).")
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-    # ==========================================
-    # GET: LISTADO DE REPETIDAS (INCLUYENDO LEGENDARIAS)
-    # ==========================================
     all_user_cards = UserPhotocard.objects.filter(
         telegram_user_id=tg_id,
         is_for_sale=False
@@ -1757,7 +1869,6 @@ def create_trade_offer(request, user_card_id):
         sender_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
         s_name = sender_profile.username if (sender_profile and sender_profile.username) else f"Noble_{tg_id}"
 
-        # Cancelar trade previo con la misma carta si existiera
         PhotocardTrade.objects.filter(sender_card=sender_card, status='pending').update(status='cancelled')
 
         trade = PhotocardTrade.objects.create(
@@ -1794,17 +1905,14 @@ def handle_trade_offer(request, trade_id, action):
     tg_id = resolve_safe_tg(request)
     trade = get_object_or_404(PhotocardTrade, id=trade_id, status='pending')
 
-    # Permitir aceptar si es el destinatario O si es un trade abierto (receiver_telegram_id == 0)
     is_authorized = (trade.receiver_telegram_id == tg_id) or (trade.receiver_telegram_id == 0 and trade.sender_telegram_id != tg_id)
 
     if action == 'accept' and is_authorized:
-        # Carta que el receptor ofrece a cambio
         return_card_id = request.POST.get('return_card_id') or request.GET.get('return_card_id')
         
         with transaction.atomic():
             sender_card = UserPhotocard.objects.select_for_update().filter(id=trade.sender_card_id).first()
             
-            # Blindaje contra robo/duplicación: verificar que el emisor todavía posea la carta
             if not sender_card or sender_card.telegram_user_id != trade.sender_telegram_id or sender_card.is_for_sale:
                 trade.status = 'cancelled'
                 trade.save()
@@ -1819,13 +1927,11 @@ def handle_trade_offer(request, trade_id, action):
                     is_for_sale=False
                 ).first()
 
-            # Transferencia de la carta del emisor al receptor
             sender_card.telegram_user_id = tg_id
             sender_card.is_for_sale = False
             sender_card.sale_price = 0
             sender_card.save()
 
-            # Transferencia de la carta del receptor al emisor (trueque 1 a 1)
             if receiver_card:
                 receiver_card.telegram_user_id = trade.sender_telegram_id
                 receiver_card.is_for_sale = False
@@ -1841,7 +1947,6 @@ def handle_trade_offer(request, trade_id, action):
             trade.status = 'accepted'
             trade.save()
 
-            # Notificar al emisor
             send_telegram_msg(
                 chat_id=trade.sender_telegram_id,
                 text=(

@@ -32,5 +32,6 @@ urlpatterns = [
     path('photocards/buy/<int:user_card_id>/', views.photocard_buy_action, name='photocard_buy_action'),
     path('photocards/trade/create/<int:user_card_id>/', views.create_trade_offer, name='create_trade_offer'),
     path('photocards/trade/<int:trade_id>/<str:action>/', views.handle_trade_offer, name='handle_trade_offer'),
+    path('feed/react/<int:post_id>/', views.toggle_reaction, name='toggle_reaction'),
   
 ]

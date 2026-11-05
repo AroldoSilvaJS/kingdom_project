@@ -63,7 +63,7 @@
             <div class="grid grid-cols-2 gap-2 mb-2">
                 <button type="button" onclick="setMediaType('image')" id="btn-media-image"
                         class="py-2.5 rounded-xl border-2 border-yellow-400 bg-yellow-500/20 text-yellow-300 font-bold text-xs uppercase flex items-center justify-center gap-1.5 shadow">
-                    <span>📸</span> <span>Fotografía</span>
+                    <span>📸</span> <span>Fotografías (1 a 5)</span>
                 </button>
                 <button type="button" onclick="setMediaType('video')" id="btn-media-video"
                         class="py-2.5 rounded-xl border border-white/20 bg-black/60 text-stone-400 font-bold text-xs uppercase flex items-center justify-center gap-1.5">
@@ -73,10 +73,25 @@
             <input type="hidden" name="media_type" id="media-type-input" value="image">
         </div>
 
-        <!-- Archivo: Fotografía -->
-        <div id="image-upload-box" class="bg-black/40 p-3 rounded-2xl border border-vip-gold/20 flex flex-col gap-1.5">
-            <label class="block text-xs text-vip-gold uppercase font-bold">Fotografía a Publicar</label>
-            <input type="file" name="image" id="image-file-input" accept="image/*" class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+        <!-- Archivo: Fotografías (Soporte Carrusel 1 a 5 Fotos) -->
+        <div id="image-upload-box" class="bg-black/40 p-3.5 rounded-2xl border border-vip-gold/30 flex flex-col gap-2">
+            <div class="flex justify-between items-center">
+                <label class="block text-xs text-vip-gold uppercase font-bold">Fotos de la Sesión</label>
+                <span id="carousel-count-badge" class="text-[9.5px] font-mono font-black text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-500/40">
+                    📸 1 a 5 fotos
+                </span>
+            </div>
+            
+            <input type="file" name="images" id="image-file-input" accept="image/*" multiple 
+                   onchange="handleImageSelection(this)"
+                   class="w-full text-xs text-vip-text file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+            
+            <p class="text-[9.5px] text-stone-400 leading-tight">
+                💡 <b>Tip de Musa:</b> Puedes seleccionar de <b>2 a 5 fotos</b> a la vez para crear un carrusel deslizable con puntos interactivos. La primera foto será la portada principal.
+            </p>
+
+            <!-- Previsualizador de Miniaturas del Carrusel -->
+            <div id="preview-thumbnails" class="hidden grid-cols-5 gap-1.5 pt-2 border-t border-white/10"></div>
         </div>
 
         <!-- Archivo: Video -->
@@ -89,7 +104,7 @@
         <!-- Descripción -->
         <div>
             <label class="block text-xs text-vip-gold mb-1 uppercase font-bold">Descripción del Post</label>
-            <textarea name="caption" rows="3" required placeholder="Escribe unas palabras tentadoras sobre esta foto..." 
+            <textarea name="caption" rows="3" required placeholder="Escribe unas palabras tentadoras sobre esta sesión..." 
                       class="w-full bg-black/70 border border-vip-gold/40 rounded-xl p-3 text-xs text-vip-text focus:outline-none focus:border-vip-gold resize-none"></textarea>
         </div>
 
@@ -128,6 +143,40 @@
             boxImg.classList.remove('hidden');
             boxVid.classList.add('hidden');
         }
+    }
+
+    function handleImageSelection(input) {
+        const files = Array.from(input.files || []).slice(0, 5);
+        const container = document.getElementById('preview-thumbnails');
+        const badge = document.getElementById('carousel-count-badge');
+
+        if (files.length === 0) {
+            container.classList.add('hidden');
+            container.innerHTML = '';
+            badge.innerText = '📸 1 a 5 fotos';
+            return;
+        }
+
+        badge.innerText = files.length > 1 ? `📸 Carrusel (${files.length} fotos)` : `📸 1 foto seleccionada`;
+        container.innerHTML = '';
+        container.classList.remove('hidden');
+        container.classList.add('grid');
+
+        files.forEach((file, idx) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const thumb = document.createElement('div');
+                thumb.className = "relative aspect-square rounded-xl overflow-hidden border border-amber-500/40 bg-black shadow";
+                thumb.innerHTML = `
+                    <img src="${e.target.result}" class="w-full h-full object-cover">
+                    <span class="absolute bottom-0.5 right-0.5 bg-black/80 text-[8px] font-mono font-bold text-yellow-400 px-1 rounded">
+                        #${idx + 1}
+                    </span>
+                `;
+                container.appendChild(thumb);
+            };
+            reader.readAsDataURL(file);
+        });
     }
 </script>
 {% endblock %}

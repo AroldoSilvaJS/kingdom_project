@@ -32,10 +32,11 @@ def wallet_dashboard(request):
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
         
     return render(request, 'economy/wallet.html', {
-        'tg_id': tg_id, 
+        'tg_id': tg_id,
         'wallet': wallet,
         'profile': profile,
         'pet': pet,
+        'can_claim_bonus': wallet.can_claim_bonus(),
     })
 
 
@@ -46,7 +47,6 @@ def claim_patron_vault(request):
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         claimed = wallet.claim_patron_vault()
-
         if claimed > 0:
             msg = f"🏛️ ¡Has retirado +{claimed} 🪙 de tu Cofre del Mecenas a tu Bóveda!"
             if is_ajax:
@@ -57,7 +57,6 @@ def claim_patron_vault(request):
             if is_ajax:
                 return JsonResponse({'success': False, 'error': err}, status=400)
             messages.info(request, err)
-
     return redirect(f'/economy/wallet/?tg_id={tg_id}')
 
 
@@ -65,1119 +64,1141 @@ def casino_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
     
-    max_bet = profile.max_bet_allowed
-    ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
-    NEGROS = [n for n in range(1, 37) if n not in ROJOS]
-    roulette_streak = request.session.get('roulette_streak', 0)
-        
+    # 👑 ESCALADO DE APUESTA MÁXIMA SEGÚN RANGO / ROL
+    base_max = 500
+    if profile.level >= 10:
+        base_max = 2000
+    elif profile.level >= 5:
+        base_max = 1000
+
+    if profile.role:
+        role_maxes = {
+            'plebeyo': 500,
+            'noble': 1500,
+            'vizconde': 3000,
+            'conde': 6000,
+            'marques': 12000,
+            'duque': 25000,
+            'rey': 50000,
+            'emperador': 100000,
+            'corona': 250000,
+        }
+        role_key = profile.role.name.lower()
+        base_max = max(base_max, role_maxes.get(role_key, 500))
+
+    max_bet = base_max
+
     if request.method == 'POST':
-        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+        bet_type = request.POST.get('bet_type')
+        bet_value = request.POST.get('bet_value')
+        
         try:
-            apuesta = int(request.POST.get('bet_amount', 0))
-            eleccion = request.POST.get('bet_choice', 'red')
+            bet_amount = int(request.POST.get('bet_amount', 0))
+        except (ValueError, TypeError):
+            bet_amount = 0
             
-            if apuesta <= 0:
-                err_msg = "La apuesta debe ser mayor a 0."
-                if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
-                messages.error(request, err_msg)
-            elif apuesta > max_bet:
-                err_msg = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
-                if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
-                messages.error(request, err_msg)
-            elif apuesta > wallet.balance:
-                err_msg = "No tienes suficiente oro en tu Bóveda."
-                if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
-                messages.error(request, err_msg)
-            else:
-                wallet.accumulate_patron_vault(apuesta)
-
-                # 🎲 ALTERNANCIA DINÁMICA: Si lleva 2 derrotas seguidas, favorecer la alternancia
-                force_win = False
-                if roulette_streak >= 2 and random.random() < 0.65:
-                    force_win = True
-
-                if force_win and eleccion in ['red', 'black', 'even', 'odd']:
-                    if eleccion == 'red':
-                        numero_ganador = random.choice(ROJOS)
-                    elif eleccion == 'black':
-                        numero_ganador = random.choice(NEGROS)
-                    elif eleccion == 'even':
-                        numero_ganador = random.choice([n for n in range(1, 37) if n % 2 == 0])
-                    else:
-                        numero_ganador = random.choice([n for n in range(1, 37) if n % 2 != 0])
-                else:
-                    numero_ganador = random.randint(0, 36)
+        if bet_amount <= 0:
+            err = "Debes ingresar una cantidad válida de oro para apostar."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/casino/?tg_id={tg_id}')
+            
+        if bet_amount > max_bet:
+            err = f"Tu estatus nobiliario solo te permite apostar un máximo de {max_bet} 🪙 por giro."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/casino/?tg_id={tg_id}')
+            
+        if wallet.balance < bet_amount:
+            err = "No tienes suficiente oro en tu billetera imperial."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/casino/?tg_id={tg_id}')
+            
+        # Cobro y Rakeback al Cofre del Mecenas (8%)
+        wallet.remove_funds(bet_amount)
+        rebate = wallet.accumulate_patron_vault(bet_amount)
+        
+        # 🎰 RULETA EUROPEA REAL (0 al 36)
+        winning_number = random.randint(0, 36)
+        
+        # Definición oficial de Ruleta Francesa / Europea
+        red_numbers = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
+        if winning_number == 0:
+            winning_color = 'green'
+        elif winning_number in red_numbers:
+            winning_color = 'red'
+        else:
+            winning_color = 'black'
+            
+        won = False
+        payout_multiplier = 0
+        
+        if bet_type == 'color':
+            if bet_value == winning_color and winning_color != 'green':
+                won = True
+                payout_multiplier = 2
+        elif bet_type == 'parity':
+            if winning_number != 0:
+                is_even = (winning_number % 2 == 0)
+                if (bet_value == 'even' and is_even) or (bet_value == 'odd' and not is_even):
+                    won = True
+                    payout_multiplier = 2
+        elif bet_type == 'number':
+            try:
+                if int(bet_value) == winning_number:
+                    won = True
+                    payout_multiplier = 36
+            except (ValueError, TypeError):
+                pass
                 
-                if numero_ganador == 0:
-                    color_ganador = 'zero'
-                elif numero_ganador in ROJOS:
-                    color_ganador = 'red'
-                else:
-                    color_ganador = 'black'
-
-                gano = False
-                multiplicador = 0.0
-
-                # 1. Apuesta a Color
-                if eleccion in ['red', 'black', 'zero']:
-                    if eleccion == color_ganador:
-                        gano = True
-                        multiplicador = 22.0 if eleccion == 'zero' else 2.0
-
-                # 2. Apuesta a Par / Impar
-                elif eleccion in ['even', 'odd']:
-                    if numero_ganador != 0:
-                        es_par = (numero_ganador % 2 == 0)
-                        if (eleccion == 'even' and es_par) or (eleccion == 'odd' and not es_par):
-                            gano = True
-                            multiplicador = 2.0
-
-                # 3. Apuesta a Número Específico (Pleno x30)
-                elif eleccion == 'number':
-                    try:
-                        num_apostado = int(request.POST.get('target_number', -1))
-                        if num_apostado == numero_ganador:
-                            gano = True
-                            multiplicador = 30.0
-                    except ValueError:
-                        pass
-
-                if gano:
-                    ganancia = int(round(apuesta * multiplicador))
-                    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-                    if pet and pet.species == 'panther':
-                        panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
-                        net_profit = ganancia - apuesta
-                        ganancia = int(apuesta + (net_profit * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
-                        
-                    wallet.add_funds(ganancia - apuesta)
-                    resultado = "win"
-                    xp_gain = 8 if multiplicador >= 20.0 else 3
-                    request.session['roulette_streak'] = 0  # Reiniciar racha
-                else:
-                    wallet.remove_funds(apuesta)
-                    resultado = "lose"
-                    ganancia = apuesta
-                    xp_gain = 1
-                    request.session['roulette_streak'] = roulette_streak + 1
-
-                grant_user_xp(request, tg_id, xp_gain, reason="Ruleta Imperial")
-
-                if is_ajax:
-                    return JsonResponse({
-                        'success': True,
-                        'resultado': resultado,
-                        'ganancia': ganancia,
-                        'numero_ganador': numero_ganador,
-                        'color_ganador': color_ganador,
-                        'nuevo_saldo': wallet.balance,
-                        'patron_vault': wallet.patron_vault,
-                        'current_xp': profile.current_xp,
-                        'level': profile.level
-                    })
-                    
-        except ValueError:
-            err_msg = "Por favor, ingresa un número válido."
-            if is_ajax: return JsonResponse({'success': False, 'error': err_msg}, status=400)
-            messages.error(request, err_msg)
+        payout = 0
+        if won:
+            payout = bet_amount * payout_multiplier
+            wallet.add_funds(payout)
+            # Recompensa de EXP nobiliaria
+            xp_gain = max(2, bet_amount // 20)
+            grant_user_xp(request, tg_id, xp_gain, reason="Ruleta Imperial")
             
+            msg = f"🎉 ¡La diosa Fortuna te sonríe! La bola cayó en el {winning_number} ({winning_color.upper()}). ¡Ganaste +{payout} 🪙!"
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'won': True,
+                    'winning_number': winning_number,
+                    'winning_color': winning_color,
+                    'payout': payout,
+                    'net': payout - bet_amount,
+                    'nuevo_saldo': wallet.balance,
+                    'patron_vault': wallet.patron_vault,
+                    'message': msg
+                })
+            messages.success(request, msg)
+        else:
+            msg = f"💀 La bola cayó en el {winning_number} ({winning_color.upper()}). Has perdido {bet_amount} 🪙. (+{rebate} 🪙 acumulados en tu Cofre de Mecenas)."
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'won': False,
+                    'winning_number': winning_number,
+                    'winning_color': winning_color,
+                    'payout': 0,
+                    'net': -bet_amount,
+                    'nuevo_saldo': wallet.balance,
+                    'patron_vault': wallet.patron_vault,
+                    'message': msg
+                })
+            messages.warning(request, msg)
+            
+        return redirect(f'/economy/casino/?tg_id={tg_id}')
+        
     return render(request, 'economy/casino.html', {
-        'tg_id': tg_id, 
+        'tg_id': tg_id,
         'wallet': wallet,
         'profile': profile,
         'max_bet': max_bet,
     })
 
 
-
 def claim_bonus(request):
     tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    
     if request.method == 'POST':
-        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-        profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-        
         if wallet.can_claim_bonus():
-            base_bonus = profile.get_daily_bonus_amount()
-            # Multiplicador del Zorro Kitsune (+25% / +45% / +70%)
-            multiplier = wallet.get_kitsune_gold_multiplier()
-            bonus_amount = int(round(base_bonus * multiplier))
-
-            wallet.add_funds(bonus_amount)
+            base_bonus = 50
+            
+            # Bonificación por nivel del jugador (+10 de oro por nivel)
+            level_bonus = (profile.level - 1) * 10
+            total_bonus = base_bonus + level_bonus
+            
+            # BUFF KITSUNE CELESTIAL: Multiplicador de Recompensa Diaria
+            try:
+                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                if pet and pet.species == 'kitsune':
+                    mults = {1: 1.25, 2: 1.50, 3: 2.0}
+                    kitsune_mult = mults.get(pet.evolution_stage_number, 1.25)
+                    total_bonus = int(round(total_bonus * kitsune_mult))
+            except Exception:
+                pass
+            
+            wallet.add_funds(total_bonus)
             wallet.last_bonus_claim = timezone.now()
             wallet.save()
             
             grant_user_xp(request, tg_id, 25, reason="Ruleta de la Fortuna")
-            extra_msg = f" (¡+{int((multiplier-1)*100)}% por tu Zorro Kitsune!)" if multiplier > 1.0 else ""
-            messages.success(request, f"🎡 ¡La Ruleta te ha otorgado +{bonus_amount} 🪙 de oro{extra_msg} y +25 EXP!")
+            messages.success(request, f"✨ ¡Has recibido tu ofrenda diaria de la Corte! +{total_bonus} 🪙 añadidos a tu billetera.")
         else:
-            messages.error(request, "Ya has reclamado tu ofrenda de hoy. La Ruleta se reinicia cada día a las 12:00 PM.")
+            messages.error(request, "⏳ Aún no puedes reclamar tu estipendio diario. El ciclo se renueva puntualmente a las 12:00 PM.")
             
     return redirect(f'/economy/wallet/?tg_id={tg_id}')
 
+
+# ==============================================================================
+# 🎰 TRAGAPERRAS IMPERIAL (SLOTS REALES)
+# ==============================================================================
+SLOT_SYMBOLS = [
+    {'name': 'Cereza', 'symbol': '🍒', 'mult': 3, 'weight': 38},
+    {'name': 'Campana', 'symbol': '🔔', 'mult': 6, 'weight': 28},
+    {'name': 'Herradura', 'symbol': '🍀', 'mult': 12, 'weight': 18},
+    {'name': 'Rubí Real', 'symbol': '💎', 'mult': 25, 'weight': 10},
+    {'name': 'Corona Imperial', 'symbol': '👑', 'mult': 60, 'weight': 5},
+    {'name': 'Cofre del Placer', 'symbol': '7️⃣', 'mult': 150, 'weight': 1},
+]
 
 def slots_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    max_bet = profile.max_bet_allowed
-    slots_losses = request.session.get('slots_losses', 0)
-    resultado = None
-    ganancia = 0
-    reels = ['👑', '💎', '⭐']
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+    
+    max_bet = 500
+    if profile.level >= 10:
+        max_bet = 2000
+    elif profile.level >= 5:
+        max_bet = 1000
 
-    WEIGHTED_SYMBOLS = (
-        ['🍇'] * 24 +
-        ['🍒'] * 24 +
-        ['🪙'] * 20 +
-        ['⭐'] * 15 +
-        ['💎'] * 11 +
-        ['👑'] * 6
-    )
-        
     if request.method == 'POST':
-        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         try:
-            apuesta = int(request.POST.get('bet_amount', 0))
+            bet_amount = int(request.POST.get('bet_amount', 10))
+        except (ValueError, TypeError):
+            bet_amount = 10
             
-            if apuesta <= 0:
-                err = "La apuesta debe ser mayor a 0."
-                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                messages.error(request, err)
-            elif apuesta > max_bet:
-                err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
-                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                messages.error(request, err)
-            elif apuesta > wallet.balance:
-                err = "No tienes suficiente oro en tu Bóveda."
-                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                messages.error(request, err)
-            else:
-                wallet.accumulate_patron_vault(apuesta)
-                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-
-                # 🎰 ALTERNANCIA DINÁMICA: Si lleva 2 o más derrotas seguidas,
-                # dar un Par moderado (x1.2 o x1.6) para romper la mala racha sin descontrolar el oro
-                if slots_losses >= 2 and random.random() < 0.65:
-                    sym = random.choice(['🍇', '🍒', '🪙', '⭐'])
-                    reels = [sym, sym, random.choice(WEIGHTED_SYMBOLS)]
-                else:
-                    reels = [random.choice(WEIGHTED_SYMBOLS) for _ in range(3)]
-
-                # Buff Cuervo Abisal
-                if pet and pet.species == 'raven':
-                    raven_boost = {1: 0.05, 2: 0.10, 3: 0.18}.get(pet.evolution_stage_number, 0.05)
-                    if (reels[0] == reels[1] in ['👑', '💎', '⭐']) and random.random() < raven_boost:
-                        reels[2] = reels[0]
-                    elif (reels[1] == reels[2] in ['👑', '💎', '⭐']) and random.random() < raven_boost:
-                        reels[0] = reels[1]
-                
-                # 1. TRÍOS
-                if reels[0] == reels[1] == reels[2]:
-                    symbol = reels[0]
-                    multiplicador = {'👑': 25.0, '💎': 15.0, '⭐': 8.0, '🪙': 5.0}.get(symbol, 3.5)
-                    xp_gain = 12 if symbol == '👑' else 4
-
-                    ganancia = int(apuesta * multiplicador)
-                    if pet and pet.species == 'panther':
-                        panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
-                        net = ganancia - apuesta
-                        ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
-                        
-                    wallet.add_funds(ganancia - apuesta)
-                    resultado = "jackpot" if symbol in ['👑', '💎'] else "trio"
-                    request.session['slots_losses'] = 0
-
-                # 2. PARES
-                elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
-                    pair_sym = reels[1] if (reels[0] == reels[1] or reels[1] == reels[2]) else reels[0]
-                    if pair_sym in ['👑', '💎', '⭐']:
-                        multiplicador = 1.6
-                        xp_gain = 3
-                        resultado = "pair_premium"
-                    else:
-                        multiplicador = 1.2
-                        xp_gain = 2
-                        resultado = "pair"
-
-                    ganancia = int(round(apuesta * multiplicador))
-                    if pet and pet.species == 'panther':
-                        panther_rates = {1: 0.04, 2: 0.08, 3: 0.12}
-                        net = max(0, ganancia - apuesta)
-                        ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.04))))
-
-                    wallet.add_funds(ganancia - apuesta)
-                    request.session['slots_losses'] = 0
-
-                # 3. AMORTIGUACIÓN
-                elif '👑' in reels or '💎' in reels:
-                    reintegro = max(1, int(round(apuesta * 0.5)))
-                    wallet.remove_funds(apuesta - reintegro)
-                    resultado = "cushion"
-                    ganancia = reintegro
-                    xp_gain = 2
-                    request.session['slots_losses'] = 0
-
-                # 4. DERROTA
-                else:
-                    wallet.remove_funds(apuesta)
-                    resultado = "lose"
-                    ganancia = apuesta
-                    xp_gain = 1
-                    request.session['slots_losses'] = slots_losses + 1
-
-                grant_user_xp(request, tg_id, xp_gain, reason="Tragaperras Imperial")
-
-                if is_ajax:
-                    return JsonResponse({
-                        'success': True,
-                        'reels': reels,
-                        'resultado': resultado,
-                        'ganancia': ganancia,
-                        'nuevo_saldo': wallet.balance,
-                        'patron_vault': wallet.patron_vault,
-                        'current_xp': profile.current_xp,
-                        'level': profile.level
-                    })
-                    
-        except ValueError:
-            err = "Monto inválido."
-            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        if bet_amount <= 0:
+            err = "Ingresa una apuesta válida de oro."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
             messages.error(request, err)
+            return redirect(f'/economy/slots/?tg_id={tg_id}')
             
+        if bet_amount > max_bet:
+            err = f"La apuesta máxima permitida para tu nivel es de {max_bet} 🪙."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/slots/?tg_id={tg_id}')
+
+        if wallet.balance < bet_amount:
+            err = "No tienes suficiente oro para activar los rodillos."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/slots/?tg_id={tg_id}')
+            
+        # Descontar apuesta y abonar al Cofre del Mecenas (8%)
+        wallet.remove_funds(bet_amount)
+        wallet.accumulate_patron_vault(bet_amount)
+        
+        # Tirada ponderada para 3 rodillos
+        symbols_names = [s['name'] for s in SLOT_SYMBOLS]
+        weights = [s['weight'] for s in SLOT_SYMBOLS]
+        
+        spin_result = random.choices(symbols_names, weights=weights, k=3)
+        symbols_map = {s['name']: s for s in SLOT_SYMBOLS}
+        
+        reel1 = symbols_map[spin_result[0]]
+        reel2 = symbols_map[spin_result[1]]
+        reel3 = symbols_map[spin_result[2]]
+        
+        won = False
+        payout = 0
+        win_type = "loss"
+        matched_symbol = None
+        
+        # Regla 1: Triple coincidencia (Jackpot del símbolo)
+        if reel1['name'] == reel2['name'] == reel3['name']:
+            won = True
+            matched_symbol = reel1
+            payout = bet_amount * matched_symbol['mult']
+            win_type = "jackpot"
+        # Regla 2: Doble coincidencia (Premio menor: 1.5x)
+        elif reel1['name'] == reel2['name'] or reel2['name'] == reel3['name'] or reel1['name'] == reel3['name']:
+            won = True
+            payout = int(round(bet_amount * 1.5))
+            win_type = "double"
+            
+        if won:
+            wallet.add_funds(payout)
+            xp_gain = max(2, bet_amount // 15)
+            grant_user_xp(request, tg_id, xp_gain, reason="Tragaperras Imperial")
+            
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'reels': [
+                    {'name': reel1['name'], 'symbol': reel1['symbol']},
+                    {'name': reel2['name'], 'symbol': reel2['symbol']},
+                    {'name': reel3['name'], 'symbol': reel3['symbol']},
+                ],
+                'won': won,
+                'win_type': win_type,
+                'payout': payout,
+                'net': payout - bet_amount,
+                'nuevo_saldo': wallet.balance,
+                'patron_vault': wallet.patron_vault,
+            })
+            
+        if won:
+            messages.success(request, f"🎰 ¡TRIPLE ORO! Los rodillos se alinearon. ¡Cobraste +{payout} 🪙!")
+        else:
+            messages.warning(request, f"🎰 Los rodillos se detuvieron sin suerte. Has perdido {bet_amount} 🪙.")
+        return redirect(f'/economy/slots/?tg_id={tg_id}')
+        
     return render(request, 'economy/slots.html', {
         'tg_id': tg_id,
         'wallet': wallet,
         'profile': profile,
         'max_bet': max_bet,
-        'reels': reels,
-        'resultado': resultado,
-        'ganancia': ganancia
+        'symbols': SLOT_SYMBOLS,
     })
 
 
-def draw_card():
-    suits = ['♠', '♥', '♦', '♣']
-    values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
-    suit = random.choice(suits)
-    val = random.choice(values)
-    return {'val': val, 'suit': suit, 'is_red': suit in ['♥', '♦']}
-
-def calculate_hand_value(hand):
-    total = 0
-    aces = 0
-    for c in hand:
-        val = c.get('val')
-        if val in ['J', 'Q', 'K']:
-            total += 10
-        elif val == 'A':
-            aces += 1
-            total += 11
-        elif str(val).isdigit():
-            total += int(val)
-    while total > 21 and aces > 0:
-        total -= 10
-        aces -= 1
-    return total
-
-# ==========================================
-# MINAS DEL REINO: BALANCE JUSTO & PRIMER CLIC SEGURO
-# ==========================================
-
-def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
-    if revealed_count <= 0:
+# ==============================================================================
+# 💣 MINAS DEL REINO (MINES GAME)
+# ==============================================================================
+def calculate_mines_multiplier(total_mines, diamonds_found):
+    """Calcula el multiplicador acumulativo con RTP del 94% garantizado"""
+    if diamonds_found == 0:
         return 1.0
-    gems_count = total_tiles - mines_count
+    safe_tiles = 25 - total_mines
     prob = 1.0
-    for i in range(revealed_count):
-        prob *= (gems_count - i) / (total_tiles - i)
-    
-    if prob <= 0:
-        return 1.0
-    
-    raw_mult = 0.98 / prob
-    return max(1.04, round(raw_mult, 2))
+    for i in range(diamonds_found):
+        prob *= (safe_tiles - i) / (25 - i)
+    raw_mult = 0.94 / prob
+    return round(raw_mult, 2)
 
 
 def mines_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    max_bet = profile.max_bet_allowed
-    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-
-    session_mines = request.session.get('mines_state')
+    
+    session_key = f'mines_game_{tg_id}'
+    game_state = request.session.get(session_key)
 
     if request.method == 'POST':
-        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         action = request.POST.get('action')
-
+        
+        # 1. INICIAR NUEVA PARTIDA
         if action == 'start':
+            if game_state and game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'Ya tienes una partida de minas en curso.'}, status=400)
+                
             try:
-                bet = int(request.POST.get('bet_amount', 20))
+                bet_amount = int(request.POST.get('bet_amount', 10))
                 mines_count = int(request.POST.get('mines_count', 3))
-
-                if bet <= 0:
-                    err = "La apuesta debe ser mayor a 0."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                elif bet > max_bet:
-                    err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                elif bet > wallet.balance:
-                    err = "No tienes suficiente oro en tu Bóveda."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                elif mines_count not in [1, 2, 3, 5, 10]:
-                    mines_count = 3
-                else:
-                    wallet.remove_funds(bet)
-                    wallet.accumulate_patron_vault(bet)
-
-                    all_indices = list(range(25))
-                    mines_locations = random.sample(all_indices, mines_count)
-
-                    session_mines = {
-                        'bet': bet,
-                        'mines_count': mines_count,
-                        'mines': mines_locations,
-                        'revealed': [],
-                        'multiplier': 1.0,
-                        'in_game': True
-                    }
-                    request.session['mines_state'] = session_mines
-
-                    if is_ajax:
-                        return JsonResponse({
-                            'success': True,
-                            'in_game': True,
-                            'nuevo_saldo': wallet.balance,
-                            'patron_vault': wallet.patron_vault,
-                            'bet': bet,
-                            'mines_count': mines_count,
-                            'revealed': [],
-                            'multiplier': 1.0,
-                            'current_cashout': bet
-                        })
-            except ValueError:
-                if is_ajax: return JsonResponse({'success': False, 'error': 'Valores no válidos.'}, status=400)
-
-        elif action == 'reveal' and session_mines and session_mines.get('in_game'):
+            except (ValueError, TypeError):
+                return JsonResponse({'success': False, 'error': 'Valores no válidos.'}, status=400)
+                
+            if bet_amount <= 0 or bet_amount > wallet.balance:
+                return JsonResponse({'success': False, 'error': 'Saldo insuficiente para iniciar.'}, status=400)
+                
+            if mines_count < 1 or mines_count > 24:
+                return JsonResponse({'success': False, 'error': 'Número de minas fuera de rango (1 a 24).'}, status=400)
+                
+            # Cobro y Rakeback
+            wallet.remove_funds(bet_amount)
+            wallet.accumulate_patron_vault(bet_amount)
+            
+            # Generar posiciones aleatorias de minas (0 a 24)
+            mines_positions = random.sample(range(25), mines_count)
+            
+            new_state = {
+                'active': True,
+                'bet_amount': bet_amount,
+                'mines_count': mines_count,
+                'mines_positions': mines_positions,
+                'revealed_tiles': [],
+                'diamonds_found': 0,
+                'current_multiplier': 1.0,
+            }
+            request.session[session_key] = new_state
+            
+            return JsonResponse({
+                'success': True,
+                'active': True,
+                'bet_amount': bet_amount,
+                'mines_count': mines_count,
+                'nuevo_saldo': wallet.balance,
+                'patron_vault': wallet.patron_vault,
+            })
+            
+        # 2. DESTAPAR CASILLA
+        elif action == 'reveal':
+            if not game_state or not game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'No hay ninguna partida activa.'}, status=400)
+                
             try:
-                tile_idx = int(request.POST.get('tile_index', -1))
-                if 0 <= tile_idx <= 24 and tile_idx not in session_mines['revealed']:
-                    
-                    # 🛡️ REGLA: PRIMER CLIC 100% SEGURO
-                    if len(session_mines['revealed']) == 0 and tile_idx in session_mines['mines']:
-                        libres = [i for i in range(25) if i != tile_idx and i not in session_mines['mines']]
-                        if libres:
-                            session_mines['mines'].remove(tile_idx)
-                            session_mines['mines'].append(random.choice(libres))
+                tile_index = int(request.POST.get('tile_index'))
+            except (ValueError, TypeError):
+                return JsonResponse({'success': False, 'error': 'Casilla no válida.'}, status=400)
+                
+            if tile_index < 0 or tile_index > 24:
+                return JsonResponse({'success': False, 'error': 'Índice de casilla incorrecto.'}, status=400)
+                
+            if tile_index in game_state['revealed_tiles']:
+                return JsonResponse({'success': False, 'error': 'Esta casilla ya fue destapada.'}, status=400)
+                
+            # ¿Es una mina?
+            if tile_index in game_state['mines_positions']:
+                # BUFF DRAGÓN DE LAS PROFUNDIDADES: Resistencia o Escudo contra explosión (Opcional)
+                game_state['active'] = False
+                all_mines = game_state['mines_positions']
+                bet = game_state['bet_amount']
+                del request.session[session_key]
+                request.session.modified = True
+                
+                grant_user_xp(request, tg_id, 1, reason="Minas del Reino")
+                
+                return JsonResponse({
+                    'success': True,
+                    'hit_mine': True,
+                    'tile_index': tile_index,
+                    'mines_positions': all_mines,
+                    'lost_amount': bet,
+                    'nuevo_saldo': wallet.balance,
+                    'message': '💥 ¡BOOM! Has pisado una trampa imperial oculta. Has perdido tu apuesta.'
+                })
+            else:
+                # Es un diamante
+                game_state['revealed_tiles'].append(tile_index)
+                game_state['diamonds_found'] += 1
+                new_mult = calculate_mines_multiplier(game_state['mines_count'], game_state['diamonds_found'])
+                
+                # BUFF DRAGÓN FÉNIX: Multiplicador adicional
+                try:
+                    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                    if pet and pet.species == 'dragon':
+                        dragon_bonus = {1: 1.05, 2: 1.10, 3: 1.20}.get(pet.evolution_stage_number, 1.05)
+                        new_mult = round(new_mult * dragon_bonus, 2)
+                except Exception:
+                    pass
 
-                    if tile_idx in session_mines['mines']:
-                        session_mines['in_game'] = False
-                        all_mines = session_mines['mines']
-                        request.session['mines_state'] = None
-
-                        grant_user_xp(request, tg_id, 1, reason="Minas del Reino")
-
-                        if is_ajax:
-                            return JsonResponse({
-                                'success': True,
-                                'status': 'bust',
-                                'hit_tile': tile_idx,
-                                'all_mines': all_mines,
-                                'nuevo_saldo': wallet.balance,
-                                'patron_vault': wallet.patron_vault
-                            })
-                    else:
-                        session_mines['revealed'].append(tile_idx)
-                        revealed_count = len(session_mines['revealed'])
-                        mult = calculate_mines_multiplier(25, session_mines['mines_count'], revealed_count)
-
-                        if pet and pet.species == 'dragon':
-                            dragon_bonus = {1: 0.04, 2: 0.08, 3: 0.14}.get(pet.evolution_stage_number, 0.04)
-                            mult = round(mult + dragon_bonus, 2)
-
-                        session_mines['multiplier'] = mult
-                        cashout_val = int(session_mines['bet'] * mult)
-
-                        total_gems = 25 - session_mines['mines_count']
-                        auto_win = (revealed_count == total_gems)
-
-                        if auto_win:
-                            session_mines['in_game'] = False
-                            if pet and pet.species == 'panther':
-                                panther_profit_bonus = {1: 0.05, 2: 0.10, 3: 0.18}.get(pet.evolution_stage_number, 0.05)
-                                net = cashout_val - session_mines['bet']
-                                cashout_val = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
-                                
-                            wallet.add_funds(cashout_val)
-                            request.session['mines_state'] = None
-                            grant_user_xp(request, tg_id, 8, reason="Pleno en Minas")
-
-                        request.session['mines_state'] = session_mines if not auto_win else None
-
-                        if is_ajax:
-                            return JsonResponse({
-                                'success': True,
-                                'status': 'win_full' if auto_win else 'gem',
-                                'hit_tile': tile_idx,
-                                'revealed_count': revealed_count,
-                                'multiplier': mult,
-                                'current_cashout': cashout_val,
-                                'nuevo_saldo': wallet.balance,
-                                'patron_vault': wallet.patron_vault,
-                                'all_mines': session_mines['mines'] if auto_win else []
-                            })
-            except ValueError:
-                pass
-
-        elif action == 'cashout' and session_mines and session_mines.get('in_game'):
-            revealed_count = len(session_mines.get('revealed', []))
-            if revealed_count > 0:
-                mult = session_mines.get('multiplier', 1.0)
-                ganancia = int(session_mines['bet'] * mult)
-
-                if pet and pet.species == 'panther':
-                    panther_profit_bonus = {1: 0.05, 2: 0.10, 3: 0.18}.get(pet.evolution_stage_number, 0.05)
-                    net = max(0, ganancia - session_mines['bet'])
-                    ganancia = int(session_mines['bet'] + (net * (1 + panther_profit_bonus)))
-
-                wallet.add_funds(ganancia)
-                all_mines = session_mines['mines']
-                request.session['mines_state'] = None
-
-                grant_user_xp(request, tg_id, 3, reason="Retiro de Minas")
-
-                if is_ajax:
+                game_state['current_multiplier'] = new_mult
+                current_payout = int(round(game_state['bet_amount'] * new_mult))
+                request.session[session_key] = game_state
+                request.session.modified = True
+                
+                # Si destapó todos los diamantes posibles, gana automáticamente
+                total_safe = 25 - game_state['mines_count']
+                all_cleared = (game_state['diamonds_found'] == total_safe)
+                
+                if all_cleared:
+                    wallet.add_funds(current_payout)
+                    del request.session[session_key]
+                    grant_user_xp(request, tg_id, 8, reason="Pleno en Minas")
                     return JsonResponse({
                         'success': True,
-                        'status': 'cashout',
-                        'ganancia': ganancia,
-                        'multiplier': mult,
-                        'all_mines': all_mines,
+                        'hit_mine': False,
+                        'all_cleared': True,
+                        'tile_index': tile_index,
+                        'diamonds_found': game_state['diamonds_found'],
+                        'multiplier': new_mult,
+                        'current_payout': current_payout,
                         'nuevo_saldo': wallet.balance,
-                        'patron_vault': wallet.patron_vault
+                        'message': f"👑 ¡INCREÍBLE! ¡Has destapado todos los diamantes! Cobraste +{current_payout} 🪙."
                     })
-            else:
-                if is_ajax:
-                    return JsonResponse({'success': False, 'error': 'Debes destapar al menos un cofre antes de retirarte.'}, status=400)
-
-    in_game = session_mines is not None and session_mines.get('in_game', False)
-    current_revealed = session_mines.get('revealed', []) if session_mines else []
-    current_bet = session_mines.get('bet', 20) if session_mines else 20
-    current_mines_count = session_mines.get('mines_count', 3) if session_mines else 3
-    current_mult = session_mines.get('multiplier', 1.0) if in_game else 1.0
-    current_cashout = int(current_bet * current_mult) if in_game else current_bet
-
+                    
+                return JsonResponse({
+                    'success': True,
+                    'hit_mine': False,
+                    'tile_index': tile_index,
+                    'diamonds_found': game_state['diamonds_found'],
+                    'multiplier': new_mult,
+                    'current_payout': current_payout,
+                })
+                
+        # 3. RETIRARSE Y COBRAR (CASH OUT)
+        elif action == 'cashout':
+            if not game_state or not game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'No hay partida activa para cobrar.'}, status=400)
+                
+            if game_state['diamonds_found'] == 0:
+                return JsonResponse({'success': False, 'error': 'Debes revelar al menos un diamante antes de cobrar.'}, status=400)
+                
+            final_payout = int(round(game_state['bet_amount'] * game_state['current_multiplier']))
+            wallet.add_funds(final_payout)
+            
+            all_mines = game_state['mines_positions']
+            del request.session[session_key]
+            request.session.modified = True
+            
+            grant_user_xp(request, tg_id, 3, reason="Retiro de Minas")
+            
+            return JsonResponse({
+                'success': True,
+                'cashed_out': True,
+                'payout': final_payout,
+                'multiplier': game_state['current_multiplier'],
+                'mines_positions': all_mines,
+                'nuevo_saldo': wallet.balance,
+                'message': f"🏆 ¡Retirada victoriosa! Has asegurado +{final_payout} 🪙 a tu bóveda."
+            })
+            
+        return JsonResponse({'success': False, 'error': 'Acción desconocida'}, status=400)
+        
     return render(request, 'economy/mines.html', {
         'tg_id': tg_id,
         'wallet': wallet,
         'profile': profile,
-        'max_bet': max_bet,
-        'in_game': in_game,
-        'current_bet': current_bet,
-        'current_mines_count': current_mines_count,
-        'current_revealed': current_revealed,
-        'current_mult': current_mult,
-        'current_cashout': current_cashout,
+        'game_state': game_state,
     })
 
 
-# ==========================================
-# BLACKJACK IMPERIAL: ANTIRRACHA & PROTECCIÓN NOBLE
-# ==========================================
+# ==============================================================================
+# 🃏 BLACKJACK DE LA CORTE (21 REAL)
+# ==============================================================================
+DECK_SUITS = ['♠️', '♥️', '♦️', '♣️']
+DECK_VALUES = [
+    ('2', 2), ('3', 3), ('4', 4), ('5', 5), ('6', 6), ('7', 7),
+    ('8', 8), ('9', 9), ('10', 10), ('J', 10), ('Q', 10), ('K', 10), ('A', 11)
+]
+
+def draw_card():
+    val_name, val_points = random.choice(DECK_VALUES)
+    suit = random.choice(DECK_SUITS)
+    is_red = suit in ['♥️', '♦️']
+    return {
+        'name': val_name,
+        'points': val_points,
+        'suit': suit,
+        'is_red': is_red,
+        'display': f"{val_name}{suit}"
+    }
+
+def calculate_hand_value(hand):
+    total = sum(c['points'] for c in hand)
+    aces = sum(1 for c in hand if c['name'] == 'A')
+    # Ajustar ases de 11 a 1 si nos pasamos de 21
+    while total > 21 and aces > 0:
+        total -= 10
+        aces -= 1
+    return total
 
 def blackjack_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-    max_bet = profile.max_bet_allowed
-        
-    session_bj = request.session.get('blackjack_state')
-    bj_losses = request.session.get('bj_loss_streak', 0)
-    resultado = None
-    ganancia = 0
-    
+    session_key = f'bj_game_{tg_id}'
+    game_state = request.session.get(session_key)
+
     if request.method == 'POST':
-        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         action = request.POST.get('action')
         
+        # 1. EMPEZAR PARTIDA
         if action == 'deal':
+            if game_state and game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'Termina tu mano actual antes de repartir otra.'}, status=400)
+                
             try:
-                apuesta = int(request.POST.get('bet_amount', 25))
-                if apuesta <= 0:
-                    err = "La apuesta debe ser mayor a 0."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                    messages.error(request, err)
-                elif apuesta > max_bet:
-                    err = f"Tu rango actual (Nivel {profile.level}) solo permite apostar hasta {max_bet} 🪙."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                    messages.error(request, err)
-                elif apuesta > wallet.balance:
-                    err = "No tienes suficiente oro en tu Bóveda."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                    messages.error(request, err)
+                bet_amount = int(request.POST.get('bet_amount', 25))
+            except (ValueError, TypeError):
+                bet_amount = 25
+                
+            if bet_amount <= 0 or bet_amount > wallet.balance:
+                return JsonResponse({'success': False, 'error': 'Oro insuficiente para la apuesta.'}, status=400)
+                
+            wallet.remove_funds(bet_amount)
+            wallet.accumulate_patron_vault(bet_amount)
+            
+            player_hand = [draw_card(), draw_card()]
+            dealer_hand = [draw_card(), draw_card()]
+            
+            p_score = calculate_hand_value(player_hand)
+            d_score = calculate_hand_value(dealer_hand)
+            
+            # Blackjack natural directo del jugador
+            if p_score == 21:
+                # Si dealer también tiene 21 -> Empate
+                if d_score == 21:
+                    wallet.add_funds(bet_amount)
+                    msg = "⚔️ ¡Empate imperial de Blackjacks! Se devuelve tu apuesta íntegra."
+                    payout = bet_amount
                 else:
-                    wallet.remove_funds(apuesta)
-                    wallet.accumulate_patron_vault(apuesta)
-
-                    player_hand = [draw_card(), draw_card()]
-                    dealer_hand = [draw_card(), draw_card()]
-
-                    # 🛡️ ALTERNANCIA: Si lleva 2 o más derrotas seguidas, asegurar mano sólida inicial
-                    if bj_losses >= 2:
-                        p_check = calculate_hand_value(player_hand)
-                        if p_check < 15:
-                            high_vals = ['10', 'J', 'Q', 'K', 'A']
-                            suits = ['♠', '♥', '♦', '♣']
-                            player_hand[1] = {'val': random.choice(high_vals), 'suit': random.choice(suits), 'is_red': False}
-
-                    p_val = calculate_hand_value(player_hand)
-                    d_init_val = calculate_hand_value(dealer_hand)
+                    payout = int(round(bet_amount * 2.5))  # Paga 3:2 clásico
+                    wallet.add_funds(payout)
+                    msg = f"👑 ¡BLACKJACK REAL! Has obtenido 21 directo. Cobras +{payout} 🪙."
+                    grant_user_xp(request, tg_id, max(4, bet_amount // 10), reason="Blackjack")
                     
-                    if p_val == 21:
-                        if d_init_val == 21:
-                            wallet.add_funds(apuesta)
-                            resultado = 'push'
-                            ganancia = apuesta
-                            xp_gain = 2
-                        else:
-                            ganancia = int(apuesta * 2.5)
-                            if pet and pet.species == 'panther':
-                                panther_rates = {1: 0.05, 2: 0.10, 3: 0.15}
-                                net = ganancia - apuesta
-                                ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.05))))
-                                
-                            wallet.add_funds(ganancia)
-                            resultado = 'blackjack'
-                            xp_gain = 6
-                            request.session['bj_loss_streak'] = 0
-                        
-                        grant_user_xp(request, tg_id, xp_gain, reason="Blackjack")
-                        session_bj = {
-                            'bet': apuesta,
-                            'player_hand': player_hand,
-                            'dealer_hand': dealer_hand,
-                            'finished': True
-                        }
-                    else:
-                        session_bj = {
-                            'bet': apuesta,
-                            'player_hand': player_hand,
-                            'dealer_hand': dealer_hand,
-                            'finished': False
-                        }
-                    request.session['blackjack_state'] = session_bj
-            except ValueError:
-                err = "Monto inválido."
-                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                messages.error(request, err)
+                return JsonResponse({
+                    'success': True,
+                    'game_over': True,
+                    'player_hand': player_hand,
+                    'dealer_hand': dealer_hand,
+                    'player_score': 21,
+                    'dealer_score': d_score,
+                    'payout': payout,
+                    'nuevo_saldo': wallet.balance,
+                    'patron_vault': wallet.patron_vault,
+                    'message': msg
+                })
                 
-        elif action == 'hit' and session_bj and not session_bj.get('finished'):
-            session_bj['player_hand'].append(draw_card())
-            p_val = calculate_hand_value(session_bj['player_hand'])
+            # Estado en juego
+            new_state = {
+                'active': True,
+                'bet_amount': bet_amount,
+                'player_hand': player_hand,
+                'dealer_hand': dealer_hand,
+            }
+            request.session[session_key] = new_state
             
-            if p_val > 21:
-                resultado = 'bust'
-                ganancia = session_bj['bet']
-                session_bj['finished'] = True
-                request.session['bj_loss_streak'] = bj_losses + 1
-
-                # Buff Lobo
-                wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
-                if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
-                    wallet.add_funds(session_bj['bet'])
-                    resultado = 'wolf_saved'
-                    ganancia = session_bj['bet']
-
-                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
-
-            request.session['blackjack_state'] = session_bj
-                
-        elif action == 'stand' and session_bj and not session_bj.get('finished'):
-            p_val = calculate_hand_value(session_bj['player_hand'])
-            d_hand = session_bj['dealer_hand']
-            
-            while calculate_hand_value(d_hand) < 17:
-                d_hand.append(draw_card())
-                
-            d_val = calculate_hand_value(d_hand)
-            apuesta = session_bj['bet']
-            
-            if d_val > 21 or p_val > d_val:
-                ganancia = apuesta * 2
-                if pet and pet.species == 'panther':
-                    panther_rates = {1: 0.05, 2: 0.10, 3: 0.15}
-                    net = ganancia - apuesta
-                    ganancia = int(apuesta + (net * (1 + panther_rates.get(pet.evolution_stage_number, 0.05))))
-                    
-                wallet.add_funds(ganancia)
-                resultado = 'win'
-                request.session['bj_loss_streak'] = 0
-                grant_user_xp(request, tg_id, 4, reason="Victoria Blackjack")
-            elif p_val == d_val:
-                wallet.add_funds(apuesta)
-                resultado = 'push'
-                ganancia = apuesta
-                grant_user_xp(request, tg_id, 2, reason="Empate Blackjack")
-            else:
-                resultado = 'lose'
-                ganancia = apuesta
-                request.session['bj_loss_streak'] = bj_losses + 1
-
-                wolf_protect_rate = {1: 0.10, 2: 0.18, 3: 0.25}.get(pet.evolution_stage_number, 0.10) if (pet and pet.species == 'wolf') else 0.0
-                if pet and pet.species == 'wolf' and random.random() < wolf_protect_rate:
-                    wallet.add_funds(apuesta)
-                    resultado = 'wolf_saved'
-                    ganancia = apuesta
-
-                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
-                
-            session_bj['finished'] = True
-            request.session['blackjack_state'] = session_bj
-
-        if is_ajax:
-            p_cards = session_bj['player_hand'] if session_bj else []
-            d_cards = session_bj['dealer_hand'] if session_bj else []
-            in_game = session_bj is not None and not session_bj.get('finished', False)
-
-            dealer_visible = d_cards
-            dealer_score_visible = calculate_hand_value(d_cards) if d_cards else 0
-            if in_game and len(d_cards) >= 2:
-                dealer_visible = [d_cards[0], {'val': '?', 'suit': '👑', 'is_red': False, 'hidden': True}]
-                dealer_score_visible = calculate_hand_value([d_cards[0]])
-
-            resp = {
+            return JsonResponse({
                 'success': True,
-                'in_game': in_game,
-                'resultado': resultado,
-                'ganancia': ganancia,
-                'player_cards': p_cards,
-                'dealer_cards': dealer_visible,
-                'player_score': calculate_hand_value(p_cards) if p_cards else 0,
-                'dealer_score': dealer_score_visible,
+                'game_over': False,
+                'player_hand': player_hand,
+                'dealer_upcard': dealer_hand[0],  # Solo la primera carta visible
+                'player_score': p_score,
                 'nuevo_saldo': wallet.balance,
                 'patron_vault': wallet.patron_vault,
-                'current_bet': session_bj['bet'] if session_bj else 25,
-            }
-
-            if session_bj and session_bj.get('finished', False):
-                request.session['blackjack_state'] = None
-
-            return JsonResponse(resp)
+            })
             
-    p_cards = session_bj['player_hand'] if session_bj else []
-    d_cards = session_bj['dealer_hand'] if session_bj else []
-    p_score = calculate_hand_value(p_cards) if p_cards else 0
-    d_score = calculate_hand_value(d_cards) if d_cards else 0
-    in_game = session_bj is not None and not session_bj.get('finished', False)
-    current_bet = session_bj['bet'] if session_bj else 25
-
-    if session_bj and session_bj.get('finished', False):
-        request.session['blackjack_state'] = None
-
+        # 2. PEDIR CARTA (HIT)
+        elif action == 'hit':
+            if not game_state or not game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'No hay partida activa.'}, status=400)
+                
+            card = draw_card()
+            game_state['player_hand'].append(card)
+            p_score = calculate_hand_value(game_state['player_hand'])
+            
+            # Comprobar si se pasó de 21
+            if p_score > 21:
+                # BUFF LOBO ESPECTRAL: Salvamento de bust (Opcional)
+                game_state['active'] = False
+                bet = game_state['bet_amount']
+                dealer_hand = game_state['dealer_hand']
+                del request.session[session_key]
+                request.session.modified = True
+                
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
+                
+                return JsonResponse({
+                    'success': True,
+                    'game_over': True,
+                    'busted': True,
+                    'player_hand': game_state['player_hand'],
+                    'dealer_hand': dealer_hand,
+                    'player_score': p_score,
+                    'dealer_score': calculate_hand_value(dealer_hand),
+                    'payout': 0,
+                    'nuevo_saldo': wallet.balance,
+                    'message': f"💀 Te has pasado con {p_score}. El croupier gana la ronda."
+                })
+                
+            request.session[session_key] = game_state
+            request.session.modified = True
+            
+            return JsonResponse({
+                'success': True,
+                'game_over': False,
+                'card_drawn': card,
+                'player_hand': game_state['player_hand'],
+                'player_score': p_score,
+            })
+            
+        # 3. PLANTARSE (STAND)
+        elif action == 'stand':
+            if not game_state or not game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'No hay partida activa.'}, status=400)
+                
+            player_hand = game_state['player_hand']
+            dealer_hand = game_state['dealer_hand']
+            bet = game_state['bet_amount']
+            
+            p_score = calculate_hand_value(player_hand)
+            d_score = calculate_hand_value(dealer_hand)
+            
+            # El croupier debe pedir carta obligatoriamente hasta alcanzar 17 o más
+            while d_score < 17:
+                dealer_hand.append(draw_card())
+                d_score = calculate_hand_value(dealer_hand)
+                
+            won = False
+            is_push = False
+            payout = 0
+            
+            if d_score > 21:
+                # Crupier se pasó -> Gana jugador
+                won = True
+                payout = bet * 2
+                msg = f"🎉 ¡El croupier se pasó con {d_score}! Has ganado +{payout} 🪙."
+            elif p_score > d_score:
+                won = True
+                payout = bet * 2
+                msg = f"⚔️ ¡Tu mano ({p_score}) supera a la del croupier ({d_score})! Ganas +{payout} 🪙."
+            elif p_score == d_score:
+                is_push = True
+                payout = bet
+                msg = f"🛡️ Empate a {p_score}. Tu apuesta de {bet} 🪙 queda a salvo."
+            else:
+                msg = f"💀 La banca gana con {d_score} frente a tu {p_score}."
+                
+            if payout > 0:
+                wallet.add_funds(payout)
+                
+            del request.session[session_key]
+            request.session.modified = True
+            
+            if won:
+                grant_user_xp(request, tg_id, 4, reason="Victoria Blackjack")
+            elif is_push:
+                grant_user_xp(request, tg_id, 2, reason="Empate Blackjack")
+            else:
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
+                
+            return JsonResponse({
+                'success': True,
+                'game_over': True,
+                'player_hand': player_hand,
+                'dealer_hand': dealer_hand,
+                'player_score': p_score,
+                'dealer_score': d_score,
+                'won': won,
+                'is_push': is_push,
+                'payout': payout,
+                'nuevo_saldo': wallet.balance,
+                'patron_vault': wallet.patron_vault,
+                'message': msg
+            })
+            
+        return JsonResponse({'success': False, 'error': 'Acción inválida'}, status=400)
+        
     return render(request, 'economy/blackjack.html', {
         'tg_id': tg_id,
         'wallet': wallet,
         'profile': profile,
-        'max_bet': max_bet,
-        'player_cards': p_cards,
-        'dealer_cards': d_cards,
-        'player_score': p_score,
-        'dealer_score': d_score,
-        'in_game': in_game,
-        'resultado': resultado,
-        'ganancia': ganancia,
-        'current_bet': current_bet
     })
+
+
+# ==============================================================================
+# 🏪 BAZAR REAL & BOUTIQUE DE OBJETOS
+# ==============================================================================
+BAZAR_ITEMS = [
+    # 🛡️ PROTECCIÓN Y DEFENSA
+    {
+        'code': 'shield_1d',
+        'name': 'Escudo Sagrado (1 Día)',
+        'description': 'Protege tus aposentos e inventario contra hurtos y asedios durante 24 horas continuas.',
+        'icon': '🛡️',
+        'price': 150,
+        'category': 'defense',
+        'badge': 'Seguridad',
+    },
+    {
+        'code': 'shield_3d',
+        'name': 'Baluarte Imperial (3 Días)',
+        'description': 'Inviolabilidad total por 72 horas avalada por la Guardia de la Corona.',
+        'icon': '🏰',
+        'price': 380,
+        'category': 'defense',
+        'badge': 'Recomendado',
+    },
+    
+    # 👑 ESTATUS Y NOBLEZA
+    {
+        'code': 'custom_title',
+        'name': 'Bula de Título Personalizado',
+        'description': 'Permite inscribir tu propio apodo o título honorífico en la Corte Imperial.',
+        'icon': '📜',
+        'price': 600,
+        'category': 'status',
+        'badge': 'Distinción',
+    },
+    {
+        'code': 'vip_badge',
+        'name': 'Insignia de Mecenas Dorado',
+        'description': 'Destaca tu perfil con el laurel dorado perpetuo del Reino del Placer.',
+        'icon': '⚜️',
+        'price': 1200,
+        'category': 'status',
+        'badge': 'Exclusivo',
+    },
+    {
+        'code': 'avatar_frame',
+        'name': 'Marco de Oro y Diamantes',
+        'description': 'Enmarca tu avatar con orfebrería imperial de alto rango nobiliario.',
+        'icon': '🖼️',
+        'price': 850,
+        'category': 'status',
+        'badge': 'Estético',
+    },
+
+    # 🌹 TRIBUTOS PARA IDOLS
+    {
+        'code': 'tribute_roses',
+        'name': 'Ramo de Rosas Negras',
+        'description': 'Ofrenda aromática que eleva la devoción y lealtad de tu Idol preferida.',
+        'icon': '🌹',
+        'price': 75,
+        'category': 'tributes',
+        'badge': 'Devoción',
+    },
+    {
+        'code': 'tribute_champagne',
+        'name': 'Champán de la Reserva Imperial',
+        'description': 'Brindis de alta alcurnia para compartir en privado con una concubina.',
+        'icon': '🍾',
+        'price': 220,
+        'category': 'tributes',
+        'badge': 'Lujoso',
+    },
+    {
+        'code': 'tribute_silk',
+        'name': 'Lencería de Seda Púrpura',
+        'description': 'Prenda delicada tejida con hilos de oro para tu cortesana favorita.',
+        'icon': '👘',
+        'price': 500,
+        'category': 'tributes',
+        'badge': 'Sensual',
+    },
+    
+    # 🎲 FORTUNA Y PRIVILEGIOS
+    {
+        'code': 'lucky_key',
+        'name': 'Llave Maestra del Casino',
+        'description': 'Asegura un giro con multiplicador duplicado en la Ruleta Imperial.',
+        'icon': '🗝️',
+        'price': 300,
+        'category': 'fortune',
+        'badge': 'Ventaja',
+    },
+]
 
 def bazar_shop(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
     
-    user_role = UserRole.objects.filter(telegram_id=tg_id).first()
-    mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id)
-    is_idol = (user_role and user_role.role == 'idol') or mis_idols.exists()
-    is_admin = check_is_staff_or_admin(tg_id)
+    # Inventario actual del usuario
+    inventory_items = UserInventoryItem.objects.filter(telegram_user_id=tg_id)
+    inv_dict = {item.item_code: item.quantity for item in inventory_items}
     
-    todas_idols = IdolProfile.objects.all().order_by('stage_name')
+    # Coleccionables con Foto disponibles en la Boutique
+    collectibles = BazarCollectible.objects.filter(is_active=True).order_by('-created_at')
+    user_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item')
 
-    inv_lucky = UserInventoryItem.get_count(tg_id, 'lucky_charm')
-    inv_market = UserInventoryItem.get_count(tg_id, 'free_market')
-    inv_priority = UserInventoryItem.get_count(tg_id, 'priority_antojo')
-
-    # 🏺 Cargar Artículos de la Boutique Real y Vitrina del Usuario
-    boutique_items = BazarCollectible.objects.filter(is_active=True).order_by('-created_at')
-    my_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item')
+    is_staff = check_is_staff_or_admin(tg_id)
 
     return render(request, 'economy/bazar.html', {
         'tg_id': tg_id,
         'wallet': wallet,
         'profile': profile,
-        'pet': pet,
-        'is_idol': is_idol,
-        'is_admin': is_admin,
-        'mis_idols': mis_idols,
-        'todas_idols': todas_idols,
-        'inv_lucky': inv_lucky,
-        'inv_market': inv_market,
-        'inv_priority': inv_priority,
-        'boutique_items': boutique_items,
-        'my_collectibles': my_collectibles,
+        'items': BAZAR_ITEMS,
+        'inventory': inv_dict,
+        'collectibles': collectibles,
+        'user_collectibles': user_collectibles,
+        'is_staff': is_staff,
     })
 
 
 def bazar_buy_action(request):
     if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
-
+        return redirect('/economy/bazar/')
+        
     tg_id = get_safe_tg_id(request)
-    item_key = request.POST.get('item_key')
+    item_code = request.POST.get('item_code')
+    
+    matched_item = next((item for item in BAZAR_ITEMS if item['code'] == item_code), None)
+    if not matched_item:
+        messages.error(request, "El artículo solicitado no existe en los estantes del Bazar.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-
-    PRICES = {
-        'shield_15': 350,
-        'shield_30': 600,
-        'dungeon_bail': 500,
-        'custom_title': 450,
-        'imperial_frame': 400,
-        'vip_badge': 300,
-        'tribute_gift': 350,
-        'priority_antojo': 200,
-        'featured_idol': 450,
-        'lucky_charm': 250,
-        'free_market': 150,
-        'energy_potion': 120,
-    }
-
-    price = PRICES.get(item_key)
-    if not price:
-        return JsonResponse({'success': False, 'error': 'Artículo no reconocido.'}, status=400)
-
+    
+    price = matched_item['price']
     if wallet.balance < price:
-        return JsonResponse({'success': False, 'error': f'No tienes suficiente oro ({price} 🪙 necesarios).'}, status=400)
-
-    msg = ""
-
-    if item_key == 'shield_15':
-        current_end = profile.inactivity_shield_until if profile.is_shield_active else timezone.now()
-        profile.inactivity_shield_until = current_end + timedelta(days=15)
-        profile.save()
-        wallet.remove_funds(price)
-        msg = "🛡️ ¡Salvoconducto Real activado! Inmunidad extendida por 15 días."
-
-    elif item_key == 'shield_30':
-        current_end = profile.inactivity_shield_until if profile.is_shield_active else timezone.now()
-        profile.inactivity_shield_until = current_end + timedelta(days=30)
-        profile.save()
-        wallet.remove_funds(price)
-        msg = "🛡️ ¡Salvoconducto Real extendido por 30 días de cobertura total!"
-
-    elif item_key == 'dungeon_bail':
-        u_role = UserRole.objects.filter(telegram_id=tg_id).first()
-        if not u_role or not u_role.is_banned:
-            return JsonResponse({'success': False, 'error': 'No estás en mazmorra actualmente.'}, status=400)
-        u_role.is_banned = False
-        u_role.ban_reason = None
-        u_role.save()
-        wallet.remove_funds(price)
-        msg = "⚖️ Fianza pagada. Has sido liberado de la mazmorra con honor restaurado."
-
-    elif item_key == 'custom_title':
-        title_text = request.POST.get('custom_title_text', '').strip()
-        if not title_text:
-            return JsonResponse({'success': False, 'error': 'Debes ingresar el título deseado.'}, status=400)
-        profile.custom_title_text = title_text[:50]
-        profile.save()
-        wallet.remove_funds(price)
-        msg = f"👑 ¡Edicto Consagrado! Tu nuevo título de rol es «{profile.custom_title_text}»."
-
-    elif item_key == 'imperial_frame':
-        profile.has_custom_avatar_frame = True
-        profile.avatar_frame = 'flame'
-        profile.save()
-        wallet.remove_funds(price)
-        msg = "🔥 ¡Marco Imperial Llama Carmesí desbloqueado en tu perfil!"
-
-    elif item_key == 'vip_badge':
-        profile.has_vip_badge = True
-        profile.save()
-        wallet.remove_funds(price)
-        msg = "✨ ¡Distintivo de Linaje VIP activado para tus comentarios!"
-
-    elif item_key == 'tribute_gift':
-        idol_id = request.POST.get('target_idol_id')
-        idol = IdolProfile.objects.filter(id=idol_id).first()
-        if not idol:
-            return JsonResponse({'success': False, 'error': 'Selecciona una Musa válida.'}, status=400)
+        messages.error(request, f"Oro insuficiente. Requiere {price} 🪙 para adquirir {matched_item['name']}.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
         
+    with transaction.atomic():
         wallet.remove_funds(price)
-        idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=idol.telegram_user_id)
-        net_gold = int(price * 0.8)
-        idol_wallet.add_funds(net_gold)
-
-        c_name = profile.username if profile.username else f"Noble_{tg_id}"
-        IdolTribute.objects.create(
-            idol=idol,
-            client_telegram_id=tg_id,
-            client_username=c_name,
-            gift_name="Gargantilla de Rubíes Imperial",
-            gold_value=price
+        inv_item, _ = UserInventoryItem.objects.get_or_create(
+            telegram_user_id=tg_id,
+            item_code=item_code
         )
+        inv_item.quantity += 1
+        inv_item.save()
+        
+        # Efectos inmediatos especiales
+        if item_code in ['shield_1d', 'shield_3d']:
+            days = 1 if item_code == 'shield_1d' else 3
+            now = timezone.now()
+            # Si ya tiene un escudo activo, se suma al tiempo restante
+            if profile.shield_expires_at and profile.shield_expires_at > now:
+                profile.shield_expires_at += timedelta(days=days)
+            else:
+                profile.shield_expires_at = now + timedelta(days=days)
+            profile.save(update_fields=['shield_expires_at'])
+            
+        elif item_code == 'vip_badge':
+            profile.has_vip_badge = True
+            profile.save(update_fields=['has_vip_badge'])
+            
+        elif item_code == 'avatar_frame':
+            profile.avatar_frame = 'gold_frame'
+            profile.save(update_fields=['avatar_frame'])
+            
+        elif item_code == 'custom_title':
+            new_title = request.POST.get('custom_title_text', '').strip()
+            if new_title:
+                profile.custom_title = new_title[:30]
+                profile.save(update_fields=['custom_title'])
+                
+        grant_user_xp(request, tg_id, max(5, price // 20), reason=f"Compra en Bazar: {matched_item['name']}")
 
-        send_telegram_msg(
-            chat_id=idol.telegram_user_id,
-            text=(
-                f"💎 <b>¡Tributo de Corte Recibido!</b>\n\n"
-                f"🌹 <b>Para tu Musa:</b> {idol.stage_name}\n"
-                f"👤 <b>De parte de:</b> {c_name}\n"
-                f"🎁 <b>Obsequio:</b> Gargantilla de Rubíes Imperial\n"
-                f"🪙 <b>Oro neto recibido:</b> <b>+{net_gold} 🪙</b> a tu Bóveda."
-            ),
-            button_text="🪙 Ver Mi Bóveda",
-            button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={idol.telegram_user_id}"
-        )
-        msg = f"🌹 ¡Tributo enviado con éxito a {idol.stage_name}! Recibió +{net_gold} 🪙."
-
-    elif item_key == 'priority_antojo':
-        UserInventoryItem.add_item(tg_id, 'priority_antojo', 1)
-        wallet.remove_funds(price)
-        msg = "📜 Sello de Antojo Prioritario adquirido. Úsalo al pedir una foto."
-
-    elif item_key == 'featured_idol':
-        idol_id = request.POST.get('target_idol_id')
-        idol = IdolProfile.objects.filter(id=idol_id, telegram_user_id=tg_id).first()
-        if not idol:
-            return JsonResponse({'success': False, 'error': 'Debes ser la dueña de la Musa para destacarla.'}, status=400)
-        idol.is_featured_until = timezone.now() + timedelta(days=3)
-        idol.save()
-        wallet.remove_funds(price)
-        msg = f"✨ ¡{idol.stage_name} fijada en la cima de la Galería por 3 días!"
-
-    elif item_key == 'lucky_charm':
-        UserInventoryItem.add_item(tg_id, 'lucky_charm', 1)
-        wallet.remove_funds(price)
-        msg = "🗝️ Llave Dorada guardada en tu inventario para tu próximo Relicario."
-
-    elif item_key == 'free_market':
-        UserInventoryItem.add_item(tg_id, 'free_market', 1)
-        wallet.remove_funds(price)
-        msg = "📜 Patente de Comercio Libre lista: tu siguiente venta pagará 0% impuesto."
-
-    elif item_key == 'energy_potion':
-        pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-        if not pet:
-            return JsonResponse({'success': False, 'error': 'No tienes una mascota en tu Santuario.'}, status=400)
-        pet.energy = 100
-        pet.save()
-        wallet.remove_funds(price)
-        msg = f"🍖 ¡Elixir consumido! La energía de {pet.name} está al 100%."
-
-    return JsonResponse({
-        'success': True,
-        'message': msg,
-        'nuevo_saldo': wallet.balance,
-        'shield_days': profile.days_of_shield_remaining
-    })
+    messages.success(request, f"🛍️ ¡Has adquirido con éxito '{matched_item['name']}' por {price} 🪙!")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
-# ==========================================
-# LABORES DE LA CORTE (TRABAJOS ACTIVOS)
-# ==========================================
-
-JOBS_CATALOG = {
-    'cliente': [
-        {'key': 'c_guard', 'title': 'Vigilancia de los Pasadizos 🍷', 'duration': 20, 'gold': 15, 'xp': 6, 'desc': 'Ronda de seguridad por los salones clandestinos.'},
-        {'key': 'c_trade', 'title': 'Contrabando de Vinos & Especias 🍾', 'duration': 120, 'gold': 45, 'xp': 20, 'desc': 'Gestión de mercancías secretas para los aposentos reales.'},
-        {'key': 'c_audit', 'title': 'Inspección Nocturna de Bóvedas 🏦', 'duration': 360, 'gold': 95, 'xp': 45, 'desc': 'Custodia de las arcas imperiales durante la noche.'},
-    ],
-    'idol': [
-        {'key': 'i_glam',  'title': 'Sesión de Maquillaje & Glamour 💄', 'duration': 20, 'gold': 18, 'xp': 8, 'desc': 'Preparación estética para recibir a los nobles.'},
-        {'key': 'i_dance', 'title': 'Ensayo de Danza en la Corte 💃', 'duration': 120, 'gold': 50, 'xp': 22, 'desc': 'Perfeccionamiento artístico en los salones de ensayo.'},
-        {'key': 'i_gala',  'title': 'Anfitriona de Gala en el Salón Imperial 🌹', 'duration': 360, 'gold': 110, 'xp': 50, 'desc': 'Presidir el banquete principal de la noche.'},
-    ]
-}
+# ==============================================================================
+# 💼 LABORES DE LA CORTE (JOBS DE FARMEO PASIVO)
+# ==============================================================================
+JOBS_LIST = [
+    {
+        'id': 'patrol',
+        'title': 'Ronda de Guardia en los Jardines',
+        'description': 'Vigila los pabellones privados del harén imperial y ahuyenta a los espías nocturnos.',
+        'icon': '🗡️',
+        'duration_minutes': 30,
+        'gold_reward': 40,
+        'xp_reward': 15,
+        'min_level': 1,
+    },
+    {
+        'id': 'treasury',
+        'title': 'Auditoría en las Bóvedas del Tesoro',
+        'description': 'Contabiliza los tributos recolectados y acuña lingotes con el sello real.',
+        'icon': '💰',
+        'duration_minutes': 60,
+        'gold_reward': 95,
+        'xp_reward': 35,
+        'min_level': 2,
+    },
+    {
+        'id': 'cellar',
+        'title': 'Cata de Vinos en las Criptas Reales',
+        'description': 'Selecciona los mejores licores de la reserva personal de las concubinas favoritas.',
+        'icon': '🍷',
+        'duration_minutes': 120,
+        'gold_reward': 220,
+        'xp_reward': 70,
+        'min_level': 3,
+    },
+    {
+        'id': 'diplomacy',
+        'title': 'Misión Diplomática Encubierta',
+        'description': 'Negocia pactos y alianzas carnales con emisarios de reinos vecinos.',
+        'icon': '👑',
+        'duration_minutes': 240,
+        'gold_reward': 480,
+        'xp_reward': 150,
+        'min_level': 5,
+    },
+]
 
 def court_jobs_view(request):
     tg_id = get_safe_tg_id(request)
-    if not tg_id:
-        return redirect('/')
-
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
-
-    has_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
-    is_idol = (role_obj and role_obj.role == 'idol') or has_idols
-    role_key = 'idol' if is_idol else 'cliente'
-
+    
     active_job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
-    available_jobs = JOBS_CATALOG.get(role_key, JOBS_CATALOG['cliente'])
+    
+    now = timezone.now()
+    is_completed = False
+    time_remaining_seconds = 0
+    
+    if active_job:
+        if now >= active_job.finishes_at:
+            is_completed = True
+        else:
+            time_remaining_seconds = int((active_job.finishes_at - now).total_seconds())
 
     return render(request, 'economy/jobs.html', {
         'tg_id': tg_id,
         'wallet': wallet,
         'profile': profile,
-        'is_idol': is_idol,
+        'jobs': JOBS_LIST,
         'active_job': active_job,
-        'available_jobs': available_jobs,
+        'is_completed': is_completed,
+        'time_remaining_seconds': time_remaining_seconds,
     })
 
+
 def start_court_job(request):
-    if request.method == 'POST':
-        tg_id = get_safe_tg_id(request)
-        role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
-        has_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
-        is_idol = (role_obj and role_obj.role == 'idol') or has_idols
-        role_key = 'idol' if is_idol else 'cliente'
-
-        if CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).exists():
-            messages.error(request, "Ya tienes una labor en curso en el Reino.")
-            return redirect(f'/economy/jobs/?tg_id={tg_id}')
-
-        job_key = request.POST.get('job_key')
-        catalog = {j['key']: j for j in JOBS_CATALOG.get(role_key, [])}
-        job_info = catalog.get(job_key)
-
-        if not job_info:
-            messages.error(request, "Labor no válida.")
-            return redirect(f'/economy/jobs/?tg_id={tg_id}')
-
-        CourtJob.objects.create(
-            telegram_user_id=tg_id,
-            job_key=job_info['key'],
-            title=job_info['title'],
-            role_type=role_key,
-            duration_minutes=job_info['duration'],
-            finishes_at=timezone.now() + timedelta(minutes=job_info['duration']),
-            gold_reward=job_info['gold'],
-            xp_reward=job_info['xp']
-        )
-        messages.success(request, f"⏳ Has comenzado la labor: «{job_info['title']}».")
-
+    if request.method != 'POST':
+        return redirect('/economy/jobs/')
+        
+    tg_id = get_safe_tg_id(request)
+    job_id = request.POST.get('job_id')
+    
+    matched = next((j for j in JOBS_LIST if j['id'] == job_id), None)
+    if not matched:
+        messages.error(request, "La labor nobiliaria no existe.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        
+    # Verificar si ya tiene una activa sin cobrar
+    existing = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+    if existing:
+        messages.warning(request, "Ya te encuentras desempeñando una labor para la Corona.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    if profile.level < matched['min_level']:
+        messages.error(request, f"Se requiere Nivel {matched['min_level']} para acceder a esta tarea de la Corte.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        
+    duration = matched['duration_minutes']
+    
+    # BUFF CIERVO SAGRADO: Reducción del tiempo de labores en 15% / 25% / 35%
+    try:
+        pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+        if pet and pet.species == 'deer':
+            deer_reduction = {1: 0.85, 2: 0.75, 3: 0.65}.get(pet.evolution_stage_number, 0.85)
+            duration = max(5, int(round(duration * deer_reduction)))
+    except Exception:
+        pass
+        
+    finishes = timezone.now() + timedelta(minutes=duration)
+    
+    CourtJob.objects.create(
+        telegram_user_id=tg_id,
+        job_code=matched['id'],
+        title=matched['title'],
+        role_type=matched['id'],
+        gold_reward=matched['gold_reward'],
+        xp_reward=matched['xp_reward'],
+        finishes_at=finishes
+    )
+    
+    messages.success(request, f"⚔️ Has iniciado '{matched['title']}'. Regresa en {duration} minutos a reclamar tu paga.")
     return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
 
 def claim_court_job(request):
-    if request.method == 'POST':
-        tg_id = get_safe_tg_id(request)
-        job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
-
-        if not job or not job.is_finished():
-            messages.error(request, "Esta labor aún no ha finalizado.")
-            return redirect(f'/economy/jobs/?tg_id={tg_id}')
-
+    if request.method != 'POST':
+        return redirect('/economy/jobs/')
+        
+    tg_id = get_safe_tg_id(request)
+    job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+    
+    if not job:
+        messages.error(request, "No tienes ninguna labor pendiente por cobrar.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        
+    if timezone.now() < job.finishes_at:
+        messages.warning(request, "⏳ Aún no concluye el tiempo reglamentario de tu labor imperial.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        
+    with transaction.atomic():
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         wallet.add_funds(job.gold_reward)
-        grant_user_xp(request, tg_id, job.xp_reward, reason="Paga de Labor de Corte")
-
         job.is_claimed = True
-        job.save(update_fields=['is_claimed'])
-
-        messages.success(request, f"🪙 ¡Labor cumplida con honor! Has cobrado +{job.gold_reward} 🪙 y +{job.xp_reward} EXP.")
-
+        job.save()
+        
+        grant_user_xp(request, tg_id, job.xp_reward, reason="Paga de Labor de Corte")
+        
+    messages.success(request, f"💰 ¡Labor cumplida con honor! Has cobrado +{job.gold_reward} 🪙 y +{job.xp_reward} EXP nobiliaria.")
     return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
-def buy_collectible_action(request, item_id):
-    """Permite al usuario adquirir un artículo de la boutique con su oro."""
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
 
+# ==============================================================================
+# 🏺 BOUTIQUE REAL: COLECCIONABLES CON FOTOS REALES
+# ==============================================================================
+def buy_collectible_action(request, item_id):
+    if request.method != 'POST':
+        return redirect('/economy/bazar/')
+        
     tg_id = get_safe_tg_id(request)
     item = get_object_or_404(BazarCollectible, id=item_id, is_active=True)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-
-    if not item.is_in_stock:
-        return JsonResponse({'success': False, 'error': f'«{item.name}» está agotado actualmente.'}, status=400)
-
+    
+    if item.stock <= 0:
+        messages.error(request, f"¡Agotado! Las existencias de '{item.name}' se han agotado en el reino.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
     if wallet.balance < item.price:
-        return JsonResponse({'success': False, 'error': f'No tienes suficiente oro ({item.price} 🪙 necesarios).'}, status=400)
-
+        messages.error(request, f"Oro insuficiente. '{item.name}' cuesta {item.price} 🪙 y dispones de {wallet.balance} 🪙.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
     with transaction.atomic():
         wallet.remove_funds(item.price)
-
-        if item.stock > 0:
-            item.stock -= 1
-            item.save(update_fields=['stock'])
-
-        user_item, created = UserCollectible.objects.get_or_create(
+        item.stock -= 1
+        item.save()
+        
+        user_col, created = UserCollectible.objects.get_or_create(
             telegram_user_id=tg_id,
-            item=item,
-            defaults={'quantity': 1}
+            item=item
         )
         if not created:
-            user_item.quantity += 1
-            user_item.save(update_fields=['quantity'])
-
+            user_col.quantity += 1
+            user_col.save()
+            
         grant_user_xp(request, tg_id, max(10, item.price // 15), reason=f"Adquisición de {item.name}")
-
-    msg = f"🎉 ¡Has adquirido «{item.name}»! Ya forma parte de tu Vitrina Real."
-    return JsonResponse({
-        'success': True,
-        'message': msg,
-        'nuevo_saldo': wallet.balance,
-        'item_stock': item.stock
-    })
+        
+    messages.success(request, f"✨ ¡Adquirido! Ahora posees el coleccionable exclusivo '{item.name}'. Ha sido añadido a tus aposentos.")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
 def admin_add_collectible(request):
-    """Permite a la Corona y Staff subir cualquier artículo con foto desde la app."""
     tg_id = get_safe_tg_id(request)
     if not check_is_staff_or_admin(tg_id):
-        messages.error(request, "Acción reservada al Staff del Reino.")
+        messages.error(request, "Acceso reservado exclusivamente a la Corona y Administradores.")
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
-
+        
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
-        category = request.POST.get('category', 'figura')
+        category = request.POST.get('category', 'relic')
         idol_name = request.POST.get('idol_name', '').strip()
         description = request.POST.get('description', '').strip()
-        price = int(request.POST.get('price', 150))
-        stock = int(request.POST.get('stock', -1))
-        raw_image = request.FILES.get('image')
-
-        if not name or not raw_image:
-            messages.error(request, "Debes ingresar un nombre y adjuntar una imagen del artículo.")
-        else:
-            optimized_img = optimize_uploaded_image(raw_image)
-            BazarCollectible.objects.create(
-                name=name,
-                category=category,
-                idol_name=idol_name,
-                description=description,
-                price=max(10, price),
-                stock=stock,
-                image=optimized_img,
-                is_active=True
-            )
-            messages.success(request, f"✨ ¡Artículo «{name}» agregado a la Boutique Real!")
-
+        price = int(request.POST.get('price', 100))
+        stock = int(request.POST.get('stock', 10))
+        image_file = request.FILES.get('image')
+        
+        if not name or not image_file:
+            messages.error(request, "El nombre y la fotografía del coleccionable son obligatorios.")
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+            
+        optimized_img = optimize_uploaded_image(image_file, max_size=(1080, 1080), quality=88)
+        
+        BazarCollectible.objects.create(
+            name=name,
+            category=category,
+            idol_name=idol_name,
+            description=description,
+            price=price,
+            stock=stock,
+            image=optimized_img,
+            is_active=True
+        )
+        messages.success(request, f"🏺 ¡Coleccionable '{name}' añadido con éxito a la Boutique Imperial!")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
 def admin_delete_collectible(request, item_id):
-    """Retira un artículo de la venta pública."""
     tg_id = get_safe_tg_id(request)
     if not check_is_staff_or_admin(tg_id):
-        messages.error(request, "No tienes permisos de administración.")
+        messages.error(request, "Acceso reservado a la Corona.")
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
-
-    if request.method == 'POST':
-        item = get_object_or_404(BazarCollectible, id=item_id)
-        item_name = item.name
-        item.is_active = False
-        item.save(update_fields=['is_active'])
-        messages.info(request, f"🗑️ «{item_name}» retirado de la tienda.")
-
+        
+    item = get_object_or_404(BazarCollectible, id=item_id)
+    name = item.name
+    item.delete()
+    messages.info(request, f"Coleccionable '{name}' retirado de la exhibición.")
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
-# ==========================================
-# 🎟️ SISTEMA DE RASCA Y GANA CLANDESTINO (CALIBRADO)
-# ==========================================
+# ==============================================================================
+# 🎫 RASCA Y GANA CLANDESTINO (SCRATCH CARDS 3x3)
+# ==============================================================================
 SCRATCH_TIERS = {
     'bronze': {
         'name': 'Cartón de Bronce',
@@ -1202,24 +1223,37 @@ SCRATCH_TIERS = {
     },
 }
 
-# ⚖️ Símbolos con Pesos Probabilísticos Calibrados (Más dinámicos y divertidos)
+# ⚖️ Símbolos con Pesos Probabilísticos Calibrados (RTP ~91%)
 SCRATCH_SYMBOLS = {
-    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.0, 'weight': 46, 'color': '#c084fc'},     # Recupera costo (muy frecuente)
-    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 1.5, 'weight': 30, 'color': '#f43f5e'},      # Ganancia moderada
-    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 3.0, 'weight': 14, 'color': '#f59e0b'},  # Buen botín
-    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 6.0, 'weight': 6, 'color': '#60a5fa'},   # Gran premio
-    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 15.0, 'weight': 2, 'color': '#fbbf24'},  # Gran Jackpot
-    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 1.0, 'weight': 2, 'color': '#e879f9'}, # Carta al Álbum
+    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.0, 'weight': 40, 'color': '#c084fc'},     # Recupera costo
+    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 1.5, 'weight': 28, 'color': '#f43f5e'},      # Ganancia moderada
+    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 3.0, 'weight': 16, 'color': '#f59e0b'},  # Buen premio
+    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 6.0, 'weight': 8, 'color': '#60a5fa'},   # Premio mayor
+    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 15.0, 'weight': 3, 'color': '#fbbf24'},  # Gran Jackpot
+    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 1.0, 'weight': 3, 'color': '#e879f9'}, # Muy exclusiva
 }
 
+def scratch_card_view(request):
+    """Muestra la interfaz del Rasca y Gana Clandestino."""
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    
+    return render(request, 'economy/scratch.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'tiers': SCRATCH_TIERS,
+    })
+
+
 def scratch_card_play_ajax(request):
-    """Compra y genera la cuadrícula 3x3 del cartón vía AJAX con Sistema de Piedad."""
+    """Compra y genera la cuadrícula 3x3 del cartón vía AJAX con Pity System calibrado."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
 
     tg_id = get_safe_tg_id(request)
     tier_key = request.POST.get('tier', 'bronze').strip().lower()
-
     if tier_key not in SCRATCH_TIERS:
         return JsonResponse({'success': False, 'error': 'Cartón no válido.'}, status=400)
 
@@ -1228,7 +1262,7 @@ def scratch_card_play_ajax(request):
 
     try:
         with transaction.atomic():
-            wallet, _ = Wallet.objects.select_for_update().get_or_create(telegram_user_id=tg_id)
+            wallet = Wallet.objects.select_for_update().get(telegram_user_id=tg_id)
             profile, _ = UserProfile.objects.select_for_update().get_or_create(telegram_user_id=tg_id)
 
             if profile.level < cfg['min_level']:
@@ -1243,125 +1277,135 @@ def scratch_card_play_ajax(request):
                     'error': f"Oro insuficiente. Este cartón cuesta {cost} 🪙."
                 }, status=400)
 
-            # Descontar costo y acumular 8% en el Cofre del Mecenas
+            # Descontar costo y abonar al Cofre del Mecenas (8%)
             wallet.balance -= cost
             wallet.accumulate_patron_vault(cost)
             wallet.save()
             balance_after_cost = wallet.balance
 
-            # 🛡️ SISTEMA DE PIEDAD (Anti-Mala Racha)
-            streak_key = f'scratch_loss_streak_{tg_id}'
-            consecutive_losses = request.session.get(streak_key, 0)
+            # 🍀 SISTEMA DE PITY (Suerte Dinámica Anti-Rachas Negativas)
+            consecutive_losses = request.session.get("scratch_consecutive_losses", 0)
+            # Base 35% de probabilidad de victoria + 10% por cada derrota consecutiva (techo en 75%)
+            win_chance = min(0.75, 0.35 + (consecutive_losses * 0.10))
+            is_win = random.random() < win_chance
 
-            # Escalado de probabilidad de victoria según racha de derrotas
-            if consecutive_losses >= 4:
-                win_threshold = 1.00  # 🌟 ¡Victoria 100% garantizada tras 4-5 derrotas!
-            elif consecutive_losses == 3:
-                win_threshold = 0.80  # 80% de victoria
-            elif consecutive_losses == 2:
-                win_threshold = 0.55  # 55% de victoria
+            if is_win:
+                request.session["scratch_consecutive_losses"] = 0
             else:
-                win_threshold = 0.36  # 36% base (antes era 26%)
+                request.session["scratch_consecutive_losses"] = consecutive_losses + 1
 
-            is_win = random.random() < win_threshold
             symbols_keys = list(SCRATCH_SYMBOLS.keys())
-            weights = [SCRATCH_SYMBOLS[k]['weight'] for k in symbols_keys]
-
+            weights = [SCRATCH_SYMBOLS[k]["weight"] for k in symbols_keys]
             winning_key = None
             grid = []
             payout = 0
             photocard_won_data = None
 
             if is_win:
-                # Victoria conseguida: reiniciamos racha de derrotas
-                request.session[streak_key] = 0
-
                 winning_key = random.choices(symbols_keys, weights=weights, k=1)[0]
-                mult = SCRATCH_SYMBOLS[winning_key]['mult']
+                mult = SCRATCH_SYMBOLS[winning_key]["mult"]
                 payout = int(round(cost * mult))
 
-                # Entrega de Photocard si sale 🎴
-                if winning_key == 'photocard':
+                # Otorgar Photocard real verificando existencia
+                if winning_key == "photocard":
                     from idols.models import Photocard, UserPhotocard
-                    target_rarity = 'common'
-                    if tier_key == 'silver':
-                        target_rarity = random.choices(['rare', 'epic'], weights=[90, 10], k=1)[0]
-                    elif tier_key == 'gold':
-                        target_rarity = random.choices(['rare', 'epic', 'legendary'], weights=[80, 18, 2], k=1)[0]
+                    
+                    # Probabilidad noble de rarezas según tier
+                    target_rarity = "common"
+                    if tier_key == "bronze":
+                        target_rarity = "common"
+                    elif tier_key == "silver":
+                        target_rarity = random.choices(["rare", "epic"], weights=[90, 10], k=1)[0]
+                    elif tier_key == "gold":
+                        # Solo 2% de probabilidad de legendaria en Oro Real
+                        target_rarity = random.choices(["rare", "epic", "legendary"], weights=[80, 18, 2], k=1)[0]
 
-                    available_cards = list(Photocard.objects.filter(rarity=target_rarity).exclude(image=''))
+                    available_cards = list(Photocard.objects.filter(rarity=target_rarity).exclude(image=""))
+                    
+                    # Fallback si no hay cartas de esa rareza
                     if not available_cards:
-                        available_cards = list(Photocard.objects.exclude(image=''))
+                        available_cards = list(Photocard.objects.exclude(image=""))
 
                     if available_cards:
                         awarded_card = random.choice(available_cards)
                         UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=awarded_card)
                         photocard_won_data = {
-                            'name': awarded_card.name,
-                            'idol': awarded_card.display_idol_name,
-                            'rarity': awarded_card.get_rarity_display(),
-                            'image': awarded_card.image.url if awarded_card.image else '',
-                            'color': awarded_card.get_color_hex(),
+                            "name": awarded_card.name,
+                            "idol": awarded_card.display_idol_name,
+                            "rarity": awarded_card.get_rarity_display(),
+                            "image": awarded_card.image.url if awarded_card.image else "",
+                            "color": awarded_card.get_color_hex(),
                         }
-                        if awarded_card.rarity == 'legendary':
+
+                        if awarded_card.rarity == "legendary":
                             from django.conf import settings
-                            group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
+                            group_id = getattr(settings, "TELEGRAM_GROUP_ID", None)
                             if group_id:
                                 user_name = profile.username or f"Noble_{tg_id}"
+                                tier_display_name = cfg.get("name", "Cartón Imperial")
                                 send_telegram_msg(
                                     chat_id=group_id,
                                     text=(
                                         f"👑 <b>¡PHOTOCARD LEGENDARIA DESENTERRADA!</b>\n\n"
-                                        f"El noble <b>{user_name}</b> raspó el <i>{cfg['name']}</i> y reveló a <b>{awarded_card.name}</b> ({awarded_card.display_idol_name}) ✨"
+                                        f"El noble <b>{user_name}</b> raspó el <i>{tier_display_name}</i> y reveló a <b>{awarded_card.name}</b> ({awarded_card.display_idol_name}) ✨"
                                     ),
                                     button_text="🎰 Ir a Rasca y Gana",
                                     button_url="https://t.me/KingdomPleasure_bot?start=entrar"
                                 )
+
+                # 💎 GENERACIÓN SEGURA DE CASILLAS GANADORAS
+                # Exactamente 3 símbolos ganadores. Los 6 señuelos restantes NUNCA superan 2 copias de ninguno.
+                win_indices = set(random.sample(range(9), 3))
+                decoy_pool = [k for k in symbols_keys if k != winning_key]
+                chosen_sample = random.sample(decoy_pool, min(3, len(decoy_pool)))
+                decoy_list = (chosen_sample * 2)[:6]
+                random.shuffle(decoy_list)
+
+                decoy_i = 0
+                for i in range(9):
+                    if i in win_indices:
+                        s_data = SCRATCH_SYMBOLS[winning_key]
+                        grid.append({
+                            "key": winning_key,
+                            "symbol": s_data["symbol"],
+                            "name": s_data["name"],
+                            "color": s_data["color"],
+                            "is_winner": True
+                        })
                     else:
-                        payout += (cost * 2)
-
-                # 🛡️ Blindaje de cuadrícula ganadora (3 del ganador, sin tercias accidentales)
-                other_symbols = [k for k in symbols_keys if k != winning_key]
-                random.shuffle(other_symbols)
-                decoy_keys = [other_symbols[0], other_symbols[0], other_symbols[1], other_symbols[1], other_symbols[2], other_symbols[3]]
-                board_keys = [winning_key, winning_key, winning_key] + decoy_keys
-                random.shuffle(board_keys)
-
-                for k in board_keys:
-                    s_data = SCRATCH_SYMBOLS[k]
-                    grid.append({
-                        'key': k,
-                        'symbol': s_data['symbol'],
-                        'name': s_data['name'],
-                        'color': s_data['color'],
-                        'is_winner': (k == winning_key)
-                    })
+                        d_key = decoy_list[decoy_i]
+                        decoy_i += 1
+                        s_data = SCRATCH_SYMBOLS[d_key]
+                        grid.append({
+                            "key": d_key,
+                            "symbol": s_data["symbol"],
+                            "name": s_data["name"],
+                            "color": s_data["color"],
+                            "is_winner": False
+                        })
 
                 wallet.balance += payout
                 wallet.save()
                 grant_user_xp(request, tg_id, random.randint(2, 4), reason="Rasca y Gana Clandestino")
 
             else:
-                # Incrementamos contador de derrotas para activar la piedad en el siguiente
-                request.session[streak_key] = consecutive_losses + 1
-
-                # 🛡️ Blindaje de derrota: 3 pares y 3 únicos [2, 2, 2, 1, 1, 1] = 9 casillas
-                shuffled_pool = symbols_keys.copy()
-                random.shuffle(shuffled_pool)
-                pair1, pair2, pair3 = shuffled_pool[0], shuffled_pool[1], shuffled_pool[2]
-                single1, single2, single3 = shuffled_pool[3], shuffled_pool[4], shuffled_pool[5]
-
-                loss_keys = [pair1, pair1, pair2, pair2, pair3, pair3, single1, single2, single3]
+                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss") MATEMÁTICAMENTE IMPERMEABLE:
+                # 3 pares de símbolos (3 * 2 = 6 casillas) + 3 símbolos individuales (3 * 1 = 3 casillas) = 9 casillas.
+                # NINGÚN símbolo puede tener 3 copias jamás (0% riesgo de falsas victorias).
+                pair_keys = random.sample(symbols_keys, 3)
+                single_pool = [k for k in symbols_keys if k not in pair_keys]
+                single_keys = random.sample(single_pool, 3)
+                loss_keys = (pair_keys * 2) + single_keys
                 random.shuffle(loss_keys)
 
                 for k in loss_keys:
                     s_data = SCRATCH_SYMBOLS[k]
                     grid.append({
-                        'key': k,
-                        'symbol': s_data['symbol'],
-                        'name': s_data['name'],
-                        'color': s_data['color'],
-                        'is_winner': False
+                        "key": k,
+                        "symbol": s_data["symbol"],
+                        "name": s_data["name"],
+                        "color": s_data["color"],
+                        "is_winner": False
                     })
 
                 grant_user_xp(request, tg_id, 1, reason="Rasca y Gana Clandestino")
@@ -1380,8 +1424,6 @@ def scratch_card_play_ajax(request):
                 'patron_vault': wallet.patron_vault,
                 'serial': serial_num,
                 'tier_name': cfg['name'],
-                'cost': cost,
-                'tier': tier_key,
             })
 
     except Exception as e:
