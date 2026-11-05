@@ -2476,111 +2476,22 @@ ARCHIVO: .\economy\views.py
 ==================================================
 
 import random
-import os
-import sys
-from io import BytesIO
-from PIL import Image
-from urllib.parse import quote as encode_param
+from datetime import timedelta
 from django.shortcuts import render, redirect, get_object_or_404
-from django.db.models import Count, Q
-from django.http import JsonResponse
 from django.contrib import messages
-from django.db import transaction
-from django.conf import settings
-from django.core.files.storage import default_storage
-from django.core.files.uploadedfile import InMemoryUploadedFile
-
-from .models import (
-    IdolProfile, Review, Post, PostImage, PostUnlock, PostLike, 
-    CustomRequest, PostComment, PhotocardBox, Photocard, UserPhotocard, PhotocardTrade
-)
-from economy.models import Wallet
-from core.models import UserProfile, UserRole, KingdomSetting
-from core.utils import grant_user_xp
+from django.http import JsonResponse
+from django.utils import timezone
+from core.models import UserRole, UserProfile
+from idols.models import IdolProfile, IdolTribute
 from pets.models import Pet
+from core.utils import grant_user_xp
 from core.telegram_notify import send_telegram_msg
-from collections import Counter
+from .models import Wallet, UserInventoryItem, CourtJob, BazarCollectible, UserCollectible
+from idols.views import optimize_uploaded_image, check_is_staff_or_admin
+from django.db import transaction
 
-ADMIN_CORONA_ID = '7474444797'
-
-
-def check_is_staff_or_admin(tg_id):
-    """Verifica si el usuario es Corona, Admin o Moderador tanto por rol como por staff_role"""
-    if not tg_id:
-        return False
-    if str(tg_id) == ADMIN_CORONA_ID:
-        return True
-    role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
-    if not role_obj:
-        return False
-    
-    staff = getattr(role_obj, 'staff_role', 'none')
-    is_staff = (staff in ['admin', 'moderador']) or (role_obj.role in ['admin', 'moderador']) or getattr(role_obj, 'is_moderator', False)
-    return is_staff
-
-
-def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
-    """
-    Comprime y convierte imágenes a WebP ultraligero antes de guardar en almacenamiento.
-    Reduce el peso de ~2.5MB a ~80-120KB manteniendo nitidez en móviles.
-    """
-    if not file_obj:
-        return file_obj
-
-    try:
-        img = Image.open(file_obj)
-        
-        # Corregir orientación automática de cámaras de celular
-        try:
-            from PIL import ExifTags
-            for orientation in ExifTags.TAGS.keys():
-                if ExifTags.TAGS[orientation] == 'Orientation':
-                    break
-            exif = img._getexif()
-            if exif and orientation in exif:
-                if exif[orientation] == 3: img = img.rotate(180, expand=True)
-                elif exif[orientation] == 6: img = img.rotate(270, expand=True)
-                elif exif[orientation] == 8: img = img.rotate(90, expand=True)
-        except Exception:
-            pass
-
-        if img.width > max_dimension or img.height > max_dimension:
-            img.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
-
-        output = BytesIO()
-        has_alpha = img.mode in ('RGBA', 'LA') or ('transparency' in img.info)
-
-        if has_alpha:
-            img.save(output, format='WEBP', quality=quality, method=4)
-        else:
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
-            img.save(output, format='WEBP', quality=quality, method=4)
-
-        output.seek(0)
-        base_name = os.path.splitext(file_obj.name)[0]
-        filename = f"{base_name}.webp"
-
-        return InMemoryUploadedFile(
-            output,
-            'ImageField',
-            filename,
-            'image/webp',
-            output.getbuffer().nbytes,
-            None
-        )
-    except Exception as e:
-        print(f"⚠️ No se pudo comprimir la imagen a WebP: {e}")
-        return file_obj
-
-
-def resolve_safe_tg(request):
-    raw_id = (
-        request.POST.get('tg_id') or 
-        request.GET.get('tg_id') or 
-        request.COOKIES.get('tg_id') or 
-        request.session.get('tg_id')
-    )
+def get_safe_tg_id(request):
+    raw_id = request.POST.get('tg_id') or request.GET.get('tg_id') or request.session.get('tg_id')
     if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null']:
         try:
             val = int(raw_id)
@@ -2588,1874 +2499,1414 @@ def resolve_safe_tg(request):
             return val
         except (ValueError, TypeError):
             pass
-    return None
+    return request.session.get('tg_id', 123456789)
 
 
-def sync_user_profile(tg_id, username_raw):
-    if not tg_id or not username_raw or str(username_raw).strip() in ['', 'None', 'undefined']:
-        return None
-    
-    clean_username = str(username_raw).strip()
-    if not clean_username.startswith('@') and not clean_username.startswith('Noble_'):
-        clean_username = f"@{clean_username}"
-
-    profile, _ = UserProfile.objects.get_or_create(
-        telegram_user_id=tg_id,
-        defaults={'username': clean_username}
-    )
-    if clean_username and profile.username != clean_username:
-        profile.username = clean_username
-        profile.save(update_fields=['username'])
-    return profile
-
-
-def idol_list(request):
-    tg_id = resolve_safe_tg(request)
-    tg_username = request.POST.get('tg_username') or request.GET.get('tg_username') or ''
-
-    if not tg_id:
-        return redirect('/')
-
-    sync_user_profile(tg_id, tg_username)
-
-    UserRole.objects.get_or_create(telegram_id=tg_id, defaults={'role': 'idol', 'staff_role': 'none'})
-
-    if request.method == 'POST':
-        action = request.POST.get('action')
-        
-        if action == 'update_status':
-            idol_id = request.POST.get('idol_id')
-            new_status = request.POST.get('status')
-            if idol_id and new_status:
-                idol = IdolProfile.objects.filter(id=idol_id, telegram_user_id=tg_id).first()
-                if idol and idol.status != new_status:
-                    idol.status = new_status
-                    idol.save(update_fields=['status'])
-
-                    group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
-                    if group_id and new_status in ['online', 'antojos']:
-                        if new_status == 'online':
-                            status_text = (
-                                f"🟢 <b>¡Musa en los Aposentos Reales!</b> ✨\n\n"
-                                f"🌹 <b>{idol.stage_name}</b> se encuentra disponible para chatear y atender a los nobles de la corte.\n\n"
-                                f"¿Deseas iniciar una conversación privada?"
-                            )
-                            btn_text = f"💬 Hablar con {idol.stage_name}"
-                        else:
-                            status_text = (
-                                f"🔥 <b>¡Sesión de Antojos Abierta!</b> 🔞\n\n"
-                                f"🌹 <b>{idol.stage_name}</b> acaba de abrir su bandeja para peticiones especiales y fotos a pedido.\n\n"
-                                f"¡Haz tu solicitud antes de que se agoten los cupos!"
-                            )
-                            btn_text = f"💌 Pedir Antojo a {idol.stage_name}"
-
-                        send_telegram_msg(
-                            chat_id=group_id,
-                            text=status_text,
-                            button_text=btn_text,
-                            button_url="https://t.me/KingdomPleasure_bot?start=entrar"
-                        )
-
-            return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-            
-        elif action in ['accept_request', 'reject_request']:
-            req_id = request.POST.get('request_id')
-            req_obj = get_object_or_404(CustomRequest, id=req_id, idol__telegram_user_id=tg_id)
-            
-            if action == 'reject_request':
-                client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=req_obj.client_telegram_id)
-                client_wallet.add_funds(req_obj.bounty)
-                req_obj.status = 'rejected'
-                req_obj.save()
-                
-                send_telegram_msg(
-                    chat_id=req_obj.client_telegram_id,
-                    text=(
-                        f"⚠️ <b>Petición Especial Rechazada</b>\n\n"
-                        f"{req_obj.idol.stage_name} no pudo atender tu solicitud en este momento.\n"
-                        f"Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos a tu Bóveda."
-                    ),
-                    button_text="🪙 Revisar Mi Bóveda",
-                    button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={req_obj.client_telegram_id}"
-                )
-                messages.info(request, f"Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al cliente.")
-                
-            elif action == 'accept_request':
-                delivered_photo = request.FILES.get('delivered_photo')
-                if not delivered_photo:
-                    messages.error(request, "Debes adjuntar la foto para completar la entrega.")
-                else:
-                    req_obj.delivered_photo = optimize_uploaded_image(delivered_photo)
-                    req_obj.status = 'accepted'
-                    req_obj.save()
-                    
-                    idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-                    idol_wallet.add_funds(req_obj.bounty)
-                    grant_user_xp(request, tg_id, 25, reason="Entrega de Petición")
-                    
-                    send_telegram_msg(
-                        chat_id=req_obj.client_telegram_id,
-                        text=(
-                            f"✨ <b>¡Tu Petición ha sido entregada!</b>\n\n"
-                            f"🌹 <b>Musa:</b> {req_obj.idol.stage_name}\n"
-                            f"📝 <b>Detalle:</b> <i>«{req_obj.description}»</i>\n\n"
-                            f"La foto exclusiva ya se encuentra en tu Colección Privada."
-                        ),
-                        button_text="💎 Ver Mi Colección",
-                        button_url=f"https://kingdom-pleasure-app.onrender.com/idols/collection/?tg_id={req_obj.client_telegram_id}"
-                    )
-                    messages.success(request, f"¡Petición entregada con éxito! Recibiste +{req_obj.bounty} 🪙 (+25 EXP).")
-                    
-            return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-    
-    idols = list(IdolProfile.objects.filter(telegram_user_id=tg_id))
-    pending_requests = CustomRequest.objects.filter(
-        idol__telegram_user_id=tg_id,
-        status='pending'
-    ).select_related('idol')
-            
-    context = {
-        'idols': idols,
-        'can_add_more': len(idols) < 2,
-        'tg_id': tg_id,
-        'tg_username': tg_username,
-        'pending_requests': pending_requests
-    }
-    return render(request, 'idols/list.html', context)
-
-
-def idol_create(request):
-    tg_id = resolve_safe_tg(request)
-    if not tg_id:
-        return redirect('/')
-
-    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-    tg_username = request.POST.get('tg_username') or request.GET.get('tg_username') or (profile.username if profile else f"@{tg_id}")
-    
-    if not tg_username.startswith('@'):
-        tg_username = f"@{tg_username}"
-
-    if IdolProfile.objects.filter(telegram_user_id=tg_id).count() >= 2:
-        messages.error(request, "Ya has alcanzado el límite máximo de 2 Idols registradas.")
-        return redirect(f'/idols/?tg_id={tg_id}')
-
-    if request.method == 'POST':
-        stage_name = request.POST.get('stage_name', '').strip()
-        group = request.POST.get('group', '').strip()
-        bio = request.POST.get('bio', '').strip()
-        tagline = request.POST.get('tagline', '').strip()
-        aura_color = request.POST.get('aura_color', 'purple')
-        specialty = request.POST.get('specialty', '').strip()
-        welcome_message = request.POST.get('welcome_message', '').strip()
-        photo = optimize_uploaded_image(request.FILES.get('photo'))
-        banner = optimize_uploaded_image(request.FILES.get('banner'))
-        
-        try:
-            IdolProfile.objects.create(
-                telegram_user_id=tg_id,
-                owner_username=tg_username,
-                stage_name=stage_name,
-                group=group,
-                bio=bio,
-                tagline=tagline,
-                aura_color=aura_color,
-                specialty=specialty,
-                welcome_message=welcome_message,
-                photo=photo,
-                banner=banner
-            )
-            UserRole.objects.get_or_create(telegram_id=tg_id, defaults={'role': 'idol', 'staff_role': 'none'})
-            UserRole.objects.filter(telegram_id=tg_id).update(role='idol')
-
-            grant_user_xp(request, tg_id, 30, reason="Creación de Idol")
-
-            group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
-            if group_id:
-                welcome_txt = (
-                    f"👑 <b>¡NUEVA MUSA CONSAGRADA EN EL REINO!</b> 🌹\n\n"
-                    f"Demos la bienvenida a la deslumbrante <b>{stage_name}</b>" + (f" ({group})" if group else "") + f".\n"
-                    + (f"✨ <i>«{tagline}»</i>\n\n" if tagline else "\n") +
-                    f"Ingresa a la corte para conocer sus aposentos y brindarle tu primera ofrenda."
-                )
-                send_telegram_msg(
-                    chat_id=group_id,
-                    text=welcome_txt,
-                    button_text=f"🎭 Conocer a {stage_name}",
-                    button_url="https://t.me/KingdomPleasure_bot?start=entrar"
-                )
-
-            messages.success(request, f"✨ ¡{stage_name} ha sido registrada con éxito! (+30 EXP)")
-            return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-        except Exception as e:
-            messages.error(request, f"Error al registrar: {str(e)}")
-
-    return render(request, 'idols/form.html', {'tg_id': tg_id, 'tg_username': tg_username})
-
-
-def idol_edit(request, idol_id):
-    tg_id = resolve_safe_tg(request)
-    idol = get_object_or_404(IdolProfile, id=idol_id)
-    
-    is_admin = check_is_staff_or_admin(tg_id)
-
-    if tg_id != idol.telegram_user_id and not is_admin:
-        messages.error(request, "No tienes permiso para editar esta Idol.")
-        return redirect(f'/idols/?tg_id={tg_id}')
-        
-    if request.method == 'POST':
-        idol.stage_name = request.POST.get('stage_name', idol.stage_name).strip()
-        idol.group = request.POST.get('group', idol.group).strip()
-        idol.bio = request.POST.get('bio', idol.bio).strip()
-        idol.tagline = request.POST.get('tagline', idol.tagline).strip()
-        idol.status = request.POST.get('status', idol.status)
-        idol.aura_color = request.POST.get('aura_color', idol.aura_color)
-        idol.specialty = request.POST.get('specialty', idol.specialty).strip()
-        idol.welcome_message = request.POST.get('welcome_message', idol.welcome_message).strip()
-        
-        if 'photo' in request.FILES:
-            idol.photo = optimize_uploaded_image(request.FILES['photo'])
-        if 'banner' in request.FILES:
-            idol.banner = optimize_uploaded_image(request.FILES['banner'])
-            
-        idol.save()
-        messages.success(request, f"¡Perfil de {idol.stage_name} actualizado!")
-        return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
-        
-    return render(request, 'idols/form.html', {'idol': idol, 'tg_id': tg_id})
-
-
-def idol_delete(request, idol_id):
-    tg_id = resolve_safe_tg(request)
-    idol = get_object_or_404(IdolProfile, id=idol_id, telegram_user_id=tg_id)
-    
-    if request.method == 'POST':
-        idol.delete()
-        return redirect(f'/idols/?tg_id={tg_id}')
-        
-    return render(request, 'idols/confirm_delete.html', {'tg_id': tg_id, 'idol': idol})
-
-
-def idol_gallery(request):
-    tg_id = resolve_safe_tg(request)
-    sort_by = request.GET.get('sort', 'rating')
-    owner_filter = request.GET.get('owner', '').strip()
-
-    query = IdolProfile.objects.annotate(
-        total_unlocks=Count('posts__unlocks')
-    )
-
-    if owner_filter:
-        query = query.filter(owner_username__icontains=owner_filter)
-
-    all_idols = list(query)
-    max_unlocks = max([i.total_unlocks for i in all_idols], default=0)
-
-    for idol in all_idols:
-        idol.is_trending = (max_unlocks > 0 and idol.total_unlocks == max_unlocks)
-        idol.is_top_rated = (idol.rating >= 4.80 and idol.services_done >= 2)
-
-    def get_sort_key(item):
-        is_feat = 1 if item.is_featured else 0
-        if sort_by == 'owner':
-            return (is_feat, str(item.owner_username).lower(), item.stage_name.lower())
-        elif sort_by == 'services':
-            return (is_feat, item.services_done, float(item.rating))
-        elif sort_by == 'recent':
-            return (is_feat, item.created_at)
-        else: # rating
-            return (is_feat, float(item.rating), item.total_unlocks)
-
-    all_idols.sort(key=get_sort_key, reverse=True)
-    all_owners = list(IdolProfile.objects.exclude(owner_username__isnull=True).exclude(owner_username='').values_list('owner_username', flat=True).distinct())
-
-    return render(request, 'idols/gallery.html', {
-        'all_idols': all_idols,
-        'tg_id': tg_id,
-        'sort_by': sort_by,
-        'owner_filter': owner_filter,
-        'all_owners': all_owners,
-    })
-
-
-def idol_detail(request, idol_id):
-    tg_id = resolve_safe_tg(request)
-    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
-    tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or (profile.username if profile else 'Noble')
-    
-    idol = get_object_or_404(IdolProfile, id=idol_id)
-    reviews = idol.reviews.all()
-    recent_posts = idol.posts.all().order_by('-created_at')[:6]
-    
-    unlocked_ids = []
-    if tg_id:
-        unlocked_ids = list(PostUnlock.objects.filter(
-            client_telegram_id=tg_id,
-            post__idol=idol
-        ).values_list('post_id', flat=True))
-        
-        if tg_id == idol.telegram_user_id:
-            unlocked_ids = list(recent_posts.values_list('id', flat=True))
-
-    total_sales = PostUnlock.objects.filter(post__idol=idol).count()
-    is_top_rated = (idol.rating >= 4.80 and idol.services_done >= 2)
-    is_trending = (total_sales >= 3)
-    
-    if request.method == 'POST':
-        try:
-            rating_val = int(request.POST.get('rating', 5))
-            comment_val = request.POST.get('comment', '').strip()
-            
-            if not comment_val:
-                messages.error(request, "Debes escribir un comentario sobre la atención.")
-            elif rating_val < 1 or rating_val > 5:
-                messages.error(request, "La calificación debe ser entre 1 y 5 estrellas.")
-            elif tg_id and tg_id == idol.telegram_user_id:
-                messages.error(request, "No puedes calificar a tu propia Idol.")
-            else:
-                Review.objects.create(
-                    idol=idol,
-                    client_telegram_id=tg_id if tg_id else 0,
-                    client_username=tg_username,
-                    rating=rating_val,
-                    comment=comment_val
-                )
-                grant_user_xp(request, tg_id, 15, reason="Reseña de Idol")
-                grant_user_xp(None, idol.telegram_user_id, 20 if rating_val == 5 else 10, reason="Calificación Recibida")
-                
-                send_telegram_msg(
-                    chat_id=idol.telegram_user_id,
-                    text=(
-                        f"⭐ <b>¡Nueva Reseña para {idol.stage_name}!</b>\n\n"
-                        f"👤 <b>Usuario:</b> {tg_username}\n"
-                        f"✨ <b>Puntuación:</b> {rating_val}★\n"
-                        f"💬 <i>«{comment_val}»</i>"
-                    ),
-                    button_text=f"🌹 Ver Perfil de {idol.stage_name}",
-                    button_url=f"https://kingdom-pleasure-app.onrender.com/idols/{idol.id}/?tg_id={idol.telegram_user_id}"
-                )
-                messages.success(request, "¡Tu reseña fue publicada con éxito (+15 EXP)!")
-        except Exception as e:
-            messages.error(request, f"Error al procesar reseña: {str(e)}")
-
-        return redirect(f'/idols/{idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-
-    context = {
-        'idol': idol,
-        'reviews': reviews,
-        'recent_posts': recent_posts,
-        'unlocked_ids': unlocked_ids,
-        'is_top_rated': is_top_rated,
-        'is_trending': is_trending,
-        'total_sales': total_sales,
-        'tg_id': tg_id,
-        'tg_username': tg_username,
-    }
-    return render(request, 'idols/detail.html', context)
-
-
-def social_feed(request):
-    tg_id = resolve_safe_tg(request)
-    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
-    tg_username = request.GET.get('tg_username') or (profile.username if profile else 'Noble')
-    
-    # Prefetch optimizado de comentarios, fotos de carrusel y likes
-    posts = Post.objects.all().select_related('idol').prefetch_related(
-        'comments', 'gallery', 'user_likes'
-    )
-
-    idol_filter_id = request.GET.get('idol_id')
-    filtered_idol = None
-    if idol_filter_id and str(idol_filter_id).isdigit():
-        filtered_idol = IdolProfile.objects.filter(id=int(idol_filter_id)).first()
-        if filtered_idol:
-            posts = posts.filter(idol=filtered_idol)
-
-    unlocked_ids = []
-    liked_ids = []
-    user_reactions = {}
-    is_admin = check_is_staff_or_admin(tg_id)
-    
-    if tg_id:
-        pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
-        propios = list(Post.objects.filter(idol__telegram_user_id=tg_id).values_list('id', flat=True))
-        unlocked_ids = set(pagados + propios)
-        
-        user_likes_objs = PostLike.objects.filter(client_telegram_id=tg_id)
-        liked_ids = list(user_likes_objs.values_list('post_id', flat=True))
-        user_reactions = {like.post_id: getattr(like, 'reaction_type', 'like') for like in user_likes_objs}
-
-    theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
-    feed_theme = {
-        'is_active': theme_active,
-        'title': KingdomSetting.get_val('feed_theme_title', 'Temática Semanal'),
-        'message': KingdomSetting.get_val('feed_theme_message', ''),
-        'banner_url': KingdomSetting.get_val('feed_theme_banner', '')
-    }
-        
-    return render(request, 'idols/feed.html', {
-        'posts': posts,
-        'tg_id': tg_id,
-        'unlocked_ids': list(unlocked_ids),
-        'liked_ids': liked_ids,
-        'user_reactions': user_reactions,
-        'tg_username': tg_username,
-        'is_admin': is_admin,
-        'feed_theme': feed_theme,
-        'filtered_idol': filtered_idol,
-    })
-
-
-def delete_post(request, post_id):
-    tg_id = resolve_safe_tg(request)
-    post = get_object_or_404(Post, id=post_id)
-    
-    is_admin = check_is_staff_or_admin(tg_id)
-    is_owner = (tg_id == post.idol.telegram_user_id)
-
-    if not (is_admin or is_owner):
-        messages.error(request, "No tienes permiso para eliminar esta publicación.")
-        return redirect(f'/idols/feed/?tg_id={tg_id}')
-
-    if request.method == 'POST':
-        post.delete()
-        messages.success(request, "🗑️ Publicación eliminada del Muro con éxito.")
-        
-    return redirect(f'/idols/feed/?tg_id={tg_id}')
-
-
-def edit_post(request, post_id):
-    tg_id = resolve_safe_tg(request)
-    post = get_object_or_404(Post, id=post_id)
-    
-    is_admin = check_is_staff_or_admin(tg_id)
-    is_owner = (tg_id == post.idol.telegram_user_id)
-
-    if not (is_admin or is_owner):
-        messages.error(request, "No tienes permiso para editar esta publicación.")
-        return redirect(f'/idols/feed/?tg_id={tg_id}')
-
-    creator_profile = UserProfile.objects.filter(telegram_user_id=post.idol.telegram_user_id).first()
-    max_price = creator_profile.max_post_price_allowed if creator_profile else 100
-
-    if request.method == 'POST':
-        post.caption = request.POST.get('caption', '').strip()
-        network = request.POST.get('network', post.network)
-        price = request.POST.get('price', post.price)
-
-        if 'image' in request.FILES:
-            post.image = optimize_uploaded_image(request.FILES['image'])
-            post.video = None
-        elif 'video' in request.FILES:
-            post.video = request.FILES['video']
-            post.image = None
-
-        post.network = network
-        if network == 'fans':
-            try:
-                p_val = int(price)
-                post.price = min(p_val, max_price) if not is_admin else p_val
-            except ValueError:
-                pass
-        else:
-            post.price = 0
-
-        post.save()
-        messages.success(request, "✨ Publicación actualizada con éxito.")
-        return redirect(f'/idols/feed/?tg_id={tg_id}')
-
-    return render(request, 'idols/edit_post.html', {
-        'post': post,
-        'tg_id': tg_id,
-        'max_price': max_price,
-        'is_admin': is_admin
-    })
-
-
-def unlock_post(request, post_id):
-    """Desbloqueo de publicaciones VIP (soporta tanto envío normal como AJAX sin recarga)."""
-    if request.method == 'POST':
-        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
-        tg_id = resolve_safe_tg(request)
-        post = get_object_or_404(Post, id=post_id)
-        
-        if tg_id and tg_id == post.idol.telegram_user_id:
-            if is_ajax:
-                return JsonResponse({
-                    'success': True,
-                    'already_unlocked': True,
-                    'media_urls': post.all_images,
-                    'is_video': post.is_video,
-                    'video_url': post.video.url if post.video else ''
-                })
-            messages.info(request, "Esta publicación es de tu Idol, ya la tienes desbloqueada.")
-            return redirect(f'/idols/feed/?tg_id={tg_id}')
-        
-        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-        
-        if post.network == 'fans':
-            pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-            precio_final = post.price
-
-            if pet and pet.species == 'viper':
-                discount_rates = {1: 0.85, 2: 0.78, 3: 0.70}
-                rate = discount_rates.get(pet.evolution_stage_number, 0.85)
-                precio_final = max(1, int(post.price * rate))
-
-            if wallet.balance >= precio_final:
-                wallet.remove_funds(precio_final)
-                
-                if pet and pet.species == 'scorpion':
-                    cb_rates = {1: 0.05, 2: 0.10, 3: 0.15}
-                    reembolso = int(precio_final * cb_rates.get(pet.evolution_stage_number, 0.05))
-                    if reembolso > 0:
-                        wallet.add_funds(reembolso)
-
-                PostUnlock.objects.get_or_create(post=post, client_telegram_id=tg_id)
-                
-                idol_profile = UserProfile.objects.filter(telegram_user_id=post.idol.telegram_user_id).first()
-                tasa_idol = idol_profile.idol_commission_rate if idol_profile else 0.85
-                ganancia_idol = int(precio_final * tasa_idol)
-                
-                idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
-                idol_wallet.add_funds(ganancia_idol)
-                
-                grant_user_xp(request, tg_id, max(5, precio_final // 10), reason="Desbloqueo VIP")
-                grant_user_xp(None, post.idol.telegram_user_id, max(5, precio_final // 10), reason="Venta de Contenido VIP")
-
-                client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-                comprador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
-                
-                send_telegram_msg(
-                    chat_id=post.idol.telegram_user_id,
-                    text=(
-                        f"💎 <b>¡Venta VIP en KingdomFans!</b>\n\n"
-                        f"🌹 <b>Musa:</b> {post.idol.stage_name}\n"
-                        f"👤 <b>Comprador:</b> {comprador}\n"
-                        f"🪙 <b>Precio:</b> {precio_final} 🪙\n"
-                        f"💰 <b>Ganancia neta:</b> <b>+{ganancia_idol} 🪙</b> ({int(tasa_idol*100)}%)\n\n"
-                        f"Tu oro ya se encuentra disponible en tu Bóveda."
-                    ),
-                    button_text="🪙 Ver Mi Bóveda",
-                    button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={post.idol.telegram_user_id}"
-                )
-                
-                desc_txt = f" (con descuento por tu {pet.evolved_name})" if (pet and pet.species == 'viper') else ""
-                
-                if is_ajax:
-                    return JsonResponse({
-                        'success': True,
-                        'new_balance': wallet.balance,
-                        'precio_pagado': precio_final,
-                        'media_urls': post.all_images,
-                        'is_video': post.is_video,
-                        'video_url': post.video.url if post.video else '',
-                        'message': f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt})"
-                    })
-                messages.success(request, f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt})")
-            else:
-                if is_ajax:
-                    return JsonResponse({'success': False, 'error': 'No tienes suficiente oro en tu Bóveda.'}, status=400)
-                messages.error(request, "No tienes suficiente oro en tu Bóveda.")
-        else:
-            if is_ajax:
-                return JsonResponse({
-                    'success': True,
-                    'media_urls': post.all_images,
-                    'is_video': post.is_video,
-                    'video_url': post.video.url if post.video else ''
-                })
-                
-        return redirect(f'/idols/feed/?tg_id={tg_id}')
-
-
-def create_post(request):
-    """Creación de posts con soporte para carruseles de 1 a 5 fotografías."""
-    tg_id = resolve_safe_tg(request)
-    mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id)
-    
-    if not mis_idols.exists():
-        messages.error(request, "Debes registrar al menos una Idol antes de publicar.")
-        return redirect(f'/idols/?tg_id={tg_id}')
-        
-    creator_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-    max_price = creator_profile.max_post_price_allowed if creator_profile else 100
-
-    if request.method == 'POST':
-        idol_id = request.POST.get('idol_id')
-        network = request.POST.get('network')
-        caption = request.POST.get('caption', '').strip()
-        media_type = request.POST.get('media_type', 'image')
-        
-        # Múltiples fotos para carrusel o foto simple tradicional
-        raw_images = request.FILES.getlist('images')
-        if not raw_images and request.FILES.get('image'):
-            raw_images = [request.FILES.get('image')]
-            
-        raw_video = request.FILES.get('video')
-        price = request.POST.get('price', 50)
-
-        if not price or str(price).strip() == '':
-            price = 50
-        
-        try:
-            idol = mis_idols.get(id=idol_id)
-
-            if media_type == 'video':
-                if not raw_video:
-                    messages.error(request, "Debes adjuntar un archivo de video (MP4 o WebM).")
-                    return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
-                post_image = None
-                post_video = raw_video
-            else:
-                if not raw_images:
-                    messages.error(request, "Debes adjuntar al menos una fotografía.")
-                    return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
-                # Primera foto como portada principal del post
-                post_image = optimize_uploaded_image(raw_images[0])
-                post_video = None
-
-            if network == 'fans' and int(price) > max_price:
-                messages.error(request, f"Tu rango actual solo permite fijar precios de hasta {max_price} 🪙 por publicación.")
-            else:
-                new_post = Post.objects.create(
-                    idol=idol,
-                    network=network,
-                    caption=caption,
-                    image=post_image,
-                    video=post_video,
-                    price=int(price) if network == 'fans' else 0
-                )
-                
-                # Guardar fotos complementarias para el carrusel (fotos 2 a 5)
-                if media_type != 'video' and len(raw_images) > 1:
-                    for idx, extra_img in enumerate(raw_images[1:5], start=1):
-                        opt_extra = optimize_uploaded_image(extra_img)
-                        PostImage.objects.create(post=new_post, image=opt_extra, order=idx)
-
-                xp_awarded = 25 if len(raw_images) > 1 else (20 if media_type == 'video' else 15)
-                grant_user_xp(request, tg_id, xp_awarded, reason="Nuevo Post Publicado")
-
-                # Notificación al Grupo Oficial de Telegram
-                group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
-                if group_id:
-                    clean_caption = (caption[:110] + '...') if len(caption) > 110 else caption
-                    multi_tag = f" 📸 ({len(raw_images)} Fotos)" if len(raw_images) > 1 else ""
-                    if network == 'fans':
-                        post_text = (
-                            f"🔞 <b>¡Nueva Sesión VIP en KingdomFans!</b> 💎\n\n"
-                            f"🌹 <b>Musa:</b> {idol.stage_name} ({idol.group or 'Solista'}){multi_tag}\n"
-                            f"🪙 <b>Tarifa:</b> <b>{price} 🪙</b>\n"
-                            f"📝 <i>«{clean_caption}»</i>\n\n"
-                            f"Cruza el umbral para desbloquear el contenido exclusivo para tu Colección."
-                        )
-                        btn_label = f"💎 Ver Contenido de {idol.stage_name}"
-                    else:
-                        post_text = (
-                            f"📸 <b>¡Nueva Publicación en KingdomGram!</b> ✨\n\n"
-                            f"🌹 <b>Musa:</b> {idol.stage_name} ({idol.group or 'Solista'}){multi_tag}\n"
-                            f"📝 <i>«{clean_caption}»</i>\n\n"
-                            f"Visita el Muro para admirar la sesión y dejarle tus halagos."
-                        )
-                        btn_label = f"📱 Ver Muro de {idol.stage_name}"
-
-                    send_telegram_msg(
-                        chat_id=group_id,
-                        text=post_text,
-                        button_text=btn_label,
-                        button_url="https://t.me/KingdomPleasure_bot?start=entrar"
-                    )
-
-                messages.success(request, f"¡Publicación realizada exitosamente como {idol.stage_name}!")
-                return redirect(f'/idols/feed/?tg_id={tg_id}')
-                
-        except IdolProfile.DoesNotExist:
-            messages.error(request, "Idol seleccionada inválida.")
-        except ValueError:
-            messages.error(request, "El precio ingresado no es válido.")
-            
-    return render(request, 'idols/create_post.html', {'tg_id': tg_id, 'mis_idols': mis_idols, 'max_price': max_price})
-
-
-def toggle_like(request, post_id):
-    """Mantiene compatibilidad con el endpoint anterior de Like simple."""
-    if request.method == 'POST':
-        tg_id = resolve_safe_tg(request)
-        if not tg_id:
-            return JsonResponse({'error': 'No user ID provided'}, status=400)
-            
-        post = get_object_or_404(Post, id=post_id)
-        existing_like = PostLike.objects.filter(post=post, client_telegram_id=tg_id).first()
-        
-        if existing_like:
-            existing_like.delete()
-            if post.likes > 0:
-                post.likes -= 1
-                post.save()
-            liked = False
-        else:
-            PostLike.objects.create(post=post, client_telegram_id=tg_id, reaction_type='like')
-            post.likes += 1
-            post.save()
-            liked = True
-            grant_user_xp(request, tg_id, 2, reason="Me Gusta en Muro")
-            
-        return JsonResponse({'liked': liked, 'likes': post.likes})
-        
-    return JsonResponse({'error': 'Invalid method'}, status=405)
-
-
-def toggle_reaction(request, post_id):
-    """
-    Gestiona la Barra de Reacciones V.I.P de la Corte (❤️, 🔥, 👑, 🥂, 🤤).
-    Permite alternar o cambiar de reacción dinámicamente con respuesta JSON.
-    """
-    if request.method == 'POST':
-        tg_id = resolve_safe_tg(request)
-        if not tg_id:
-            return JsonResponse({'success': False, 'error': 'No user ID provided'}, status=400)
-            
-        post = get_object_or_404(Post, id=post_id)
-        reaction = request.POST.get('reaction', 'like').strip()
-        allowed = ['like', 'fire', 'crown', 'toast', 'drool']
-        if reaction not in allowed:
-            reaction = 'like'
-
-        existing_like = PostLike.objects.filter(post=post, client_telegram_id=tg_id).first()
-        
-        if existing_like:
-            if existing_like.reaction_type == reaction:
-                existing_like.delete()
-                if post.likes > 0:
-                    post.likes -= 1
-                    post.save()
-                active = False
-                current_reaction = None
-            else:
-                existing_like.reaction_type = reaction
-                existing_like.save()
-                active = True
-                current_reaction = reaction
-        else:
-            PostLike.objects.create(post=post, client_telegram_id=tg_id, reaction_type=reaction)
-            post.likes += 1
-            post.save()
-            active = True
-            current_reaction = reaction
-            grant_user_xp(request, tg_id, 2, reason="Reacción en Muro")
-
-        counts = {}
-        for r_code in allowed:
-            counts[r_code] = PostLike.objects.filter(post=post, reaction_type=r_code).count()
-
-        return JsonResponse({
-            'success': True,
-            'active': active,
-            'current_reaction': current_reaction,
-            'total_likes': post.likes,
-            'counts': counts
-        })
-        
-    return JsonResponse({'error': 'Invalid method'}, status=405)
-
-
-def my_collection(request):
-    tg_id = resolve_safe_tg(request)
-    unlocked_posts = []
-    delivered_antojos = []
-    
-    if tg_id:
-        unlocked_posts = Post.objects.filter(
-            unlocks__client_telegram_id=tg_id
-        ).select_related('idol').order_by('-unlocks__unlocked_at')
-        
-        delivered_antojos = CustomRequest.objects.filter(
-            client_telegram_id=tg_id,
-            status='accepted'
-        ).exclude(delivered_photo='').select_related('idol').order_by('-created_at')
-        
-    return render(request, 'idols/collection.html', {
-        'tg_id': tg_id, 
-        'posts': unlocked_posts,
-        'antojos': delivered_antojos,
-        'total_items': len(unlocked_posts) + len(delivered_antojos)
-    })
-
-
-def send_tip(request, post_id):
-    """Brindis / Propina para la Musa (soporta AJAX para lluvia de monedas en vivo)."""
-    if request.method == 'POST':
-        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
-        tg_id = resolve_safe_tg(request)
-        post = get_object_or_404(Post, id=post_id)
-        
-        try:
-            amount = int(request.POST.get('tip_amount', 0))
-        except ValueError:
-            amount = 0
-            
-        if amount <= 0:
-            if is_ajax:
-                return JsonResponse({'success': False, 'error': 'El monto del brindis debe ser mayor a 0.'}, status=400)
-            messages.error(request, "El monto del brindis debe ser mayor a 0.")
-            return redirect(f'/idols/feed/?tg_id={tg_id}')
-            
-        if tg_id and tg_id == post.idol.telegram_user_id:
-            if is_ajax:
-                return JsonResponse({'success': False, 'error': 'No puedes enviarte ofrendas a ti mismo.'}, status=400)
-            messages.info(request, "No puedes enviarte ofrendas a ti mismo.")
-            return redirect(f'/idols/feed/?tg_id={tg_id}')
-            
-        client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-        
-        if client_wallet.remove_funds(amount):
-            comision = int(amount * 0.10)
-            neto_idol = amount - comision
-            
-            pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-            if pet and pet.species == 'scorpion':
-                cb_rates = {1: 0.05, 2: 0.10, 3: 0.15}
-                reembolso = int(amount * cb_rates.get(pet.evolution_stage_number, 0.05))
-                if reembolso > 0:
-                    client_wallet.add_funds(reembolso)
-
-            idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
-            idol_wallet.add_funds(neto_idol)
-            
-            grant_user_xp(request, tg_id, max(2, amount // 20), reason="Ofrenda a Musa")
-            grant_user_xp(None, post.idol.telegram_user_id, max(2, amount // 20), reason="Ofrenda Recibida")
-
-            client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-            invitador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
-            
-            send_telegram_msg(
-                chat_id=post.idol.telegram_user_id,
-                text=(
-                    f"🥂 <b>¡Te han invitado un trago Real!</b>\n\n"
-                    f"🌹 <b>Para tu Musa:</b> {post.idol.stage_name}\n"
-                    f"👤 <b>De parte de:</b> {invitador}\n"
-                    f"🪙 <b>Ofrenda:</b> +{neto_idol} 🪙 netos directos a tu Bóveda."
-                ),
-                button_text="🥂 Ver Mi Bóveda",
-                button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={post.idol.telegram_user_id}"
-            )
-            msg = f"🥂 ¡Le has invitado un trago de {amount} 🪙 a {post.idol.stage_name}!"
-            if is_ajax:
-                return JsonResponse({
-                    'success': True,
-                    'new_balance': client_wallet.balance,
-                    'amount': amount,
-                    'message': msg
-                })
-            messages.success(request, msg)
-        else:
-            if is_ajax:
-                return JsonResponse({'success': False, 'error': 'No tienes suficiente oro en tu Bóveda.'}, status=400)
-            messages.error(request, "No tienes suficiente oro en tu Bóveda.")
-            
-        return redirect(f'/idols/feed/?tg_id={tg_id}')
-
-
-def create_custom_request(request, idol_id):
-    if request.method == 'POST':
-        tg_id = resolve_safe_tg(request)
-        profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
-        tg_username = request.POST.get('tg_username') or (profile.username if profile else 'Noble')
-        idol = get_object_or_404(IdolProfile, id=idol_id)
-        
-        if tg_id and tg_id == idol.telegram_user_id:
-            messages.error(request, "No puedes solicitarte una petición a ti misma.")
-            return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
-
-        try:
-            bounty = int(request.POST.get('bounty', 100))
-        except ValueError:
-            bounty = 100
-            
-        description = request.POST.get('description', '').strip()
-        if bounty < 100 or not description:
-            messages.error(request, "La ofrenda mínima para un antojo es de 100 🪙 y requiere una descripción.")
-            return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
-            
-        client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-        if not client_wallet.remove_funds(bounty):
-            messages.error(request, f"No tienes suficiente oro ({bounty} 🪙) en tu Bóveda.")
-            return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
-
-        from economy.models import UserInventoryItem
-        has_priority_stamp = UserInventoryItem.consume_item(tg_id, 'priority_antojo', 1)
-            
-        CustomRequest.objects.create(
-            idol=idol,
-            client_telegram_id=tg_id,
-            client_username=tg_username,
-            description=description,
-            bounty=bounty,
-            is_priority=has_priority_stamp,
-            status='pending'
-        )
-
-        extra_pri_msg = "⚡ (¡Sello Prioritario aplicado! Tu solicitud aparecerá primera en su bandeja)" if has_priority_stamp else ""
-
-        send_telegram_msg(
-            chat_id=idol.telegram_user_id,
-            text=(
-                f"{'⚡ <b>¡PETICIÓN PRIORITARIA DE ANTOJO!</b> ⚡' if has_priority_stamp else '📬 <b>¡Nueva Petición Especial!</b>'}\n\n"
-                f"🌹 <b>Para tu Musa:</b> {idol.stage_name}\n"
-                f"👤 <b>Solicitante:</b> {tg_username}\n"
-                f"🪙 <b>Recompensa en custodia:</b> <b>+{bounty} 🪙</b>\n"
-                f"📝 <b>Detalle:</b> <i>«{description}»</i>\n\n"
-                f"Ingresa a tu panel de Idols para atenderla."
-            ),
-            button_text=f"📸 Atender Petición de {idol.stage_name}",
-            button_url=f"https://kingdom-pleasure-app.onrender.com/idols/?tg_id={idol.telegram_user_id}"
-        )
-        messages.success(request, f"¡Petición enviada a {idol.stage_name}! Tu oro quedó en custodia. {extra_pri_msg}")
-        
-    return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
-
-
-def add_comment(request, post_id):
-    """Comentarios en el Muro (soporta inserción en vivo vía AJAX con insignias nobiliarias)."""
-    if request.method == 'POST':
-        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
-        tg_id = resolve_safe_tg(request)
-        profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
-        tg_username = request.POST.get('tg_username') or (profile.username if profile else 'Noble')
-        text = request.POST.get('text', '').strip()
-        parent_id = request.POST.get('parent_id')
-        post = get_object_or_404(Post, id=post_id)
-        
-        if text:
-            nombre_final = f"{post.idol.stage_name} (Idol)" if (tg_id and tg_id == post.idol.telegram_user_id) else tg_username
-            
-            parent_comment = None
-            if parent_id and str(parent_id).isdigit():
-                parent_comment = PostComment.objects.filter(id=int(parent_id), post=post).first()
-
-            is_vip = bool(profile and profile.has_vip_badge)
-
-            new_comment = PostComment.objects.create(
-                post=post,
-                parent=parent_comment,
-                author_telegram_id=tg_id if tg_id else 0,
-                author_name=nombre_final,
-                is_vip_author=is_vip,
-                text=text
-            )
-            grant_user_xp(request, tg_id, 3, reason="Comentario en Muro")
-
-            if parent_comment and parent_comment.author_telegram_id and parent_comment.author_telegram_id != tg_id:
-                send_telegram_msg(
-                    chat_id=parent_comment.author_telegram_id,
-                    text=(
-                        f"💬 <b>¡Respondieron a tu comentario!</b>\n\n"
-                        f"👤 <b>{nombre_final}</b> te respondió en la publicación de {post.idol.stage_name}:\n"
-                        f"<i>«{text}»</i>"
-                    ),
-                    button_text="📱 Ver Respuesta",
-                    button_url=f"https://kingdom-pleasure-app.onrender.com/idols/feed/?tg_id={parent_comment.author_telegram_id}"
-                )
-            elif tg_id != post.idol.telegram_user_id:
-                send_telegram_msg(
-                    chat_id=post.idol.telegram_user_id,
-                    text=(
-                        f"💬 <b>¡Nuevo halago para tu Musa {post.idol.stage_name}!</b>\n\n"
-                        f"👤 <b>Usuario:</b> {nombre_final}\n"
-                        f"📝 <i>«{text}»</i>"
-                    ),
-                    button_text="📱 Ver Publicación",
-                    button_url=f"https://kingdom-pleasure-app.onrender.com/idols/feed/?tg_id={post.idol.telegram_user_id}"
-                )
-
-            if is_ajax:
-                author_title = getattr(profile, 'title', '') if profile else ''
-                author_level = getattr(profile, 'level', 1) if profile else 1
-                avatar_frame = getattr(profile, 'active_avatar_frame', '') if profile else ''
-                return JsonResponse({
-                    'success': True,
-                    'comment': {
-                        'id': new_comment.id,
-                        'parent_id': parent_comment.id if parent_comment else None,
-                        'author_name': new_comment.author_name,
-                        'is_vip_author': new_comment.is_vip_author,
-                        'author_level': author_level,
-                        'author_title': author_title,
-                        'avatar_frame': avatar_frame,
-                        'text': new_comment.text,
-                        'created_at': 'hace un instante'
-                    },
-                    'total_comments': post.comments.count()
-                })
-
-            messages.success(request, "Comentario publicado (+3 EXP).")
-            
-        return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-
-
-# ==========================================
-# SISTEMA DE PHOTOCARDS Y CAJAS CS
-# ==========================================
-
-def photocard_boxes_view(request):
-    tg_id = resolve_safe_tg(request)
-    if not tg_id:
-        return redirect('/')
-
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-    boxes = PhotocardBox.objects.filter(is_active=True).prefetch_related('cards')
-    
-    is_admin = check_is_staff_or_admin(tg_id)
-    my_cards_count = UserPhotocard.objects.filter(telegram_user_id=tg_id).count()
-
-    upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
-    upcoming_data = {
-        'is_active': upcoming_active,
-        'title': KingdomSetting.get_val('upcoming_box_title', ''),
-        'release_date': KingdomSetting.get_val('upcoming_box_date', ''),
-        'description': KingdomSetting.get_val('upcoming_box_desc', ''),
-        'image_url': KingdomSetting.get_val('upcoming_box_image', '')
-    }
-
-    return render(request, 'idols/photocard_boxes.html', {
-        'tg_id': tg_id,
-        'wallet': wallet,
-        'boxes': boxes,
-        'is_admin': is_admin,
-        'my_cards_count': my_cards_count,
-        'upcoming': upcoming_data,
-    })
-
-
-def open_photocard_box_ajax(request, box_id):
-    if request.method != 'POST':
-        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
-
-    tg_id = resolve_safe_tg(request)
-    if not tg_id:
-        return JsonResponse({'success': False, 'error': 'Sesión no identificada'}, status=400)
-
-    box = get_object_or_404(PhotocardBox, id=box_id, is_active=True)
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-
-    if wallet.balance < box.price:
-        return JsonResponse({'success': False, 'error': f'No tienes suficiente oro ({box.price} 🪙 necesarios).'}, status=400)
-
-    all_cards = list(box.cards.all())
-    if not all_cards:
-        return JsonResponse({'success': False, 'error': 'Esta caja aún no tiene cartas cargadas.'}, status=400)
-
-    wallet.remove_funds(box.price)
-
-    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-    extra_legendary = {1: 5.0, 2: 12.0, 3: 20.0}.get(pet.evolution_stage_number, 5.0) if (pet and pet.species == 'rabbit') else 0.0
-
-    from economy.models import UserInventoryItem
-    has_lucky_key = UserInventoryItem.consume_item(tg_id, 'lucky_charm')
-    if has_lucky_key:
-        extra_legendary += 15.0
-
-    roll = random.random() * 100
-    p_legendary = 3.0 + extra_legendary
-    p_epic = p_legendary + 12.0
-    p_rare = p_epic + 25.0
-
-    if roll < p_legendary:
-        target_rarity = 'legendary'
-    elif roll < p_epic:
-        target_rarity = 'epic'
-    elif roll < p_rare:
-        target_rarity = 'rare'
-    else:
-        target_rarity = 'common'
-
-    pool = [c for c in all_cards if c.rarity == target_rarity]
-    winner = random.choice(pool) if pool else random.choice(all_cards)
-
-    UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=winner)
-
-    xp_map = {'common': 5, 'rare': 12, 'epic': 25, 'legendary': 50}
-    grant_user_xp(request, tg_id, xp_map.get(winner.rarity, 10), reason=f"Photocard {winner.get_rarity_display()}")
-
-    if winner.rarity == 'legendary':
-        group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
-        if group_id:
-            user_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-            noble_name = user_prof.username if user_prof else f"Noble_{tg_id}"
-            send_telegram_msg(
-                chat_id=group_id,
-                text=(
-                    f"👑🎉 <b>¡DESENTIERRO LEGENDARIO EN EL REINO!</b> 🎉👑\n\n"
-                    f"El afortunado <b>{noble_name}</b> abrió el relicario <i>«{box.name}»</i> y obtuvo una carta <b>LEGENDARIA</b>:\n\n"
-                    f"🎴 <b>«{winner.name}»</b> ({winner.display_idol_name})\n\n"
-                    f"¡Rindamos honores a su increíble fortuna en los relicarios!"
-                ),
-                button_text="🎁 Probar Mi Suerte en Cajas",
-                button_url="https://t.me/KingdomPleasure_bot?start=entrar"
-            )
-
-    reel = []
-    for i in range(35):
-        card_item = winner if i == 28 else random.choice(all_cards)
-        reel.append({
-            'id': card_item.id,
-            'name': card_item.name,
-            'rarity': card_item.rarity,
-            'rarity_display': card_item.get_rarity_display(),
-            'color': card_item.get_color_hex(),
-            'image_url': card_item.image.url if card_item.image else '',
-            'idol_name': card_item.display_idol_name,
-        })
-
-    return JsonResponse({
-        'success': True,
-        'nuevo_saldo': wallet.balance,
-        'winning_index': 28,
-        'winner': {
-            'id': winner.id,
-            'name': winner.name,
-            'rarity': winner.rarity,
-            'rarity_display': winner.get_rarity_display(),
-            'color': winner.get_color_hex(),
-            'image_url': winner.image.url if winner.image else '',
-            'idol_name': winner.display_idol_name,
-        },
-        'reel': reel
-    })
-
-
-def my_photocards_album(request):
-    try:
-        tg_id = resolve_safe_tg(request)
-        if not tg_id:
-            return redirect('/')
-
-        raw_user_cards = list(UserPhotocard.objects.filter(
-            telegram_user_id=tg_id,
-            photocard__isnull=False
-        ).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at'))
-
-        user_cards = [uc for uc in raw_user_cards if getattr(uc, 'photocard', None) is not None]
-
-        RARITY_PRIORITY = {
-            'legendary': 1,
-            'epic': 2,
-            'rare': 3,
-            'common': 4,
-        }
-
-        def card_canonical_sort_key(uc):
-            p = getattr(uc, 'photocard', None)
-            if not p:
-                return (99, '', '', 0)
-            r_val = RARITY_PRIORITY.get(getattr(p, 'rarity', 'common'), 5)
-            idol_name = (getattr(p, 'display_idol_name', '') or '').lower().strip()
-            card_name = (getattr(p, 'name', '') or '').lower().strip()
-            return (r_val, idol_name, card_name, p.id)
-
-        for uc in user_cards:
-            try:
-                uc.safe_image_url = uc.photocard.image.url if (uc.photocard and uc.photocard.image) else ''
-            except Exception:
-                uc.safe_image_url = ''
-            uc.rarity_weight = RARITY_PRIORITY.get(getattr(uc.photocard, 'rarity', 'common'), 5)
-
-        total = len(user_cards)
-        legendaries = sum(1 for uc in user_cards if getattr(uc.photocard, 'rarity', '') == 'legendary')
-        epics = sum(1 for uc in user_cards if getattr(uc.photocard, 'rarity', '') == 'epic')
-
-        cards_by_photocard = {}
-        for uc in user_cards:
-            cards_by_photocard.setdefault(uc.photocard_id, []).append(uc)
-
-        duplicates_list = []
-        duplicate_cards_count = 0
-        for p_id, ucs in cards_by_photocard.items():
-            if len(ucs) > 1:
-                rep_obj = ucs[0]
-                rep_obj.copies_total = len(ucs)
-                rep_obj.copies_extra = len(ucs) - 1
-                duplicates_list.append(rep_obj)
-                duplicate_cards_count += (len(ucs) - 1)
-
-        duplicates_list.sort(key=card_canonical_sort_key)
-
-        all_boxes = list(PhotocardBox.objects.all().prefetch_related('cards').order_by('name'))
-        collections_data = []
-
-        for box in all_boxes:
-            total_in_box = len(box.cards.all())
-            box_ucs = [uc for uc in user_cards if getattr(uc.photocard, 'box_id', None) == box.id]
-
-            distinct_cards_owned = {}
-            for uc in box_ucs:
-                if uc.photocard_id not in distinct_cards_owned:
-                    uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
-                    distinct_cards_owned[uc.photocard_id] = uc
-
-            box_cards_sorted = list(distinct_cards_owned.values())
-            box_cards_sorted.sort(key=card_canonical_sort_key)
-
-            owned_count = len(distinct_cards_owned)
-            percent = int((owned_count / total_in_box) * 100) if total_in_box > 0 else 0
-
-            if owned_count > 0 or total_in_box > 0:
-                collections_data.append({
-                    'box': box,
-                    'total_cards': total_in_box,
-                    'owned_count': owned_count,
-                    'percent': percent,
-                    'is_complete': (owned_count == total_in_box and total_in_box > 0),
-                    'user_cards': box_cards_sorted,
-                })
-
-        orphan_ucs = [uc for uc in user_cards if not getattr(uc.photocard, 'box_id', None)]
-        if orphan_ucs:
-            orphan_distinct = {}
-            for uc in orphan_ucs:
-                if uc.photocard_id not in orphan_distinct:
-                    uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
-                    orphan_distinct[uc.photocard_id] = uc
-
-            orphan_cards_sorted = list(orphan_distinct.values())
-            orphan_cards_sorted.sort(key=card_canonical_sort_key)
-
-            class OrphanBox:
-                id = 0
-                name = 'Colección Clandestina (Especial)'
-                cover_image = None
-
-            collections_data.append({
-                'box': OrphanBox(),
-                'total_cards': len(orphan_distinct),
-                'owned_count': len(orphan_distinct),
-                'percent': 100,
-                'is_complete': False,
-                'user_cards': orphan_cards_sorted,
-            })
-
-        sorted_all_cards = list(user_cards)
-        sorted_all_cards.sort(key=card_canonical_sort_key)
-
-        members = UserProfile.objects.exclude(
-            telegram_user_id=tg_id
-        ).order_by('-level')[:60]
-
-        return render(request, 'idols/photocards_album.html', {
-            'tg_id': tg_id,
-            'user_cards': sorted_all_cards,
-            'collections': collections_data,
-            'duplicates': duplicates_list,
-            'duplicate_cards_count': duplicate_cards_count,
-            'unique_count': len(cards_by_photocard),
-            'total': total,
-            'legendaries': legendaries,
-            'epics': epics,
-            'members': members,
-        })
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        messages.error(request, f"Aviso del Álbum: {str(e)}")
-        return redirect('/idols/photocards/')
-
-
-def admin_photocards_manage(request):
-    tg_id = resolve_safe_tg(request)
-    is_admin = check_is_staff_or_admin(tg_id)
-
-    if not is_admin:
-        messages.error(request, "Solo los administradores pueden gestionar Photocards.")
-        return redirect('/idols/photocards/')
-
-    if request.method == 'POST':
-        action = request.POST.get('action')
-
-        try:
-            if action == 'create_box':
-                name = request.POST.get('name', '').strip()
-                description = request.POST.get('description', '').strip()
-                price = int(request.POST.get('price', 120))
-                cover_image = optimize_uploaded_image(request.FILES.get('cover_image'))
-                if name:
-                    PhotocardBox.objects.create(name=name, description=description, price=price, cover_image=cover_image)
-                    messages.success(request, f"✨ Caja «{name}» creada.")
-
-            elif action == 'edit_box':
-                box_id = request.POST.get('box_id')
-                box = get_object_or_404(PhotocardBox, id=box_id)
-                box.name = request.POST.get('name', box.name).strip()
-                box.description = request.POST.get('description', box.description).strip()
-                box.price = int(request.POST.get('price', box.price))
-                if 'cover_image' in request.FILES:
-                    box.cover_image = optimize_uploaded_image(request.FILES['cover_image'])
-                box.save()
-                messages.success(request, f"💾 Caja «{box.name}» actualizada.")
-
-            elif action == 'delete_box':
-                box_id = request.POST.get('box_id')
-                box = get_object_or_404(PhotocardBox, id=box_id)
-                box_name = box.name
-
-                owned_cards = UserPhotocard.objects.filter(photocard__box=box).count()
-                if owned_cards > 0:
-                    box.is_active = False
-                    box.save()
-                    messages.error(request, f"⚠️ La caja «{box_name}» no se puede eliminar porque los usuarios ya tienen {owned_cards} cartas en sus álbumes. La caja fue PAUSADA.")
-                else:
-                    box.cards.all().delete()
-                    box.delete()
-                    messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
-
-            elif action == 'toggle_box':
-                box_id = request.POST.get('box_id')
-                box = get_object_or_404(PhotocardBox, id=box_id)
-                box.is_active = not box.is_active
-                box.save()
-                estado = "Activada" if box.is_active else "Pausada"
-                messages.info(request, f"Caja {box.name} {estado}.")
-
-            elif action == 'upload_card':
-                box_id = request.POST.get('box_id')
-                idol_name = request.POST.get('idol_name', '').strip()
-                name = request.POST.get('name', '').strip()
-                rarity = request.POST.get('rarity', 'common')
-                raw_image = request.FILES.get('image')
-
-                if not raw_image or not name or not box_id:
-                    messages.error(request, "Debes adjuntar el archivo de Canva, asignar un nombre y una caja.")
-                else:
-                    box_obj = get_object_or_404(PhotocardBox, id=box_id)
-                    optimized_img = optimize_uploaded_image(raw_image)
-                    
-                    Photocard.objects.create(
-                        box=box_obj,
-                        idol_name=idol_name or "K-Pop Idol",
-                        name=name,
-                        rarity=rarity,
-                        image=optimized_img,
-                        created_by_tg_id=tg_id
-                    )
-                    messages.success(request, f"🎴 Photocard «{name}» ({idol_name}) subida con éxito.")
-
-            elif action == 'edit_card':
-                card_id = request.POST.get('card_id')
-                card = get_object_or_404(Photocard, id=card_id)
-                card.box_id = request.POST.get('box_id', card.box_id)
-                card.idol_name = request.POST.get('idol_name', card.idol_name).strip()
-                card.name = request.POST.get('name', card.name).strip()
-                card.rarity = request.POST.get('rarity', card.rarity)
-                if 'image' in request.FILES:
-                    card.image = optimize_uploaded_image(request.FILES['image'])
-                card.save()
-                messages.success(request, f"💾 Photocard «{card.name}» actualizada.")
-
-            elif action == 'delete_card':
-                card_id = request.POST.get('card_id')
-                card = get_object_or_404(Photocard, id=card_id)
-                c_name = card.name
-                card.delete()
-                messages.warning(request, f"🗑️ Photocard «{c_name}» eliminada.")
-
-            elif action == 'save_upcoming_box':
-                title = request.POST.get('upcoming_title', '').strip()
-                date = request.POST.get('upcoming_date', '').strip()
-                desc = request.POST.get('upcoming_desc', '').strip()
-                is_active = request.POST.get('upcoming_active') == '1'
-
-                KingdomSetting.set_val('upcoming_box_title', title)
-                KingdomSetting.set_val('upcoming_box_date', date)
-                KingdomSetting.set_val('upcoming_box_desc', desc)
-                KingdomSetting.set_val('upcoming_box_active', 'true' if is_active else 'false')
-
-                if 'upcoming_image' in request.FILES:
-                    file_obj = optimize_uploaded_image(request.FILES['upcoming_image'])
-                    saved_path = default_storage.save(f'photocard_boxes/upcoming_{file_obj.name}', file_obj)
-                    image_url = default_storage.url(saved_path)
-                    KingdomSetting.set_val('upcoming_box_image', image_url)
-
-                messages.success(request, "📢 ¡Anuncio de Próximo Lanzamiento guardado con éxito!")
-
-        except Exception as e:
-            err_str = str(e)
-            if "File size too large" in err_str:
-                messages.error(request, "⚠️ La imagen supera el límite de carga permitido (10 MB). Por favor comprímela antes de subir.")
-            else:
-                messages.error(request, f"⚠️ Error al procesar archivo: {err_str}")
-
-        return redirect(f'/idols/photocards/admin/?tg_id={tg_id}')
-
-    boxes = PhotocardBox.objects.all().prefetch_related('cards')
-    all_idols = IdolProfile.objects.all().order_by('stage_name')
-    all_cards = Photocard.objects.all().select_related('box').order_by('-created_at')
-
-    upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
-    upcoming_data = {
-        'is_active': upcoming_active,
-        'title': KingdomSetting.get_val('upcoming_box_title', ''),
-        'release_date': KingdomSetting.get_val('upcoming_box_date', ''),
-        'description': KingdomSetting.get_val('upcoming_box_desc', ''),
-        'image_url': KingdomSetting.get_val('upcoming_box_image', '')
-    }
-
-    return render(request, 'idols/admin_photocards.html', {
-        'tg_id': tg_id,
-        'boxes': boxes,
-        'all_idols': all_idols,
-        'all_cards': all_cards,
-        'upcoming': upcoming_data,
-    })
-
-
-def photocards_market(request):
-    tg_id = resolve_safe_tg(request)
-    if not tg_id:
-        return redirect('/')
-
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-
-    market_cards = UserPhotocard.objects.filter(
-        is_for_sale=True
-    ).exclude(telegram_user_id=tg_id).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at')
-
-    my_sales = UserPhotocard.objects.filter(
-        telegram_user_id=tg_id,
-        is_for_sale=True
-    ).select_related('photocard')
-
-    received_trades = PhotocardTrade.objects.filter(
-        Q(receiver_telegram_id=tg_id) | Q(receiver_telegram_id=0),
-        status='pending'
-    ).exclude(sender_telegram_id=tg_id).select_related('sender_card__photocard', 'receiver_card__photocard').order_by('-created_at')
-
-    sent_trades = PhotocardTrade.objects.filter(
-        sender_telegram_id=tg_id,
-        status='pending'
-    ).select_related('sender_card__photocard', 'receiver_card__photocard').order_by('-created_at')
-
-    return render(request, 'idols/photocards_market.html', {
-        'tg_id': tg_id,
-        'wallet': wallet,
-        'market_cards': market_cards,
-        'my_sales': my_sales,
-        'received_trades': received_trades,
-        'sent_trades': sent_trades,
-    })
-
-
-def photocard_sell_action(request, user_card_id):
-    if request.method == 'POST':
-        tg_id = resolve_safe_tg(request)
-        user_card = get_object_or_404(UserPhotocard, id=user_card_id, telegram_user_id=tg_id)
-        mode = request.POST.get('mode', 'list')
-
-        if mode == 'list':
-            try:
-                price = int(request.POST.get('price', 50))
-                if price < 20:
-                    messages.error(request, "El precio mínimo de venta en el Mercado es de 20 🪙.")
-                else:
-                    user_card.is_for_sale = True
-                    user_card.sale_price = price
-                    user_card.save()
-                    messages.success(request, f"🏷️ «{user_card.photocard.name}» publicada en el Mercado por {price} 🪙.")
-            except ValueError:
-                messages.error(request, "Precio no válido.")
-        elif mode == 'cancel':
-            user_card.is_for_sale = False
-            user_card.sale_price = 0
-            user_card.save()
-            messages.info(request, f"Venta de «{user_card.photocard.name}» cancelada. Regresó a tu Álbum.")
-
-    return redirect('/idols/photocards/album/')
-
-
-def photocard_buy_action(request, user_card_id):
-    if request.method == 'POST':
-        tg_id = resolve_safe_tg(request)
-        buyer_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-        user_card = get_object_or_404(UserPhotocard, id=user_card_id, is_for_sale=True)
-
-        if user_card.telegram_user_id == tg_id:
-            messages.info(request, "No puedes comprar tu propia carta.")
-            return redirect('/idols/photocards/market/')
-
-        price = user_card.sale_price or 50
-        if buyer_wallet.balance < price:
-            messages.error(request, f"No tienes suficiente oro ({price} 🪙 necesarios).")
-            return redirect('/idols/photocards/market/')
-
-        with transaction.atomic():
-            buyer_wallet.remove_funds(price)
-
-            vendedor_id = user_card.telegram_user_id
-            
-            from economy.models import UserInventoryItem
-            used_free_tax = UserInventoryItem.consume_item(vendedor_id, 'free_market')
-            
-            fee = 0 if used_free_tax else int(price * 0.10)
-            neto_vendedor = price - fee
-
-            seller_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=vendedor_id)
-            seller_wallet.add_funds(neto_vendedor)
-
-            carta_nombre = user_card.photocard.name
-
-            user_card.telegram_user_id = tg_id
-            user_card.is_for_sale = False
-            user_card.sale_price = 0
-            user_card.save()
-
-            PhotocardTrade.objects.filter(sender_card=user_card, status='pending').update(status='cancelled')
-            PhotocardTrade.objects.filter(receiver_card=user_card, status='pending').update(status='cancelled')
-
-            grant_user_xp(request, tg_id, 10, reason="Compra en Mercado")
-            grant_user_xp(None, vendedor_id, 15, reason="Venta de Photocard")
-
-            send_telegram_msg(
-                chat_id=vendedor_id,
-                text=(
-                    f"🏷️ <b>¡Vendiste una Photocard en el Mercado!</b>\n\n"
-                    f"🎴 <b>Carta:</b> {carta_nombre}\n"
-                    f"🪙 <b>Precio:</b> {price} 🪙\n"
-                    f"💰 <b>Ganancia neta recibida:</b> <b>+{neto_vendedor} 🪙</b> en tu Bóveda."
-                ),
-                button_text="🪙 Ver Mi Bóveda",
-                button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={vendedor_id}"
-            )
-
-        messages.success(request, f"🎉 ¡Compraste «{carta_nombre}» por {price} 🪙! Ya está en tu Álbum.")
-        return redirect('/idols/photocards/album/')
-
-    return redirect('/idols/photocards/market/')
-
-
-# ==========================================
-# EL CALDERO REAL: FUSIÓN INTELIGENTE
-# ==========================================
-
-def photocard_fusion(request):
-    tg_id = resolve_safe_tg(request)
-    if not tg_id:
-        return redirect('/')
-
+def wallet_dashboard(request):
+    tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-
-    RECIPES = {
-        'common':    {'required_count': 4, 'cost': 35,  'source_rarity': 'common',    'target_rarity': 'rare',      'luck_target': 'epic',      'luck_chance': 0.12},
-        'rare':      {'required_count': 3, 'cost': 75,  'source_rarity': 'rare',      'target_rarity': 'epic',      'luck_target': 'legendary', 'luck_chance': 0.15},
-        'epic':      {'required_count': 3, 'cost': 150, 'source_rarity': 'epic',      'target_rarity': 'epic',      'luck_target': 'legendary', 'luck_chance': 0.25},
-        'legendary': {'required_count': 2, 'cost': 200, 'source_rarity': 'legendary', 'target_rarity': 'legendary', 'luck_target': 'legendary', 'luck_chance': 0.0},
-    }
-
-    if request.method == 'POST':
-        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
-        tier = request.POST.get('tier', 'common')
-        raw_card_ids = request.POST.getlist('card_ids')
-
-        recipe = RECIPES.get(tier)
-        if not recipe:
-            err = "Receta de fusión no válida."
-            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-            messages.error(request, err)
-            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
-
-        target_rarity = recipe['target_rarity']
-        target_pool_exists = Photocard.objects.filter(rarity=target_rarity).exists()
-        luck_pool_exists = Photocard.objects.filter(rarity=recipe['luck_target']).exists()
-
-        if not target_pool_exists and not luck_pool_exists:
-            err = f"⚠️ La Corona aún no ha forjado Photocards de rareza {target_rarity.upper()}."
-            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-            messages.error(request, err)
-            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
-
-        if wallet.balance < recipe['cost']:
-            err = f"No tienes suficiente oro ({recipe['cost']} 🪙 necesarios)."
-            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-            messages.error(request, err)
-            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
-
-        try:
-            card_ids = [int(cid) for cid in raw_card_ids if str(cid).isdigit()]
-        except ValueError:
-            card_ids = []
-
-        if len(card_ids) != recipe['required_count']:
-            err = f"Debes seleccionar exactamente {recipe['required_count']} cartas para esta transmutación."
-            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-            messages.error(request, err)
-            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
-
-        with transaction.atomic():
-            selected_cards = list(UserPhotocard.objects.select_for_update().filter(
-                id__in=card_ids,
-                telegram_user_id=tg_id,
-                is_for_sale=False,
-                photocard__rarity=recipe['source_rarity']
-            ).select_related('photocard'))
-
-            if len(selected_cards) != recipe['required_count']:
-                err = "Algunas cartas seleccionadas ya no están disponibles, están a la venta o no coinciden en rareza."
-                if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                messages.error(request, err)
-                return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
-
-            sacrificed_counts = Counter(c.photocard_id for c in selected_cards)
-            for pid, count in sacrificed_counts.items():
-                total_owned = UserPhotocard.objects.filter(
-                    telegram_user_id=tg_id,
-                    photocard_id=pid
-                ).count()
-                if (total_owned - count) < 1:
-                    err = "⚠️ No puedes fundir tu única copia de una Photocard. La Corona protege tu Álbum."
-                    if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-                    messages.error(request, err)
-                    return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
-
-            luck_prob = recipe['luck_chance']
-            if pet and pet.species == 'rabbit':
-                rabbit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
-                luck_prob += rabbit_bonus
-
-            roll = random.random()
-            is_lucky_jump = False
-
-            if roll < luck_prob and luck_pool_exists:
-                awarded_rarity = recipe['luck_target']
-                is_lucky_jump = True
-            elif target_pool_exists:
-                awarded_rarity = recipe['target_rarity']
-            else:
-                awarded_rarity = recipe['source_rarity']
-
-            pool = list(Photocard.objects.filter(rarity=awarded_rarity))
-            if not pool:
-                pool = list(Photocard.objects.filter(rarity=recipe['source_rarity']))
-                if not pool:
-                    pool = list(Photocard.objects.all())
-
-            wallet.remove_funds(recipe['cost'])
-            consumed_ids = [c.id for c in selected_cards]
-            PhotocardTrade.objects.filter(sender_card_id__in=consumed_ids, status='pending').update(status='cancelled')
-            PhotocardTrade.objects.filter(receiver_card_id__in=consumed_ids, status='pending').update(status='cancelled')
-            UserPhotocard.objects.filter(id__in=consumed_ids).delete()
-
-            currently_owned_card_ids = set(
-                UserPhotocard.objects.filter(telegram_user_id=tg_id)
-                .values_list('photocard_id', flat=True)
-            )
-
-            unowned_in_pool = [c for c in pool if c.id not in currently_owned_card_ids]
-
-            if unowned_in_pool:
-                new_card = random.choice(unowned_in_pool)
-                is_new_discovery = True
-            else:
-                new_card = random.choice(pool)
-                is_new_discovery = False
-
-            new_user_card = UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=new_card)
-
-            xp_map = {'rare': 15, 'epic': 30, 'legendary': 60}
-            grant_user_xp(request, tg_id, xp_map.get(new_card.rarity, 20), reason="Alquimia de Photocards")
-
-            if is_ajax:
-                return JsonResponse({
-                    'success': True,
-                    'is_lucky': is_lucky_jump,
-                    'is_new': is_new_discovery,
-                    'nuevo_saldo': wallet.balance,
-                    'card': {
-                        'id': new_user_card.id,
-                        'name': new_card.name,
-                        'idol_name': new_card.display_idol_name,
-                        'rarity': new_card.rarity,
-                        'rarity_display': new_card.get_rarity_display(),
-                        'color': new_card.get_color_hex(),
-                        'image_url': new_card.image.url if new_card.image else ''
-                    }
-                })
-
-            messages.success(request, f"✨ ¡Alquimia completada! Obtuviste «{new_card.name}» ({new_card.get_rarity_display()}).")
-            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
-
-    all_user_cards = UserPhotocard.objects.filter(
-        telegram_user_id=tg_id,
-        is_for_sale=False
-    ).select_related('photocard').order_by('photocard_id', 'id')
-
-    seen_photocard_ids = set()
-    duplicate_cards = []
-
-    for uc in all_user_cards:
-        if uc.photocard_id not in seen_photocard_ids:
-            seen_photocard_ids.add(uc.photocard_id)
-        else:
-            duplicate_cards.append(uc)
-
-    commons     = [c for c in duplicate_cards if c.photocard.rarity == 'common']
-    rares       = [c for c in duplicate_cards if c.photocard.rarity == 'rare']
-    epics       = [c for c in duplicate_cards if c.photocard.rarity == 'epic']
-    legendaries = [c for c in duplicate_cards if c.photocard.rarity == 'legendary']
-
-    return render(request, 'idols/photocard_fusion.html', {
+        
+    return render(request, 'economy/wallet.html', {
         'tg_id': tg_id,
         'wallet': wallet,
         'profile': profile,
         'pet': pet,
-        'commons': commons,
-        'rares': rares,
-        'epics': epics,
-        'legendaries': legendaries,
+        'can_claim_bonus': wallet.can_claim_bonus(),
     })
 
 
-# ==========================================
-# INTERCAMBIOS P2P BLINDADOS
-# ==========================================
-
-def create_trade_offer(request, user_card_id):
+def claim_patron_vault(request):
+    """Permite al usuario retirar su 8% acumulado en el Cofre del Mecenas."""
+    tg_id = get_safe_tg_id(request)
     if request.method == 'POST':
-        tg_id = resolve_safe_tg(request)
-        sender_card = get_object_or_404(UserPhotocard, id=user_card_id, telegram_user_id=tg_id, is_for_sale=False)
-        
-        target_raw = request.POST.get('target_user', '').strip()
-        receiver_id = None
-        receiver_name = 'Noble'
-
-        if target_raw == 'open':
-            receiver_id = 0
-            receiver_name = 'Cualquier Miembro del Reino'
-        elif target_raw.isdigit():
-            receiver_id = int(target_raw)
-            p = UserProfile.objects.filter(telegram_user_id=receiver_id).first()
-            if p and p.username: receiver_name = p.username
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        claimed = wallet.claim_patron_vault()
+        if claimed > 0:
+            msg = f"🏛️ ¡Has retirado +{claimed} 🪙 de tu Cofre del Mecenas a tu Bóveda!"
+            if is_ajax:
+                return JsonResponse({'success': True, 'claimed': claimed, 'nuevo_saldo': wallet.balance, 'message': msg})
+            messages.success(request, msg)
         else:
-            clean_at = target_raw if target_raw.startswith('@') else f"@{target_raw}"
-            p = UserProfile.objects.filter(username__iexact=clean_at).first()
-            if p:
-                receiver_id = p.telegram_user_id
-                receiver_name = p.username
-
-        if receiver_id is None or receiver_id == tg_id:
-            messages.error(request, "Debes seleccionar a un destinatario válido.")
-            return redirect('/idols/photocards/album/')
-
-        sender_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-        s_name = sender_profile.username if (sender_profile and sender_profile.username) else f"Noble_{tg_id}"
-
-        PhotocardTrade.objects.filter(sender_card=sender_card, status='pending').update(status='cancelled')
-
-        trade = PhotocardTrade.objects.create(
-            sender_telegram_id=tg_id,
-            sender_username=s_name,
-            sender_card=sender_card,
-            receiver_telegram_id=receiver_id,
-            receiver_username=receiver_name,
-            status='pending'
-        )
-
-        if receiver_id != 0:
-            send_telegram_msg(
-                chat_id=receiver_id,
-                text=(
-                    f"🤝 <b>¡Nueva Oferta de Intercambio de Photocards!</b>\n\n"
-                    f"👤 <b>De:</b> {s_name}\n"
-                    f"🎴 <b>Te ofrece:</b> <i>«{sender_card.photocard.name}»</i> ({sender_card.photocard.get_rarity_display()})\n\n"
-                    f"Ingresa a tu Mercado para revisar y aceptar el intercambio."
-                ),
-                button_text="🤝 Revisar Oferta",
-                button_url=f"https://kingdom-pleasure-app.onrender.com/idols/photocards/market/?tg_id={receiver_id}"
-            )
-            messages.success(request, f"🤝 Propuesta enviada directamente a {receiver_name}.")
-        else:
-            messages.success(request, "📢 ¡Tu carta ha sido publicada en el Tablón de Intercambios del Mercado para cualquiera!")
-
-        return redirect('/idols/photocards/market/')
-
-    return redirect('/idols/photocards/album/')
+            err = "Tu Cofre del Mecenas está vacío actualmente. Juega en el casino para acumular retorno."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.info(request, err)
+    return redirect(f'/economy/wallet/?tg_id={tg_id}')
 
 
-def handle_trade_offer(request, trade_id, action):
-    tg_id = resolve_safe_tg(request)
-    trade = get_object_or_404(PhotocardTrade, id=trade_id, status='pending')
+def casino_game(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+    
+    # 👑 ESCALADO DE APUESTA MÁXIMA SEGÚN RANGO / ROL
+    base_max = 500
+    if profile.level >= 10:
+        base_max = 2000
+    elif profile.level >= 5:
+        base_max = 1000
 
-    is_authorized = (trade.receiver_telegram_id == tg_id) or (trade.receiver_telegram_id == 0 and trade.sender_telegram_id != tg_id)
+    if profile.role:
+        role_maxes = {
+            'plebeyo': 500,
+            'noble': 1500,
+            'vizconde': 3000,
+            'conde': 6000,
+            'marques': 12000,
+            'duque': 25000,
+            'rey': 50000,
+            'emperador': 100000,
+            'corona': 250000,
+        }
+        role_key = profile.role.name.lower()
+        base_max = max(base_max, role_maxes.get(role_key, 500))
 
-    if action == 'accept' and is_authorized:
-        return_card_id = request.POST.get('return_card_id') or request.GET.get('return_card_id')
+    max_bet = base_max
+
+    if request.method == 'POST':
+        bet_type = request.POST.get('bet_type')
+        bet_value = request.POST.get('bet_value')
         
-        with transaction.atomic():
-            sender_card = UserPhotocard.objects.select_for_update().filter(id=trade.sender_card_id).first()
+        try:
+            bet_amount = int(request.POST.get('bet_amount', 0))
+        except (ValueError, TypeError):
+            bet_amount = 0
             
-            if not sender_card or sender_card.telegram_user_id != trade.sender_telegram_id or sender_card.is_for_sale:
-                trade.status = 'cancelled'
-                trade.save()
-                messages.error(request, "⚠️ El intercambio no se pudo completar: el emisor ya no posee esta carta o la puso a la venta.")
-                return redirect('/idols/photocards/market/')
+        if bet_amount <= 0:
+            err = "Debes ingresar una cantidad válida de oro para apostar."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/casino/?tg_id={tg_id}')
+            
+        if bet_amount > max_bet:
+            err = f"Tu estatus nobiliario solo te permite apostar un máximo de {max_bet} 🪙 por giro."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/casino/?tg_id={tg_id}')
+            
+        if wallet.balance < bet_amount:
+            err = "No tienes suficiente oro en tu billetera imperial."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/casino/?tg_id={tg_id}')
+            
+        # Cobro y Rakeback al Cofre del Mecenas (8%)
+        wallet.remove_funds(bet_amount)
+        rebate = wallet.accumulate_patron_vault(bet_amount)
+        
+        # 🎰 RULETA EUROPEA REAL (0 al 36)
+        winning_number = random.randint(0, 36)
+        
+        # Definición oficial de Ruleta Francesa / Europea
+        red_numbers = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
+        if winning_number == 0:
+            winning_color = 'green'
+        elif winning_number in red_numbers:
+            winning_color = 'red'
+        else:
+            winning_color = 'black'
+            
+        won = False
+        payout_multiplier = 0
+        
+        if bet_type == 'color':
+            if bet_value == winning_color and winning_color != 'green':
+                won = True
+                payout_multiplier = 2
+        elif bet_type == 'parity':
+            if winning_number != 0:
+                is_even = (winning_number % 2 == 0)
+                if (bet_value == 'even' and is_even) or (bet_value == 'odd' and not is_even):
+                    won = True
+                    payout_multiplier = 2
+        elif bet_type == 'number':
+            try:
+                if int(bet_value) == winning_number:
+                    won = True
+                    payout_multiplier = 36
+            except (ValueError, TypeError):
+                pass
+                
+        payout = 0
+        if won:
+            payout = bet_amount * payout_multiplier
+            wallet.add_funds(payout)
+            # Recompensa de EXP nobiliaria
+            xp_gain = max(2, bet_amount // 20)
+            grant_user_xp(request, tg_id, xp_gain, reason="Ruleta Imperial")
+            
+            msg = f"🎉 ¡La diosa Fortuna te sonríe! La bola cayó en el {winning_number} ({winning_color.upper()}). ¡Ganaste +{payout} 🪙!"
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'won': True,
+                    'winning_number': winning_number,
+                    'winning_color': winning_color,
+                    'payout': payout,
+                    'net': payout - bet_amount,
+                    'nuevo_saldo': wallet.balance,
+                    'patron_vault': wallet.patron_vault,
+                    'message': msg
+                })
+            messages.success(request, msg)
+        else:
+            msg = f"💀 La bola cayó en el {winning_number} ({winning_color.upper()}). Has perdido {bet_amount} 🪙. (+{rebate} 🪙 acumulados en tu Cofre de Mecenas)."
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'won': False,
+                    'winning_number': winning_number,
+                    'winning_color': winning_color,
+                    'payout': 0,
+                    'net': -bet_amount,
+                    'nuevo_saldo': wallet.balance,
+                    'patron_vault': wallet.patron_vault,
+                    'message': msg
+                })
+            messages.warning(request, msg)
+            
+        return redirect(f'/economy/casino/?tg_id={tg_id}')
+        
+    return render(request, 'economy/casino.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'max_bet': max_bet,
+    })
 
-            receiver_card = None
-            if return_card_id and str(return_card_id).isdigit():
-                receiver_card = UserPhotocard.objects.select_for_update().filter(
-                    id=int(return_card_id),
-                    telegram_user_id=tg_id,
-                    is_for_sale=False
-                ).first()
 
-            sender_card.telegram_user_id = tg_id
-            sender_card.is_for_sale = False
-            sender_card.sale_price = 0
-            sender_card.save()
+def claim_bonus(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    
+    if request.method == 'POST':
+        if wallet.can_claim_bonus():
+            base_bonus = 50
+            
+            # Bonificación por nivel del jugador (+10 de oro por nivel)
+            level_bonus = (profile.level - 1) * 10
+            total_bonus = base_bonus + level_bonus
+            
+            # BUFF KITSUNE CELESTIAL: Multiplicador de Recompensa Diaria
+            try:
+                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                if pet and pet.species == 'kitsune':
+                    mults = {1: 1.25, 2: 1.50, 3: 2.0}
+                    kitsune_mult = mults.get(pet.evolution_stage_number, 1.25)
+                    total_bonus = int(round(total_bonus * kitsune_mult))
+            except Exception:
+                pass
+            
+            wallet.add_funds(total_bonus)
+            wallet.last_bonus_claim = timezone.now()
+            wallet.save()
+            
+            grant_user_xp(request, tg_id, 25, reason="Ruleta de la Fortuna")
+            messages.success(request, f"✨ ¡Has recibido tu ofrenda diaria de la Corte! +{total_bonus} 🪙 añadidos a tu billetera.")
+        else:
+            messages.error(request, "⏳ Aún no puedes reclamar tu estipendio diario. El ciclo se renueva puntualmente a las 12:00 PM.")
+            
+    return redirect(f'/economy/wallet/?tg_id={tg_id}')
 
-            if receiver_card:
-                receiver_card.telegram_user_id = trade.sender_telegram_id
-                receiver_card.is_for_sale = False
-                receiver_card.sale_price = 0
-                receiver_card.save()
-                trade.receiver_card = receiver_card
 
-            trade.receiver_telegram_id = tg_id
-            receiver_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-            if receiver_profile and receiver_profile.username:
-                trade.receiver_username = receiver_profile.username
+# ==============================================================================
+# 🎰 TRAGAPERRAS IMPERIAL (SLOTS REALES)
+# ==============================================================================
+SLOT_SYMBOLS = [
+    {'name': 'Cereza', 'symbol': '🍒', 'mult': 3, 'weight': 38},
+    {'name': 'Campana', 'symbol': '🔔', 'mult': 6, 'weight': 28},
+    {'name': 'Herradura', 'symbol': '🍀', 'mult': 12, 'weight': 18},
+    {'name': 'Rubí Real', 'symbol': '💎', 'mult': 25, 'weight': 10},
+    {'name': 'Corona Imperial', 'symbol': '👑', 'mult': 60, 'weight': 5},
+    {'name': 'Cofre del Placer', 'symbol': '7️⃣', 'mult': 150, 'weight': 1},
+]
 
-            trade.status = 'accepted'
-            trade.save()
+def slots_game(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+    
+    max_bet = 500
+    if profile.level >= 10:
+        max_bet = 2000
+    elif profile.level >= 5:
+        max_bet = 1000
 
-            send_telegram_msg(
-                chat_id=trade.sender_telegram_id,
-                text=(
-                    f"🎉 <b>¡Tu intercambio de Photocards fue aceptado!</b>\n\n"
-                    f"👤 <b>Por:</b> {trade.receiver_username}\n"
-                    f"🎴 <b>Entregaste:</b> «{sender_card.photocard.name}»\n" +
-                    (f"🎴 <b>Recibiste a cambio:</b> «{receiver_card.photocard.name}»" if receiver_card else "")
-                ),
-                button_text="🎴 Ver Mi Álbum",
-                button_url=f"https://kingdom-pleasure-app.onrender.com/idols/photocards/album/?tg_id={trade.sender_telegram_id}"
-            )
+    if request.method == 'POST':
+        try:
+            bet_amount = int(request.POST.get('bet_amount', 10))
+        except (ValueError, TypeError):
+            bet_amount = 10
+            
+        if bet_amount <= 0:
+            err = "Ingresa una apuesta válida de oro."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/slots/?tg_id={tg_id}')
+            
+        if bet_amount > max_bet:
+            err = f"La apuesta máxima permitida para tu nivel es de {max_bet} 🪙."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/slots/?tg_id={tg_id}')
 
-            grant_user_xp(request, tg_id, 15, reason="Intercambio Exitoso")
-            grant_user_xp(None, trade.sender_telegram_id, 15, reason="Intercambio Exitoso")
+        if wallet.balance < bet_amount:
+            err = "No tienes suficiente oro para activar los rodillos."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/slots/?tg_id={tg_id}')
+            
+        # Descontar apuesta y abonar al Cofre del Mecenas (8%)
+        wallet.remove_funds(bet_amount)
+        wallet.accumulate_patron_vault(bet_amount)
+        
+        # Tirada ponderada para 3 rodillos
+        symbols_names = [s['name'] for s in SLOT_SYMBOLS]
+        weights = [s['weight'] for s in SLOT_SYMBOLS]
+        
+        spin_result = random.choices(symbols_names, weights=weights, k=3)
+        symbols_map = {s['name']: s for s in SLOT_SYMBOLS}
+        
+        reel1 = symbols_map[spin_result[0]]
+        reel2 = symbols_map[spin_result[1]]
+        reel3 = symbols_map[spin_result[2]]
+        
+        won = False
+        payout = 0
+        win_type = "loss"
+        matched_symbol = None
+        
+        # Regla 1: Triple coincidencia (Jackpot del símbolo)
+        if reel1['name'] == reel2['name'] == reel3['name']:
+            won = True
+            matched_symbol = reel1
+            payout = bet_amount * matched_symbol['mult']
+            win_type = "jackpot"
+        # Regla 2: Doble coincidencia (Premio menor: 1.5x)
+        elif reel1['name'] == reel2['name'] or reel2['name'] == reel3['name'] or reel1['name'] == reel3['name']:
+            won = True
+            payout = int(round(bet_amount * 1.5))
+            win_type = "double"
+            
+        if won:
+            wallet.add_funds(payout)
+            xp_gain = max(2, bet_amount // 15)
+            grant_user_xp(request, tg_id, xp_gain, reason="Tragaperras Imperial")
+            
+        if is_ajax:
+            return JsonResponse({
+                'success': True,
+                'reels': [
+                    {'name': reel1['name'], 'symbol': reel1['symbol']},
+                    {'name': reel2['name'], 'symbol': reel2['symbol']},
+                    {'name': reel3['name'], 'symbol': reel3['symbol']},
+                ],
+                'won': won,
+                'win_type': win_type,
+                'payout': payout,
+                'net': payout - bet_amount,
+                'nuevo_saldo': wallet.balance,
+                'patron_vault': wallet.patron_vault,
+            })
+            
+        if won:
+            messages.success(request, f"🎰 ¡TRIPLE ORO! Los rodillos se alinearon. ¡Cobraste +{payout} 🪙!")
+        else:
+            messages.warning(request, f"🎰 Los rodillos se detuvieron sin suerte. Has perdido {bet_amount} 🪙.")
+        return redirect(f'/economy/slots/?tg_id={tg_id}')
+        
+    return render(request, 'economy/slots.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'max_bet': max_bet,
+        'symbols': SLOT_SYMBOLS,
+    })
 
-        messages.success(request, f"🎉 ¡Intercambio completado! «{sender_card.photocard.name}» ya está en tu Álbum.")
 
-    elif action == 'reject' and is_authorized:
-        trade.status = 'rejected'
-        trade.save()
-        send_telegram_msg(
-            chat_id=trade.sender_telegram_id,
-            text=f"⚠️ Tu propuesta de intercambio de «{trade.sender_card.photocard.name}» fue rechazada."
+# ==============================================================================
+# 💣 MINAS DEL REINO (MINES GAME)
+# ==============================================================================
+def calculate_mines_multiplier(total_mines, diamonds_found):
+    """Calcula el multiplicador acumulativo con RTP del 94% garantizado"""
+    if diamonds_found == 0:
+        return 1.0
+    safe_tiles = 25 - total_mines
+    prob = 1.0
+    for i in range(diamonds_found):
+        prob *= (safe_tiles - i) / (25 - i)
+    raw_mult = 0.94 / prob
+    return round(raw_mult, 2)
+
+
+def mines_game(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    
+    session_key = f'mines_game_{tg_id}'
+    game_state = request.session.get(session_key)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        # 1. INICIAR NUEVA PARTIDA
+        if action == 'start':
+            if game_state and game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'Ya tienes una partida de minas en curso.'}, status=400)
+                
+            try:
+                bet_amount = int(request.POST.get('bet_amount', 10))
+                mines_count = int(request.POST.get('mines_count', 3))
+            except (ValueError, TypeError):
+                return JsonResponse({'success': False, 'error': 'Valores no válidos.'}, status=400)
+                
+            if bet_amount <= 0 or bet_amount > wallet.balance:
+                return JsonResponse({'success': False, 'error': 'Saldo insuficiente para iniciar.'}, status=400)
+                
+            if mines_count < 1 or mines_count > 24:
+                return JsonResponse({'success': False, 'error': 'Número de minas fuera de rango (1 a 24).'}, status=400)
+                
+            # Cobro y Rakeback
+            wallet.remove_funds(bet_amount)
+            wallet.accumulate_patron_vault(bet_amount)
+            
+            # Generar posiciones aleatorias de minas (0 a 24)
+            mines_positions = random.sample(range(25), mines_count)
+            
+            new_state = {
+                'active': True,
+                'bet_amount': bet_amount,
+                'mines_count': mines_count,
+                'mines_positions': mines_positions,
+                'revealed_tiles': [],
+                'diamonds_found': 0,
+                'current_multiplier': 1.0,
+            }
+            request.session[session_key] = new_state
+            
+            return JsonResponse({
+                'success': True,
+                'active': True,
+                'bet_amount': bet_amount,
+                'mines_count': mines_count,
+                'nuevo_saldo': wallet.balance,
+                'patron_vault': wallet.patron_vault,
+            })
+            
+        # 2. DESTAPAR CASILLA
+        elif action == 'reveal':
+            if not game_state or not game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'No hay ninguna partida activa.'}, status=400)
+                
+            try:
+                tile_index = int(request.POST.get('tile_index'))
+            except (ValueError, TypeError):
+                return JsonResponse({'success': False, 'error': 'Casilla no válida.'}, status=400)
+                
+            if tile_index < 0 or tile_index > 24:
+                return JsonResponse({'success': False, 'error': 'Índice de casilla incorrecto.'}, status=400)
+                
+            if tile_index in game_state['revealed_tiles']:
+                return JsonResponse({'success': False, 'error': 'Esta casilla ya fue destapada.'}, status=400)
+                
+            # ¿Es una mina?
+            if tile_index in game_state['mines_positions']:
+                # BUFF DRAGÓN DE LAS PROFUNDIDADES: Resistencia o Escudo contra explosión (Opcional)
+                game_state['active'] = False
+                all_mines = game_state['mines_positions']
+                bet = game_state['bet_amount']
+                del request.session[session_key]
+                request.session.modified = True
+                
+                grant_user_xp(request, tg_id, 1, reason="Minas del Reino")
+                
+                return JsonResponse({
+                    'success': True,
+                    'hit_mine': True,
+                    'tile_index': tile_index,
+                    'mines_positions': all_mines,
+                    'lost_amount': bet,
+                    'nuevo_saldo': wallet.balance,
+                    'message': '💥 ¡BOOM! Has pisado una trampa imperial oculta. Has perdido tu apuesta.'
+                })
+            else:
+                # Es un diamante
+                game_state['revealed_tiles'].append(tile_index)
+                game_state['diamonds_found'] += 1
+                new_mult = calculate_mines_multiplier(game_state['mines_count'], game_state['diamonds_found'])
+                
+                # BUFF DRAGÓN FÉNIX: Multiplicador adicional
+                try:
+                    pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                    if pet and pet.species == 'dragon':
+                        dragon_bonus = {1: 1.05, 2: 1.10, 3: 1.20}.get(pet.evolution_stage_number, 1.05)
+                        new_mult = round(new_mult * dragon_bonus, 2)
+                except Exception:
+                    pass
+
+                game_state['current_multiplier'] = new_mult
+                current_payout = int(round(game_state['bet_amount'] * new_mult))
+                request.session[session_key] = game_state
+                request.session.modified = True
+                
+                # Si destapó todos los diamantes posibles, gana automáticamente
+                total_safe = 25 - game_state['mines_count']
+                all_cleared = (game_state['diamonds_found'] == total_safe)
+                
+                if all_cleared:
+                    wallet.add_funds(current_payout)
+                    del request.session[session_key]
+                    grant_user_xp(request, tg_id, 8, reason="Pleno en Minas")
+                    return JsonResponse({
+                        'success': True,
+                        'hit_mine': False,
+                        'all_cleared': True,
+                        'tile_index': tile_index,
+                        'diamonds_found': game_state['diamonds_found'],
+                        'multiplier': new_mult,
+                        'current_payout': current_payout,
+                        'nuevo_saldo': wallet.balance,
+                        'message': f"👑 ¡INCREÍBLE! ¡Has destapado todos los diamantes! Cobraste +{current_payout} 🪙."
+                    })
+                    
+                return JsonResponse({
+                    'success': True,
+                    'hit_mine': False,
+                    'tile_index': tile_index,
+                    'diamonds_found': game_state['diamonds_found'],
+                    'multiplier': new_mult,
+                    'current_payout': current_payout,
+                })
+                
+        # 3. RETIRARSE Y COBRAR (CASH OUT)
+        elif action == 'cashout':
+            if not game_state or not game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'No hay partida activa para cobrar.'}, status=400)
+                
+            if game_state['diamonds_found'] == 0:
+                return JsonResponse({'success': False, 'error': 'Debes revelar al menos un diamante antes de cobrar.'}, status=400)
+                
+            final_payout = int(round(game_state['bet_amount'] * game_state['current_multiplier']))
+            wallet.add_funds(final_payout)
+            
+            all_mines = game_state['mines_positions']
+            del request.session[session_key]
+            request.session.modified = True
+            
+            grant_user_xp(request, tg_id, 3, reason="Retiro de Minas")
+            
+            return JsonResponse({
+                'success': True,
+                'cashed_out': True,
+                'payout': final_payout,
+                'multiplier': game_state['current_multiplier'],
+                'mines_positions': all_mines,
+                'nuevo_saldo': wallet.balance,
+                'message': f"🏆 ¡Retirada victoriosa! Has asegurado +{final_payout} 🪙 a tu bóveda."
+            })
+            
+        return JsonResponse({'success': False, 'error': 'Acción desconocida'}, status=400)
+        
+    return render(request, 'economy/mines.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'game_state': game_state,
+    })
+
+
+# ==============================================================================
+# 🃏 BLACKJACK DE LA CORTE (21 REAL)
+# ==============================================================================
+DECK_SUITS = ['♠️', '♥️', '♦️', '♣️']
+DECK_VALUES = [
+    ('2', 2), ('3', 3), ('4', 4), ('5', 5), ('6', 6), ('7', 7),
+    ('8', 8), ('9', 9), ('10', 10), ('J', 10), ('Q', 10), ('K', 10), ('A', 11)
+]
+
+def draw_card():
+    val_name, val_points = random.choice(DECK_VALUES)
+    suit = random.choice(DECK_SUITS)
+    is_red = suit in ['♥️', '♦️']
+    return {
+        'name': val_name,
+        'points': val_points,
+        'suit': suit,
+        'is_red': is_red,
+        'display': f"{val_name}{suit}"
+    }
+
+def calculate_hand_value(hand):
+    total = sum(c['points'] for c in hand)
+    aces = sum(1 for c in hand if c['name'] == 'A')
+    # Ajustar ases de 11 a 1 si nos pasamos de 21
+    while total > 21 and aces > 0:
+        total -= 10
+        aces -= 1
+    return total
+
+def blackjack_game(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    session_key = f'bj_game_{tg_id}'
+    game_state = request.session.get(session_key)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        # 1. EMPEZAR PARTIDA
+        if action == 'deal':
+            if game_state and game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'Termina tu mano actual antes de repartir otra.'}, status=400)
+                
+            try:
+                bet_amount = int(request.POST.get('bet_amount', 25))
+            except (ValueError, TypeError):
+                bet_amount = 25
+                
+            if bet_amount <= 0 or bet_amount > wallet.balance:
+                return JsonResponse({'success': False, 'error': 'Oro insuficiente para la apuesta.'}, status=400)
+                
+            wallet.remove_funds(bet_amount)
+            wallet.accumulate_patron_vault(bet_amount)
+            
+            player_hand = [draw_card(), draw_card()]
+            dealer_hand = [draw_card(), draw_card()]
+            
+            p_score = calculate_hand_value(player_hand)
+            d_score = calculate_hand_value(dealer_hand)
+            
+            # Blackjack natural directo del jugador
+            if p_score == 21:
+                # Si dealer también tiene 21 -> Empate
+                if d_score == 21:
+                    wallet.add_funds(bet_amount)
+                    msg = "⚔️ ¡Empate imperial de Blackjacks! Se devuelve tu apuesta íntegra."
+                    payout = bet_amount
+                else:
+                    payout = int(round(bet_amount * 2.5))  # Paga 3:2 clásico
+                    wallet.add_funds(payout)
+                    msg = f"👑 ¡BLACKJACK REAL! Has obtenido 21 directo. Cobras +{payout} 🪙."
+                    grant_user_xp(request, tg_id, max(4, bet_amount // 10), reason="Blackjack")
+                    
+                return JsonResponse({
+                    'success': True,
+                    'game_over': True,
+                    'player_hand': player_hand,
+                    'dealer_hand': dealer_hand,
+                    'player_score': 21,
+                    'dealer_score': d_score,
+                    'payout': payout,
+                    'nuevo_saldo': wallet.balance,
+                    'patron_vault': wallet.patron_vault,
+                    'message': msg
+                })
+                
+            # Estado en juego
+            new_state = {
+                'active': True,
+                'bet_amount': bet_amount,
+                'player_hand': player_hand,
+                'dealer_hand': dealer_hand,
+            }
+            request.session[session_key] = new_state
+            
+            return JsonResponse({
+                'success': True,
+                'game_over': False,
+                'player_hand': player_hand,
+                'dealer_upcard': dealer_hand[0],  # Solo la primera carta visible
+                'player_score': p_score,
+                'nuevo_saldo': wallet.balance,
+                'patron_vault': wallet.patron_vault,
+            })
+            
+        # 2. PEDIR CARTA (HIT)
+        elif action == 'hit':
+            if not game_state or not game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'No hay partida activa.'}, status=400)
+                
+            card = draw_card()
+            game_state['player_hand'].append(card)
+            p_score = calculate_hand_value(game_state['player_hand'])
+            
+            # Comprobar si se pasó de 21
+            if p_score > 21:
+                # BUFF LOBO ESPECTRAL: Salvamento de bust (Opcional)
+                game_state['active'] = False
+                bet = game_state['bet_amount']
+                dealer_hand = game_state['dealer_hand']
+                del request.session[session_key]
+                request.session.modified = True
+                
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
+                
+                return JsonResponse({
+                    'success': True,
+                    'game_over': True,
+                    'busted': True,
+                    'player_hand': game_state['player_hand'],
+                    'dealer_hand': dealer_hand,
+                    'player_score': p_score,
+                    'dealer_score': calculate_hand_value(dealer_hand),
+                    'payout': 0,
+                    'nuevo_saldo': wallet.balance,
+                    'message': f"💀 Te has pasado con {p_score}. El croupier gana la ronda."
+                })
+                
+            request.session[session_key] = game_state
+            request.session.modified = True
+            
+            return JsonResponse({
+                'success': True,
+                'game_over': False,
+                'card_drawn': card,
+                'player_hand': game_state['player_hand'],
+                'player_score': p_score,
+            })
+            
+        # 3. PLANTARSE (STAND)
+        elif action == 'stand':
+            if not game_state or not game_state.get('active'):
+                return JsonResponse({'success': False, 'error': 'No hay partida activa.'}, status=400)
+                
+            player_hand = game_state['player_hand']
+            dealer_hand = game_state['dealer_hand']
+            bet = game_state['bet_amount']
+            
+            p_score = calculate_hand_value(player_hand)
+            d_score = calculate_hand_value(dealer_hand)
+            
+            # El croupier debe pedir carta obligatoriamente hasta alcanzar 17 o más
+            while d_score < 17:
+                dealer_hand.append(draw_card())
+                d_score = calculate_hand_value(dealer_hand)
+                
+            won = False
+            is_push = False
+            payout = 0
+            
+            if d_score > 21:
+                # Crupier se pasó -> Gana jugador
+                won = True
+                payout = bet * 2
+                msg = f"🎉 ¡El croupier se pasó con {d_score}! Has ganado +{payout} 🪙."
+            elif p_score > d_score:
+                won = True
+                payout = bet * 2
+                msg = f"⚔️ ¡Tu mano ({p_score}) supera a la del croupier ({d_score})! Ganas +{payout} 🪙."
+            elif p_score == d_score:
+                is_push = True
+                payout = bet
+                msg = f"🛡️ Empate a {p_score}. Tu apuesta de {bet} 🪙 queda a salvo."
+            else:
+                msg = f"💀 La banca gana con {d_score} frente a tu {p_score}."
+                
+            if payout > 0:
+                wallet.add_funds(payout)
+                
+            del request.session[session_key]
+            request.session.modified = True
+            
+            if won:
+                grant_user_xp(request, tg_id, 4, reason="Victoria Blackjack")
+            elif is_push:
+                grant_user_xp(request, tg_id, 2, reason="Empate Blackjack")
+            else:
+                grant_user_xp(request, tg_id, 1, reason="Derrota Blackjack")
+                
+            return JsonResponse({
+                'success': True,
+                'game_over': True,
+                'player_hand': player_hand,
+                'dealer_hand': dealer_hand,
+                'player_score': p_score,
+                'dealer_score': d_score,
+                'won': won,
+                'is_push': is_push,
+                'payout': payout,
+                'nuevo_saldo': wallet.balance,
+                'patron_vault': wallet.patron_vault,
+                'message': msg
+            })
+            
+        return JsonResponse({'success': False, 'error': 'Acción inválida'}, status=400)
+        
+    return render(request, 'economy/blackjack.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+    })
+
+
+# ==============================================================================
+# 🏪 BAZAR REAL & BOUTIQUE DE OBJETOS
+# ==============================================================================
+BAZAR_ITEMS = [
+    # 🛡️ PROTECCIÓN Y DEFENSA
+    {
+        'code': 'shield_1d',
+        'name': 'Escudo Sagrado (1 Día)',
+        'description': 'Protege tus aposentos e inventario contra hurtos y asedios durante 24 horas continuas.',
+        'icon': '🛡️',
+        'price': 150,
+        'category': 'defense',
+        'badge': 'Seguridad',
+    },
+    {
+        'code': 'shield_3d',
+        'name': 'Baluarte Imperial (3 Días)',
+        'description': 'Inviolabilidad total por 72 horas avalada por la Guardia de la Corona.',
+        'icon': '🏰',
+        'price': 380,
+        'category': 'defense',
+        'badge': 'Recomendado',
+    },
+    
+    # 👑 ESTATUS Y NOBLEZA
+    {
+        'code': 'custom_title',
+        'name': 'Bula de Título Personalizado',
+        'description': 'Permite inscribir tu propio apodo o título honorífico en la Corte Imperial.',
+        'icon': '📜',
+        'price': 600,
+        'category': 'status',
+        'badge': 'Distinción',
+    },
+    {
+        'code': 'vip_badge',
+        'name': 'Insignia de Mecenas Dorado',
+        'description': 'Destaca tu perfil con el laurel dorado perpetuo del Reino del Placer.',
+        'icon': '⚜️',
+        'price': 1200,
+        'category': 'status',
+        'badge': 'Exclusivo',
+    },
+    {
+        'code': 'avatar_frame',
+        'name': 'Marco de Oro y Diamantes',
+        'description': 'Enmarca tu avatar con orfebrería imperial de alto rango nobiliario.',
+        'icon': '🖼️',
+        'price': 850,
+        'category': 'status',
+        'badge': 'Estético',
+    },
+
+    # 🌹 TRIBUTOS PARA IDOLS
+    {
+        'code': 'tribute_roses',
+        'name': 'Ramo de Rosas Negras',
+        'description': 'Ofrenda aromática que eleva la devoción y lealtad de tu Idol preferida.',
+        'icon': '🌹',
+        'price': 75,
+        'category': 'tributes',
+        'badge': 'Devoción',
+    },
+    {
+        'code': 'tribute_champagne',
+        'name': 'Champán de la Reserva Imperial',
+        'description': 'Brindis de alta alcurnia para compartir en privado con una concubina.',
+        'icon': '🍾',
+        'price': 220,
+        'category': 'tributes',
+        'badge': 'Lujoso',
+    },
+    {
+        'code': 'tribute_silk',
+        'name': 'Lencería de Seda Púrpura',
+        'description': 'Prenda delicada tejida con hilos de oro para tu cortesana favorita.',
+        'icon': '👘',
+        'price': 500,
+        'category': 'tributes',
+        'badge': 'Sensual',
+    },
+    
+    # 🎲 FORTUNA Y PRIVILEGIOS
+    {
+        'code': 'lucky_key',
+        'name': 'Llave Maestra del Casino',
+        'description': 'Asegura un giro con multiplicador duplicado en la Ruleta Imperial.',
+        'icon': '🗝️',
+        'price': 300,
+        'category': 'fortune',
+        'badge': 'Ventaja',
+    },
+]
+
+def bazar_shop(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    
+    # Inventario actual del usuario
+    inventory_items = UserInventoryItem.objects.filter(telegram_user_id=tg_id)
+    inv_dict = {item.item_code: item.quantity for item in inventory_items}
+    
+    # Coleccionables con Foto disponibles en la Boutique
+    collectibles = BazarCollectible.objects.filter(is_active=True).order_by('-created_at')
+    user_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item')
+
+    is_staff = check_is_staff_or_admin(tg_id)
+
+    return render(request, 'economy/bazar.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'items': BAZAR_ITEMS,
+        'inventory': inv_dict,
+        'collectibles': collectibles,
+        'user_collectibles': user_collectibles,
+        'is_staff': is_staff,
+    })
+
+
+def bazar_buy_action(request):
+    if request.method != 'POST':
+        return redirect('/economy/bazar/')
+        
+    tg_id = get_safe_tg_id(request)
+    item_code = request.POST.get('item_code')
+    
+    matched_item = next((item for item in BAZAR_ITEMS if item['code'] == item_code), None)
+    if not matched_item:
+        messages.error(request, "El artículo solicitado no existe en los estantes del Bazar.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    
+    price = matched_item['price']
+    if wallet.balance < price:
+        messages.error(request, f"Oro insuficiente. Requiere {price} 🪙 para adquirir {matched_item['name']}.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
+    with transaction.atomic():
+        wallet.remove_funds(price)
+        inv_item, _ = UserInventoryItem.objects.get_or_create(
+            telegram_user_id=tg_id,
+            item_code=item_code
         )
-        messages.info(request, "Propuesta rechazada.")
+        inv_item.quantity += 1
+        inv_item.save()
+        
+        # Efectos inmediatos especiales
+        if item_code in ['shield_1d', 'shield_3d']:
+            days = 1 if item_code == 'shield_1d' else 3
+            now = timezone.now()
+            # Si ya tiene un escudo activo, se suma al tiempo restante
+            if profile.shield_expires_at and profile.shield_expires_at > now:
+                profile.shield_expires_at += timedelta(days=days)
+            else:
+                profile.shield_expires_at = now + timedelta(days=days)
+            profile.save(update_fields=['shield_expires_at'])
+            
+        elif item_code == 'vip_badge':
+            profile.has_vip_badge = True
+            profile.save(update_fields=['has_vip_badge'])
+            
+        elif item_code == 'avatar_frame':
+            profile.avatar_frame = 'gold_frame'
+            profile.save(update_fields=['avatar_frame'])
+            
+        elif item_code == 'custom_title':
+            new_title = request.POST.get('custom_title_text', '').strip()
+            if new_title:
+                profile.custom_title = new_title[:30]
+                profile.save(update_fields=['custom_title'])
+                
+        grant_user_xp(request, tg_id, max(5, price // 20), reason=f"Compra en Bazar: {matched_item['name']}")
 
-    elif action == 'cancel' and trade.sender_telegram_id == tg_id:
-        trade.status = 'cancelled'
-        trade.save()
-        messages.info(request, "Propuesta de intercambio cancelada.")
+    messages.success(request, f"🛍️ ¡Has adquirido con éxito '{matched_item['name']}' por {price} 🪙!")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
-    return redirect('/idols/photocards/market/')
+
+# ==============================================================================
+# 💼 LABORES DE LA CORTE (JOBS DE FARMEO PASIVO)
+# ==============================================================================
+JOBS_LIST = [
+    {
+        'id': 'patrol',
+        'title': 'Ronda de Guardia en los Jardines',
+        'description': 'Vigila los pabellones privados del harén imperial y ahuyenta a los espías nocturnos.',
+        'icon': '🗡️',
+        'duration_minutes': 30,
+        'gold_reward': 40,
+        'xp_reward': 15,
+        'min_level': 1,
+    },
+    {
+        'id': 'treasury',
+        'title': 'Auditoría en las Bóvedas del Tesoro',
+        'description': 'Contabiliza los tributos recolectados y acuña lingotes con el sello real.',
+        'icon': '💰',
+        'duration_minutes': 60,
+        'gold_reward': 95,
+        'xp_reward': 35,
+        'min_level': 2,
+    },
+    {
+        'id': 'cellar',
+        'title': 'Cata de Vinos en las Criptas Reales',
+        'description': 'Selecciona los mejores licores de la reserva personal de las concubinas favoritas.',
+        'icon': '🍷',
+        'duration_minutes': 120,
+        'gold_reward': 220,
+        'xp_reward': 70,
+        'min_level': 3,
+    },
+    {
+        'id': 'diplomacy',
+        'title': 'Misión Diplomática Encubierta',
+        'description': 'Negocia pactos y alianzas carnales con emisarios de reinos vecinos.',
+        'icon': '👑',
+        'duration_minutes': 240,
+        'gold_reward': 480,
+        'xp_reward': 150,
+        'min_level': 5,
+    },
+]
+
+def court_jobs_view(request):
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    
+    active_job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+    
+    now = timezone.now()
+    is_completed = False
+    time_remaining_seconds = 0
+    
+    if active_job:
+        if now >= active_job.finishes_at:
+            is_completed = True
+        else:
+            time_remaining_seconds = int((active_job.finishes_at - now).total_seconds())
+
+    return render(request, 'economy/jobs.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'jobs': JOBS_LIST,
+        'active_job': active_job,
+        'is_completed': is_completed,
+        'time_remaining_seconds': time_remaining_seconds,
+    })
+
+
+def start_court_job(request):
+    if request.method != 'POST':
+        return redirect('/economy/jobs/')
+        
+    tg_id = get_safe_tg_id(request)
+    job_id = request.POST.get('job_id')
+    
+    matched = next((j for j in JOBS_LIST if j['id'] == job_id), None)
+    if not matched:
+        messages.error(request, "La labor nobiliaria no existe.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        
+    # Verificar si ya tiene una activa sin cobrar
+    existing = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+    if existing:
+        messages.warning(request, "Ya te encuentras desempeñando una labor para la Corona.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    if profile.level < matched['min_level']:
+        messages.error(request, f"Se requiere Nivel {matched['min_level']} para acceder a esta tarea de la Corte.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        
+    duration = matched['duration_minutes']
+    
+    # BUFF CIERVO SAGRADO: Reducción del tiempo de labores en 15% / 25% / 35%
+    try:
+        pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+        if pet and pet.species == 'deer':
+            deer_reduction = {1: 0.85, 2: 0.75, 3: 0.65}.get(pet.evolution_stage_number, 0.85)
+            duration = max(5, int(round(duration * deer_reduction)))
+    except Exception:
+        pass
+        
+    finishes = timezone.now() + timedelta(minutes=duration)
+    
+    CourtJob.objects.create(
+        telegram_user_id=tg_id,
+        job_code=matched['id'],
+        title=matched['title'],
+        role_type=matched['id'],
+        gold_reward=matched['gold_reward'],
+        xp_reward=matched['xp_reward'],
+        finishes_at=finishes
+    )
+    
+    messages.success(request, f"⚔️ Has iniciado '{matched['title']}'. Regresa en {duration} minutos a reclamar tu paga.")
+    return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+
+def claim_court_job(request):
+    if request.method != 'POST':
+        return redirect('/economy/jobs/')
+        
+    tg_id = get_safe_tg_id(request)
+    job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+    
+    if not job:
+        messages.error(request, "No tienes ninguna labor pendiente por cobrar.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        
+    if timezone.now() < job.finishes_at:
+        messages.warning(request, "⏳ Aún no concluye el tiempo reglamentario de tu labor imperial.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        
+    with transaction.atomic():
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        wallet.add_funds(job.gold_reward)
+        job.is_claimed = True
+        job.save()
+        
+        grant_user_xp(request, tg_id, job.xp_reward, reason="Paga de Labor de Corte")
+        
+    messages.success(request, f"💰 ¡Labor cumplida con honor! Has cobrado +{job.gold_reward} 🪙 y +{job.xp_reward} EXP nobiliaria.")
+    return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+
+# ==============================================================================
+# 🏺 BOUTIQUE REAL: COLECCIONABLES CON FOTOS REALES
+# ==============================================================================
+def buy_collectible_action(request, item_id):
+    if request.method != 'POST':
+        return redirect('/economy/bazar/')
+        
+    tg_id = get_safe_tg_id(request)
+    item = get_object_or_404(BazarCollectible, id=item_id, is_active=True)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    
+    if item.stock <= 0:
+        messages.error(request, f"¡Agotado! Las existencias de '{item.name}' se han agotado en el reino.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
+    if wallet.balance < item.price:
+        messages.error(request, f"Oro insuficiente. '{item.name}' cuesta {item.price} 🪙 y dispones de {wallet.balance} 🪙.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
+    with transaction.atomic():
+        wallet.remove_funds(item.price)
+        item.stock -= 1
+        item.save()
+        
+        user_col, created = UserCollectible.objects.get_or_create(
+            telegram_user_id=tg_id,
+            item=item
+        )
+        if not created:
+            user_col.quantity += 1
+            user_col.save()
+            
+        grant_user_xp(request, tg_id, max(10, item.price // 15), reason=f"Adquisición de {item.name}")
+        
+    messages.success(request, f"✨ ¡Adquirido! Ahora posees el coleccionable exclusivo '{item.name}'. Ha sido añadido a tus aposentos.")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+def admin_add_collectible(request):
+    tg_id = get_safe_tg_id(request)
+    if not check_is_staff_or_admin(tg_id):
+        messages.error(request, "Acceso reservado exclusivamente a la Corona y Administradores.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        category = request.POST.get('category', 'relic')
+        idol_name = request.POST.get('idol_name', '').strip()
+        description = request.POST.get('description', '').strip()
+        price = int(request.POST.get('price', 100))
+        stock = int(request.POST.get('stock', 10))
+        image_file = request.FILES.get('image')
+        
+        if not name or not image_file:
+            messages.error(request, "El nombre y la fotografía del coleccionable son obligatorios.")
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+            
+        optimized_img = optimize_uploaded_image(image_file, max_size=(1080, 1080), quality=88)
+        
+        BazarCollectible.objects.create(
+            name=name,
+            category=category,
+            idol_name=idol_name,
+            description=description,
+            price=price,
+            stock=stock,
+            image=optimized_img,
+            is_active=True
+        )
+        messages.success(request, f"🏺 ¡Coleccionable '{name}' añadido con éxito a la Boutique Imperial!")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+def admin_delete_collectible(request, item_id):
+    tg_id = get_safe_tg_id(request)
+    if not check_is_staff_or_admin(tg_id):
+        messages.error(request, "Acceso reservado a la Corona.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
+    item = get_object_or_404(BazarCollectible, id=item_id)
+    name = item.name
+    item.delete()
+    messages.info(request, f"Coleccionable '{name}' retirado de la exhibición.")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+# ==============================================================================
+# 🎫 RASCA Y GANA CLANDESTINO (SCRATCH CARDS 3x3)
+# ==============================================================================
+SCRATCH_TIERS = {
+    'bronze': {
+        'name': 'Cartón de Bronce',
+        'cost': 25,
+        'badge': '🥉',
+        'min_level': 1,
+        'card_pool': ['common'],
+    },
+    'silver': {
+        'name': 'Cartón de Plata',
+        'cost': 60,
+        'badge': '🥈',
+        'min_level': 3,
+        'card_pool': ['rare'],
+    },
+    'gold': {
+        'name': 'Cartón Imperial de Oro',
+        'cost': 150,
+        'badge': '🥇',
+        'min_level': 5,
+        'card_pool': ['rare', 'epic', 'legendary'],
+    },
+}
+
+# ⚖️ Símbolos con Pesos Probabilísticos Calibrados (RTP ~91%)
+SCRATCH_SYMBOLS = {
+    'fleur': {'symbol': '⚜️', 'name': 'Flor de Lis', 'mult': 1.0, 'weight': 40, 'color': '#c084fc'},     # Recupera costo
+    'wine': {'symbol': '🍷', 'name': 'Copa de Vino', 'mult': 1.5, 'weight': 28, 'color': '#f43f5e'},      # Ganancia moderada
+    'gold_sack': {'symbol': '🪙', 'name': 'Saco de Oro', 'mult': 3.0, 'weight': 16, 'color': '#f59e0b'},  # Buen premio
+    'diamond': {'symbol': '💎', 'name': 'Diamante Real', 'mult': 6.0, 'weight': 8, 'color': '#60a5fa'},   # Premio mayor
+    'crown': {'symbol': '👑', 'name': 'Corona Imperial', 'mult': 15.0, 'weight': 3, 'color': '#fbbf24'},  # Gran Jackpot
+    'photocard': {'symbol': '🎴', 'name': 'Photocard Secreta', 'mult': 1.0, 'weight': 3, 'color': '#e879f9'}, # Muy exclusiva
+}
+
+def scratch_card_view(request):
+    """Muestra la interfaz del Rasca y Gana Clandestino."""
+    tg_id = get_safe_tg_id(request)
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+    
+    return render(request, 'economy/scratch.html', {
+        'tg_id': tg_id,
+        'wallet': wallet,
+        'profile': profile,
+        'tiers': SCRATCH_TIERS,
+    })
+
+
+def scratch_card_play_ajax(request):
+    """Compra y genera la cuadrícula 3x3 del cartón vía AJAX con Pity System calibrado."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Método no permitido'}, status=405)
+
+    tg_id = get_safe_tg_id(request)
+    tier_key = request.POST.get('tier', 'bronze').strip().lower()
+    if tier_key not in SCRATCH_TIERS:
+        return JsonResponse({'success': False, 'error': 'Cartón no válido.'}, status=400)
+
+    cfg = SCRATCH_TIERS[tier_key]
+    cost = cfg['cost']
+
+    try:
+        with transaction.atomic():
+            wallet = Wallet.objects.select_for_update().get(telegram_user_id=tg_id)
+            profile, _ = UserProfile.objects.select_for_update().get_or_create(telegram_user_id=tg_id)
+
+            if profile.level < cfg['min_level']:
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Requiere Nivel {cfg['min_level']} o superior para raspar este cartón."
+                }, status=400)
+
+            if wallet.balance < cost:
+                return JsonResponse({
+                    'success': False,
+                    'error': f"Oro insuficiente. Este cartón cuesta {cost} 🪙."
+                }, status=400)
+
+            # Descontar costo y abonar al Cofre del Mecenas (8%)
+            wallet.balance -= cost
+            wallet.accumulate_patron_vault(cost)
+            wallet.save()
+            balance_after_cost = wallet.balance
+
+            # 🍀 SISTEMA DE PITY (Suerte Dinámica Anti-Rachas Negativas)
+            consecutive_losses = request.session.get("scratch_consecutive_losses", 0)
+            # Base 35% de probabilidad de victoria + 10% por cada derrota consecutiva (techo en 75%)
+            win_chance = min(0.75, 0.35 + (consecutive_losses * 0.10))
+            is_win = random.random() < win_chance
+
+            if is_win:
+                request.session["scratch_consecutive_losses"] = 0
+            else:
+                request.session["scratch_consecutive_losses"] = consecutive_losses + 1
+
+            symbols_keys = list(SCRATCH_SYMBOLS.keys())
+            weights = [SCRATCH_SYMBOLS[k]["weight"] for k in symbols_keys]
+            winning_key = None
+            grid = []
+            payout = 0
+            photocard_won_data = None
+
+            if is_win:
+                winning_key = random.choices(symbols_keys, weights=weights, k=1)[0]
+                mult = SCRATCH_SYMBOLS[winning_key]["mult"]
+                payout = int(round(cost * mult))
+
+                # Otorgar Photocard real verificando existencia
+                if winning_key == "photocard":
+                    from idols.models import Photocard, UserPhotocard
+                    
+                    # Probabilidad noble de rarezas según tier
+                    target_rarity = "common"
+                    if tier_key == "bronze":
+                        target_rarity = "common"
+                    elif tier_key == "silver":
+                        target_rarity = random.choices(["rare", "epic"], weights=[90, 10], k=1)[0]
+                    elif tier_key == "gold":
+                        # Solo 2% de probabilidad de legendaria en Oro Real
+                        target_rarity = random.choices(["rare", "epic", "legendary"], weights=[80, 18, 2], k=1)[0]
+
+                    available_cards = list(Photocard.objects.filter(rarity=target_rarity).exclude(image=""))
+                    
+                    # Fallback si no hay cartas de esa rareza
+                    if not available_cards:
+                        available_cards = list(Photocard.objects.exclude(image=""))
+
+                    if available_cards:
+                        awarded_card = random.choice(available_cards)
+                        UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=awarded_card)
+                        photocard_won_data = {
+                            "name": awarded_card.name,
+                            "idol": awarded_card.display_idol_name,
+                            "rarity": awarded_card.get_rarity_display(),
+                            "image": awarded_card.image.url if awarded_card.image else "",
+                            "color": awarded_card.get_color_hex(),
+                        }
+
+                        if awarded_card.rarity == "legendary":
+                            from django.conf import settings
+                            group_id = getattr(settings, "TELEGRAM_GROUP_ID", None)
+                            if group_id:
+                                user_name = profile.username or f"Noble_{tg_id}"
+                                tier_display_name = cfg.get("name", "Cartón Imperial")
+                                send_telegram_msg(
+                                    chat_id=group_id,
+                                    text=(
+                                        f"👑 <b>¡PHOTOCARD LEGENDARIA DESENTERRADA!</b>\n\n"
+                                        f"El noble <b>{user_name}</b> raspó el <i>{tier_display_name}</i> y reveló a <b>{awarded_card.name}</b> ({awarded_card.display_idol_name}) ✨"
+                                    ),
+                                    button_text="🎰 Ir a Rasca y Gana",
+                                    button_url="https://t.me/KingdomPleasure_bot?start=entrar"
+                                )
+
+                # 💎 GENERACIÓN SEGURA DE CASILLAS GANADORAS
+                # Exactamente 3 símbolos ganadores. Los 6 señuelos restantes NUNCA superan 2 copias de ninguno.
+                win_indices = set(random.sample(range(9), 3))
+                decoy_pool = [k for k in symbols_keys if k != winning_key]
+                chosen_sample = random.sample(decoy_pool, min(3, len(decoy_pool)))
+                decoy_list = (chosen_sample * 2)[:6]
+                random.shuffle(decoy_list)
+
+                decoy_i = 0
+                for i in range(9):
+                    if i in win_indices:
+                        s_data = SCRATCH_SYMBOLS[winning_key]
+                        grid.append({
+                            "key": winning_key,
+                            "symbol": s_data["symbol"],
+                            "name": s_data["name"],
+                            "color": s_data["color"],
+                            "is_winner": True
+                        })
+                    else:
+                        d_key = decoy_list[decoy_i]
+                        decoy_i += 1
+                        s_data = SCRATCH_SYMBOLS[d_key]
+                        grid.append({
+                            "key": d_key,
+                            "symbol": s_data["symbol"],
+                            "name": s_data["name"],
+                            "color": s_data["color"],
+                            "is_winner": False
+                        })
+
+                wallet.balance += payout
+                wallet.save()
+                grant_user_xp(request, tg_id, random.randint(2, 4), reason="Rasca y Gana Clandestino")
+
+            else:
+                # 🎭 GENERAR CUASI-VICTORIA ("Near-Miss") MATEMÁTICAMENTE IMPERMEABLE:
+                # 3 pares de símbolos (3 * 2 = 6 casillas) + 3 símbolos individuales (3 * 1 = 3 casillas) = 9 casillas.
+                # NINGÚN símbolo puede tener 3 copias jamás (0% riesgo de falsas victorias).
+                pair_keys = random.sample(symbols_keys, 3)
+                single_pool = [k for k in symbols_keys if k not in pair_keys]
+                single_keys = random.sample(single_pool, 3)
+                loss_keys = (pair_keys * 2) + single_keys
+                random.shuffle(loss_keys)
+
+                for k in loss_keys:
+                    s_data = SCRATCH_SYMBOLS[k]
+                    grid.append({
+                        "key": k,
+                        "symbol": s_data["symbol"],
+                        "name": s_data["name"],
+                        "color": s_data["color"],
+                        "is_winner": False
+                    })
+
+                grant_user_xp(request, tg_id, 1, reason="Rasca y Gana Clandestino")
+
+            serial_num = f"KOP-{random.randint(10000, 99999)}"
+
+            return JsonResponse({
+                'success': True,
+                'is_win': is_win,
+                'winning_symbol': SCRATCH_SYMBOLS[winning_key]['name'] if winning_key else None,
+                'payout': payout,
+                'photocard_won': photocard_won_data,
+                'grid': grid,
+                'balance_after_cost': balance_after_cost,
+                'new_balance': wallet.balance,
+                'patron_vault': wallet.patron_vault,
+                'serial': serial_num,
+                'tier_name': cfg['name'],
+            })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': f"Error en la casa de juego: {str(e)}"}, status=500)
 
 ==================================================
 ARCHIVO: .\economy\__init__.py
@@ -5467,10 +4918,13 @@ def social_feed(request):
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
     tg_username = request.GET.get('tg_username') or (profile.username if profile else 'Noble')
     
-    # Prefetch optimizado de comentarios, fotos de carrusel y likes
-    posts = Post.objects.all().select_related('idol').prefetch_related(
-        'comments', 'gallery', 'user_likes'
-    )
+    # Prefetch blindado con fallback si faltan migraciones
+    try:
+        posts = Post.objects.all().select_related('idol').prefetch_related(
+            'comments', 'gallery', 'user_likes'
+        )
+    except Exception:
+        posts = Post.objects.all().select_related('idol')
 
     idol_filter_id = request.GET.get('idol_id')
     filtered_idol = None
@@ -5485,13 +4939,28 @@ def social_feed(request):
     is_admin = check_is_staff_or_admin(tg_id)
     
     if tg_id:
-        pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
-        propios = list(Post.objects.filter(idol__telegram_user_id=tg_id).values_list('id', flat=True))
-        unlocked_ids = set(pagados + propios)
-        
-        user_likes_objs = PostLike.objects.filter(client_telegram_id=tg_id)
-        liked_ids = list(user_likes_objs.values_list('post_id', flat=True))
-        user_reactions = {like.post_id: getattr(like, 'reaction_type', 'like') for like in user_likes_objs}
+        try:
+            pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
+            propios = list(Post.objects.filter(idol__telegram_user_id=tg_id).values_list('id', flat=True))
+            unlocked_ids = set(pagados + propios)
+        except Exception:
+            unlocked_ids = set()
+            
+        try:
+            user_likes_objs = PostLike.objects.filter(client_telegram_id=tg_id)
+            liked_ids = list(user_likes_objs.values_list('post_id', flat=True))
+            user_reactions = {like.post_id: getattr(like, 'reaction_type', 'like') for like in user_likes_objs}
+        except Exception:
+            liked_ids = []
+            user_reactions = {}
+
+    # Inyectar propiedades directamente en cada post para la plantilla
+    posts_list = []
+    for p in posts:
+        p.is_unlocked = (p.id in unlocked_ids or p.network == 'gram' or is_admin or (p.idol and p.idol.telegram_user_id == tg_id))
+        p.is_liked = (p.id in liked_ids)
+        p.user_reaction = user_reactions.get(p.id, 'like' if p.id in liked_ids else '')
+        posts_list.append(p)
 
     theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
     feed_theme = {
@@ -5502,7 +4971,7 @@ def social_feed(request):
     }
         
     return render(request, 'idols/feed.html', {
-        'posts': posts,
+        'posts': posts_list,
         'tg_id': tg_id,
         'unlocked_ids': list(unlocked_ids),
         'liked_ids': liked_ids,
@@ -14204,16 +13673,13 @@ ARCHIVO: .\templates\idols\feed.html
                     <button type="button" onclick="toggleReactionDock({{ post.id }})" id="react-btn-{{ post.id }}"
                             class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-black/70 transition-all active:scale-125 select-none border-white/10 text-stone-300 hover:text-white">
                         <span id="react-icon-{{ post.id }}" class="text-sm">
-                            {% with ur=user_reactions|default:None %}
-                                {% if post.id in user_reactions %}
-                                    {% if user_reactions|get_item:post.id == 'fire' %}🔥
-                                    {% elif user_reactions|get_item:post.id == 'crown' %}👑
-                                    {% elif user_reactions|get_item:post.id == 'toast' %}🥂
-                                    {% elif user_reactions|get_item:post.id == 'drool' %}🤤
-                                    {% else %}❤️{% endif %}
-                                {% else %}🤍{% endif %}
-                            {% endwith %}
-                        </span>
+                          {% if post.user_reaction == 'fire' %}🔥
+                          {% elif post.user_reaction == 'crown' %}👑
+                          {% elif post.user_reaction == 'toast' %}🥂
+                          {% elif post.user_reaction == 'drool' %}🤤
+                          {% elif post.user_reaction == 'like' or post.is_liked %}❤️
+                          {% else %}🤍{% endif %}
+                      </span>
                         <span id="like-count-{{ post.id }}" class="text-xs font-mono font-black">{{ post.likes }}</span>
                     </button>
 

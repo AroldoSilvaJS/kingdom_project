@@ -477,11 +477,22 @@ def idol_detail(request, idol_id):
 
 
 def social_feed(request):
+    """
+    Muro VIP Clandestino de la Corte.
+    Integra saldo en tiempo real, catálogo de musas para filtro instantáneo,
+    y prefetch blindado de reacciones, desbloqueos y comentarios.
+    """
     tg_id = resolve_safe_tg(request)
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
     tg_username = request.GET.get('tg_username') or (profile.username if profile else 'Noble')
     
-    # Prefetch blindado con fallback si faltan migraciones
+    wallet = Wallet.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+    my_balance = wallet.balance if wallet else 0
+
+    # Todas las Musas activas para el selector desplegable
+    all_idols = IdolProfile.objects.filter(is_active=True).order_by('stage_name')
+
+    # Prefetch blindado con fallback
     try:
         posts = Post.objects.all().select_related('idol').prefetch_related(
             'comments', 'gallery', 'user_likes'
@@ -496,7 +507,7 @@ def social_feed(request):
         if filtered_idol:
             posts = posts.filter(idol=filtered_idol)
 
-    unlocked_ids = []
+    unlocked_ids = set()
     liked_ids = []
     user_reactions = {}
     is_admin = check_is_staff_or_admin(tg_id)
@@ -517,7 +528,7 @@ def social_feed(request):
             liked_ids = []
             user_reactions = {}
 
-    # Inyectar propiedades directamente en cada post para la plantilla
+    # Inyectar propiedades directamente en cada post
     posts_list = []
     for p in posts:
         p.is_unlocked = (p.id in unlocked_ids or p.network == 'gram' or is_admin or (p.idol and p.idol.telegram_user_id == tg_id))
@@ -532,7 +543,7 @@ def social_feed(request):
         'message': KingdomSetting.get_val('feed_theme_message', ''),
         'banner_url': KingdomSetting.get_val('feed_theme_banner', '')
     }
-        
+    
     return render(request, 'idols/feed.html', {
         'posts': posts_list,
         'tg_id': tg_id,
@@ -543,6 +554,10 @@ def social_feed(request):
         'is_admin': is_admin,
         'feed_theme': feed_theme,
         'filtered_idol': filtered_idol,
+        'all_idols': all_idols,
+        'my_balance': my_balance,
+        'wallet': wallet,
+        'profile': profile,
     })
 
 
@@ -848,7 +863,7 @@ def toggle_like(request, post_id):
 def toggle_reaction(request, post_id):
     """
     Gestiona la Barra de Reacciones V.I.P de la Corte (❤️, 🔥, 👑, 🥂, 🤤).
-    Permite alternar o cambiar de reacción dinámicamente con respuesta JSON.
+    Devuelve active_reaction y current_reaction perfectamente sincronizados.
     """
     if request.method == 'POST':
         tg_id = resolve_safe_tg(request)
@@ -865,6 +880,7 @@ def toggle_reaction(request, post_id):
         
         if existing_like:
             if existing_like.reaction_type == reaction:
+                # Quitar reacción
                 existing_like.delete()
                 if post.likes > 0:
                     post.likes -= 1
@@ -872,11 +888,13 @@ def toggle_reaction(request, post_id):
                 active = False
                 current_reaction = None
             else:
+                # Cambiar de reacción
                 existing_like.reaction_type = reaction
                 existing_like.save()
                 active = True
                 current_reaction = reaction
         else:
+            # Nueva reacción
             PostLike.objects.create(post=post, client_telegram_id=tg_id, reaction_type=reaction)
             post.likes += 1
             post.save()
@@ -884,19 +902,17 @@ def toggle_reaction(request, post_id):
             current_reaction = reaction
             grant_user_xp(request, tg_id, 2, reason="Reacción en Muro")
 
-        counts = {}
-        for r_code in allowed:
-            counts[r_code] = PostLike.objects.filter(post=post, reaction_type=r_code).count()
-
         return JsonResponse({
             'success': True,
             'active': active,
             'current_reaction': current_reaction,
-            'total_likes': post.likes,
-            'counts': counts
+            'active_reaction': current_reaction,
+            'total_likes': post.likes
         })
         
     return JsonResponse({'error': 'Invalid method'}, status=405)
+
+
 
 
 def my_collection(request):
@@ -1056,7 +1072,9 @@ def create_custom_request(request, idol_id):
 
 
 def add_comment(request, post_id):
-    """Comentarios en el Muro (soporta inserción en vivo vía AJAX con insignias nobiliarias)."""
+    """
+    Comentarios en vivo vía AJAX con marco, título nobiliario y nivel real.
+    """
     if request.method == 'POST':
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         tg_id = resolve_safe_tg(request)
@@ -1085,6 +1103,7 @@ def add_comment(request, post_id):
             )
             grant_user_xp(request, tg_id, 3, reason="Comentario en Muro")
 
+            # Notificación Telegram
             if parent_comment and parent_comment.author_telegram_id and parent_comment.author_telegram_id != tg_id:
                 send_telegram_msg(
                     chat_id=parent_comment.author_telegram_id,
@@ -1109,9 +1128,10 @@ def add_comment(request, post_id):
                 )
 
             if is_ajax:
-                author_title = getattr(profile, 'title', '') if profile else ''
-                author_level = getattr(profile, 'level', 1) if profile else 1
-                avatar_frame = getattr(profile, 'active_avatar_frame', '') if profile else ''
+                author_title = profile.get_title_display() if (profile and profile.title) else ''
+                author_level = profile.level if profile else 1
+                avatar_frame = profile.avatar_frame if profile else 'gold'
+
                 return JsonResponse({
                     'success': True,
                     'comment': {
@@ -1119,7 +1139,9 @@ def add_comment(request, post_id):
                         'parent_id': parent_comment.id if parent_comment else None,
                         'author_name': new_comment.author_name,
                         'is_vip_author': new_comment.is_vip_author,
+                        'level': author_level,
                         'author_level': author_level,
+                        'title': author_title,
                         'author_title': author_title,
                         'avatar_frame': avatar_frame,
                         'text': new_comment.text,
@@ -1130,7 +1152,7 @@ def add_comment(request, post_id):
 
             messages.success(request, "Comentario publicado (+3 EXP).")
             
-        return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+        return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={tg_username}')
 
 
 # ==========================================
