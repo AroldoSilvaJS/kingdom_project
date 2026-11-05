@@ -287,16 +287,13 @@
                     <button type="button" onclick="toggleReactionDock({{ post.id }})" id="react-btn-{{ post.id }}"
                             class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border bg-black/70 transition-all active:scale-125 select-none border-white/10 text-stone-300 hover:text-white">
                         <span id="react-icon-{{ post.id }}" class="text-sm">
-                            {% with ur=user_reactions|default:None %}
-                                {% if post.id in user_reactions %}
-                                    {% if user_reactions|get_item:post.id == 'fire' %}🔥
-                                    {% elif user_reactions|get_item:post.id == 'crown' %}👑
-                                    {% elif user_reactions|get_item:post.id == 'toast' %}🥂
-                                    {% elif user_reactions|get_item:post.id == 'drool' %}🤤
-                                    {% else %}❤️{% endif %}
-                                {% else %}🤍{% endif %}
-                            {% endwith %}
-                        </span>
+                          {% if post.user_reaction == 'fire' %}🔥
+                          {% elif post.user_reaction == 'crown' %}👑
+                          {% elif post.user_reaction == 'toast' %}🥂
+                          {% elif post.user_reaction == 'drool' %}🤤
+                          {% elif post.user_reaction == 'like' or post.is_liked %}❤️
+                          {% else %}🤍{% endif %}
+                      </span>
                         <span id="like-count-{{ post.id }}" class="text-xs font-mono font-black">{{ post.likes }}</span>
                     </button>
 

@@ -481,10 +481,13 @@ def social_feed(request):
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
     tg_username = request.GET.get('tg_username') or (profile.username if profile else 'Noble')
     
-    # Prefetch optimizado de comentarios, fotos de carrusel y likes
-    posts = Post.objects.all().select_related('idol').prefetch_related(
-        'comments', 'gallery', 'user_likes'
-    )
+    # Prefetch blindado con fallback si faltan migraciones
+    try:
+        posts = Post.objects.all().select_related('idol').prefetch_related(
+            'comments', 'gallery', 'user_likes'
+        )
+    except Exception:
+        posts = Post.objects.all().select_related('idol')
 
     idol_filter_id = request.GET.get('idol_id')
     filtered_idol = None
@@ -499,13 +502,28 @@ def social_feed(request):
     is_admin = check_is_staff_or_admin(tg_id)
     
     if tg_id:
-        pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
-        propios = list(Post.objects.filter(idol__telegram_user_id=tg_id).values_list('id', flat=True))
-        unlocked_ids = set(pagados + propios)
-        
-        user_likes_objs = PostLike.objects.filter(client_telegram_id=tg_id)
-        liked_ids = list(user_likes_objs.values_list('post_id', flat=True))
-        user_reactions = {like.post_id: getattr(like, 'reaction_type', 'like') for like in user_likes_objs}
+        try:
+            pagados = list(PostUnlock.objects.filter(client_telegram_id=tg_id).values_list('post_id', flat=True))
+            propios = list(Post.objects.filter(idol__telegram_user_id=tg_id).values_list('id', flat=True))
+            unlocked_ids = set(pagados + propios)
+        except Exception:
+            unlocked_ids = set()
+            
+        try:
+            user_likes_objs = PostLike.objects.filter(client_telegram_id=tg_id)
+            liked_ids = list(user_likes_objs.values_list('post_id', flat=True))
+            user_reactions = {like.post_id: getattr(like, 'reaction_type', 'like') for like in user_likes_objs}
+        except Exception:
+            liked_ids = []
+            user_reactions = {}
+
+    # Inyectar propiedades directamente en cada post para la plantilla
+    posts_list = []
+    for p in posts:
+        p.is_unlocked = (p.id in unlocked_ids or p.network == 'gram' or is_admin or (p.idol and p.idol.telegram_user_id == tg_id))
+        p.is_liked = (p.id in liked_ids)
+        p.user_reaction = user_reactions.get(p.id, 'like' if p.id in liked_ids else '')
+        posts_list.append(p)
 
     theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
     feed_theme = {
@@ -516,7 +534,7 @@ def social_feed(request):
     }
         
     return render(request, 'idols/feed.html', {
-        'posts': posts,
+        'posts': posts_list,
         'tg_id': tg_id,
         'unlocked_ids': list(unlocked_ids),
         'liked_ids': liked_ids,
