@@ -489,8 +489,11 @@ def social_feed(request):
     wallet = Wallet.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
     my_balance = wallet.balance if wallet else 0
 
-    # Todas las Musas activas para el selector desplegable
-    all_idols = IdolProfile.objects.filter(is_active=True).order_by('stage_name')
+    # ✅ CORREGIDO: IdolProfile no tiene 'is_active', se cargan todas las musas ordenadas
+    try:
+        all_idols = IdolProfile.objects.all().order_by('stage_name')
+    except Exception:
+        all_idols = []
 
     # Prefetch blindado con fallback
     try:
@@ -531,8 +534,8 @@ def social_feed(request):
     # Inyectar propiedades directamente en cada post
     posts_list = []
     for p in posts:
-        p.is_unlocked = (p.id in unlocked_ids or p.network == 'gram' or is_admin or (p.idol and p.idol.telegram_user_id == tg_id))
-        p.is_liked = (p.id in liked_ids)
+        p.is_unlocked = bool(p.id in unlocked_ids or p.network == 'gram' or is_admin or (p.idol and p.idol.telegram_user_id == tg_id))
+        p.is_liked = bool(p.id in liked_ids)
         p.user_reaction = user_reactions.get(p.id, 'like' if p.id in liked_ids else '')
         posts_list.append(p)
 
