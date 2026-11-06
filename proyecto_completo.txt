@@ -3452,67 +3452,68 @@ def bazar_buy_action(request):
 
 
 # ==========================================
-# LABORES DE LA CORTE (COURT JOBS)
+# LABORES DE LA CORTE (PUNTO MEDIO EQUILIBRADO)
 # ==========================================
 
 JOBS_CATALOG = [
     {
         'id': 'patrol',
         'key': 'patrol',
-        'title': 'Patrullar las Mazmorras',
-        'description': 'Supervisa las celdas inferiores del reino en busca de intrusos.',
-        'desc': 'Supervisa las celdas inferiores del reino en busca de intrusos.',
+        'title': 'Ronda de Mazmorras',
+        'description': 'Supervisión rápida de pasadizos y rejas del palacio.',
         'icon': 'fa-shield-halved',
-        'duration_minutes': 5,
-        'duration': 5,
-        'gold_reward': 150,
-        'gold': 150,
-        'xp_reward': 50,
-        'xp': 50,
+        'duration_minutes': 15,
+        'duration_display': '15 min',
+        'gold_reward': 50,
+        'xp_reward': 25,
         'min_level': 1
     },
     {
         'id': 'wine_tasting',
         'key': 'wine_tasting',
-        'title': 'Cata de Vinos Reales',
-        'description': 'Selecciona las mejores cosechas de la bodega para el banquete imperial.',
-        'desc': 'Selecciona las mejores cosechas de la bodega para el banquete imperial.',
+        'title': 'Cata en Bodegas Reales',
+        'description': 'Selección de cosechas finas para el banquete de las Idols.',
         'icon': 'fa-wine-glass',
-        'duration_minutes': 15,
-        'duration': 15,
-        'gold_reward': 500,
-        'gold': 500,
-        'xp_reward': 180,
-        'xp': 180,
-        'min_level': 2
+        'duration_minutes': 30,
+        'duration_display': '30 min',
+        'gold_reward': 120,
+        'xp_reward': 60,
+        'min_level': 1
     },
     {
         'id': 'royal_treasury',
         'key': 'royal_treasury',
-        'title': 'Auditoría del Tesoro',
-        'description': 'Cuenta los cofres de oro y gemas acumulados por los tributos.',
-        'desc': 'Cuenta los cofres de oro y gemas acumulados por los tributos.',
+        'title': 'Auditoría de Tributos',
+        'description': 'Conteo de arcas reales y registro de donaciones nobles.',
         'icon': 'fa-coins',
-        'duration_minutes': 30,
-        'duration': 30,
-        'gold_reward': 1200,
-        'gold': 1200,
-        'xp_reward': 450,
-        'xp': 450,
+        'duration_minutes': 60,
+        'duration_display': '1 hora',
+        'gold_reward': 280,
+        'xp_reward': 150,
+        'min_level': 2
+    },
+    {
+        'id': 'escort_caravan',
+        'key': 'escort_caravan',
+        'title': 'Escolta de Mercaderes VIP',
+        'description': 'Custodia cargamentos exóticos traídos directamente al bazar.',
+        'icon': 'fa-horse',
+        'duration_minutes': 120,
+        'duration_display': '2 horas',
+        'gold_reward': 600,
+        'xp_reward': 320,
         'min_level': 3
     },
     {
         'id': 'guard_honor',
         'key': 'guard_honor',
-        'title': 'Guardia de Honor VIP',
-        'description': 'Custodia la cámara privada de las Idols durante las festividades.',
+        'title': 'Custodia de Aposentos Reales',
+        'description': 'Protección exclusiva en los salones privados durante las celebraciones.',
         'icon': 'fa-crown',
-        'duration_minutes': 60,
-        'duration': 60,
-        'gold_reward': 3000,
-        'gold': 3000,
-        'xp_reward': 1000,
-        'xp': 1000,
+        'duration_minutes': 240,
+        'duration_display': '4 horas',
+        'gold_reward': 1350,
+        'xp_reward': 750,
         'min_level': 5
     }
 ]
@@ -3520,8 +3521,9 @@ JOBS_CATALOG = [
 
 def court_jobs_view(request):
     """Vista principal para consultar y reclamar Labores de la Corte."""
-    tg_id = get_telegram_id_from_request(request)
-    profile = Profile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+    tg_id = get_safe_tg_id(request)
+    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
     active_job = None
     is_completed = False
@@ -3543,9 +3545,11 @@ def court_jobs_view(request):
                 time_remaining_seconds = max(0, int((active_job.finishes_at - now).total_seconds()))
 
     context = {
+        'tg_id': tg_id,
         'profile': profile,
+        'wallet': wallet,
         'available_jobs': JOBS_CATALOG,
-        'jobs': JOBS_CATALOG,  # Soporte doble para compatibilidad
+        'jobs': JOBS_CATALOG,
         'active_job': active_job,
         'is_completed': is_completed,
         'time_remaining_seconds': time_remaining_seconds,
@@ -3556,12 +3560,11 @@ def court_jobs_view(request):
 @require_POST
 def start_court_job(request):
     """Inicia una nueva labor de la corte si no hay otra en curso."""
-    tg_id = get_telegram_id_from_request(request)
+    tg_id = get_safe_tg_id(request)
     if not tg_id:
         messages.error(request, 'Sesión no válida.')
         return redirect('economy:jobs')
 
-    # Acepta tanto 'job_key' como 'job_id'
     job_key = request.POST.get('job_key') or request.POST.get('job_id')
     
     existing = CourtJob.objects.filter(
@@ -3571,22 +3574,21 @@ def start_court_job(request):
 
     if existing:
         messages.warning(request, 'Ya tienes una labor en curso en la corte.')
-        return redirect('economy:jobs')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     matched = next((j for j in JOBS_CATALOG if j['id'] == job_key or j['key'] == job_key), None)
     if not matched:
         messages.error(request, 'La labor seleccionada no existe.')
-        return redirect('economy:jobs')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
-    profile = Profile.objects.filter(telegram_user_id=tg_id).first()
+    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
     user_level = profile.level if profile else 1
     if user_level < matched.get('min_level', 1):
         messages.error(request, f"Requiere nivel {matched['min_level']} en la corte.")
-        return redirect('economy:jobs')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     finishes = timezone.now() + timedelta(minutes=matched['duration_minutes'])
 
-    # Creación con el campo exacto del modelo: job_key
     CourtJob.objects.create(
         telegram_user_id=tg_id,
         job_key=matched['id'],
@@ -3599,13 +3601,13 @@ def start_court_job(request):
     )
 
     messages.success(request, f'¡Has iniciado la labor: "{matched["title"]}"!')
-    return redirect('economy:jobs')
+    return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
 
 @require_POST
 def claim_court_job(request):
-    """Reclama la recompensa de una labor completada."""
-    tg_id = get_telegram_id_from_request(request)
+    """Reclama la recompensa de una labor completada acreditando a Wallet y UserProfile."""
+    tg_id = get_safe_tg_id(request)
     if not tg_id:
         messages.error(request, 'Sesión no válida.')
         return redirect('economy:jobs')
@@ -3617,34 +3619,26 @@ def claim_court_job(request):
 
     if not job:
         messages.warning(request, 'No tienes ninguna labor para reclamar.')
-        return redirect('economy:jobs')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     if timezone.now() < job.finishes_at:
         messages.error(request, 'Esta labor aún no ha finalizado.')
-        return redirect('economy:jobs')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
-    profile = Profile.objects.filter(telegram_user_id=tg_id).first()
-    if not profile:
-        messages.error(request, 'Perfil de cortesano no encontrado.')
-        return redirect('economy:jobs')
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    
+    # 🪙 1. Acreditación de Oro a la Billetera
+    wallet.add_funds(job.gold_reward)
 
-    # Acreditación de Oro y Experiencia
-    profile.gold_balance += job.gold_reward
-    profile.experience += job.xp_reward
+    # ✨ 2. Acreditación de XP mediante el helper oficial del Reino
+    grant_user_xp(request, tg_id, job.xp_reward, reason=f"Labor de la Corte: {job.title}")
 
-    # Subida de nivel básica si alcanza la meta de XP
-    xp_needed = profile.level * 200
-    if profile.experience >= xp_needed:
-        profile.level += 1
-        messages.info(request, f'👑 ¡Has ascendido al Nivel {profile.level} de la Corte!')
-
-    profile.save(update_fields=['gold_balance', 'experience', 'level'])
-
+    # 3. Marcar como cobrada
     job.is_claimed = True
     job.save(update_fields=['is_claimed'])
 
-    messages.success(request, f'✨ ¡Recompensa reclamada! +{job.gold_reward} Oro y +{job.xp_reward} XP.')
-    return redirect('economy:jobs')
+    messages.success(request, f'✨ ¡Tributo reclamado! +{job.gold_reward} Oro acreditados a tu Bóveda y +{job.xp_reward} EXP.')
+    return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
 
 # ==============================================================================
@@ -10653,7 +10647,7 @@ ARCHIVO: .\templates\economy\jobs.html
         {% if profile %}
         <div class="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs">
             <span class="text-slate-400">Rango Actual: <strong class="text-white">Nivel {{ profile.level }}</strong></span>
-            <span class="text-[#D4AF37] font-semibold"><i class="fa-solid fa-coins mr-1"></i>{{ profile.gold_balance }} Oro</span>
+            <span class="text-[#D4AF37] font-semibold"><i class="fa-solid fa-coins mr-1"></i>{{ wallet.balance }} Oro</span>
         </div>
         {% endif %}
     </div>
