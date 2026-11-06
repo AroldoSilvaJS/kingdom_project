@@ -4,6 +4,7 @@ from economy.models import Wallet
 from django.contrib import messages
 from django.db import transaction
 
+
 def grant_user_xp(request, tg_id, xp_amount, reason=""):
     if not tg_id or str(tg_id).strip() in ['', 'None', 'undefined', 'null']:
         return

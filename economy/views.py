@@ -1,17 +1,33 @@
+# 1. Librería estándar de Python
 import random
 from datetime import timedelta
-from django.shortcuts import render, redirect, get_object_or_404
+
+# 2. Django Core & Utilidades
 from django.contrib import messages
+from django.db import transaction
 from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from core.models import UserRole, UserProfile
+from django.views.decorators.http import require_POST
+
+# 3. Modelos de otras Apps del Reino
+from core.models import UserProfile, UserRole
 from idols.models import IdolProfile, IdolTribute
 from pets.models import Pet
-from core.utils import grant_user_xp
+
+# 4. Utilidades y Helpers
 from core.telegram_notify import send_telegram_msg
-from .models import Wallet, UserInventoryItem, CourtJob, BazarCollectible, UserCollectible
-from idols.views import optimize_uploaded_image, check_is_staff_or_admin
-from django.db import transaction
+from core.utils import grant_user_xp
+from idols.views import check_is_staff_or_admin, optimize_uploaded_image
+
+# 5. Modelos de la App Actual (Economy)
+from .models import (
+    BazarCollectible,
+    CourtJob,
+    UserCollectible,
+    UserInventoryItem,
+    Wallet,
+)
 
 def get_safe_tg_id(request):
     raw_id = request.POST.get('tg_id') or request.GET.get('tg_id') or request.session.get('tg_id')
@@ -958,7 +974,7 @@ def bazar_buy_action(request):
 
 
 # ==========================================
-# LABORES DE LA CORTE (COURT JOBS)
+# LABORES DE LA CORTE (COURT JOBS) - CORREGIDO
 # ==========================================
 
 JOBS_CATALOG = [
@@ -1012,6 +1028,7 @@ JOBS_CATALOG = [
         'key': 'guard_honor',
         'title': 'Guardia de Honor VIP',
         'description': 'Custodia la cámara privada de las Idols durante las festividades.',
+        'desc': 'Custodia la cámara privada de las Idols durante las festividades.',
         'icon': 'fa-crown',
         'duration_minutes': 60,
         'duration': 60,
@@ -1026,8 +1043,9 @@ JOBS_CATALOG = [
 
 def court_jobs_view(request):
     """Vista principal para consultar y reclamar Labores de la Corte."""
-    tg_id = get_telegram_id_from_request(request)
-    profile = Profile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+    tg_id = get_safe_tg_id(request)
+    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
     active_job = None
     is_completed = False
@@ -1049,9 +1067,11 @@ def court_jobs_view(request):
                 time_remaining_seconds = max(0, int((active_job.finishes_at - now).total_seconds()))
 
     context = {
+        'tg_id': tg_id,
         'profile': profile,
+        'wallet': wallet,
         'available_jobs': JOBS_CATALOG,
-        'jobs': JOBS_CATALOG,  # Soporte doble para compatibilidad
+        'jobs': JOBS_CATALOG,
         'active_job': active_job,
         'is_completed': is_completed,
         'time_remaining_seconds': time_remaining_seconds,
@@ -1062,12 +1082,11 @@ def court_jobs_view(request):
 @require_POST
 def start_court_job(request):
     """Inicia una nueva labor de la corte si no hay otra en curso."""
-    tg_id = get_telegram_id_from_request(request)
+    tg_id = get_safe_tg_id(request)
     if not tg_id:
         messages.error(request, 'Sesión no válida.')
         return redirect('economy:jobs')
 
-    # Acepta tanto 'job_key' como 'job_id'
     job_key = request.POST.get('job_key') or request.POST.get('job_id')
     
     existing = CourtJob.objects.filter(
@@ -1077,22 +1096,21 @@ def start_court_job(request):
 
     if existing:
         messages.warning(request, 'Ya tienes una labor en curso en la corte.')
-        return redirect('economy:jobs')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     matched = next((j for j in JOBS_CATALOG if j['id'] == job_key or j['key'] == job_key), None)
     if not matched:
         messages.error(request, 'La labor seleccionada no existe.')
-        return redirect('economy:jobs')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
-    profile = Profile.objects.filter(telegram_user_id=tg_id).first()
+    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
     user_level = profile.level if profile else 1
     if user_level < matched.get('min_level', 1):
         messages.error(request, f"Requiere nivel {matched['min_level']} en la corte.")
-        return redirect('economy:jobs')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     finishes = timezone.now() + timedelta(minutes=matched['duration_minutes'])
 
-    # Creación con el campo exacto del modelo: job_key
     CourtJob.objects.create(
         telegram_user_id=tg_id,
         job_key=matched['id'],
@@ -1105,13 +1123,13 @@ def start_court_job(request):
     )
 
     messages.success(request, f'¡Has iniciado la labor: "{matched["title"]}"!')
-    return redirect('economy:jobs')
+    return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
 
 @require_POST
 def claim_court_job(request):
-    """Reclama la recompensa de una labor completada."""
-    tg_id = get_telegram_id_from_request(request)
+    """Reclama la recompensa de una labor completada acreditando a Wallet y UserProfile."""
+    tg_id = get_safe_tg_id(request)
     if not tg_id:
         messages.error(request, 'Sesión no válida.')
         return redirect('economy:jobs')
@@ -1123,34 +1141,26 @@ def claim_court_job(request):
 
     if not job:
         messages.warning(request, 'No tienes ninguna labor para reclamar.')
-        return redirect('economy:jobs')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     if timezone.now() < job.finishes_at:
         messages.error(request, 'Esta labor aún no ha finalizado.')
-        return redirect('economy:jobs')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
-    profile = Profile.objects.filter(telegram_user_id=tg_id).first()
-    if not profile:
-        messages.error(request, 'Perfil de cortesano no encontrado.')
-        return redirect('economy:jobs')
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    
+    # 🪙 1. Acreditación de Oro a la Billetera
+    wallet.add_funds(job.gold_reward)
 
-    # Acreditación de Oro y Experiencia
-    profile.gold_balance += job.gold_reward
-    profile.experience += job.xp_reward
+    # ✨ 2. Acreditación de XP mediante el helper oficial del Reino
+    grant_user_xp(request, tg_id, job.xp_reward, reason=f"Labor de la Corte: {job.title}")
 
-    # Subida de nivel básica si alcanza la meta de XP
-    xp_needed = profile.level * 200
-    if profile.experience >= xp_needed:
-        profile.level += 1
-        messages.info(request, f'👑 ¡Has ascendido al Nivel {profile.level} de la Corte!')
-
-    profile.save(update_fields=['gold_balance', 'experience', 'level'])
-
+    # 3. Marcar como cobrada
     job.is_claimed = True
     job.save(update_fields=['is_claimed'])
 
-    messages.success(request, f'✨ ¡Recompensa reclamada! +{job.gold_reward} Oro y +{job.xp_reward} XP.')
-    return redirect('economy:jobs')
+    messages.success(request, f'✨ ¡Tributo reclamado! +{job.gold_reward} Oro acreditados a tu Bóveda y +{job.xp_reward} EXP.')
+    return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
 
 # ==============================================================================

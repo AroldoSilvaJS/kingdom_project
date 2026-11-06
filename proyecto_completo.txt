@@ -1210,6 +1210,7 @@ from economy.models import Wallet
 from django.contrib import messages
 from django.db import transaction
 
+
 def grant_user_xp(request, tg_id, xp_amount, reason=""):
     if not tg_id or str(tg_id).strip() in ['', 'None', 'undefined', 'null']:
         return
@@ -2475,20 +2476,36 @@ urlpatterns = [
 ARCHIVO: .\economy\views.py
 ==================================================
 
+# 1. Librería estándar de Python
 import random
 from datetime import timedelta
-from django.shortcuts import render, redirect, get_object_or_404
+
+# 2. Django Core & Utilidades
 from django.contrib import messages
+from django.db import transaction
 from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from core.models import UserRole, UserProfile
+from django.views.decorators.http import require_POST
+
+# 3. Modelos de otras Apps del Reino
+from core.models import UserProfile, UserRole
 from idols.models import IdolProfile, IdolTribute
 from pets.models import Pet
-from core.utils import grant_user_xp
+
+# 4. Utilidades y Helpers
 from core.telegram_notify import send_telegram_msg
-from .models import Wallet, UserInventoryItem, CourtJob, BazarCollectible, UserCollectible
-from idols.views import optimize_uploaded_image, check_is_staff_or_admin
-from django.db import transaction
+from core.utils import grant_user_xp
+from idols.views import check_is_staff_or_admin, optimize_uploaded_image
+
+# 5. Modelos de la App Actual (Economy)
+from .models import (
+    BazarCollectible,
+    CourtJob,
+    UserCollectible,
+    UserInventoryItem,
+    Wallet,
+)
 
 def get_safe_tg_id(request):
     raw_id = request.POST.get('tg_id') or request.GET.get('tg_id') or request.session.get('tg_id')
@@ -3434,155 +3451,200 @@ def bazar_buy_action(request):
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
-# ==============================================================================
-# 💼 LABORES DE LA CORTE (JOBS DE FARMEO PASIVO)
-# ==============================================================================
-JOBS_LIST = [
+# ==========================================
+# LABORES DE LA CORTE (COURT JOBS)
+# ==========================================
+
+JOBS_CATALOG = [
     {
         'id': 'patrol',
-        'title': 'Ronda de Guardia en los Jardines',
-        'description': 'Vigila los pabellones privados del harén imperial y ahuyenta a los espías nocturnos.',
-        'icon': '🗡️',
+        'key': 'patrol',
+        'title': 'Patrullar las Mazmorras',
+        'description': 'Supervisa las celdas inferiores del reino en busca de intrusos.',
+        'desc': 'Supervisa las celdas inferiores del reino en busca de intrusos.',
+        'icon': 'fa-shield-halved',
+        'duration_minutes': 5,
+        'duration': 5,
+        'gold_reward': 150,
+        'gold': 150,
+        'xp_reward': 50,
+        'xp': 50,
+        'min_level': 1
+    },
+    {
+        'id': 'wine_tasting',
+        'key': 'wine_tasting',
+        'title': 'Cata de Vinos Reales',
+        'description': 'Selecciona las mejores cosechas de la bodega para el banquete imperial.',
+        'desc': 'Selecciona las mejores cosechas de la bodega para el banquete imperial.',
+        'icon': 'fa-wine-glass',
+        'duration_minutes': 15,
+        'duration': 15,
+        'gold_reward': 500,
+        'gold': 500,
+        'xp_reward': 180,
+        'xp': 180,
+        'min_level': 2
+    },
+    {
+        'id': 'royal_treasury',
+        'key': 'royal_treasury',
+        'title': 'Auditoría del Tesoro',
+        'description': 'Cuenta los cofres de oro y gemas acumulados por los tributos.',
+        'desc': 'Cuenta los cofres de oro y gemas acumulados por los tributos.',
+        'icon': 'fa-coins',
         'duration_minutes': 30,
-        'gold_reward': 40,
-        'xp_reward': 15,
-        'min_level': 1,
+        'duration': 30,
+        'gold_reward': 1200,
+        'gold': 1200,
+        'xp_reward': 450,
+        'xp': 450,
+        'min_level': 3
     },
     {
-        'id': 'treasury',
-        'title': 'Auditoría en las Bóvedas del Tesoro',
-        'description': 'Contabiliza los tributos recolectados y acuña lingotes con el sello real.',
-        'icon': '💰',
+        'id': 'guard_honor',
+        'key': 'guard_honor',
+        'title': 'Guardia de Honor VIP',
+        'description': 'Custodia la cámara privada de las Idols durante las festividades.',
+        'icon': 'fa-crown',
         'duration_minutes': 60,
-        'gold_reward': 95,
-        'xp_reward': 35,
-        'min_level': 2,
-    },
-    {
-        'id': 'cellar',
-        'title': 'Cata de Vinos en las Criptas Reales',
-        'description': 'Selecciona los mejores licores de la reserva personal de las concubinas favoritas.',
-        'icon': '🍷',
-        'duration_minutes': 120,
-        'gold_reward': 220,
-        'xp_reward': 70,
-        'min_level': 3,
-    },
-    {
-        'id': 'diplomacy',
-        'title': 'Misión Diplomática Encubierta',
-        'description': 'Negocia pactos y alianzas carnales con emisarios de reinos vecinos.',
-        'icon': '👑',
-        'duration_minutes': 240,
-        'gold_reward': 480,
-        'xp_reward': 150,
-        'min_level': 5,
-    },
+        'duration': 60,
+        'gold_reward': 3000,
+        'gold': 3000,
+        'xp_reward': 1000,
+        'xp': 1000,
+        'min_level': 5
+    }
 ]
 
+
 def court_jobs_view(request):
-    tg_id = get_safe_tg_id(request)
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    
-    active_job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
-    
-    now = timezone.now()
+    """Vista principal para consultar y reclamar Labores de la Corte."""
+    tg_id = get_telegram_id_from_request(request)
+    profile = Profile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+
+    active_job = None
     is_completed = False
     time_remaining_seconds = 0
-    
-    if active_job:
-        if now >= active_job.finishes_at:
-            is_completed = True
-        else:
-            time_remaining_seconds = int((active_job.finishes_at - now).total_seconds())
 
-    return render(request, 'economy/jobs.html', {
-        'tg_id': tg_id,
-        'wallet': wallet,
+    if tg_id:
+        active_job = CourtJob.objects.filter(
+            telegram_user_id=tg_id,
+            is_claimed=False
+        ).order_by('-created_at').first()
+
+        if active_job:
+            now = timezone.now()
+            if now >= active_job.finishes_at:
+                is_completed = True
+                time_remaining_seconds = 0
+            else:
+                is_completed = False
+                time_remaining_seconds = max(0, int((active_job.finishes_at - now).total_seconds()))
+
+    context = {
         'profile': profile,
-        'jobs': JOBS_LIST,
+        'available_jobs': JOBS_CATALOG,
+        'jobs': JOBS_CATALOG,  # Soporte doble para compatibilidad
         'active_job': active_job,
         'is_completed': is_completed,
         'time_remaining_seconds': time_remaining_seconds,
-    })
+    }
+    return render(request, 'economy/jobs.html', context)
 
 
+@require_POST
 def start_court_job(request):
-    if request.method != 'POST':
-        return redirect('/economy/jobs/')
-        
-    tg_id = get_safe_tg_id(request)
-    job_id = request.POST.get('job_id')
+    """Inicia una nueva labor de la corte si no hay otra en curso."""
+    tg_id = get_telegram_id_from_request(request)
+    if not tg_id:
+        messages.error(request, 'Sesión no válida.')
+        return redirect('economy:jobs')
+
+    # Acepta tanto 'job_key' como 'job_id'
+    job_key = request.POST.get('job_key') or request.POST.get('job_id')
     
-    matched = next((j for j in JOBS_LIST if j['id'] == job_id), None)
-    if not matched:
-        messages.error(request, "La labor nobiliaria no existe.")
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
-        
-    # Verificar si ya tiene una activa sin cobrar
-    existing = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+    existing = CourtJob.objects.filter(
+        telegram_user_id=tg_id,
+        is_claimed=False
+    ).first()
+
     if existing:
-        messages.warning(request, "Ya te encuentras desempeñando una labor para la Corona.")
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
-        
-    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    if profile.level < matched['min_level']:
-        messages.error(request, f"Se requiere Nivel {matched['min_level']} para acceder a esta tarea de la Corte.")
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
-        
-    duration = matched['duration_minutes']
-    
-    # BUFF CIERVO SAGRADO: Reducción del tiempo de labores en 15% / 25% / 35%
-    try:
-        pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-        if pet and pet.species == 'deer':
-            deer_reduction = {1: 0.85, 2: 0.75, 3: 0.65}.get(pet.evolution_stage_number, 0.85)
-            duration = max(5, int(round(duration * deer_reduction)))
-    except Exception:
-        pass
-        
-    finishes = timezone.now() + timedelta(minutes=duration)
-    
+        messages.warning(request, 'Ya tienes una labor en curso en la corte.')
+        return redirect('economy:jobs')
+
+    matched = next((j for j in JOBS_CATALOG if j['id'] == job_key or j['key'] == job_key), None)
+    if not matched:
+        messages.error(request, 'La labor seleccionada no existe.')
+        return redirect('economy:jobs')
+
+    profile = Profile.objects.filter(telegram_user_id=tg_id).first()
+    user_level = profile.level if profile else 1
+    if user_level < matched.get('min_level', 1):
+        messages.error(request, f"Requiere nivel {matched['min_level']} en la corte.")
+        return redirect('economy:jobs')
+
+    finishes = timezone.now() + timedelta(minutes=matched['duration_minutes'])
+
+    # Creación con el campo exacto del modelo: job_key
     CourtJob.objects.create(
         telegram_user_id=tg_id,
-        job_code=matched['id'],
+        job_key=matched['id'],
         title=matched['title'],
         role_type=matched['id'],
         gold_reward=matched['gold_reward'],
         xp_reward=matched['xp_reward'],
+        duration_minutes=matched['duration_minutes'],
         finishes_at=finishes
     )
-    
-    messages.success(request, f"⚔️ Has iniciado '{matched['title']}'. Regresa en {duration} minutos a reclamar tu paga.")
-    return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+    messages.success(request, f'¡Has iniciado la labor: "{matched["title"]}"!')
+    return redirect('economy:jobs')
 
 
+@require_POST
 def claim_court_job(request):
-    if request.method != 'POST':
-        return redirect('/economy/jobs/')
-        
-    tg_id = get_safe_tg_id(request)
-    job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
-    
+    """Reclama la recompensa de una labor completada."""
+    tg_id = get_telegram_id_from_request(request)
+    if not tg_id:
+        messages.error(request, 'Sesión no válida.')
+        return redirect('economy:jobs')
+
+    job = CourtJob.objects.filter(
+        telegram_user_id=tg_id,
+        is_claimed=False
+    ).order_by('-created_at').first()
+
     if not job:
-        messages.error(request, "No tienes ninguna labor pendiente por cobrar.")
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
-        
+        messages.warning(request, 'No tienes ninguna labor para reclamar.')
+        return redirect('economy:jobs')
+
     if timezone.now() < job.finishes_at:
-        messages.warning(request, "⏳ Aún no concluye el tiempo reglamentario de tu labor imperial.")
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
-        
-    with transaction.atomic():
-        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-        wallet.add_funds(job.gold_reward)
-        job.is_claimed = True
-        job.save()
-        
-        grant_user_xp(request, tg_id, job.xp_reward, reason="Paga de Labor de Corte")
-        
-    messages.success(request, f"💰 ¡Labor cumplida con honor! Has cobrado +{job.gold_reward} 🪙 y +{job.xp_reward} EXP nobiliaria.")
-    return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        messages.error(request, 'Esta labor aún no ha finalizado.')
+        return redirect('economy:jobs')
+
+    profile = Profile.objects.filter(telegram_user_id=tg_id).first()
+    if not profile:
+        messages.error(request, 'Perfil de cortesano no encontrado.')
+        return redirect('economy:jobs')
+
+    # Acreditación de Oro y Experiencia
+    profile.gold_balance += job.gold_reward
+    profile.experience += job.xp_reward
+
+    # Subida de nivel básica si alcanza la meta de XP
+    xp_needed = profile.level * 200
+    if profile.experience >= xp_needed:
+        profile.level += 1
+        messages.info(request, f'👑 ¡Has ascendido al Nivel {profile.level} de la Corte!')
+
+    profile.save(update_fields=['gold_balance', 'experience', 'level'])
+
+    job.is_claimed = True
+    job.save(update_fields=['is_claimed'])
+
+    messages.success(request, f'✨ ¡Recompensa reclamada! +{job.gold_reward} Oro y +{job.xp_reward} XP.')
+    return redirect('economy:jobs')
 
 
 # ==============================================================================
@@ -10565,120 +10627,177 @@ ARCHIVO: .\templates\economy\jobs.html
 ==================================================
 
 {% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Labores de la Corte - Kingdom of Pleasure{% endblock %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
-    
-    <div class="flex justify-between items-center px-1">
-        <button type="button" onclick="universalNav('/')" class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1 active:scale-95 transition-all">
-            <span>⬅</span> <span>Menú</span>
-        </button>
-        <span class="text-[10px] font-mono font-bold uppercase tracking-widest text-yellow-400 bg-black/60 border border-vip-gold/30 px-3 py-1 rounded-full">
-            {% if is_idol %}🌹 Oficios de Musa{% else %}🥂 Labores Nobiliarias{% endif %}
-        </span>
-    </div>
+<div class="max-w-md mx-auto px-4 py-6 space-y-6">
 
-    <!-- BANNER HERO -->
-    <div class="vip-panel p-5 text-center relative overflow-hidden border border-vip-gold/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1a0c28] via-[#090212] to-black">
-        <span class="text-3xl mb-1 filter drop-shadow">🏛️</span>
-        <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
-            Labores de la Corte
-        </h1>
-        <p class="text-[11px] text-stone-300 mt-1 max-w-[280px]">
-            {% if is_idol %}
-                Perfecciona tu arte y recibe la asignación real para tu Bóveda.
-            {% else %}
-                Sirve a la Corona para obtener oro limpio y sustentar tus deleites.
-            {% endif %}
-        </p>
-    </div>
-
-    <!-- ⏳ LABOR EN CURSO (SI TIENE UNA ACTIVA) -->
-    {% if active_job %}
-    <div class="p-4 rounded-3xl border-2 {% if active_job.is_finished %}border-emerald-500 bg-emerald-950/40 animate-pulse{% else %}border-yellow-500/60 bg-black/70{% endif %} shadow-xl flex flex-col gap-2.5">
-        <div class="flex justify-between items-start">
+    <!-- Encabezado Real -->
+    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1F1235] via-[#120824] to-[#0A0414] p-5 border border-[#D4AF37]/30 shadow-[0_4px_25px_rgba(212,175,55,0.12)]">
+        <div class="absolute -top-10 -right-10 w-32 h-32 bg-[#D4AF37]/10 rounded-full blur-2xl pointer-events-none"></div>
+        <div class="flex items-center justify-between">
             <div>
-                <span class="text-[9px] font-mono uppercase font-black text-yellow-400">Labor Activa</span>
-                <h3 class="text-xs font-black text-white mt-0.5">{{ active_job.title }}</h3>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-[#D4AF37] px-2 py-0.5 rounded bg-[#D4AF37]/10 border border-[#D4AF37]/20">
+                    Gremio Imperial
+                </span>
+                <h1 class="text-xl font-cinzel font-bold text-white mt-1">Labores de la Corte</h1>
+                <p class="text-xs text-slate-400">Sirve al reino, obtén tributos de oro y sube tu estatus.</p>
             </div>
-            <span class="text-xs font-mono font-black text-amber-300 bg-black/80 border border-yellow-500/40 px-2.5 py-1 rounded-xl">
-                +{{ active_job.gold_reward }} 🪙
+            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[#D4AF37]/20 to-[#996515]/20 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] text-2xl shadow-inner">
+                <i class="fa-solid fa-scroll"></i>
+            </div>
+        </div>
+        
+        {% if profile %}
+        <div class="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs">
+            <span class="text-slate-400">Rango Actual: <strong class="text-white">Nivel {{ profile.level }}</strong></span>
+            <span class="text-[#D4AF37] font-semibold"><i class="fa-solid fa-coins mr-1"></i>{{ profile.gold_balance }} Oro</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Tarea Activa (Si existe) -->
+    {% if active_job %}
+    <div class="rounded-2xl bg-[#150A24] border border-[#D4AF37]/40 p-5 shadow-[0_0_20px_rgba(212,175,55,0.15)] relative overflow-hidden">
+        <div class="flex items-center justify-between mb-3">
+            <span class="text-[10px] font-bold tracking-wider uppercase text-amber-300 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full {% if is_completed %}bg-emerald-400 animate-pulse{% else %}bg-amber-400 animate-ping{% endif %}"></span>
+                {% if is_completed %}¡Misión Cumplida!{% else %}En Ejecución{% endif %}
+            </span>
+            <span class="text-xs text-slate-400 font-mono" id="job-timer-badge">
+                {% if is_completed %}Lista para cobrar{% else %}Calculando...{% endif %}
             </span>
         </div>
 
-        {% if active_job.is_finished %}
-            <form action="{% url 'economy:claim_job' %}" method="POST" class="m-0 mt-1">
-                {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <button type="submit" class="w-full btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.6)] animate-bounce">
-                    🪙 ¡Reclamar Paga (+{{ active_job.gold_reward }} 🪙)!
-                </button>
-            </form>
+        <h3 class="text-lg font-bold text-white mb-1">{{ active_job.title }}</h3>
+        <p class="text-xs text-slate-400 mb-4">Recompensa acordada: <strong class="text-[#D4AF37]">+{{ active_job.gold_reward }} Oro</strong> y <strong class="text-indigo-400">+{{ active_job.xp_reward }} XP</strong></p>
+
+        <!-- Barra de Progreso -->
+        <div class="w-full bg-black/40 rounded-full h-2.5 mb-4 overflow-hidden border border-white/5">
+            <div id="job-progress-bar" class="h-full bg-gradient-to-r from-[#D4AF37] to-amber-300 transition-all duration-1000" style="width: {% if is_completed %}100%{% else %}10%{% endif %};"></div>
+        </div>
+
+        {% if is_completed %}
+        <form method="POST" action="{% url 'economy:claim_job' %}">
+            {% csrf_token %}
+            <button type="submit" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-700 text-white font-bold text-sm shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2">
+                <i class="fa-solid fa-gift text-base"></i> Reclamar Tributo Real
+            </button>
+        </form>
         {% else %}
-            <div class="bg-black/60 p-2.5 rounded-xl border border-white/5 flex items-center justify-between text-xs font-mono">
-                <span class="text-stone-400">Tiempo restante:</span>
-                <span id="job-timer" class="font-bold text-yellow-300 text-sm">Calculando...</span>
-            </div>
+        <div class="text-center py-2 bg-black/30 rounded-xl border border-white/5">
+            <p class="text-[11px] text-slate-400">Tiempo restante para finalizar:</p>
+            <p id="countdown-display" class="text-base font-mono font-bold text-[#D4AF37] mt-0.5">--:--</p>
+        </div>
         {% endif %}
     </div>
     {% endif %}
 
-    <!-- CATÁLOGO DE LABORES DISPONIBLES -->
-    <div class="flex flex-col gap-2.5">
-        <h4 class="text-xs font-bold text-stone-300 uppercase tracking-wider px-1">Labores Disponibles</h4>
+    <!-- Catálogo de Labores Disponibles -->
+    <div class="space-y-3">
+        <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400 px-1">Labores del Tablón</h2>
 
         {% for job in available_jobs %}
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex flex-col gap-2.5 shadow">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h5 class="text-xs font-black text-white">{{ job.title }}</h5>
-                    <p class="text-[10px] text-stone-300 mt-0.5">{{ job.desc }}</p>
+        <div class="rounded-xl bg-[#120721] border border-white/10 p-4 hover:border-[#D4AF37]/30 transition-all">
+            <div class="flex items-start justify-between gap-3">
+                <div class="w-10 h-10 rounded-lg bg-[#1F1038] border border-white/5 flex items-center justify-center text-[#D4AF37] text-lg flex-shrink-0">
+                    <i class="fa-solid {{ job.icon|default:'fa-hammer' }}"></i>
                 </div>
-                <div class="text-right flex flex-col items-end flex-shrink-0">
-                    <span class="text-xs font-mono font-black text-yellow-300">+{{ job.gold }} 🪙</span>
-                    <span class="text-[9px] font-mono text-purple-300">+{{ job.xp }} EXP</span>
-                </div>
-            </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h4 class="text-sm font-bold text-white truncate">{{ job.title }}</h4>
+                        {% if job.min_level > 1 %}
+                        <span class="text-[9px] px-1.5 py-0.2 bg-purple-900/50 text-purple-300 rounded border border-purple-700/50">Nivel {{ job.min_level }}</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{{ job.description }}</p>
 
-            <div class="flex items-center justify-between border-t border-white/5 pt-2">
-                <span class="text-[9.5px] font-mono text-stone-400">⏳ Turno: {{ job.duration }} min</span>
-                
-                <form action="{% url 'economy:start_job' %}" method="POST" class="m-0">
-                    {% csrf_token %}
-                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                    <input type="hidden" name="job_key" value="{{ job.key }}">
-                    <button type="submit" {% if active_job %}disabled{% endif %}
-                            class="btn-gold text-[10px] font-black uppercase px-4 py-1.5 rounded-xl shadow active:scale-95 transition-all {% if active_job %}opacity-30 cursor-not-allowed{% endif %}">
-                        Iniciar Labor
+                    <div class="flex items-center gap-3 mt-2 text-[10px]">
+                        <span class="text-slate-400"><i class="fa-regular fa-clock mr-1"></i>{{ job.duration_minutes }} min</span>
+                        <span class="text-[#D4AF37] font-semibold"><i class="fa-solid fa-coins mr-1"></i>+{{ job.gold_reward }} Oro</span>
+                        <span class="text-indigo-400 font-semibold"><i class="fa-solid fa-bolt mr-1"></i>+{{ job.xp_reward }} XP</span>
+                    </div>
+                </div>
+
+                <!-- Botón Iniciar -->
+                <div class="flex-shrink-0">
+                    {% if active_job %}
+                    <button disabled class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-500 text-xs font-semibold cursor-not-allowed">
+                        Ocupado
                     </button>
-                </form>
+                    {% elif profile and profile.level < job.min_level %}
+                    <button disabled class="px-3 py-1.5 rounded-lg bg-red-950/40 text-red-400 border border-red-800/40 text-xs font-semibold cursor-not-allowed">
+                        Bloqueado
+                    </button>
+                    {% else %}
+                    <form method="POST" action="{% url 'economy:start_job' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="job_key" value="{{ job.id }}">
+                        <button type="submit" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B38F26] text-black font-bold text-xs shadow-md hover:brightness-110 active:scale-95 transition-all">
+                            Iniciar
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
             </div>
+        </div>
+        {% empty %}
+        <div class="text-center py-8 rounded-xl bg-white/5 border border-white/5 text-slate-400 text-xs">
+            No hay labores disponibles en este momento.
         </div>
         {% endfor %}
     </div>
 
+    <!-- Botón Volver -->
+    <div class="pt-2">
+        <a href="{% url 'core:menu' %}" class="block text-center py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-semibold text-slate-300 hover:bg-white/10 transition-colors">
+            <i class="fa-solid fa-arrow-left mr-1.5"></i> Volver al Menú Principal
+        </a>
+    </div>
+
 </div>
 
+{% if active_job and not is_completed %}
 <script>
-    document.addEventListener("DOMContentLoaded", () => {
-        let seconds = {{ active_job.seconds_remaining|default:0 }};
-        const timerElem = document.getElementById('job-timer');
-        if (timerElem && seconds > 0) {
-            function updateTimer() {
-                if (seconds <= 0) {
-                    location.reload();
-                    return;
-                }
-                const m = Math.floor(seconds / 60);
-                const s = seconds % 60;
-                timerElem.innerText = `${m}m ${s < 10 ? '0' : ''}${s}s`;
-                seconds--;
+    (function() {
+        let remainingSeconds = {{ time_remaining_seconds }};
+        const totalDuration = {{ active_job.duration_minutes }} * 60;
+        const countdownEl = document.getElementById('countdown-display');
+        const timerBadgeEl = document.getElementById('job-timer-badge');
+        const progressBar = document.getElementById('job-progress-bar');
+
+        function updateTimer() {
+            if (remainingSeconds <= 0) {
+                if (countdownEl) countdownEl.innerText = "¡Completado!";
+                if (timerBadgeEl) timerBadgeEl.innerText = "Listo para cobrar";
+                if (progressBar) progressBar.style.width = "100%";
+                setTimeout(() => window.location.reload(), 1500);
+                return;
             }
-            updateTimer();
-            setInterval(updateTimer, 1000);
+
+            const minutes = Math.floor(remainingSeconds / 60);
+            const seconds = remainingSeconds % 60;
+            const formatted = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (countdownEl) countdownEl.innerText = formatted;
+            if (timerBadgeEl) timerBadgeEl.innerText = formatted;
+
+            if (progressBar && totalDuration > 0) {
+                const elapsed = totalDuration - remainingSeconds;
+                const pct = Math.min(100, Math.max(5, (elapsed / totalDuration) * 100));
+                progressBar.style.width = pct + "%";
+            }
+
+            remainingSeconds--;
+            setTimeout(updateTimer, 1000);
         }
-    });
+
+        updateTimer();
+    })();
 </script>
+{% endif %}
 {% endblock %}
 
 ==================================================
