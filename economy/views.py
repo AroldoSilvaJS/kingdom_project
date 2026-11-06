@@ -957,155 +957,200 @@ def bazar_buy_action(request):
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
-# ==============================================================================
-# 💼 LABORES DE LA CORTE (JOBS DE FARMEO PASIVO)
-# ==============================================================================
-JOBS_LIST = [
+# ==========================================
+# LABORES DE LA CORTE (COURT JOBS)
+# ==========================================
+
+JOBS_CATALOG = [
     {
         'id': 'patrol',
-        'title': 'Ronda de Guardia en los Jardines',
-        'description': 'Vigila los pabellones privados del harén imperial y ahuyenta a los espías nocturnos.',
-        'icon': '🗡️',
+        'key': 'patrol',
+        'title': 'Patrullar las Mazmorras',
+        'description': 'Supervisa las celdas inferiores del reino en busca de intrusos.',
+        'desc': 'Supervisa las celdas inferiores del reino en busca de intrusos.',
+        'icon': 'fa-shield-halved',
+        'duration_minutes': 5,
+        'duration': 5,
+        'gold_reward': 150,
+        'gold': 150,
+        'xp_reward': 50,
+        'xp': 50,
+        'min_level': 1
+    },
+    {
+        'id': 'wine_tasting',
+        'key': 'wine_tasting',
+        'title': 'Cata de Vinos Reales',
+        'description': 'Selecciona las mejores cosechas de la bodega para el banquete imperial.',
+        'desc': 'Selecciona las mejores cosechas de la bodega para el banquete imperial.',
+        'icon': 'fa-wine-glass',
+        'duration_minutes': 15,
+        'duration': 15,
+        'gold_reward': 500,
+        'gold': 500,
+        'xp_reward': 180,
+        'xp': 180,
+        'min_level': 2
+    },
+    {
+        'id': 'royal_treasury',
+        'key': 'royal_treasury',
+        'title': 'Auditoría del Tesoro',
+        'description': 'Cuenta los cofres de oro y gemas acumulados por los tributos.',
+        'desc': 'Cuenta los cofres de oro y gemas acumulados por los tributos.',
+        'icon': 'fa-coins',
         'duration_minutes': 30,
-        'gold_reward': 40,
-        'xp_reward': 15,
-        'min_level': 1,
+        'duration': 30,
+        'gold_reward': 1200,
+        'gold': 1200,
+        'xp_reward': 450,
+        'xp': 450,
+        'min_level': 3
     },
     {
-        'id': 'treasury',
-        'title': 'Auditoría en las Bóvedas del Tesoro',
-        'description': 'Contabiliza los tributos recolectados y acuña lingotes con el sello real.',
-        'icon': '💰',
+        'id': 'guard_honor',
+        'key': 'guard_honor',
+        'title': 'Guardia de Honor VIP',
+        'description': 'Custodia la cámara privada de las Idols durante las festividades.',
+        'icon': 'fa-crown',
         'duration_minutes': 60,
-        'gold_reward': 95,
-        'xp_reward': 35,
-        'min_level': 2,
-    },
-    {
-        'id': 'cellar',
-        'title': 'Cata de Vinos en las Criptas Reales',
-        'description': 'Selecciona los mejores licores de la reserva personal de las concubinas favoritas.',
-        'icon': '🍷',
-        'duration_minutes': 120,
-        'gold_reward': 220,
-        'xp_reward': 70,
-        'min_level': 3,
-    },
-    {
-        'id': 'diplomacy',
-        'title': 'Misión Diplomática Encubierta',
-        'description': 'Negocia pactos y alianzas carnales con emisarios de reinos vecinos.',
-        'icon': '👑',
-        'duration_minutes': 240,
-        'gold_reward': 480,
-        'xp_reward': 150,
-        'min_level': 5,
-    },
+        'duration': 60,
+        'gold_reward': 3000,
+        'gold': 3000,
+        'xp_reward': 1000,
+        'xp': 1000,
+        'min_level': 5
+    }
 ]
 
+
 def court_jobs_view(request):
-    tg_id = get_safe_tg_id(request)
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    
-    active_job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
-    
-    now = timezone.now()
+    """Vista principal para consultar y reclamar Labores de la Corte."""
+    tg_id = get_telegram_id_from_request(request)
+    profile = Profile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+
+    active_job = None
     is_completed = False
     time_remaining_seconds = 0
-    
-    if active_job:
-        if now >= active_job.finishes_at:
-            is_completed = True
-        else:
-            time_remaining_seconds = int((active_job.finishes_at - now).total_seconds())
 
-    return render(request, 'economy/jobs.html', {
-        'tg_id': tg_id,
-        'wallet': wallet,
+    if tg_id:
+        active_job = CourtJob.objects.filter(
+            telegram_user_id=tg_id,
+            is_claimed=False
+        ).order_by('-created_at').first()
+
+        if active_job:
+            now = timezone.now()
+            if now >= active_job.finishes_at:
+                is_completed = True
+                time_remaining_seconds = 0
+            else:
+                is_completed = False
+                time_remaining_seconds = max(0, int((active_job.finishes_at - now).total_seconds()))
+
+    context = {
         'profile': profile,
-        'jobs': JOBS_LIST,
+        'available_jobs': JOBS_CATALOG,
+        'jobs': JOBS_CATALOG,  # Soporte doble para compatibilidad
         'active_job': active_job,
         'is_completed': is_completed,
         'time_remaining_seconds': time_remaining_seconds,
-    })
+    }
+    return render(request, 'economy/jobs.html', context)
 
 
+@require_POST
 def start_court_job(request):
-    if request.method != 'POST':
-        return redirect('/economy/jobs/')
-        
-    tg_id = get_safe_tg_id(request)
-    job_id = request.POST.get('job_id')
+    """Inicia una nueva labor de la corte si no hay otra en curso."""
+    tg_id = get_telegram_id_from_request(request)
+    if not tg_id:
+        messages.error(request, 'Sesión no válida.')
+        return redirect('economy:jobs')
+
+    # Acepta tanto 'job_key' como 'job_id'
+    job_key = request.POST.get('job_key') or request.POST.get('job_id')
     
-    matched = next((j for j in JOBS_LIST if j['id'] == job_id), None)
-    if not matched:
-        messages.error(request, "La labor nobiliaria no existe.")
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
-        
-    # Verificar si ya tiene una activa sin cobrar
-    existing = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
+    existing = CourtJob.objects.filter(
+        telegram_user_id=tg_id,
+        is_claimed=False
+    ).first()
+
     if existing:
-        messages.warning(request, "Ya te encuentras desempeñando una labor para la Corona.")
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
-        
-    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    if profile.level < matched['min_level']:
-        messages.error(request, f"Se requiere Nivel {matched['min_level']} para acceder a esta tarea de la Corte.")
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
-        
-    duration = matched['duration_minutes']
-    
-    # BUFF CIERVO SAGRADO: Reducción del tiempo de labores en 15% / 25% / 35%
-    try:
-        pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-        if pet and pet.species == 'deer':
-            deer_reduction = {1: 0.85, 2: 0.75, 3: 0.65}.get(pet.evolution_stage_number, 0.85)
-            duration = max(5, int(round(duration * deer_reduction)))
-    except Exception:
-        pass
-        
-    finishes = timezone.now() + timedelta(minutes=duration)
-    
+        messages.warning(request, 'Ya tienes una labor en curso en la corte.')
+        return redirect('economy:jobs')
+
+    matched = next((j for j in JOBS_CATALOG if j['id'] == job_key or j['key'] == job_key), None)
+    if not matched:
+        messages.error(request, 'La labor seleccionada no existe.')
+        return redirect('economy:jobs')
+
+    profile = Profile.objects.filter(telegram_user_id=tg_id).first()
+    user_level = profile.level if profile else 1
+    if user_level < matched.get('min_level', 1):
+        messages.error(request, f"Requiere nivel {matched['min_level']} en la corte.")
+        return redirect('economy:jobs')
+
+    finishes = timezone.now() + timedelta(minutes=matched['duration_minutes'])
+
+    # Creación con el campo exacto del modelo: job_key
     CourtJob.objects.create(
         telegram_user_id=tg_id,
-        job_code=matched['id'],
+        job_key=matched['id'],
         title=matched['title'],
         role_type=matched['id'],
         gold_reward=matched['gold_reward'],
         xp_reward=matched['xp_reward'],
+        duration_minutes=matched['duration_minutes'],
         finishes_at=finishes
     )
-    
-    messages.success(request, f"⚔️ Has iniciado '{matched['title']}'. Regresa en {duration} minutos a reclamar tu paga.")
-    return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+    messages.success(request, f'¡Has iniciado la labor: "{matched["title"]}"!')
+    return redirect('economy:jobs')
 
 
+@require_POST
 def claim_court_job(request):
-    if request.method != 'POST':
-        return redirect('/economy/jobs/')
-        
-    tg_id = get_safe_tg_id(request)
-    job = CourtJob.objects.filter(telegram_user_id=tg_id, is_claimed=False).first()
-    
+    """Reclama la recompensa de una labor completada."""
+    tg_id = get_telegram_id_from_request(request)
+    if not tg_id:
+        messages.error(request, 'Sesión no válida.')
+        return redirect('economy:jobs')
+
+    job = CourtJob.objects.filter(
+        telegram_user_id=tg_id,
+        is_claimed=False
+    ).order_by('-created_at').first()
+
     if not job:
-        messages.error(request, "No tienes ninguna labor pendiente por cobrar.")
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
-        
+        messages.warning(request, 'No tienes ninguna labor para reclamar.')
+        return redirect('economy:jobs')
+
     if timezone.now() < job.finishes_at:
-        messages.warning(request, "⏳ Aún no concluye el tiempo reglamentario de tu labor imperial.")
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
-        
-    with transaction.atomic():
-        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-        wallet.add_funds(job.gold_reward)
-        job.is_claimed = True
-        job.save()
-        
-        grant_user_xp(request, tg_id, job.xp_reward, reason="Paga de Labor de Corte")
-        
-    messages.success(request, f"💰 ¡Labor cumplida con honor! Has cobrado +{job.gold_reward} 🪙 y +{job.xp_reward} EXP nobiliaria.")
-    return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        messages.error(request, 'Esta labor aún no ha finalizado.')
+        return redirect('economy:jobs')
+
+    profile = Profile.objects.filter(telegram_user_id=tg_id).first()
+    if not profile:
+        messages.error(request, 'Perfil de cortesano no encontrado.')
+        return redirect('economy:jobs')
+
+    # Acreditación de Oro y Experiencia
+    profile.gold_balance += job.gold_reward
+    profile.experience += job.xp_reward
+
+    # Subida de nivel básica si alcanza la meta de XP
+    xp_needed = profile.level * 200
+    if profile.experience >= xp_needed:
+        profile.level += 1
+        messages.info(request, f'👑 ¡Has ascendido al Nivel {profile.level} de la Corte!')
+
+    profile.save(update_fields=['gold_balance', 'experience', 'level'])
+
+    job.is_claimed = True
+    job.save(update_fields=['is_claimed'])
+
+    messages.success(request, f'✨ ¡Recompensa reclamada! +{job.gold_reward} Oro y +{job.xp_reward} XP.')
+    return redirect('economy:jobs')
 
 
 # ==============================================================================
