@@ -974,68 +974,68 @@ def bazar_buy_action(request):
 
 
 # ==========================================
-# LABORES DE LA CORTE (COURT JOBS) - CORREGIDO
+# LABORES DE LA CORTE (PUNTO MEDIO EQUILIBRADO)
 # ==========================================
 
 JOBS_CATALOG = [
     {
         'id': 'patrol',
         'key': 'patrol',
-        'title': 'Patrullar las Mazmorras',
-        'description': 'Supervisa las celdas inferiores del reino en busca de intrusos.',
-        'desc': 'Supervisa las celdas inferiores del reino en busca de intrusos.',
+        'title': 'Ronda de Mazmorras',
+        'description': 'Supervisión rápida de pasadizos y rejas del palacio.',
         'icon': 'fa-shield-halved',
-        'duration_minutes': 5,
-        'duration': 5,
-        'gold_reward': 150,
-        'gold': 150,
-        'xp_reward': 50,
-        'xp': 50,
+        'duration_minutes': 15,
+        'duration_display': '15 min',
+        'gold_reward': 50,
+        'xp_reward': 25,
         'min_level': 1
     },
     {
         'id': 'wine_tasting',
         'key': 'wine_tasting',
-        'title': 'Cata de Vinos Reales',
-        'description': 'Selecciona las mejores cosechas de la bodega para el banquete imperial.',
-        'desc': 'Selecciona las mejores cosechas de la bodega para el banquete imperial.',
+        'title': 'Cata en Bodegas Reales',
+        'description': 'Selección de cosechas finas para el banquete de las Idols.',
         'icon': 'fa-wine-glass',
-        'duration_minutes': 15,
-        'duration': 15,
-        'gold_reward': 500,
-        'gold': 500,
-        'xp_reward': 180,
-        'xp': 180,
-        'min_level': 2
+        'duration_minutes': 30,
+        'duration_display': '30 min',
+        'gold_reward': 120,
+        'xp_reward': 60,
+        'min_level': 1
     },
     {
         'id': 'royal_treasury',
         'key': 'royal_treasury',
-        'title': 'Auditoría del Tesoro',
-        'description': 'Cuenta los cofres de oro y gemas acumulados por los tributos.',
-        'desc': 'Cuenta los cofres de oro y gemas acumulados por los tributos.',
+        'title': 'Auditoría de Tributos',
+        'description': 'Conteo de arcas reales y registro de donaciones nobles.',
         'icon': 'fa-coins',
-        'duration_minutes': 30,
-        'duration': 30,
-        'gold_reward': 1200,
-        'gold': 1200,
-        'xp_reward': 450,
-        'xp': 450,
+        'duration_minutes': 60,
+        'duration_display': '1 hora',
+        'gold_reward': 280,
+        'xp_reward': 150,
+        'min_level': 2
+    },
+    {
+        'id': 'escort_caravan',
+        'key': 'escort_caravan',
+        'title': 'Escolta de Mercaderes VIP',
+        'description': 'Custodia cargamentos exóticos traídos directamente al bazar.',
+        'icon': 'fa-horse',
+        'duration_minutes': 120,
+        'duration_display': '2 horas',
+        'gold_reward': 600,
+        'xp_reward': 320,
         'min_level': 3
     },
     {
         'id': 'guard_honor',
         'key': 'guard_honor',
-        'title': 'Guardia de Honor VIP',
-        'description': 'Custodia la cámara privada de las Idols durante las festividades.',
-        'desc': 'Custodia la cámara privada de las Idols durante las festividades.',
+        'title': 'Custodia de Aposentos Reales',
+        'description': 'Protección exclusiva en los salones privados durante las celebraciones.',
         'icon': 'fa-crown',
-        'duration_minutes': 60,
-        'duration': 60,
-        'gold_reward': 3000,
-        'gold': 3000,
-        'xp_reward': 1000,
-        'xp': 1000,
+        'duration_minutes': 240,
+        'duration_display': '4 horas',
+        'gold_reward': 1350,
+        'xp_reward': 750,
         'min_level': 5
     }
 ]
