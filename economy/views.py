@@ -973,12 +973,12 @@ def bazar_buy_action(request):
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
-# ==========================================
-# LABORES DE LA CORTE (PICARONES Y EQUILIBRADOS)
-# ==========================================
+# ==============================================================================
+# 🪔 LABORES DE LA CORTE (EQUILIBRADAS, PICARONAS Y CON DISTINCIÓN DE ROL)
+# ==============================================================================
 
 JOBS_CATALOG = [
-    # --- LABORES PARA CLIENTES / NOBLES ---
+    # --- LABORES PARA NOBLES / CLIENTES ---
     {
         'id': 'noble_bath_oil',
         'key': 'noble_bath_oil',
@@ -987,8 +987,11 @@ JOBS_CATALOG = [
         'title': 'Aceitado en los Baños de Vapor',
         'description': 'Aplicar esencias afrodisíacas a las doncellas en las termas reales.',
         'duration_minutes': 15,
+        'gold_reward': 55,
         'reward_gold': 55,
+        'xp_reward': 30,
         'reward_xp': 30,
+        'min_level': 1,
         'icon': 'fa-solid fa-hot-tub-person',
         'emoji': '🛁',
         'badge_color': 'bg-pink-900/60 text-pink-300 border-pink-700/50',
@@ -1001,8 +1004,11 @@ JOBS_CATALOG = [
         'title': 'Cata Privada de Licores Prohibidos',
         'description': 'Servir y degustar vino especiado en los aposentos privados de la favorita.',
         'duration_minutes': 30,
+        'gold_reward': 130,
         'reward_gold': 130,
+        'xp_reward': 70,
         'reward_xp': 70,
+        'min_level': 1,
         'icon': 'fa-solid fa-wine-glass',
         'emoji': '🍷',
         'badge_color': 'bg-purple-900/60 text-purple-300 border-purple-700/50',
@@ -1015,8 +1021,11 @@ JOBS_CATALOG = [
         'title': 'Custodia del Salón de Seda',
         'description': 'Montar guardia tras las cortinas de terciopelo asegurando que nadie interrumpa los deleites.',
         'duration_minutes': 60,
+        'gold_reward': 300,
         'reward_gold': 300,
+        'xp_reward': 160,
         'reward_xp': 160,
+        'min_level': 2,
         'icon': 'fa-solid fa-shield-cat',
         'emoji': '🪭',
         'badge_color': 'bg-rose-900/60 text-rose-300 border-rose-700/50',
@@ -1029,8 +1038,11 @@ JOBS_CATALOG = [
         'title': 'Escolta Íntima al Palacio Lunar',
         'description': 'Acompañar discretamente a una dama de alto rango a su encuentro secreto a la luz de las velas.',
         'duration_minutes': 120,
+        'gold_reward': 650,
         'reward_gold': 650,
+        'xp_reward': 350,
         'reward_xp': 350,
+        'min_level': 3,
         'icon': 'fa-solid fa-moon',
         'emoji': '🌙',
         'badge_color': 'bg-indigo-900/60 text-indigo-300 border-indigo-700/50',
@@ -1043,8 +1055,11 @@ JOBS_CATALOG = [
         'title': 'Mecenas de la Fiesta de Baco',
         'description': 'Financiar y supervisar una bacanal real con las personalidades más extravagantes de la corte.',
         'duration_minutes': 240,
+        'gold_reward': 1450,
         'reward_gold': 1450,
+        'xp_reward': 800,
         'reward_xp': 800,
+        'min_level': 4,
         'icon': 'fa-solid fa-crown',
         'emoji': '👑',
         'badge_color': 'bg-amber-900/60 text-amber-300 border-amber-700/50',
@@ -1057,10 +1072,13 @@ JOBS_CATALOG = [
         'role_type': 'idol',
         'role_label': 'Idol / Musa',
         'title': 'Perfumado de Velos y Almohadas',
-        'description': 'Rociar mirra y rosas en los lechos del sultán dejando un rastro embriagador.',
+        'description': 'Rociar mirra y rosas en los lechos reales dejando un rastro embriagador.',
         'duration_minutes': 15,
+        'gold_reward': 65,
         'reward_gold': 65,
+        'xp_reward': 35,
         'reward_xp': 35,
+        'min_level': 1,
         'icon': 'fa-solid fa-spray-can-sparkles',
         'emoji': '🌸',
         'badge_color': 'bg-fuchsia-900/60 text-fuchsia-300 border-fuchsia-700/50',
@@ -1073,8 +1091,11 @@ JOBS_CATALOG = [
         'title': 'Susurros de Alcoba',
         'description': 'Endulzar los oídos de nobles con confesiones atrevidas a cambio de pesados tributos.',
         'duration_minutes': 30,
+        'gold_reward': 145,
         'reward_gold': 145,
+        'xp_reward': 75,
         'reward_xp': 75,
+        'min_level': 1,
         'icon': 'fa-solid fa-kiss-wink-heart',
         'emoji': '💋',
         'badge_color': 'bg-pink-900/60 text-pink-300 border-pink-700/50',
@@ -1087,8 +1108,11 @@ JOBS_CATALOG = [
         'title': 'Danza de los Siete Velos',
         'description': 'Hechizar al salón principal con movimientos hipnóticos de cadera al son de címbalos.',
         'duration_minutes': 60,
+        'gold_reward': 330,
         'reward_gold': 330,
+        'xp_reward': 180,
         'reward_xp': 180,
+        'min_level': 2,
         'icon': 'fa-solid fa-gem',
         'emoji': '💃',
         'badge_color': 'bg-rose-900/60 text-rose-300 border-rose-700/50',
@@ -1101,8 +1125,11 @@ JOBS_CATALOG = [
         'title': 'Audiencia Privada en la Torre de Marfil',
         'description': 'Una sesión exclusiva de masajes, licores y caricias para el benefactor más influyente.',
         'duration_minutes': 120,
+        'gold_reward': 720,
         'reward_gold': 720,
+        'xp_reward': 380,
         'reward_xp': 380,
+        'min_level': 3,
         'icon': 'fa-solid fa-masks-theater',
         'emoji': '🫦',
         'badge_color': 'bg-violet-900/60 text-violet-300 border-violet-700/50',
@@ -1115,8 +1142,11 @@ JOBS_CATALOG = [
         'title': 'Soberana del Harén por una Noche',
         'description': 'Presidir el festival supremo del placer, recibiendo reverencias y cofres de oro puro.',
         'duration_minutes': 240,
+        'gold_reward': 1600,
         'reward_gold': 1600,
+        'xp_reward': 850,
         'reward_xp': 850,
+        'min_level': 4,
         'icon': 'fa-solid fa-wand-magic-sparkles',
         'emoji': '✨',
         'badge_color': 'bg-amber-900/60 text-amber-300 border-amber-700/50',
@@ -1125,49 +1155,40 @@ JOBS_CATALOG = [
 
 
 def court_jobs_view(request):
-    """
-    Vista de Labores de la Corte con distinción de roles (Noble / Idol).
-    """
-    tg_id = (
-        request.GET.get('tg_id')
-        or request.session.get('telegram_user_id')
-        or request.COOKIES.get('tg_id')
-    )
-    if not tg_id:
-        messages.error(request, 'No se pudo identificar tu usuario de Telegram.')
-        return redirect('core:home')
-
-    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+    """Vista principal para consultar y reclamar Labores de la Corte con distinción de roles."""
+    tg_id = get_safe_tg_id(request)
+    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-    # Identificar rol de usuario
-    role_obj = UserRole.objects.filter(telegram_user_id=tg_id).first()
+    # Identificar rol (Noble vs Idol)
+    role_obj = UserRole.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
     is_idol = (
         (role_obj and role_obj.role == 'idol')
         or IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
-    )
+    ) if tg_id else False
     user_role_type = 'idol' if is_idol else 'cliente'
 
-    # Filtrar labores según rol (cada quien ve sus labores principales, o todas organizadas por pestañas)
     role_jobs = [j for j in JOBS_CATALOG if j['role_type'] == user_role_type]
     other_jobs = [j for j in JOBS_CATALOG if j['role_type'] != user_role_type]
 
-    # Trabajo activo actual
-    active_job = CourtJob.objects.filter(
-        telegram_user_id=tg_id,
-        is_completed=False,
-        is_claimed=False
-    ).order_by('-started_at').first()
-
-    now = timezone.now()
+    active_job = None
     is_completed = False
     time_remaining_seconds = 0
 
-    if active_job:
-        if now >= active_job.finishes_at:
-            is_completed = True
-        else:
-            time_remaining_seconds = max(0, int((active_job.finishes_at - now).total_seconds()))
+    if tg_id:
+        active_job = CourtJob.objects.filter(
+            telegram_user_id=tg_id,
+            is_claimed=False
+        ).order_by('-created_at').first()
+
+        if active_job:
+            now = timezone.now()
+            if now >= active_job.finishes_at:
+                is_completed = True
+                time_remaining_seconds = 0
+            else:
+                is_completed = False
+                time_remaining_seconds = max(0, int((active_job.finishes_at - now).total_seconds()))
 
     context = {
         'tg_id': tg_id,
@@ -1177,7 +1198,8 @@ def court_jobs_view(request):
         'is_idol': is_idol,
         'role_jobs': role_jobs,
         'other_jobs': other_jobs,
-        'all_jobs': JOBS_CATALOG,
+        'available_jobs': JOBS_CATALOG,
+        'jobs': JOBS_CATALOG,
         'active_job': active_job,
         'is_completed': is_completed,
         'time_remaining_seconds': time_remaining_seconds,
@@ -1186,20 +1208,17 @@ def court_jobs_view(request):
 
 
 @require_POST
-def start_court_job_action(request):
-    """
-    Inicia una labor en la corte.
-    """
-    tg_id = request.POST.get('tg_id')
-    job_key = request.POST.get('job_key')
-
-    if not tg_id or not job_key:
-        messages.error(request, 'Petición incompleta.')
+def start_court_job(request):
+    """Inicia una nueva labor de la corte si no hay otra en curso."""
+    tg_id = get_safe_tg_id(request)
+    if not tg_id:
+        messages.error(request, 'Sesión no válida.')
         return redirect('economy:jobs')
+
+    job_key = request.POST.get('job_key') or request.POST.get('job_id')
 
     existing = CourtJob.objects.filter(
         telegram_user_id=tg_id,
-        is_completed=False,
         is_claimed=False
     ).first()
 
@@ -1213,72 +1232,75 @@ def start_court_job_action(request):
         return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-    now = timezone.now()
-    finishes_at = now + timedelta(minutes=matched['duration_minutes'])
+    user_level = profile.level if profile and hasattr(profile, 'level') else 1
+    if user_level < matched.get('min_level', 1):
+        messages.error(request, f"Requiere nivel {matched['min_level']} en la corte.")
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+    finishes = timezone.now() + timedelta(minutes=matched['duration_minutes'])
 
     CourtJob.objects.create(
         telegram_user_id=tg_id,
-        user=profile,
         job_key=matched['id'],
         title=matched['title'],
         role_type=matched.get('role_type', 'cliente'),
-        reward_gold=matched['reward_gold'],
-        reward_xp=matched['reward_xp'],
+        gold_reward=matched['gold_reward'],
+        xp_reward=matched['xp_reward'],
         duration_minutes=matched['duration_minutes'],
-        started_at=now,
-        finishes_at=finishes_at,
-        is_completed=False,
+        finishes_at=finishes,
         is_claimed=False
     )
 
-    messages.success(request, f'Has comenzado: "{matched["title"]}". Regresa en {matched["duration_minutes"]} min.')
+    messages.success(request, f'¡Has iniciado la labor: "{matched["title"]}"!')
     return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
 
 @require_POST
-def claim_court_job_action(request):
-    """
-    Reclama las recompensas de una labor finalizada.
-    """
-    tg_id = request.POST.get('tg_id')
-    job_id = request.POST.get('job_id')
-
-    if not tg_id or not job_id:
-        messages.error(request, 'Petición inválida.')
+def claim_court_job(request):
+    """Reclama la recompensa de una labor completada acreditando a Wallet y UserProfile."""
+    tg_id = get_safe_tg_id(request)
+    if not tg_id:
+        messages.error(request, 'Sesión no válida.')
         return redirect('economy:jobs')
 
-    with transaction.atomic():
-        job = CourtJob.objects.select_for_update().filter(
-            id=job_id,
-            telegram_user_id=tg_id,
-            is_claimed=False
-        ).first()
+    job = CourtJob.objects.filter(
+        telegram_user_id=tg_id,
+        is_claimed=False
+    ).order_by('-created_at').first()
 
-        if not job:
-            messages.error(request, 'Labor no encontrada o ya reclamada.')
-            return redirect(f'/economy/jobs/?tg_id={tg_id}')
+    if not job:
+        messages.warning(request, 'No tienes ninguna labor para reclamar.')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
-        if timezone.now() < job.finishes_at:
-            messages.warning(request, 'Esta labor aún no ha finalizado.')
-            return redirect(f'/economy/jobs/?tg_id={tg_id}')
+    if timezone.now() < job.finishes_at:
+        messages.error(request, 'Esta labor aún no ha finalizado.')
+        return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
-        # Marcar como reclamado
-        job.is_completed = True
-        job.is_claimed = True
-        job.claimed_at = timezone.now()
-        job.save()
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-        # Otorgar oro en la Wallet
-        wallet, _ = Wallet.objects.select_for_update().get_or_create(telegram_user_id=tg_id)
-        wallet.add_funds(job.reward_gold)
+    # 🪙 1. Acreditación de Oro a la Billetera
+    wallet.add_funds(job.gold_reward)
 
-        # Otorgar XP al UserProfile
+    # ✨ 2. Acreditación de XP mediante el helper oficial del Reino
+    try:
+        grant_user_xp(request, tg_id, job.xp_reward, reason=f"Labor de la Corte: {job.title}")
+    except Exception:
         profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
         if profile and hasattr(profile, 'xp'):
-            grant_user_xp(profile, job.reward_xp)
+            profile.xp += job.xp_reward
+            profile.save()
 
-    messages.success(request, f'¡Placer cumplido! Recibiste +{job.reward_gold} monedas de oro y +{job.reward_xp} XP.')
+    # 3. Marcar como cobrada
+    job.is_claimed = True
+    job.save(update_fields=['is_claimed'])
+
+    messages.success(request, f'✨ ¡Tributo reclamado! +{job.gold_reward} Oro acreditados a tu Bóveda y +{job.xp_reward} EXP.')
     return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+
+# Alias de compatibilidad total
+start_court_job_action = start_court_job
+claim_court_job_action = claim_court_job
 
 
 # ==============================================================================
