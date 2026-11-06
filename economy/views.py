@@ -984,51 +984,51 @@ JOBS_CATALOG = [
         'key': 'noble_bath_oil',
         'role_type': 'cliente',
         'role_label': 'Noble / Cliente',
-        'title': 'Aceitado en los Baños de Vapor',
-        'description': 'Aplicar esencias afrodisíacas a las doncellas en las termas reales.',
+        'title': 'Selección de Aceites para el Baño Real',
+        'description': 'Elegir esencias aromáticas exóticas para el tocador privado de los nobles.',
         'duration_minutes': 15,
         'gold_reward': 55,
         'reward_gold': 55,
         'xp_reward': 30,
         'reward_xp': 30,
         'min_level': 1,
-        'icon': 'fa-solid fa-hot-tub-person',
-        'emoji': '🛁',
-        'badge_color': 'bg-pink-900/60 text-pink-300 border-pink-700/50',
+        'icon': 'fa-solid fa-bottle-droplet',
+        'emoji': '🏺',
+        'badge_color': 'bg-amber-900/60 text-amber-300 border-amber-700/50',
     },
     {
         'id': 'noble_wine_tasting',
         'key': 'noble_wine_tasting',
         'role_type': 'cliente',
         'role_label': 'Noble / Cliente',
-        'title': 'Cata Privada de Licores Prohibidos',
-        'description': 'Servir y degustar vino especiado en los aposentos privados de la favorita.',
+        'title': 'Cata de Vinos Afrodisíacos',
+        'description': 'Degustar cosechas reservadas con toques de canela y miel para banquetes de medianoche.',
         'duration_minutes': 30,
         'gold_reward': 130,
         'reward_gold': 130,
         'xp_reward': 70,
         'reward_xp': 70,
         'min_level': 1,
-        'icon': 'fa-solid fa-wine-glass',
+        'icon': 'fa-solid fa-wine-glass-empty',
         'emoji': '🍷',
-        'badge_color': 'bg-purple-900/60 text-purple-300 border-purple-700/50',
+        'badge_color': 'bg-rose-900/60 text-rose-300 border-rose-700/50',
     },
     {
-        'id': 'noble_silk_guard',
-        'key': 'noble_silk_guard',
+        'id': 'noble_harem_inspection',
+        'key': 'noble_harem_inspection',
         'role_type': 'cliente',
         'role_label': 'Noble / Cliente',
-        'title': 'Custodia del Salón de Seda',
-        'description': 'Montar guardia tras las cortinas de terciopelo asegurando que nadie interrumpa los deleites.',
+        'title': 'Custodia de las Cámaras del Placer',
+        'description': 'Supervisar la discreción y el descanso de las concubinas y favoritas del sultán.',
         'duration_minutes': 60,
-        'gold_reward': 300,
-        'reward_gold': 300,
+        'gold_reward': 290,
+        'reward_gold': 290,
         'xp_reward': 160,
         'reward_xp': 160,
         'min_level': 2,
-        'icon': 'fa-solid fa-shield-cat',
+        'icon': 'fa-solid fa-shield-halved',
         'emoji': '🪭',
-        'badge_color': 'bg-rose-900/60 text-rose-300 border-rose-700/50',
+        'badge_color': 'bg-purple-900/60 text-purple-300 border-purple-700/50',
     },
     {
         'id': 'noble_night_escort',
@@ -1158,14 +1158,19 @@ def court_jobs_view(request):
     """Vista principal para consultar y reclamar Labores de la Corte con distinción de roles."""
     tg_id = get_safe_tg_id(request)
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    
+    wallet = None
+    if tg_id:
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
     # Identificar rol (Noble vs Idol)
-    role_obj = UserRole.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+    # CORREGIDO: En UserRole el campo es 'telegram_id', NO 'telegram_user_id'
+    role_obj = UserRole.objects.filter(telegram_id=tg_id).first() if tg_id else None
     is_idol = (
         (role_obj and role_obj.role == 'idol')
-        or IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
+        or (tg_id and IdolProfile.objects.filter(telegram_user_id=tg_id).exists())
     ) if tg_id else False
+
     user_role_type = 'idol' if is_idol else 'cliente'
 
     role_jobs = [j for j in JOBS_CATALOG if j['role_type'] == user_role_type]
@@ -1216,7 +1221,7 @@ def start_court_job(request):
         return redirect('economy:jobs')
 
     job_key = request.POST.get('job_key') or request.POST.get('job_id')
-
+    
     existing = CourtJob.objects.filter(
         telegram_user_id=tg_id,
         is_claimed=False
@@ -1233,12 +1238,12 @@ def start_court_job(request):
 
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
     user_level = profile.level if profile and hasattr(profile, 'level') else 1
+
     if user_level < matched.get('min_level', 1):
         messages.error(request, f"Requiere nivel {matched['min_level']} en la corte.")
         return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     finishes = timezone.now() + timedelta(minutes=matched['duration_minutes'])
-
     CourtJob.objects.create(
         telegram_user_id=tg_id,
         job_key=matched['id'],
@@ -1277,11 +1282,10 @@ def claim_court_job(request):
         return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-
-    # 🪙 1. Acreditación de Oro a la Billetera
+    # 🪙 1. Acreditación de Oro
     wallet.add_funds(job.gold_reward)
 
-    # ✨ 2. Acreditación de XP mediante el helper oficial del Reino
+    # ✨ 2. Acreditación de XP
     try:
         grant_user_xp(request, tg_id, job.xp_reward, reason=f"Labor de la Corte: {job.title}")
     except Exception:
@@ -1296,7 +1300,6 @@ def claim_court_job(request):
 
     messages.success(request, f'✨ ¡Tributo reclamado! +{job.gold_reward} Oro acreditados a tu Bóveda y +{job.xp_reward} EXP.')
     return redirect(f'/economy/jobs/?tg_id={tg_id}')
-
 
 # Alias de compatibilidad total
 start_court_job_action = start_court_job

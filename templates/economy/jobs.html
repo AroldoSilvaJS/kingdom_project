@@ -1,13 +1,12 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block extra_head %}
-<!-- FontAwesome CDN para asegurar que todos los iconos carguen correctamente -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-{% endblock %}
-
 {% block content %}
+<!-- FontAwesome CDN directo para garantizar la carga de todos los iconos -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
 <div class="min-h-screen bg-neutral-950 text-neutral-100 pb-28 pt-4 px-4 max-w-lg mx-auto">
+
     <!-- Header de Navegación -->
     <div class="flex items-center justify-between mb-4 border-b border-neutral-800 pb-3">
         <a href="{% url 'economy:bazar' %}?tg_id={{ tg_id }}" class="text-neutral-400 hover:text-amber-400 transition-colors flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider">
@@ -15,7 +14,7 @@
         </a>
         <div class="flex items-center gap-2 bg-neutral-900 border border-amber-500/30 px-3 py-1 rounded-full text-xs text-amber-300 font-bold shadow-inner">
             <i class="fa-solid fa-coins text-amber-400"></i>
-            <span>{{ wallet.balance }} 🪙</span>
+            <span>{{ wallet.balance|default:0 }} 🪙</span>
         </div>
     </div>
 
@@ -83,44 +82,41 @@
                 </button>
             </form>
             {% else %}
-            <div class="flex items-center justify-between bg-neutral-950/60 rounded-xl p-3 border border-neutral-800">
-                <div class="text-xs text-neutral-400 flex items-center gap-2">
-                    <i class="fa-solid fa-stopwatch text-amber-400 text-sm"></i>
-                    <span>Tiempo restante:</span>
-                </div>
-                <div id="countdown" class="text-sm font-black font-mono text-amber-300 tracking-wider">
+            <div class="flex items-center justify-between bg-neutral-950/80 px-4 py-3 rounded-xl border border-neutral-800">
+                <span class="text-xs text-neutral-400 flex items-center gap-1.5">
+                    <i class="fa-regular fa-clock text-amber-400"></i> Tiempo restante:
+                </span>
+                <span id="countdown" class="text-sm font-mono font-bold text-amber-400">
                     Calculando...
-                </div>
+                </span>
             </div>
             {% endif %}
         </div>
     </div>
     {% endif %}
 
-    <!-- Pestañas de Selección de Rol -->
-    <div class="mb-4">
-        <div class="flex border-b border-neutral-800 text-xs font-bold">
-            <button type="button" onclick="switchTab('my_role')" id="tab-my-role" class="flex-1 pb-2.5 text-center border-b-2 border-rose-500 text-rose-400 transition-colors flex items-center justify-center gap-1.5">
-                {% if is_idol %}
-                    <i class="fa-solid fa-gem"></i> Para Musas ({{ role_jobs|length }})
-                {% else %}
-                    <i class="fa-solid fa-crown"></i> Para Nobles ({{ role_jobs|length }})
-                {% endif %}
-            </button>
-            <button type="button" onclick="switchTab('other_role')" id="tab-other-role" class="flex-1 pb-2.5 text-center border-b-2 border-transparent text-neutral-400 hover:text-neutral-200 transition-colors flex items-center justify-center gap-1.5">
-                {% if is_idol %}
-                    <i class="fa-solid fa-shield-halved"></i> Labores de Nobles
-                {% else %}
-                    <i class="fa-solid fa-feather"></i> Labores de Musas
-                {% endif %}
-            </button>
-        </div>
+    <!-- Pestañas de Roles (Tu Casta vs La Otra Casta) -->
+    <div class="flex border-b border-neutral-800 mb-4 text-xs font-bold">
+        <button id="tab-my-role" onclick="switchTab('my_role')" class="py-2.5 px-4 border-b-2 border-rose-500 text-rose-400 flex items-center gap-1.5 transition-colors">
+            {% if is_idol %}
+                <i class="fa-solid fa-gem"></i> Labores de Musas (Tus Labores)
+            {% else %}
+                <i class="fa-solid fa-crown"></i> Labores de Nobles (Tus Labores)
+            {% endif %}
+        </button>
+        <button id="tab-other-role" onclick="switchTab('other_role')" class="py-2.5 px-4 border-b-2 border-transparent text-neutral-400 hover:text-neutral-200 flex items-center gap-1.5 transition-colors">
+            {% if is_idol %}
+                <i class="fa-solid fa-crown"></i> Labores de Nobles
+            {% else %}
+                <i class="fa-solid fa-gem"></i> Labores de Musas
+            {% endif %}
+        </button>
     </div>
 
     <!-- LISTA DE LABORES: TU ROL -->
     <div id="content-my-role" class="space-y-3">
         {% for job in role_jobs %}
-        <div class="rounded-xl bg-neutral-900 border border-neutral-800/80 hover:border-neutral-700 p-4 transition-all">
+        <div class="rounded-xl bg-neutral-900/80 border border-neutral-800 p-4 transition-all hover:border-neutral-700">
             <div class="flex items-start justify-between gap-3">
                 <div class="flex items-center gap-3">
                     <div class="w-11 h-11 rounded-xl bg-neutral-800 border border-neutral-700 flex items-center justify-center text-xl shadow-inner shrink-0">
@@ -140,7 +136,6 @@
                         </h4>
                     </div>
                 </div>
-
                 <div class="text-right shrink-0">
                     <div class="text-xs font-bold text-amber-300 font-mono">
                         +{{ job.gold_reward }} 🪙
@@ -181,6 +176,7 @@
             <i class="fa-solid fa-circle-info text-amber-400"></i>
             <span>Labores exclusivas de la otra casta:</span>
         </div>
+
         {% for job in other_jobs %}
         <div class="rounded-xl bg-neutral-900/60 border border-neutral-800/50 p-4 opacity-80">
             <div class="flex items-start justify-between gap-3">
@@ -202,7 +198,6 @@
                         </h4>
                     </div>
                 </div>
-
                 <div class="text-right shrink-0">
                     <div class="text-xs font-bold text-amber-400 font-mono">
                         +{{ job.gold_reward }} 🪙

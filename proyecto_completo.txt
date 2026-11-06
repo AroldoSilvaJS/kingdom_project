@@ -2455,15 +2455,18 @@ urlpatterns = [
     path('wallet/', views.wallet_dashboard, name='wallet'),
     path('casino/', views.casino_game, name='casino'),
     path('claim-bonus/', views.claim_bonus, name='claim_bonus'),
-    path('claim-vault/', views.claim_patron_vault, name='claim_vault'),  # 👈 RUTA DEL COFRE DEL MECENAS
+    path('claim-vault/', views.claim_patron_vault, name='claim_vault'),
     path('slots/', views.slots_game, name='slots'),
     path('blackjack/', views.blackjack_game, name='blackjack'),
     path('mines/', views.mines_game, name='mines'),
     path('bazar/', views.bazar_shop, name='bazar'),
     path('bazar/buy/', views.bazar_buy_action, name='bazar_buy'),
+
+    # Labores de la Corte
     path('jobs/', views.court_jobs_view, name='jobs'),
     path('jobs/start/', views.start_court_job, name='start_job'),
     path('jobs/claim/', views.claim_court_job, name='claim_job'),
+
     # Boutique Real: Coleccionables con Fotos
     path('bazar/collectible/buy/<int:item_id>/', views.buy_collectible_action, name='buy_collectible'),
     path('bazar/collectible/add/', views.admin_add_collectible, name='add_collectible'),
@@ -3451,79 +3454,203 @@ def bazar_buy_action(request):
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
-# ==========================================
-# LABORES DE LA CORTE (PUNTO MEDIO EQUILIBRADO)
-# ==========================================
+# ==============================================================================
+# 🪔 LABORES DE LA CORTE (EQUILIBRADAS, PICARONAS Y CON DISTINCIÓN DE ROL)
+# ==============================================================================
 
 JOBS_CATALOG = [
+    # --- LABORES PARA NOBLES / CLIENTES ---
     {
-        'id': 'patrol',
-        'key': 'patrol',
-        'title': 'Ronda de Mazmorras',
-        'description': 'Supervisión rápida de pasadizos y rejas del palacio.',
-        'icon': 'fa-shield-halved',
+        'id': 'noble_bath_oil',
+        'key': 'noble_bath_oil',
+        'role_type': 'cliente',
+        'role_label': 'Noble / Cliente',
+        'title': 'Aceitado en los Baños de Vapor',
+        'description': 'Aplicar esencias afrodisíacas a las doncellas en las termas reales.',
         'duration_minutes': 15,
-        'duration_display': '15 min',
-        'gold_reward': 50,
-        'xp_reward': 25,
-        'min_level': 1
+        'gold_reward': 55,
+        'reward_gold': 55,
+        'xp_reward': 30,
+        'reward_xp': 30,
+        'min_level': 1,
+        'icon': 'fa-solid fa-hot-tub-person',
+        'emoji': '🛁',
+        'badge_color': 'bg-pink-900/60 text-pink-300 border-pink-700/50',
     },
     {
-        'id': 'wine_tasting',
-        'key': 'wine_tasting',
-        'title': 'Cata en Bodegas Reales',
-        'description': 'Selección de cosechas finas para el banquete de las Idols.',
-        'icon': 'fa-wine-glass',
+        'id': 'noble_wine_tasting',
+        'key': 'noble_wine_tasting',
+        'role_type': 'cliente',
+        'role_label': 'Noble / Cliente',
+        'title': 'Cata Privada de Licores Prohibidos',
+        'description': 'Servir y degustar vino especiado en los aposentos privados de la favorita.',
         'duration_minutes': 30,
-        'duration_display': '30 min',
-        'gold_reward': 120,
-        'xp_reward': 60,
-        'min_level': 1
+        'gold_reward': 130,
+        'reward_gold': 130,
+        'xp_reward': 70,
+        'reward_xp': 70,
+        'min_level': 1,
+        'icon': 'fa-solid fa-wine-glass',
+        'emoji': '🍷',
+        'badge_color': 'bg-purple-900/60 text-purple-300 border-purple-700/50',
     },
     {
-        'id': 'royal_treasury',
-        'key': 'royal_treasury',
-        'title': 'Auditoría de Tributos',
-        'description': 'Conteo de arcas reales y registro de donaciones nobles.',
-        'icon': 'fa-coins',
+        'id': 'noble_silk_guard',
+        'key': 'noble_silk_guard',
+        'role_type': 'cliente',
+        'role_label': 'Noble / Cliente',
+        'title': 'Custodia del Salón de Seda',
+        'description': 'Montar guardia tras las cortinas de terciopelo asegurando que nadie interrumpa los deleites.',
         'duration_minutes': 60,
-        'duration_display': '1 hora',
-        'gold_reward': 280,
-        'xp_reward': 150,
-        'min_level': 2
+        'gold_reward': 300,
+        'reward_gold': 300,
+        'xp_reward': 160,
+        'reward_xp': 160,
+        'min_level': 2,
+        'icon': 'fa-solid fa-shield-cat',
+        'emoji': '🪭',
+        'badge_color': 'bg-rose-900/60 text-rose-300 border-rose-700/50',
     },
     {
-        'id': 'escort_caravan',
-        'key': 'escort_caravan',
-        'title': 'Escolta de Mercaderes VIP',
-        'description': 'Custodia cargamentos exóticos traídos directamente al bazar.',
-        'icon': 'fa-horse',
+        'id': 'noble_night_escort',
+        'key': 'noble_night_escort',
+        'role_type': 'cliente',
+        'role_label': 'Noble / Cliente',
+        'title': 'Escolta Íntima al Palacio Lunar',
+        'description': 'Acompañar discretamente a una dama de alto rango a su encuentro secreto a la luz de las velas.',
         'duration_minutes': 120,
-        'duration_display': '2 horas',
-        'gold_reward': 600,
-        'xp_reward': 320,
-        'min_level': 3
+        'gold_reward': 650,
+        'reward_gold': 650,
+        'xp_reward': 350,
+        'reward_xp': 350,
+        'min_level': 3,
+        'icon': 'fa-solid fa-moon',
+        'emoji': '🌙',
+        'badge_color': 'bg-indigo-900/60 text-indigo-300 border-indigo-700/50',
     },
     {
-        'id': 'guard_honor',
-        'key': 'guard_honor',
-        'title': 'Custodia de Aposentos Reales',
-        'description': 'Protección exclusiva en los salones privados durante las celebraciones.',
-        'icon': 'fa-crown',
+        'id': 'noble_pleasure_patron',
+        'key': 'noble_pleasure_patron',
+        'role_type': 'cliente',
+        'role_label': 'Noble / Cliente',
+        'title': 'Mecenas de la Fiesta de Baco',
+        'description': 'Financiar y supervisar una bacanal real con las personalidades más extravagantes de la corte.',
         'duration_minutes': 240,
-        'duration_display': '4 horas',
-        'gold_reward': 1350,
-        'xp_reward': 750,
-        'min_level': 5
-    }
+        'gold_reward': 1450,
+        'reward_gold': 1450,
+        'xp_reward': 800,
+        'reward_xp': 800,
+        'min_level': 4,
+        'icon': 'fa-solid fa-crown',
+        'emoji': '👑',
+        'badge_color': 'bg-amber-900/60 text-amber-300 border-amber-700/50',
+    },
+
+    # --- LABORES EXCLUSIVAS PARA IDOLS / MUSAS ---
+    {
+        'id': 'idol_perfume_silk',
+        'key': 'idol_perfume_silk',
+        'role_type': 'idol',
+        'role_label': 'Idol / Musa',
+        'title': 'Perfumado de Velos y Almohadas',
+        'description': 'Rociar mirra y rosas en los lechos reales dejando un rastro embriagador.',
+        'duration_minutes': 15,
+        'gold_reward': 65,
+        'reward_gold': 65,
+        'xp_reward': 35,
+        'reward_xp': 35,
+        'min_level': 1,
+        'icon': 'fa-solid fa-spray-can-sparkles',
+        'emoji': '🌸',
+        'badge_color': 'bg-fuchsia-900/60 text-fuchsia-300 border-fuchsia-700/50',
+    },
+    {
+        'id': 'idol_whisper_secrets',
+        'key': 'idol_whisper_secrets',
+        'role_type': 'idol',
+        'role_label': 'Idol / Musa',
+        'title': 'Susurros de Alcoba',
+        'description': 'Endulzar los oídos de nobles con confesiones atrevidas a cambio de pesados tributos.',
+        'duration_minutes': 30,
+        'gold_reward': 145,
+        'reward_gold': 145,
+        'xp_reward': 75,
+        'reward_xp': 75,
+        'min_level': 1,
+        'icon': 'fa-solid fa-kiss-wink-heart',
+        'emoji': '💋',
+        'badge_color': 'bg-pink-900/60 text-pink-300 border-pink-700/50',
+    },
+    {
+        'id': 'idol_belly_dance',
+        'key': 'idol_belly_dance',
+        'role_type': 'idol',
+        'role_label': 'Idol / Musa',
+        'title': 'Danza de los Siete Velos',
+        'description': 'Hechizar al salón principal con movimientos hipnóticos de cadera al son de címbalos.',
+        'duration_minutes': 60,
+        'gold_reward': 330,
+        'reward_gold': 330,
+        'xp_reward': 180,
+        'reward_xp': 180,
+        'min_level': 2,
+        'icon': 'fa-solid fa-gem',
+        'emoji': '💃',
+        'badge_color': 'bg-rose-900/60 text-rose-300 border-rose-700/50',
+    },
+    {
+        'id': 'idol_private_audience',
+        'key': 'idol_private_audience',
+        'role_type': 'idol',
+        'role_label': 'Idol / Musa',
+        'title': 'Audiencia Privada en la Torre de Marfil',
+        'description': 'Una sesión exclusiva de masajes, licores y caricias para el benefactor más influyente.',
+        'duration_minutes': 120,
+        'gold_reward': 720,
+        'reward_gold': 720,
+        'xp_reward': 380,
+        'reward_xp': 380,
+        'min_level': 3,
+        'icon': 'fa-solid fa-masks-theater',
+        'emoji': '🫦',
+        'badge_color': 'bg-violet-900/60 text-violet-300 border-violet-700/50',
+    },
+    {
+        'id': 'idol_reina_noche',
+        'key': 'idol_reina_noche',
+        'role_type': 'idol',
+        'role_label': 'Idol / Musa',
+        'title': 'Soberana del Harén por una Noche',
+        'description': 'Presidir el festival supremo del placer, recibiendo reverencias y cofres de oro puro.',
+        'duration_minutes': 240,
+        'gold_reward': 1600,
+        'reward_gold': 1600,
+        'xp_reward': 850,
+        'reward_xp': 850,
+        'min_level': 4,
+        'icon': 'fa-solid fa-wand-magic-sparkles',
+        'emoji': '✨',
+        'badge_color': 'bg-amber-900/60 text-amber-300 border-amber-700/50',
+    },
 ]
 
 
 def court_jobs_view(request):
-    """Vista principal para consultar y reclamar Labores de la Corte."""
+    """Vista principal para consultar y reclamar Labores de la Corte con distinción de roles."""
     tg_id = get_safe_tg_id(request)
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+
+    # Identificar rol (Noble vs Idol)
+    role_obj = UserRole.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+    is_idol = (
+        (role_obj and role_obj.role == 'idol')
+        or IdolProfile.objects.filter(telegram_user_id=tg_id).exists()
+    ) if tg_id else False
+    user_role_type = 'idol' if is_idol else 'cliente'
+
+    role_jobs = [j for j in JOBS_CATALOG if j['role_type'] == user_role_type]
+    other_jobs = [j for j in JOBS_CATALOG if j['role_type'] != user_role_type]
 
     active_job = None
     is_completed = False
@@ -3548,6 +3675,10 @@ def court_jobs_view(request):
         'tg_id': tg_id,
         'profile': profile,
         'wallet': wallet,
+        'user_role_type': user_role_type,
+        'is_idol': is_idol,
+        'role_jobs': role_jobs,
+        'other_jobs': other_jobs,
         'available_jobs': JOBS_CATALOG,
         'jobs': JOBS_CATALOG,
         'active_job': active_job,
@@ -3566,7 +3697,7 @@ def start_court_job(request):
         return redirect('economy:jobs')
 
     job_key = request.POST.get('job_key') or request.POST.get('job_id')
-    
+
     existing = CourtJob.objects.filter(
         telegram_user_id=tg_id,
         is_claimed=False
@@ -3582,7 +3713,7 @@ def start_court_job(request):
         return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-    user_level = profile.level if profile else 1
+    user_level = profile.level if profile and hasattr(profile, 'level') else 1
     if user_level < matched.get('min_level', 1):
         messages.error(request, f"Requiere nivel {matched['min_level']} en la corte.")
         return redirect(f'/economy/jobs/?tg_id={tg_id}')
@@ -3593,11 +3724,12 @@ def start_court_job(request):
         telegram_user_id=tg_id,
         job_key=matched['id'],
         title=matched['title'],
-        role_type=matched['id'],
+        role_type=matched.get('role_type', 'cliente'),
         gold_reward=matched['gold_reward'],
         xp_reward=matched['xp_reward'],
         duration_minutes=matched['duration_minutes'],
-        finishes_at=finishes
+        finishes_at=finishes,
+        is_claimed=False
     )
 
     messages.success(request, f'¡Has iniciado la labor: "{matched["title"]}"!')
@@ -3626,12 +3758,18 @@ def claim_court_job(request):
         return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-    
+
     # 🪙 1. Acreditación de Oro a la Billetera
     wallet.add_funds(job.gold_reward)
 
     # ✨ 2. Acreditación de XP mediante el helper oficial del Reino
-    grant_user_xp(request, tg_id, job.xp_reward, reason=f"Labor de la Corte: {job.title}")
+    try:
+        grant_user_xp(request, tg_id, job.xp_reward, reason=f"Labor de la Corte: {job.title}")
+    except Exception:
+        profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+        if profile and hasattr(profile, 'xp'):
+            profile.xp += job.xp_reward
+            profile.save()
 
     # 3. Marcar como cobrada
     job.is_claimed = True
@@ -3639,6 +3777,11 @@ def claim_court_job(request):
 
     messages.success(request, f'✨ ¡Tributo reclamado! +{job.gold_reward} Oro acreditados a tu Bóveda y +{job.xp_reward} EXP.')
     return redirect(f'/economy/jobs/?tg_id={tg_id}')
+
+
+# Alias de compatibilidad total
+start_court_job_action = start_court_job
+claim_court_job_action = claim_court_job
 
 
 # ==============================================================================
@@ -10623,175 +10766,298 @@ ARCHIVO: .\templates\economy\jobs.html
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Labores de la Corte - Kingdom of Pleasure{% endblock %}
+{% block extra_head %}
+<!-- FontAwesome CDN para asegurar que todos los iconos carguen correctamente -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+{% endblock %}
 
 {% block content %}
-<div class="max-w-md mx-auto px-4 py-6 space-y-6">
-
-    <!-- Encabezado Real -->
-    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1F1235] via-[#120824] to-[#0A0414] p-5 border border-[#D4AF37]/30 shadow-[0_4px_25px_rgba(212,175,55,0.12)]">
-        <div class="absolute -top-10 -right-10 w-32 h-32 bg-[#D4AF37]/10 rounded-full blur-2xl pointer-events-none"></div>
-        <div class="flex items-center justify-between">
-            <div>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-[#D4AF37] px-2 py-0.5 rounded bg-[#D4AF37]/10 border border-[#D4AF37]/20">
-                    Gremio Imperial
-                </span>
-                <h1 class="text-xl font-cinzel font-bold text-white mt-1">Labores de la Corte</h1>
-                <p class="text-xs text-slate-400">Sirve al reino, obtén tributos de oro y sube tu estatus.</p>
-            </div>
-            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[#D4AF37]/20 to-[#996515]/20 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37] text-2xl shadow-inner">
-                <i class="fa-solid fa-scroll"></i>
-            </div>
+<div class="min-h-screen bg-neutral-950 text-neutral-100 pb-28 pt-4 px-4 max-w-lg mx-auto">
+    <!-- Header de Navegación -->
+    <div class="flex items-center justify-between mb-4 border-b border-neutral-800 pb-3">
+        <a href="{% url 'economy:bazar' %}?tg_id={{ tg_id }}" class="text-neutral-400 hover:text-amber-400 transition-colors flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider">
+            <i class="fa-solid fa-arrow-left"></i> Volver al Bazar
+        </a>
+        <div class="flex items-center gap-2 bg-neutral-900 border border-amber-500/30 px-3 py-1 rounded-full text-xs text-amber-300 font-bold shadow-inner">
+            <i class="fa-solid fa-coins text-amber-400"></i>
+            <span>{{ wallet.balance }} 🪙</span>
         </div>
-        
-        {% if profile %}
-        <div class="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs">
-            <span class="text-slate-400">Rango Actual: <strong class="text-white">Nivel {{ profile.level }}</strong></span>
-            <span class="text-[#D4AF37] font-semibold"><i class="fa-solid fa-coins mr-1"></i>{{ wallet.balance }} Oro</span>
-        </div>
-        {% endif %}
     </div>
 
-    <!-- Tarea Activa (Si existe) -->
-    {% if active_job %}
-    <div class="rounded-2xl bg-[#150A24] border border-[#D4AF37]/40 p-5 shadow-[0_0_20px_rgba(212,175,55,0.15)] relative overflow-hidden">
-        <div class="flex items-center justify-between mb-3">
-            <span class="text-[10px] font-bold tracking-wider uppercase text-amber-300 flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full {% if is_completed %}bg-emerald-400 animate-pulse{% else %}bg-amber-400 animate-ping{% endif %}"></span>
-                {% if is_completed %}¡Misión Cumplida!{% else %}En Ejecución{% endif %}
-            </span>
-            <span class="text-xs text-slate-400 font-mono" id="job-timer-badge">
-                {% if is_completed %}Lista para cobrar{% else %}Calculando...{% endif %}
-            </span>
+    <!-- Título y Banner -->
+    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-rose-950/40 via-neutral-900 to-amber-950/30 border border-rose-500/20 p-5 mb-5 shadow-lg">
+        <div class="flex items-start justify-between">
+            <div>
+                <span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full {% if is_idol %}bg-fuchsia-900/60 text-fuchsia-300 border border-fuchsia-700/50{% else %}bg-amber-900/60 text-amber-300 border border-amber-700/50{% endif %} mb-2">
+                    {% if is_idol %}
+                        <i class="fa-solid fa-gem text-fuchsia-400"></i> Eres Musa / Idol
+                    {% else %}
+                        <i class="fa-solid fa-crown text-amber-400"></i> Eres Noble / Cliente
+                    {% endif %}
+                </span>
+                <h1 class="text-2xl font-black tracking-tight text-neutral-50 flex items-center gap-2">
+                    Labores de la Corte <span class="text-xl">🪔</span>
+                </h1>
+                <p class="text-xs text-neutral-400 mt-1 leading-relaxed">
+                    Satisface los deseos clandestinos del palacio. Emprende tareas de placer y prestigio para cosechar oro y gloria.
+                </p>
+            </div>
         </div>
+    </div>
 
-        <h3 class="text-lg font-bold text-white mb-1">{{ active_job.title }}</h3>
-        <p class="text-xs text-slate-400 mb-4">Recompensa acordada: <strong class="text-[#D4AF37]">+{{ active_job.gold_reward }} Oro</strong> y <strong class="text-indigo-400">+{{ active_job.xp_reward }} XP</strong></p>
-
-        <!-- Barra de Progreso -->
-        <div class="w-full bg-black/40 rounded-full h-2.5 mb-4 overflow-hidden border border-white/5">
-            <div id="job-progress-bar" class="h-full bg-gradient-to-r from-[#D4AF37] to-amber-300 transition-all duration-1000" style="width: {% if is_completed %}100%{% else %}10%{% endif %};"></div>
+    <!-- Mensajes Django -->
+    {% if messages %}
+    <div class="space-y-2 mb-4">
+        {% for message in messages %}
+        <div class="p-3 rounded-xl text-xs font-medium border flex items-center gap-2 {% if message.tags == 'success' %}bg-emerald-950/70 border-emerald-500/50 text-emerald-200{% elif message.tags == 'warning' %}bg-amber-950/70 border-amber-500/50 text-amber-200{% else %}bg-rose-950/70 border-rose-500/50 text-rose-200{% endif %}">
+            <i class="fa-solid {% if message.tags == 'success' %}fa-circle-check{% elif message.tags == 'warning' %}fa-triangle-exclamation{% else %}fa-circle-xmark{% endif %}"></i>
+            <span>{{ message }}</span>
         </div>
-
-        {% if is_completed %}
-        <form method="POST" action="{% url 'economy:claim_job' %}">
-            {% csrf_token %}
-            <button type="submit" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-700 text-white font-bold text-sm shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2">
-                <i class="fa-solid fa-gift text-base"></i> Reclamar Tributo Real
-            </button>
-        </form>
-        {% else %}
-        <div class="text-center py-2 bg-black/30 rounded-xl border border-white/5">
-            <p class="text-[11px] text-slate-400">Tiempo restante para finalizar:</p>
-            <p id="countdown-display" class="text-base font-mono font-bold text-[#D4AF37] mt-0.5">--:--</p>
-        </div>
-        {% endif %}
+        {% endfor %}
     </div>
     {% endif %}
 
-    <!-- Catálogo de Labores Disponibles -->
-    <div class="space-y-3">
-        <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400 px-1">Labores del Tablón</h2>
+    <!-- LABOR ACTIVA EN CURSO -->
+    {% if active_job %}
+    <div class="rounded-2xl bg-neutral-900/90 border border-amber-500/40 p-4 mb-6 shadow-xl relative overflow-hidden">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-hourglass-half animate-spin"></i> Labor en Curso
+            </span>
+            <span class="text-xs font-mono font-bold text-amber-300">
+                +{{ active_job.gold_reward }} 🪙 | +{{ active_job.xp_reward }} XP
+            </span>
+        </div>
+        
+        <h3 class="text-base font-bold text-neutral-100 flex items-center gap-2">
+            {{ active_job.title }}
+        </h3>
+        <p class="text-xs text-neutral-400 mt-0.5">
+            Duración estipulada: {{ active_job.duration_minutes }} minutos
+        </p>
 
-        {% for job in available_jobs %}
-        <div class="rounded-xl bg-[#120721] border border-white/10 p-4 hover:border-[#D4AF37]/30 transition-all">
-            <div class="flex items-start justify-between gap-3">
-                <div class="w-10 h-10 rounded-lg bg-[#1F1038] border border-white/5 flex items-center justify-center text-[#D4AF37] text-lg flex-shrink-0">
-                    <i class="fa-solid {{ job.icon|default:'fa-hammer' }}"></i>
+        <!-- Cronómetro o Reclamar -->
+        <div class="mt-4 pt-3 border-t border-neutral-800">
+            {% if is_completed %}
+            <form action="{% url 'economy:claim_job' %}" method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <input type="hidden" name="job_id" value="{{ active_job.id }}">
+                <button type="submit" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-sm shadow-lg shadow-emerald-950/50 transition-all flex items-center justify-center gap-2 animate-bounce">
+                    <i class="fa-solid fa-gift"></i> ¡Reclamar Placer y Recompensas!
+                </button>
+            </form>
+            {% else %}
+            <div class="flex items-center justify-between bg-neutral-950/60 rounded-xl p-3 border border-neutral-800">
+                <div class="text-xs text-neutral-400 flex items-center gap-2">
+                    <i class="fa-solid fa-stopwatch text-amber-400 text-sm"></i>
+                    <span>Tiempo restante:</span>
                 </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2">
-                        <h4 class="text-sm font-bold text-white truncate">{{ job.title }}</h4>
-                        {% if job.min_level > 1 %}
-                        <span class="text-[9px] px-1.5 py-0.2 bg-purple-900/50 text-purple-300 rounded border border-purple-700/50">Nivel {{ job.min_level }}</span>
-                        {% endif %}
-                    </div>
-                    <p class="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{{ job.description }}</p>
-
-                    <div class="flex items-center gap-3 mt-2 text-[10px]">
-                        <span class="text-slate-400"><i class="fa-regular fa-clock mr-1"></i>{{ job.duration_minutes }} min</span>
-                        <span class="text-[#D4AF37] font-semibold"><i class="fa-solid fa-coins mr-1"></i>+{{ job.gold_reward }} Oro</span>
-                        <span class="text-indigo-400 font-semibold"><i class="fa-solid fa-bolt mr-1"></i>+{{ job.xp_reward }} XP</span>
-                    </div>
-                </div>
-
-                <!-- Botón Iniciar -->
-                <div class="flex-shrink-0">
-                    {% if active_job %}
-                    <button disabled class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-500 text-xs font-semibold cursor-not-allowed">
-                        Ocupado
-                    </button>
-                    {% elif profile and profile.level < job.min_level %}
-                    <button disabled class="px-3 py-1.5 rounded-lg bg-red-950/40 text-red-400 border border-red-800/40 text-xs font-semibold cursor-not-allowed">
-                        Bloqueado
-                    </button>
-                    {% else %}
-                    <form method="POST" action="{% url 'economy:start_job' %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="job_key" value="{{ job.id }}">
-                        <button type="submit" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#D4AF37] to-[#B38F26] text-black font-bold text-xs shadow-md hover:brightness-110 active:scale-95 transition-all">
-                            Iniciar
-                        </button>
-                    </form>
-                    {% endif %}
+                <div id="countdown" class="text-sm font-black font-mono text-amber-300 tracking-wider">
+                    Calculando...
                 </div>
             </div>
+            {% endif %}
         </div>
-        {% empty %}
-        <div class="text-center py-8 rounded-xl bg-white/5 border border-white/5 text-slate-400 text-xs">
-            No hay labores disponibles en este momento.
+    </div>
+    {% endif %}
+
+    <!-- Pestañas de Selección de Rol -->
+    <div class="mb-4">
+        <div class="flex border-b border-neutral-800 text-xs font-bold">
+            <button type="button" onclick="switchTab('my_role')" id="tab-my-role" class="flex-1 pb-2.5 text-center border-b-2 border-rose-500 text-rose-400 transition-colors flex items-center justify-center gap-1.5">
+                {% if is_idol %}
+                    <i class="fa-solid fa-gem"></i> Para Musas ({{ role_jobs|length }})
+                {% else %}
+                    <i class="fa-solid fa-crown"></i> Para Nobles ({{ role_jobs|length }})
+                {% endif %}
+            </button>
+            <button type="button" onclick="switchTab('other_role')" id="tab-other-role" class="flex-1 pb-2.5 text-center border-b-2 border-transparent text-neutral-400 hover:text-neutral-200 transition-colors flex items-center justify-center gap-1.5">
+                {% if is_idol %}
+                    <i class="fa-solid fa-shield-halved"></i> Labores de Nobles
+                {% else %}
+                    <i class="fa-solid fa-feather"></i> Labores de Musas
+                {% endif %}
+            </button>
+        </div>
+    </div>
+
+    <!-- LISTA DE LABORES: TU ROL -->
+    <div id="content-my-role" class="space-y-3">
+        {% for job in role_jobs %}
+        <div class="rounded-xl bg-neutral-900 border border-neutral-800/80 hover:border-neutral-700 p-4 transition-all">
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-neutral-800 border border-neutral-700 flex items-center justify-center text-xl shadow-inner shrink-0">
+                        <span>{{ job.emoji }}</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full {{ job.badge_color }}">
+                                {{ job.role_label }}
+                            </span>
+                            <span class="text-[10px] text-neutral-400 font-medium">
+                                <i class="fa-regular fa-clock"></i> {{ job.duration_minutes }}m
+                            </span>
+                        </div>
+                        <h4 class="text-sm font-bold text-neutral-100 mt-1">
+                            {{ job.title }}
+                        </h4>
+                    </div>
+                </div>
+
+                <div class="text-right shrink-0">
+                    <div class="text-xs font-bold text-amber-300 font-mono">
+                        +{{ job.gold_reward }} 🪙
+                    </div>
+                    <div class="text-[10px] font-medium text-emerald-400 font-mono">
+                        +{{ job.xp_reward }} XP
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-xs text-neutral-400 mt-2.5 line-clamp-2 leading-relaxed">
+                {{ job.description }}
+            </p>
+
+            <div class="mt-3 pt-2.5 border-t border-neutral-800/80 flex items-center justify-end">
+                {% if active_job %}
+                <button disabled class="w-full py-2 px-3 rounded-lg bg-neutral-800/50 text-neutral-500 font-semibold text-xs cursor-not-allowed">
+                    Ocupado en otra labor
+                </button>
+                {% else %}
+                <form action="{% url 'economy:start_job' %}" method="POST" class="w-full">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="job_key" value="{{ job.id }}">
+                    <button type="submit" class="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-rose-700 to-amber-700 hover:from-rose-600 hover:to-amber-600 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-play text-[10px]"></i> Iniciar Labor ({{ job.duration_minutes }} min)
+                    </button>
+                </form>
+                {% endif %}
+            </div>
         </div>
         {% endfor %}
     </div>
 
-    <!-- Botón Volver -->
-    <div class="pt-2">
-        <a href="{% url 'core:menu' %}" class="block text-center py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-semibold text-slate-300 hover:bg-white/10 transition-colors">
-            <i class="fa-solid fa-arrow-left mr-1.5"></i> Volver al Menú Principal
-        </a>
+    <!-- LISTA DE LABORES: OTRO ROL -->
+    <div id="content-other-role" class="space-y-3 hidden">
+        <div class="p-3 bg-neutral-900/60 rounded-xl border border-neutral-800 text-[11px] text-neutral-400 flex items-center gap-2">
+            <i class="fa-solid fa-circle-info text-amber-400"></i>
+            <span>Labores exclusivas de la otra casta:</span>
+        </div>
+        {% for job in other_jobs %}
+        <div class="rounded-xl bg-neutral-900/60 border border-neutral-800/50 p-4 opacity-80">
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-neutral-800/70 border border-neutral-700/60 flex items-center justify-center text-xl shrink-0">
+                        <span>{{ job.emoji }}</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full {{ job.badge_color }}">
+                                {{ job.role_label }}
+                            </span>
+                            <span class="text-[10px] text-neutral-400 font-medium">
+                                <i class="fa-regular fa-clock"></i> {{ job.duration_minutes }}m
+                            </span>
+                        </div>
+                        <h4 class="text-sm font-bold text-neutral-200 mt-1">
+                            {{ job.title }}
+                        </h4>
+                    </div>
+                </div>
+
+                <div class="text-right shrink-0">
+                    <div class="text-xs font-bold text-amber-400 font-mono">
+                        +{{ job.gold_reward }} 🪙
+                    </div>
+                    <div class="text-[10px] font-medium text-emerald-400 font-mono">
+                        +{{ job.xp_reward }} XP
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-xs text-neutral-400 mt-2 line-clamp-2 leading-relaxed">
+                {{ job.description }}
+            </p>
+
+            <div class="mt-3 pt-2.5 border-t border-neutral-800 flex items-center justify-end">
+                {% if active_job %}
+                <button disabled class="w-full py-2 px-3 rounded-lg bg-neutral-800/40 text-neutral-500 font-semibold text-xs cursor-not-allowed">
+                    Ocupado en otra labor
+                </button>
+                {% else %}
+                <form action="{% url 'economy:start_job' %}" method="POST" class="w-full">
+                    {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                    <input type="hidden" name="job_key" value="{{ job.id }}">
+                    <button type="submit" class="w-full py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs border border-neutral-700 transition-all flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-play text-[10px]"></i> Iniciar Labor ({{ job.duration_minutes }} min)
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
     </div>
 
 </div>
 
-{% if active_job and not is_completed %}
+<!-- Scripts de Interacción -->
 <script>
-    (function() {
-        let remainingSeconds = {{ time_remaining_seconds }};
-        const totalDuration = {{ active_job.duration_minutes }} * 60;
-        const countdownEl = document.getElementById('countdown-display');
-        const timerBadgeEl = document.getElementById('job-timer-badge');
-        const progressBar = document.getElementById('job-progress-bar');
+    function switchTab(tab) {
+        const myRoleTab = document.getElementById('tab-my-role');
+        const otherRoleTab = document.getElementById('tab-other-role');
+        const myRoleContent = document.getElementById('content-my-role');
+        const otherRoleContent = document.getElementById('content-other-role');
 
-        function updateTimer() {
-            if (remainingSeconds <= 0) {
-                if (countdownEl) countdownEl.innerText = "¡Completado!";
-                if (timerBadgeEl) timerBadgeEl.innerText = "Listo para cobrar";
-                if (progressBar) progressBar.style.width = "100%";
-                setTimeout(() => window.location.reload(), 1500);
-                return;
-            }
+        if (tab === 'my_role') {
+            myRoleTab.classList.add('border-rose-500', 'text-rose-400');
+            myRoleTab.classList.remove('border-transparent', 'text-neutral-400');
+            otherRoleTab.classList.add('border-transparent', 'text-neutral-400');
+            otherRoleTab.classList.remove('border-rose-500', 'text-rose-400');
+            myRoleContent.classList.remove('hidden');
+            otherRoleContent.classList.add('hidden');
+        } else {
+            otherRoleTab.classList.add('border-rose-500', 'text-rose-400');
+            otherRoleTab.classList.remove('border-transparent', 'text-neutral-400');
+            myRoleTab.classList.add('border-transparent', 'text-neutral-400');
+            myRoleTab.classList.remove('border-rose-500', 'text-rose-400');
+            otherRoleContent.classList.remove('hidden');
+            myRoleContent.classList.add('hidden');
+        }
+    }
 
-            const minutes = Math.floor(remainingSeconds / 60);
-            const seconds = remainingSeconds % 60;
-            const formatted = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            
-            if (countdownEl) countdownEl.innerText = formatted;
-            if (timerBadgeEl) timerBadgeEl.innerText = formatted;
+    {% if active_job and not is_completed %}
+    let secondsLeft = {{ time_remaining_seconds }};
+    const countdownEl = document.getElementById('countdown');
 
-            if (progressBar && totalDuration > 0) {
-                const elapsed = totalDuration - remainingSeconds;
-                const pct = Math.min(100, Math.max(5, (elapsed / totalDuration) * 100));
-                progressBar.style.width = pct + "%";
-            }
-
-            remainingSeconds--;
-            setTimeout(updateTimer, 1000);
+    function updateTimer() {
+        if (secondsLeft <= 0) {
+            countdownEl.innerHTML = '<span class="text-emerald-400 font-bold">¡Finalizado! Recargando...</span>';
+            setTimeout(() => {
+                window.location.reload();
+            }, 1200);
+            return;
         }
 
-        updateTimer();
-    })();
+        const hrs = Math.floor(secondsLeft / 3600);
+        const mins = Math.floor((secondsLeft % 3600) / 60);
+        const secs = secondsLeft % 60;
+
+        let str = '';
+        if (hrs > 0) str += `${hrs}h `;
+        str += `${mins < 10 ? '0' : ''}${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
+
+        countdownEl.innerText = str;
+        secondsLeft--;
+    }
+
+    updateTimer();
+    setInterval(updateTimer, 1000);
+    {% endif %}
 </script>
-{% endif %}
 {% endblock %}
 
 ==================================================
