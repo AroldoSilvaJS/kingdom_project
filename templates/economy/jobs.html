@@ -7,11 +7,16 @@
 
 <div class="min-h-screen bg-neutral-950 text-neutral-100 pb-28 pt-4 px-4 max-w-lg mx-auto">
 
-    <!-- Header de Navegación -->
+    <!-- Header de Navegación Universal -->
     <div class="flex items-center justify-between mb-4 border-b border-neutral-800 pb-3">
-        <a href="{% url 'economy:bazar' %}?tg_id={{ tg_id }}" class="text-neutral-400 hover:text-amber-400 transition-colors flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider">
-            <i class="fa-solid fa-arrow-left"></i> Volver al Bazar
-        </a>
+        <div class="flex items-center gap-2">
+            <button type="button" onclick="universalNav('/')" class="text-xs text-neutral-300 hover:text-amber-400 bg-neutral-900/90 hover:bg-neutral-800 px-3 py-1.5 rounded-full border border-neutral-800 flex items-center gap-1.5 active:scale-95 transition-all">
+                <i class="fa-solid fa-arrow-left"></i> <span>Menú</span>
+            </button>
+            <button type="button" onclick="universalNav('/economy/bazar/')" class="text-xs text-neutral-400 hover:text-amber-400 bg-neutral-900/60 hover:bg-neutral-800 px-3 py-1.5 rounded-full border border-neutral-800 flex items-center gap-1.5 active:scale-95 transition-all">
+                <i class="fa-solid fa-store"></i> <span>Bazar</span>
+            </button>
+        </div>
         <div class="flex items-center gap-2 bg-neutral-900 border border-amber-500/30 px-3 py-1 rounded-full text-xs text-amber-300 font-bold shadow-inner">
             <i class="fa-solid fa-coins text-amber-400"></i>
             <span>{{ wallet.balance|default:0 }} 🪙</span>
@@ -24,9 +29,9 @@
             <div>
                 <span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full {% if is_idol %}bg-fuchsia-900/60 text-fuchsia-300 border border-fuchsia-700/50{% else %}bg-amber-900/60 text-amber-300 border border-amber-700/50{% endif %} mb-2">
                     {% if is_idol %}
-                        <i class="fa-solid fa-gem text-fuchsia-400"></i> Eres Musa / Idol
+                        <i class="fa-solid fa-gem text-fuchsia-400"></i> Eres Musa / Idol 🌹
                     {% else %}
-                        <i class="fa-solid fa-crown text-amber-400"></i> Eres Noble / Cliente
+                        <i class="fa-solid fa-crown text-amber-400"></i> Eres Noble / Cliente 🥂
                     {% endif %}
                 </span>
                 <h1 class="text-2xl font-black tracking-tight text-neutral-50 flex items-center gap-2">
@@ -260,10 +265,11 @@
     }
 
     {% if active_job and not is_completed %}
-    let secondsLeft = {{ time_remaining_seconds }};
+    let secondsLeft = {{ time_remaining_seconds|default:0 }};
     const countdownEl = document.getElementById('countdown');
 
     function updateTimer() {
+        if (!countdownEl) return;
         if (secondsLeft <= 0) {
             countdownEl.innerHTML = '<span class="text-emerald-400 font-bold">¡Finalizado! Recargando...</span>';
             setTimeout(() => {
