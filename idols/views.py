@@ -1324,6 +1324,7 @@ def my_photocards_album(request):
             except Exception:
                 uc.safe_image_url = ''
             uc.rarity_weight = RARITY_PRIORITY.get(getattr(uc.photocard, 'rarity', 'common'), 5)
+            uc.is_owned = True
 
         total = len(user_cards)
         legendaries = sum(1 for uc in user_cards if getattr(uc.photocard, 'rarity', '') == 'legendary')
@@ -1345,23 +1346,50 @@ def my_photocards_album(request):
 
         duplicates_list.sort(key=card_canonical_sort_key)
 
+        class MissingPhotocardSlot:
+            """Representa un slot de carta faltante/bloqueada en el álbum."""
+            def __init__(self, photocard):
+                self.id = 0
+                self.is_owned = False
+                self.photocard = photocard
+                self.photocard_id = photocard.id
+                self.copies_count = 0
+                self.is_for_sale = False
+                self.sale_price = 0
+                self.obtained_at = photocard.created_at
+                try:
+                    self.safe_image_url = photocard.image.url if photocard.image else ''
+                except Exception:
+                    self.safe_image_url = ''
+                self.rarity_weight = RARITY_PRIORITY.get(getattr(photocard, 'rarity', 'common'), 5)
+
         all_boxes = list(PhotocardBox.objects.all().prefetch_related('cards').order_by('name'))
         collections_data = []
 
         for box in all_boxes:
-            total_in_box = len(box.cards.all())
+            all_box_cards = list(box.cards.all())
+            total_in_box = len(all_box_cards)
             box_ucs = [uc for uc in user_cards if getattr(uc.photocard, 'box_id', None) == box.id]
 
             distinct_cards_owned = {}
             for uc in box_ucs:
                 if uc.photocard_id not in distinct_cards_owned:
+                    uc.is_owned = True
                     uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
                     distinct_cards_owned[uc.photocard_id] = uc
 
-            box_cards_sorted = list(distinct_cards_owned.values())
-            box_cards_sorted.sort(key=card_canonical_sort_key)
+            # Construir la cuadrícula completa de la caja (obtenidas + bloqueadas)
+            box_slots = []
+            for pc in all_box_cards:
+                if pc.id in distinct_cards_owned:
+                    box_slots.append(distinct_cards_owned[pc.id])
+                else:
+                    box_slots.append(MissingPhotocardSlot(pc))
+
+            box_slots.sort(key=card_canonical_sort_key)
 
             owned_count = len(distinct_cards_owned)
+            missing_count = max(0, total_in_box - owned_count)
             percent = int((owned_count / total_in_box) * 100) if total_in_box > 0 else 0
 
             if owned_count > 0 or total_in_box > 0:
@@ -1369,9 +1397,10 @@ def my_photocards_album(request):
                     'box': box,
                     'total_cards': total_in_box,
                     'owned_count': owned_count,
+                    'missing_count': missing_count,
                     'percent': percent,
                     'is_complete': (owned_count == total_in_box and total_in_box > 0),
-                    'user_cards': box_cards_sorted,
+                    'user_cards': box_slots,
                 })
 
         orphan_ucs = [uc for uc in user_cards if not getattr(uc.photocard, 'box_id', None)]
@@ -1379,6 +1408,7 @@ def my_photocards_album(request):
             orphan_distinct = {}
             for uc in orphan_ucs:
                 if uc.photocard_id not in orphan_distinct:
+                    uc.is_owned = True
                     uc.copies_count = len(cards_by_photocard.get(uc.photocard_id, []))
                     orphan_distinct[uc.photocard_id] = uc
 
@@ -1394,6 +1424,7 @@ def my_photocards_album(request):
                 'box': OrphanBox(),
                 'total_cards': len(orphan_distinct),
                 'owned_count': len(orphan_distinct),
+                'missing_count': 0,
                 'percent': 100,
                 'is_complete': False,
                 'user_cards': orphan_cards_sorted,

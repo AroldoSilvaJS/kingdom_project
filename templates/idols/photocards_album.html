@@ -66,22 +66,22 @@
             <span>⚖️</span> Ordenar:
         </span>
         <div class="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-vip-gold/20">
-            <button type="button" onclick="sortAlbum('rarity')" id="sort-btn-rarity"
+            <button type="button" onclick="sortAlbum('rarity')" id="sort-btn-rarity" 
                     class="album-sort-btn px-2.5 py-1 rounded-lg bg-vip-gold text-black font-black shadow transition-all">
                 👑 Rareza
             </button>
-            <button type="button" onclick="sortAlbum('name')" id="sort-btn-name"
+            <button type="button" onclick="sortAlbum('name')" id="sort-btn-name" 
                     class="album-sort-btn px-2.5 py-1 rounded-lg text-stone-400 hover:text-white transition-all font-bold">
                 🔤 Idol A-Z
             </button>
-            <button type="button" onclick="sortAlbum('recent')" id="sort-btn-recent"
+            <button type="button" onclick="sortAlbum('recent')" id="sort-btn-recent" 
                     class="album-sort-btn px-2.5 py-1 rounded-lg text-stone-400 hover:text-white transition-all font-bold">
                 ⏱️ Recientes
             </button>
         </div>
     </div>
 
-    <!-- VISTA 1: COLECCIONES AGRUPADAS POR CAJA (BINDER SLEEVES) -->
+    <!-- VISTA 1: COLECCIONES AGRUPADAS POR CAJA -->
     <div id="view-collections" class="flex flex-col gap-4">
         {% for col in collections %}
         <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-gradient-to-br from-[#160824] via-[#090212] to-black shadow-xl flex flex-col gap-3">
@@ -94,15 +94,22 @@
                             {{ col.box.name }}
                         </h3>
                     </div>
-                    {% if col.is_complete %}
-                        <span class="text-[9px] bg-gradient-to-r from-yellow-500 to-amber-500 text-black font-black uppercase px-2.5 py-0.5 rounded-full shadow animate-pulse font-mono">
-                            👑 ¡Completa!
-                        </span>
-                    {% else %}
-                        <span class="text-[10px] font-mono text-yellow-300 font-bold bg-black/60 px-2 py-0.5 rounded-lg border border-yellow-500/30">
-                            {{ col.owned_count }}/{{ col.total_cards }}
-                        </span>
-                    {% endif %}
+                    <div class="flex items-center gap-1.5">
+                        {% if col.is_complete %}
+                            <span class="text-[9px] bg-gradient-to-r from-yellow-500 to-amber-500 text-black font-black uppercase px-2.5 py-0.5 rounded-full shadow animate-pulse font-mono">
+                                👑 ¡Completa!
+                            </span>
+                        {% else %}
+                            <span class="text-[10px] font-mono text-yellow-300 font-bold bg-black/60 px-2 py-0.5 rounded-lg border border-yellow-500/30">
+                                {{ col.owned_count }}/{{ col.total_cards }}
+                            </span>
+                            {% if col.missing_count > 0 %}
+                            <span class="text-[9px] font-mono text-stone-400 bg-neutral-900 px-2 py-0.5 rounded-lg border border-neutral-800">
+                                Faltan: <strong class="text-rose-400">{{ col.missing_count }}</strong>
+                            </span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
                 </div>
 
                 <div class="flex items-center gap-2 mt-0.5">
@@ -117,6 +124,8 @@
             {% if col.user_cards %}
             <div class="grid grid-cols-3 gap-2.5 album-card-grid">
                 {% for uc in col.user_cards %}
+                {% if uc.is_owned %}
+                <!-- 🎴 CARTA DESBLOQUEADA / OBTENIDA -->
                 <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_count|default:1 }})" 
                      class="album-card-item relative aspect-[5/7.2] rounded-2xl overflow-hidden bg-black border-2 flex flex-col justify-end p-2 group cursor-pointer shadow-xl active:scale-95 transition-all select-none {% if uc.photocard.rarity == 'legendary' or uc.photocard.rarity == 'epic' %}holo-card{% endif %}" 
                      data-search="{{ uc.photocard.name|lower }} {{ uc.photocard.display_idol_name|lower }}" 
@@ -151,12 +160,48 @@
                         <span class="text-[8.5px] font-black text-white truncate block leading-tight">{{ uc.photocard.name }}</span>
                     </div>
                 </div>
+
+                {% else %}
+                <!-- 🔒 CARTA BLOQUEADA / FALTANTE -->
+                <div onclick="openLockedCardModal('{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ col.box.name|escapejs }}', '{{ uc.safe_image_url }}')" 
+                     class="album-card-item relative aspect-[5/7.2] rounded-2xl overflow-hidden bg-neutral-950 border-2 border-dashed border-neutral-700/70 flex flex-col justify-end p-2 group cursor-pointer shadow-inner active:scale-95 transition-all select-none hover:border-neutral-500" 
+                     data-search="{{ uc.photocard.name|lower }} {{ uc.photocard.display_idol_name|lower }}" 
+                     data-rarity-weight="{{ uc.rarity_weight|default:5 }}"
+                     data-rarity="{{ uc.photocard.rarity }}"
+                     data-name="{{ uc.photocard.display_idol_name|lower }} {{ uc.photocard.name|lower }}"
+                     data-date="{{ uc.obtained_at.isoformat }}"
+                     title="Carta no desbloqueada (Toca para ver detalles)">
+                    
+                    {% if uc.safe_image_url %}
+                        <img src="{{ uc.safe_image_url }}" alt="{{ uc.photocard.name }}" class="absolute inset-0 w-full h-full object-cover filter grayscale contrast-75 brightness-[0.22] group-hover:brightness-[0.32] transition-all duration-300">
+                    {% else %}
+                        <div class="absolute inset-0 flex items-center justify-center text-xs bg-neutral-900 text-neutral-600">🎴</div>
+                    {% endif %}
+                    
+                    <div class="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/30 pointer-events-none"></div>
+
+                    <!-- Candado Central -->
+                    <div class="absolute inset-0 flex flex-col items-center justify-center gap-1 pointer-events-none z-10">
+                        <div class="w-7 h-7 rounded-full bg-neutral-900/90 border border-neutral-600/90 flex items-center justify-center text-xs shadow-lg group-hover:scale-110 transition-transform">
+                            <span>🔒</span>
+                        </div>
+                        <span class="text-[7.5px] font-black uppercase tracking-wider text-stone-400 bg-black/80 px-2 py-0.5 rounded-full border border-neutral-800">
+                            Bloqueada
+                        </span>
+                    </div>
+
+                    <!-- Pie con nombre e idol en tono atenuado -->
+                    <div class="relative z-10 text-center truncate bg-neutral-900/90 backdrop-blur-sm p-1 rounded-xl border border-neutral-800">
+                        <span class="text-[7px] text-stone-400 font-bold truncate block">{{ uc.photocard.display_idol_name }}</span>
+                        <span class="text-[8.5px] font-medium text-stone-300 truncate block leading-tight">{{ uc.photocard.name }}</span>
+                    </div>
+                </div>
+                {% endif %}
                 {% endfor %}
             </div>
             {% else %}
-                <p class="text-center text-[10px] text-stone-500 py-3 italic">Aún no tienes cartas de esta caja.</p>
+                <p class="text-center text-[10px] text-stone-500 py-3 italic">Esta colección no tiene cartas configuradas aún.</p>
             {% endif %}
-
         </div>
         {% empty %}
         <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
@@ -171,68 +216,53 @@
 
     <!-- VISTA 2: REPETIDAS (LISTAS PARA EL MERCADO O CALDERO) -->
     <div id="view-duplicates" class="hidden flex flex-col gap-3">
-        <div class="flex items-center justify-between p-3 bg-gradient-to-r from-yellow-950/40 via-purple-950/30 to-black rounded-2xl border border-yellow-500/30">
-            <div class="flex flex-col">
-                <span class="text-[10px] font-mono text-yellow-400 uppercase font-black">Copias Duplicadas</span>
-                <span class="text-xs text-stone-300">Total repetidas: <b class="text-white">{{ duplicate_cards_count }}</b></span>
-            </div>
-            <button type="button" onclick="universalNav('/idols/photocards/fusion/')" 
-                    class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs px-3 py-1.5 rounded-xl shadow active:scale-95 transition-all">
-                🔮 Caldero
-            </button>
-        </div>
-
         {% if duplicates %}
-        <div class="grid grid-cols-2 gap-3 album-card-grid">
-            {% for uc in duplicates %}
-            <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_total }})" 
-                 class="album-card-item relative rounded-2xl overflow-hidden aspect-[5/7] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl cursor-pointer active:scale-95 transition-all select-none {% if uc.photocard.rarity == 'legendary' or uc.photocard.rarity == 'epic' %}holo-card{% endif %}" 
-                 data-search="{{ uc.photocard.name|lower }} {{ uc.photocard.display_idol_name|lower }}" 
-                 data-rarity-weight="{{ uc.rarity_weight|default:5 }}"
-                 data-rarity="{{ uc.photocard.rarity }}"
-                 data-name="{{ uc.photocard.display_idol_name|lower }} {{ uc.photocard.name|lower }}"
-                 data-date="{{ uc.obtained_at.isoformat }}"
-                 style="border-color: {{ uc.photocard.get_color_hex }};">
-                
-                {% if uc.safe_image_url %}
-                    <img src="{{ uc.safe_image_url }}" class="absolute inset-0 w-full h-full object-cover">
-                {% else %}
-                    <div class="absolute inset-0 flex items-center justify-center text-xs bg-stone-900 text-stone-500">🎴</div>
-                {% endif %}
-
-                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none"></div>
-
-                <div class="absolute top-2 left-2 z-10 flex flex-col gap-1">
-                    <span class="bg-yellow-400 text-black text-[10px] font-mono font-black px-2 py-0.5 rounded-lg shadow-lg border border-black flex items-center gap-1">
-                        <span>🔁</span> Total: x{{ uc.copies_total }}
-                    </span>
-                    <span class="bg-purple-950/90 text-purple-200 border border-purple-500 text-[8.5px] font-mono font-bold px-1.5 py-0.2 rounded-md shadow">
-                        {{ uc.copies_extra }} para cambio
-                    </span>
-                </div>
-
-                <div class="relative z-10 bg-black/85 backdrop-blur-sm p-2 rounded-xl border border-white/10 flex flex-col">
-                    <span class="text-[8px] font-mono uppercase font-bold" style="color: {{ uc.photocard.get_color_hex }};">
-                        {{ uc.photocard.get_rarity_display }}
-                    </span>
-                    <h4 class="text-xs font-black text-white truncate">{{ uc.photocard.name }}</h4>
-                    <span class="text-[9.5px] text-yellow-300 font-bold truncate">{{ uc.photocard.display_idol_name }}</span>
-                </div>
+            <div class="p-3 bg-amber-950/30 border border-amber-500/30 rounded-2xl text-xs text-amber-200 flex items-center justify-between">
+                <span>Total de copias repetidas:</span>
+                <span class="font-mono font-black text-amber-400 text-sm">+{{ duplicate_cards_count }} cartas</span>
             </div>
-            {% endfor %}
-        </div>
+            <div class="grid grid-cols-3 gap-2.5 album-card-grid">
+                {% for uc in duplicates %}
+                <div onclick="openCardActionModal({{ uc.id }}, '{{ uc.photocard.name|escapejs }}', '{{ uc.photocard.display_idol_name|escapejs }}', '{{ uc.photocard.get_rarity_display|escapejs }}', '{{ uc.photocard.get_color_hex }}', '{{ uc.safe_image_url }}', {{ uc.is_for_sale|yesno:'true,false' }}, {{ uc.sale_price|default:0 }}, {{ uc.copies_total|default:1 }})" 
+                     class="album-card-item relative aspect-[5/7.2] rounded-2xl overflow-hidden bg-black border-2 flex flex-col justify-end p-2 group cursor-pointer shadow-xl active:scale-95 transition-all select-none {% if uc.photocard.rarity == 'legendary' or uc.photocard.rarity == 'epic' %}holo-card{% endif %}" 
+                     data-search="{{ uc.photocard.name|lower }} {{ uc.photocard.display_idol_name|lower }}" 
+                     data-rarity-weight="{{ uc.rarity_weight|default:5 }}"
+                     data-rarity="{{ uc.photocard.rarity }}"
+                     data-name="{{ uc.photocard.display_idol_name|lower }} {{ uc.photocard.name|lower }}"
+                     data-date="{{ uc.obtained_at.isoformat }}"
+                     style="border-color: {{ uc.photocard.get_color_hex }};">
+                    
+                    {% if uc.safe_image_url %}
+                        <img src="{{ uc.safe_image_url }}" alt="{{ uc.photocard.name }}" class="absolute inset-0 w-full h-full object-cover">
+                    {% else %}
+                        <div class="absolute inset-0 flex items-center justify-center text-xs bg-stone-900 text-stone-500">🎴</div>
+                    {% endif %}
+                    
+                    <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent pointer-events-none"></div>
+
+                    <span class="absolute top-1.5 left-1.5 bg-yellow-400 text-black text-[9px] font-mono font-black px-1.5 py-0.2 rounded-md shadow-md z-10 border border-black">
+                        +{{ uc.copies_extra }} rep.
+                    </span>
+
+                    <div class="relative z-10 text-center truncate bg-black/80 backdrop-blur-sm p-1 rounded-xl border border-white/10">
+                        <span class="text-[7px] text-yellow-300 font-bold truncate block">{{ uc.photocard.display_idol_name }}</span>
+                        <span class="text-[8.5px] font-black text-white truncate block leading-tight">{{ uc.photocard.name }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
         {% else %}
-        <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
-            <span class="text-4xl my-2">✨</span>
-            <h4 class="font-serif text-sm font-bold text-white uppercase tracking-wider">Sin Repetidas</h4>
-            <p class="text-xs text-stone-400 mt-1 max-w-xs leading-relaxed">
-                ¡Tu colección es única! No tienes copias duplicadas en este momento.
-            </p>
-        </div>
-        {% endif %} 
+            <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
+                <span class="text-3xl my-2">✨</span>
+                <h4 class="font-serif text-sm font-bold text-white uppercase tracking-wider">Sin Repetidas</h4>
+                <p class="text-xs text-stone-400 mt-1 max-w-xs leading-relaxed">
+                    No tienes cartas duplicadas en este momento. Cada photocard en tu posesión es única.
+                </p>
+            </div>
+        {% endif %}
     </div>
 
-    <!-- VISTA 3: TODAS (VISTA PLANA CON FILTROS DE RAREZA) -->
+    <!-- VISTA 3: TODAS LAS CARTAS -->
     <div id="view-all" class="hidden flex flex-col gap-3">
         <div class="grid grid-cols-5 gap-1 p-1 bg-black/70 border border-vip-gold/25 rounded-2xl text-[10px] font-bold uppercase text-center shadow-inner">
             <button type="button" onclick="filterFlatAlbum('all')" class="py-1.5 rounded-xl bg-vip-gold text-black flat-filter-btn" id="f-all">Todas</button>
@@ -265,23 +295,21 @@
                     <span class="text-[7.5px] font-mono font-bold uppercase" style="color: {{ uc.photocard.get_color_hex }};">
                         {{ uc.photocard.get_rarity_display }}
                     </span>
-                    <h4 class="text-xs font-black text-white truncate leading-tight">{{ uc.photocard.name }}</h4>
-                    <span class="text-[8.5px] text-yellow-300 font-bold truncate">{{ uc.photocard.display_idol_name }}</span>
+                    <span class="text-[9px] text-yellow-300 font-bold truncate">{{ uc.photocard.display_idol_name }}</span>
+                    <span class="text-xs font-black text-white truncate">{{ uc.photocard.name }}</span>
                 </div>
             </div>
-            {% empty %}
-                <p class="col-span-2 text-center text-xs text-stone-500 py-6">Tu álbum está vacío.</p>
             {% endfor %}
         </div>
     </div>
-
 </div>
 
-<!-- 🔍 MODAL DE INSPECCIÓN 3D CON GIRO DE CARTA (FLIP CARD PRO) -->
+<!-- MODAL DE ACCIÓN 3D CON GIRO DE CARTA (FLIP CARD PRO) -->
 <div id="card-action-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
     <div class="vip-panel modal-spring-in p-5 max-w-sm w-full max-h-[90vh] overflow-y-auto border-2 rounded-3xl relative flex flex-col items-center text-center shadow-2xl bg-gradient-to-b from-[#1a0928] to-black" id="modal-card-container">
         
         <button onclick="closeCardActionModal()" class="absolute top-3.5 right-3.5 text-stone-400 hover:text-white text-2xl z-30">&times;</button>
+
         <span class="text-[10px] font-mono uppercase font-black px-3 py-0.5 rounded-full border mb-2 shadow" id="modal-card-rarity"></span>
 
         <!-- CONTENEDOR 3D FLIP CARD -->
@@ -302,113 +330,150 @@
                     </div>
 
                     <div class="flex flex-col items-center">
-                        <div class="w-14 h-14 rounded-full border-2 border-vip-gold/40 flex items-center justify-center text-2xl mb-1 shadow-[0_0_15px_rgba(212,175,55,0.4)]">
+                        <div class="w-14 h-14 rounded-full border-2 border-vip-gold/40 flex items-center justify-center text-2xl mb-1 shadow-[0_0_15px_rgba(212,175,55,0.3)]">
                             👑
                         </div>
-                        <span class="font-serif text-[11px] font-black text-white uppercase tracking-wider" id="flip-back-title">Photocard Real</span>
-                        <span class="text-[9px] font-mono text-yellow-300 mt-0.5" id="flip-back-idol">Idol</span>
+                        <h4 class="text-xs font-black text-white font-serif" id="flip-back-title">Photocard</h4>
+                        <span class="text-[9px] text-stone-400 italic" id="flip-back-idol">Idol</span>
                     </div>
 
-                    <div class="w-full bg-black/60 p-2 rounded-xl border border-white/5 text-[8.5px] font-mono text-stone-300">
-                        <span>Certificado de Colección</span><br>
-                        <span class="text-yellow-400 font-bold">Propietario: {{ tg_id }}</span>
+                    <div class="w-full bg-black/50 p-1.5 rounded-lg border border-vip-gold/20 text-[7.5px] font-mono text-stone-300">
+                        Autenticada por la Corte Imperial • Intransferible sin contrato
                     </div>
-
-                    <span class="text-[8px] text-stone-500 font-mono">Toca para volver al frente ↺</span>
                 </div>
 
             </div>
         </div>
 
-        <h3 class="font-serif text-sm font-black text-white mt-1" id="modal-card-title"></h3>
-        <span class="text-xs text-yellow-400 font-bold mb-2" id="modal-card-idol"></span>
+        <h3 class="font-serif text-sm font-black text-white mt-2" id="modal-card-title"></h3>
+        <p class="text-xs text-yellow-300 font-bold mb-1" id="modal-card-idol"></p>
 
-        <div id="modal-copies-info" class="hidden mb-3 px-3 py-1 bg-yellow-500/20 border border-yellow-500/40 rounded-xl text-[10px] text-yellow-300 font-mono">
-            Tienes <span id="modal-copies-num" class="font-bold text-white"></span> copias de esta carta. ¡La original sigue a salvo!
+        <div id="modal-copies-info" class="mb-2 text-[10px] text-stone-400 font-mono">
+            Copias en tu poder: <strong class="text-yellow-400" id="modal-copies-num">1</strong>
         </div>
 
-        <!-- ACCIONES: VENDER O RETIRAR -->
-        <div id="modal-is-for-sale-box" class="hidden w-full flex flex-col gap-2 mt-1">
-            <p class="text-xs text-yellow-300 font-mono bg-yellow-950/60 p-2.5 rounded-xl border border-yellow-500/40">
-                Esta carta está publicada en el Mercado por <span id="modal-sale-price-label" class="font-bold text-white"></span> 🪙.
-            </p>
-            <form id="cancel-sale-form" method="POST" action="">
+        <!-- ESTADO EN VENTA -->
+        <div id="modal-is-for-sale-box" class="hidden mb-2 p-2 bg-yellow-950/60 border border-yellow-500/50 rounded-xl text-xs text-yellow-200">
+            🏷️ Publicada en el Mercado por <span class="font-mono font-bold text-yellow-400" id="modal-sale-price-label"></span> 🪙
+            <form id="cancel-sale-form" method="POST" action="" class="mt-1">
                 {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <input type="hidden" name="mode" value="cancel">
-                <button type="submit" class="w-full bg-rose-950 border border-rose-600 text-rose-200 py-2.5 rounded-xl text-xs font-bold uppercase">
-                    Cancelar Venta y Retirar del Mercado
+                <button type="submit" class="text-[10px] text-rose-400 underline font-bold hover:text-rose-300">
+                    Cancelar Publicación
                 </button>
             </form>
         </div>
 
-        <div id="modal-actions-box" class="w-full flex flex-col gap-3 mt-1">
-            <form id="sell-form" method="POST" action="" class="bg-black/60 p-3 rounded-2xl border border-white/10 flex flex-col gap-2">
+        <!-- ACCIONES: VENDER O TRASPASAR -->
+        <div class="w-full flex flex-col gap-2 mt-2" id="modal-actions-box">
+            
+            <!-- FORMULARIO: PONER A LA VENTA -->
+            <form id="sell-form" method="POST" action="" class="w-full flex flex-col gap-1.5 p-2.5 bg-black/50 border border-white/10 rounded-2xl">
                 {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                <input type="hidden" name="mode" value="list">
-                
-                <span class="text-xs font-bold text-yellow-300 text-left flex items-center gap-1">
-                    <span>🏷️</span> Poner a la Venta en Oro
-                </span>
-                
+                <span class="text-[10px] font-bold text-stone-300 uppercase tracking-wider text-left">Poner en Venta (Mercado)</span>
                 <div class="flex gap-2">
-                    <input type="number" name="price" min="20" value="50" required placeholder="Precio..." 
-                           class="flex-1 bg-black border border-vip-gold/40 rounded-xl px-3 py-2 text-xs font-mono font-bold text-white text-center">
-                    <button type="submit" class="btn-gold px-4 py-2 rounded-xl text-xs font-black uppercase shadow">
+                    <input type="number" name="price" min="10" max="5000" placeholder="Precio en 🪙" required 
+                           class="flex-1 bg-black/80 border border-vip-gold/30 rounded-xl px-2 py-1 text-xs text-white placeholder-stone-600 focus:outline-none focus:border-yellow-400 font-mono">
+                    <button type="submit" class="px-3 py-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs rounded-xl shadow">
                         Vender
                     </button>
                 </div>
             </form>
 
-            <form id="trade-form" method="POST" action="" class="bg-black/60 p-3 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
+            <!-- FORMULARIO: REGALAR / TRASPASAR -->
+            <form id="trade-form" method="POST" action="" class="w-full flex flex-col gap-1.5 p-2.5 bg-black/50 border border-white/10 rounded-2xl">
                 {% csrf_token %}
-                <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                
-                <span class="text-xs font-bold text-purple-300 text-left flex items-center gap-1">
-                    <span>🤝</span> Proponer Intercambio
-                </span>
-
-                <div>
-                    <select name="target_user" required class="w-full bg-black border border-purple-500/40 rounded-xl p-2.5 text-xs text-white">
-                        <option value="open">📢 Publicar Intercambio Abierto (Mercado)</option>
-                        <optgroup label="── Miembros y Musas del Reino ──">
-                            {% for m in members %}
-                                <option value="{{ m.telegram_user_id }}">
-                                    👤 {{ m.username|default:"Noble" }} (Lvl {{ m.level }})
-                                </option>
-                            {% endfor %}
-                        </optgroup>
+                <span class="text-[10px] font-bold text-stone-300 uppercase tracking-wider text-left">Enviar de Regalo a un Noble</span>
+                <div class="flex gap-2">
+                    <select name="target_tg_id" required 
+                            class="flex-1 bg-black/80 border border-purple-500/30 rounded-xl px-2 py-1 text-xs text-white focus:outline-none focus:border-purple-400">
+                        <option value="">Selecciona destinatario...</option>
+                        {% for m in members %}
+                            <option value="{{ m.telegram_user_id }}">
+                                {{ m.username|default:m.telegram_user_id }} (Nvl {{ m.level }})
+                            </option>
+                        {% endfor %}
                     </select>
+                    <button type="submit" class="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow">
+                        Enviar
+                    </button>
                 </div>
-                
-                <button type="submit" class="btn-gold py-2 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-                    Enviar Propuesta
-                </button>
             </form>
+
         </div>
 
     </div>
 </div>
 
+<!-- MODAL DE PHOTOCARD BLOQUEADA / FALTANTE -->
+<div id="locked-card-modal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4">
+    <div class="vip-panel modal-spring-in p-5 max-w-sm w-full border-2 border-neutral-700/80 rounded-3xl relative flex flex-col items-center text-center shadow-2xl bg-gradient-to-b from-[#18181b] via-[#101012] to-black">
+        <button onclick="closeLockedCardModal()" class="absolute top-3.5 right-3.5 text-stone-400 hover:text-white text-2xl z-30">&times;</button>
+        
+        <div class="flex items-center gap-2 mb-2">
+            <span class="text-[10px] font-mono uppercase font-black px-3 py-0.5 rounded-full border border-neutral-600 bg-neutral-900 text-neutral-300 shadow">
+                🔒 Photocard Bloqueada
+            </span>
+            <span id="locked-modal-rarity" class="text-[10px] font-mono uppercase font-black px-2.5 py-0.5 rounded-full border"></span>
+        </div>
+
+        <!-- CONTENEDOR DE LA CARTA EN GRIS -->
+        <div class="w-40 h-56 relative my-2 rounded-2xl overflow-hidden border-2 border-dashed border-neutral-600 bg-neutral-950 flex flex-col justify-end p-2.5 shadow-2xl">
+            <img id="locked-modal-img" src="" class="absolute inset-0 w-full h-full object-cover filter grayscale contrast-75 brightness-[0.25]">
+            <div class="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/30"></div>
+            
+            <div class="absolute inset-0 flex flex-col items-center justify-center gap-1 z-10 pointer-events-none">
+                <div class="w-10 h-10 rounded-full bg-neutral-900/90 border border-neutral-600 flex items-center justify-center text-lg shadow-xl">
+                    🔒
+                </div>
+                <span class="text-[9px] font-mono font-bold text-neutral-400 uppercase tracking-wider">Aún no obtenida</span>
+            </div>
+
+            <div class="relative z-10 text-center bg-black/90 p-1.5 rounded-xl border border-neutral-800">
+                <span id="locked-modal-idol" class="text-[8px] text-stone-400 font-bold block truncate"></span>
+                <span id="locked-modal-title" class="text-[10px] font-black text-stone-200 block truncate"></span>
+            </div>
+        </div>
+
+        <!-- EXPLICACIÓN / CÓMO CONSEGUIRLA -->
+        <div class="w-full bg-neutral-900/80 border border-neutral-800 rounded-2xl p-3 my-2 text-left flex flex-col gap-1.5 text-xs">
+            <span class="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1">
+                <span>💡</span> ¿Cómo desbloquearla?
+            </span>
+            <p class="text-[11px] text-stone-300 leading-relaxed">
+                Esta carta forma parte de la colección <strong id="locked-modal-box" class="text-white"></strong>. Se revelará automáticamente en tu álbum cuando te salga abriendo cajas o la consigas en el Caldero de Fusión.
+            </p>
+        </div>
+
+        <!-- BOTONES DE ACCIÓN -->
+        <div class="flex gap-2 w-full mt-2">
+            <button type="button" onclick="closeLockedCardModal()" class="flex-1 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-stone-300 text-xs font-bold transition-all">
+                Cerrar
+            </button>
+            <button type="button" onclick="universalNav('/idols/photocards/')" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 text-black text-xs font-black shadow-lg hover:brightness-110 active:scale-95 transition-all">
+                🎁 Abrir Cajas
+            </button>
+        </div>
+    </div>
+</div>
+
 <style>
-    /* Estructura para giro 3D de naipes */
-    .flip-card-container {
-        perspective: 1000px;
-    }
+    .flip-card-container { perspective: 1000px; }
     .flip-card-inner {
+        transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
         transform-style: preserve-3d;
-        transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
-    .flip-card-inner.is-flipped {
-        transform: rotateY(180deg);
-    }
+    .flip-card-inner.is-flipped { transform: rotateY(180deg); }
     .flip-card-front, .flip-card-back {
         backface-visibility: hidden;
         -webkit-backface-visibility: hidden;
     }
-    .flip-card-back {
-        transform: rotateY(180deg);
+    .flip-card-back { transform: rotateY(180deg); }
+    .holo-card::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 50%, rgba(255,255,255,0.15) 100%);
+        pointer-events: none;
     }
 </style>
 
@@ -442,9 +507,8 @@
 
     function sortAlbum(criteria) {
         currentSortCriteria = criteria;
-
         try { window.Telegram?.WebApp?.HapticFeedback?.selectionChanged(); } catch(e) {}
-
+        
         document.querySelectorAll('.album-sort-btn').forEach(b => {
             b.className = "album-sort-btn px-2.5 py-1 rounded-lg text-stone-400 hover:text-white transition-all font-bold";
         });
@@ -459,7 +523,7 @@
                 if (criteria === 'rarity') {
                     const rA = parseInt(a.getAttribute('data-rarity-weight') || '99');
                     const rB = parseInt(b.getAttribute('data-rarity-weight') || '99');
-                    if (rA !== rB) return rA - rB; // Menor peso = Mayor rareza (1: Legendary)
+                    if (rA !== rB) return rA - rB;
                     const nA = (a.getAttribute('data-name') || '').toLowerCase();
                     const nB = (b.getAttribute('data-name') || '').toLowerCase();
                     return nA.localeCompare(nB);
@@ -470,7 +534,7 @@
                 } else if (criteria === 'recent') {
                     const dA = a.getAttribute('data-date') || '';
                     const dB = b.getAttribute('data-date') || '';
-                    return dB.localeCompare(dA); // Más recientes primero
+                    return dB.localeCompare(dA);
                 }
                 return 0;
             });
@@ -521,32 +585,44 @@
         const cancelForm = document.getElementById('cancel-sale-form');
 
         sellForm.action = `/idols/photocards/sell/${cardId}/`;
-        tradeForm.action = `/idols/photocards/trade/create/${cardId}/`;
-        cancelForm.action = `/idols/photocards/sell/${cardId}/`;
+        tradeForm.action = `/idols/photocards/trade/${cardId}/`;
+        cancelForm.action = `/idols/photocards/cancel_sale/${cardId}/`;
 
-        const copiesInfo = document.getElementById('modal-copies-info');
-        if (copiesCount && copiesCount > 1) {
-            document.getElementById('modal-copies-num').innerText = copiesCount;
-            copiesInfo.classList.remove('hidden');
-        } else {
-            copiesInfo.classList.add('hidden');
-        }
-
+        const saleBox = document.getElementById('modal-is-for-sale-box');
+        const actionsBox = document.getElementById('modal-actions-box');
         if (isForSale) {
-            document.getElementById('modal-is-for-sale-box').classList.remove('hidden');
-            document.getElementById('modal-actions-box').classList.add('hidden');
+            saleBox.classList.remove('hidden');
+            actionsBox.classList.add('hidden');
             document.getElementById('modal-sale-price-label').innerText = salePrice;
         } else {
-            document.getElementById('modal-is-for-sale-box').classList.add('hidden');
-            document.getElementById('modal-actions-box').classList.remove('hidden');
+            saleBox.classList.add('hidden');
+            actionsBox.classList.remove('hidden');
         }
 
+        document.getElementById('modal-copies-num').innerText = copiesCount;
         document.getElementById('card-action-modal').classList.remove('hidden');
         try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
     }
 
     function closeCardActionModal() {
         document.getElementById('card-action-modal').classList.add('hidden');
+    }
+
+    function openLockedCardModal(name, idolName, rarityDisplay, colorHex, boxName, imgUrl) {
+        document.getElementById('locked-modal-title').innerText = name;
+        document.getElementById('locked-modal-idol').innerText = idolName ? ('Idol: ' + idolName) : '';
+        document.getElementById('locked-modal-box').innerText = boxName;
+        const rEl = document.getElementById('locked-modal-rarity');
+        rEl.innerText = rarityDisplay;
+        rEl.style.borderColor = colorHex;
+        rEl.style.color = colorHex;
+        document.getElementById('locked-modal-img').src = imgUrl || '';
+        document.getElementById('locked-card-modal').classList.remove('hidden');
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+    }
+
+    function closeLockedCardModal() {
+        document.getElementById('locked-card-modal').classList.add('hidden');
     }
 </script>
 {% endblock %}
