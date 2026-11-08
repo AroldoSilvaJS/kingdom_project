@@ -167,11 +167,20 @@
                         </span>
                     {% endif %}
 
-                    {% if is_admin or post.idol.telegram_user_id == tg_id %}
-                        <button type="button" onclick="universalNav('{% url 'idols:edit_post' post.id %}')" 
-                                class="text-yellow-400 hover:text-yellow-300 text-xs px-2 py-1 rounded-xl bg-black/80 border border-yellow-500/40 shadow active:scale-90" title="Editar">
-                            ✏️
-                        </button>
+                    <!-- ACCIONES DE GESTIÓN (IDOL CREADORA O ADMIN) -->
+                    {% if post.can_manage or is_admin or post.idol.telegram_user_id|stringformat:"s" == tg_id|stringformat:"s" %}
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" onclick="universalNav('{% url 'idols:edit_post' post.id %}')" 
+                                    class="text-yellow-400 hover:text-yellow-300 text-xs px-2.5 py-1 rounded-xl bg-black/80 border border-yellow-500/40 shadow active:scale-90 transition-all flex items-center gap-1" 
+                                    title="Editar publicación">
+                                <span>✏️</span>
+                            </button>
+                            <button type="button" onclick="confirmDeletePost({{ post.id }})" 
+                                    class="text-rose-400 hover:text-rose-300 text-xs px-2.5 py-1 rounded-xl bg-black/80 border border-rose-500/40 shadow active:scale-90 transition-all flex items-center gap-1" 
+                                    title="Eliminar publicación">
+                                <span>🗑️</span>
+                            </button>
+                        </div>
                     {% endif %}
                 </div>
             </div>
@@ -1000,6 +1009,57 @@
 
     function closeImageLightbox() {
         document.getElementById('image-lightbox').classList.add('hidden');
+    }
+
+
+    // 🗑️ ELIMINAR PUBLICACIÓN CON CONFIRMACIÓN Y ANIMACIÓN SUAVE
+    async function confirmDeletePost(postId) {
+        if (!confirm('¿Estás segura/o de que deseas eliminar esta publicación del Muro VIP? Esta acción no se puede deshacer.')) {
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('csrfmiddlewaretoken', csrfToken);
+            formData.append('tg_id', tgId);
+            formData.append('ajax', '1');
+
+            const resp = await fetch(`/idols/feed/delete/${postId}/?tg_id=${tgId}`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData
+            });
+
+            const data = await resp.json().catch(() => null);
+
+            if (resp.ok && (!data || data.success !== false)) {
+                showVipToast(data?.message || '🗑️ Publicación eliminada del Muro.', '🗑️');
+                const postEl = document.getElementById(`post-${postId}`);
+                if (postEl) {
+                    postEl.style.transition = 'all 0.35s ease-out';
+                    postEl.style.opacity = '0';
+                    postEl.style.transform = 'scale(0.92)';
+                    setTimeout(() => postEl.remove(), 350);
+                }
+            } else {
+                alert(data?.error || 'No se pudo eliminar la publicación.');
+            }
+        } catch (err) {
+            // Fallback por envío estándar de formulario POST si fetch falla
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/idols/feed/delete/${postId}/?tg_id=${tgId}`;
+            const tokenInput = document.createElement('input');
+            tokenInput.type = 'hidden';
+            tokenInput.name = 'csrfmiddlewaretoken';
+            tokenInput.value = csrfToken;
+            form.appendChild(tokenInput);
+            document.body.appendChild(form);
+            form.submit();
+        }
     }
 </script>
 {% endblock %}

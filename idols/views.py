@@ -534,7 +534,10 @@ def social_feed(request):
     # Inyectar propiedades directamente en cada post
     posts_list = []
     for p in posts:
-        p.is_unlocked = bool(p.id in unlocked_ids or p.network == 'gram' or is_admin or (p.idol and p.idol.telegram_user_id == tg_id))
+        # Verificación segura de autoría (Idol propietaria o Admin)
+        is_owner = bool(tg_id and p.idol and str(p.idol.telegram_user_id) == str(tg_id))
+        p.can_manage = bool(is_admin or is_owner)
+        p.is_unlocked = bool(p.id in unlocked_ids or p.network == 'gram' or is_admin or is_owner)
         p.is_liked = bool(p.id in liked_ids)
         p.user_reaction = user_reactions.get(p.id, 'like' if p.id in liked_ids else '')
         posts_list.append(p)
@@ -569,14 +572,18 @@ def delete_post(request, post_id):
     post = get_object_or_404(Post, id=post_id)
     
     is_admin = check_is_staff_or_admin(tg_id)
-    is_owner = (tg_id == post.idol.telegram_user_id)
+    is_owner = bool(tg_id and post.idol and str(tg_id) == str(post.idol.telegram_user_id))
 
     if not (is_admin or is_owner):
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1':
+            return JsonResponse({'success': False, 'error': "No tienes permiso para eliminar esta publicación."}, status=403)
         messages.error(request, "No tienes permiso para eliminar esta publicación.")
         return redirect(f'/idols/feed/?tg_id={tg_id}')
 
     if request.method == 'POST':
         post.delete()
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1':
+            return JsonResponse({'success': True, 'message': "🗑️ Publicación eliminada del Muro con éxito."})
         messages.success(request, "🗑️ Publicación eliminada del Muro con éxito.")
         
     return redirect(f'/idols/feed/?tg_id={tg_id}')
@@ -587,7 +594,7 @@ def edit_post(request, post_id):
     post = get_object_or_404(Post, id=post_id)
     
     is_admin = check_is_staff_or_admin(tg_id)
-    is_owner = (tg_id == post.idol.telegram_user_id)
+    is_owner = bool(tg_id and post.idol and str(tg_id) == str(post.idol.telegram_user_id))
 
     if not (is_admin or is_owner):
         messages.error(request, "No tienes permiso para editar esta publicación.")
@@ -612,9 +619,9 @@ def edit_post(request, post_id):
         if network == 'fans':
             try:
                 p_val = int(price)
-                post.price = min(p_val, max_price) if not is_admin else p_val
-            except ValueError:
-                pass
+                post.price = max(1, min(p_val, max_price))
+            except Exception:
+                post.price = 50
         else:
             post.price = 0
 
@@ -625,8 +632,7 @@ def edit_post(request, post_id):
     return render(request, 'idols/edit_post.html', {
         'post': post,
         'tg_id': tg_id,
-        'max_price': max_price,
-        'is_admin': is_admin
+        'max_price': max_price
     })
 
 
