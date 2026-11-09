@@ -1229,7 +1229,7 @@ def open_photocard_box_ajax(request, box_id):
 
     wallet.remove_funds(total_cost)
 
-    # Bonos pasivos de mascota y amuleto
+    # Bonos de suerte (conejo / amuleto)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
     extra_legendary_base = {1: 5.0, 2: 12.0, 3: 20.0}.get(pet.evolution_stage_number, 5.0) if (pet and pet.species == 'rabbit') else 0.0
 
@@ -1238,7 +1238,6 @@ def open_photocard_box_ajax(request, box_id):
     if has_lucky_key:
         extra_legendary_base += 15.0
 
-    # Cartas que el usuario ya poseía antes de esta apertura
     already_owned_ids = set(UserPhotocard.objects.filter(telegram_user_id=tg_id).values_list('photocard_id', flat=True))
 
     xp_map = {'common': 5, 'rare': 12, 'epic': 25, 'legendary': 50}
@@ -1288,7 +1287,6 @@ def open_photocard_box_ajax(request, box_id):
         if card.rarity == 'legendary':
             legendary_winners.append(card)
 
-    # Si salió alguna legendaria, anunciar con fanfarria en el grupo oficial
     if legendary_winners:
         group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
         if group_id:
@@ -1307,7 +1305,6 @@ def open_photocard_box_ajax(request, box_id):
                 button_url="https://t.me/KingdomPleasure_bot?start=entrar"
             )
 
-    # Riel para compatibilidad
     first_winner = winners[0]
     reel = []
     for i in range(35):
@@ -1322,7 +1319,6 @@ def open_photocard_box_ajax(request, box_id):
             'idol_name': card_item.display_idol_name if hasattr(card_item, 'display_idol_name') else card_item['idol_name'],
         })
 
-    # Determinar la rareza más alta de toda la tirada
     rarity_ranks = {'legendary': 4, 'epic': 3, 'rare': 2, 'common': 1}
     highest_card = max(winners, key=lambda w: rarity_ranks.get(w['rarity'], 1))
 
