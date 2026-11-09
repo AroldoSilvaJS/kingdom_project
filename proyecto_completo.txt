@@ -6807,6 +6807,220 @@ def handle_trade_offer(request, trade_id, action):
 
     return redirect('/idols/photocards/market/')
 
+
+import urllib.request
+
+def download_image_from_url(url, default_filename='downloaded_image.webp'):
+    """
+    Descarga una imagen desde una URL pública con User-Agent de navegador
+    para evitar bloqueos 403, retornando un buffer compatible con PIL/Django.
+    """
+    if not url or not str(url).strip().startswith(('http://', 'https://')):
+        return None
+    try:
+        req = urllib.request.Request(
+            url.strip(),
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = resp.read()
+            # Límite de seguridad: máximo 10MB
+            if len(data) > 10 * 1024 * 1024:
+                return None
+            bio = BytesIO(data)
+            bio.name = default_filename
+            return bio
+    except Exception as e:
+        print(f"Error descargando imagen desde URL {url}: {e}")
+        return None
+
+
+def admin_photocards_manage(request):
+    tg_id = resolve_safe_tg(request)
+    is_admin = check_is_staff_or_admin(tg_id)
+    if not is_admin:
+        messages.error(request, "Solo los administradores pueden gestionar Photocards.")
+        return redirect('/idols/photocards/')
+
+    target_tab = 'subir'
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        target_tab = request.POST.get('target_tab', 'subir')
+        try:
+            if action == 'create_box':
+                target_tab = 'cajas'
+                name = request.POST.get('name', '').strip()
+                description = request.POST.get('description', '').strip()
+                price = int(request.POST.get('price', 120))
+                
+                # Permite archivo de galería O enlace directo
+                cover_file = request.FILES.get('cover_image')
+                cover_url = request.POST.get('cover_url', '').strip()
+                if not cover_file and cover_url:
+                    cover_file = download_image_from_url(cover_url, default_filename=f"box_{name[:12]}.webp")
+                
+                cover_image = optimize_uploaded_image(cover_file)
+                if name:
+                    PhotocardBox.objects.create(name=name, description=description, price=price, cover_image=cover_image)
+                    messages.success(request, f"✨ Caja «{name}» creada exitosamente.")
+
+            elif action == 'edit_box':
+                target_tab = 'cajas'
+                box_id = request.POST.get('box_id')
+                box = get_object_or_404(PhotocardBox, id=box_id)
+                box.name = request.POST.get('name', box.name).strip()
+                box.description = request.POST.get('description', box.description).strip()
+                box.price = int(request.POST.get('price', box.price))
+                
+                cover_file = request.FILES.get('cover_image')
+                cover_url = request.POST.get('cover_url', '').strip()
+                if not cover_file and cover_url:
+                    cover_file = download_image_from_url(cover_url, default_filename=f"box_{box.id}.webp")
+                
+                if cover_file:
+                    box.cover_image = optimize_uploaded_image(cover_file)
+                box.save()
+                messages.success(request, f"💾 Caja «{box.name}» actualizada.")
+
+            elif action == 'delete_box':
+                target_tab = 'cajas'
+                box_id = request.POST.get('box_id')
+                box = get_object_or_404(PhotocardBox, id=box_id)
+                box_name = box.name
+                owned_cards = UserPhotocard.objects.filter(photocard__box=box).count()
+                if owned_cards > 0:
+                    box.is_active = False
+                    box.save()
+                    messages.error(request, f"⚠️ La caja «{box_name}» no se puede eliminar porque los usuarios ya tienen {owned_cards} cartas en sus álbumes. La caja fue PAUSADA.")
+                else:
+                    box.cards.all().delete()
+                    box.delete()
+                    messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
+
+            elif action == 'toggle_box':
+                target_tab = 'cajas'
+                box_id = request.POST.get('box_id')
+                box = get_object_or_404(PhotocardBox, id=box_id)
+                box.is_active = not box.is_active
+                box.save()
+                estado = "Activada" if box.is_active else "Pausada"
+                messages.info(request, f"Caja {box.name} {estado}.")
+
+            elif action == 'upload_card':
+                target_tab = 'subir'
+                box_id = request.POST.get('box_id')
+                idol_name = request.POST.get('idol_name', '').strip()
+                name = request.POST.get('name', '').strip()
+                rarity = request.POST.get('rarity', 'common')
+                
+                raw_image = request.FILES.get('image')
+                card_url = request.POST.get('card_url', '').strip()
+                if not raw_image and card_url:
+                    raw_image = download_image_from_url(card_url, default_filename=f"card_{name[:12]}.webp")
+                
+                if not raw_image or not name or not box_id:
+                    messages.error(request, "Debes adjuntar el archivo de Canva (o su enlace), asignar un nombre y una caja.")
+                else:
+                    box_obj = get_object_or_404(PhotocardBox, id=box_id)
+                    optimized_img = optimize_uploaded_image(raw_image)
+                    
+                    Photocard.objects.create(
+                        box=box_obj,
+                        idol_name=idol_name or "K-Pop Idol",
+                        name=name,
+                        rarity=rarity,
+                        image=optimized_img,
+                        created_by_tg_id=tg_id
+                    )
+                    messages.success(request, f"🎴 Photocard «{name}» ({idol_name}) subida con éxito.")
+
+            elif action == 'edit_card':
+                target_tab = 'cartas'
+                card_id = request.POST.get('card_id')
+                card = get_object_or_404(Photocard, id=card_id)
+                card.box_id = request.POST.get('box_id', card.box_id)
+                card.name = request.POST.get('name', card.name).strip()
+                card.idol_name = request.POST.get('idol_name', card.idol_name).strip()
+                card.rarity = request.POST.get('rarity', card.rarity)
+                
+                new_img = request.FILES.get('image')
+                new_url = request.POST.get('card_url', '').strip()
+                if not new_img and new_url:
+                    new_img = download_image_from_url(new_url, default_filename=f"card_{card.id}.webp")
+                if new_img:
+                    card.image = optimize_uploaded_image(new_img)
+                card.save()
+                messages.success(request, f"💾 Photocard «{card.name}» actualizada.")
+
+            elif action == 'delete_card':
+                target_tab = 'cartas'
+                card_id = request.POST.get('card_id')
+                card = get_object_or_404(Photocard, id=card_id)
+                card_name = card.name
+                card.delete()
+                messages.warning(request, f"🗑️ Photocard «{card_name}» eliminada.")
+
+            elif action == 'save_upcoming_box':
+                target_tab = 'proxima'
+                title = request.POST.get('upcoming_title', '').strip()
+                date = request.POST.get('upcoming_date', '').strip()
+                desc = request.POST.get('upcoming_desc', '').strip()
+                is_active = request.POST.get('upcoming_active') == '1'
+
+                KingdomSetting.set_val('upcoming_box_title', title)
+                KingdomSetting.set_val('upcoming_box_date', date)
+                KingdomSetting.set_val('upcoming_box_desc', desc)
+                KingdomSetting.set_val('upcoming_box_active', 'true' if is_active else 'false')
+
+                file_obj = request.FILES.get('upcoming_image')
+                url_obj = request.POST.get('upcoming_image_url', '').strip()
+                if not file_obj and url_obj:
+                    file_obj = download_image_from_url(url_obj, default_filename='upcoming.webp')
+
+                if file_obj:
+                    file_opt = optimize_uploaded_image(file_obj)
+                    saved_path = default_storage.save(f'photocard_boxes/upcoming_{file_opt.name}', file_opt)
+                    image_url = default_storage.url(saved_path)
+                    KingdomSetting.set_val('upcoming_box_image', image_url)
+
+                messages.success(request, "📢 ¡Anuncio de Próximo Lanzamiento guardado con éxito!")
+
+        except Exception as e:
+            err_str = str(e)
+            if "File size too large" in err_str:
+                messages.error(request, "⚠️ La imagen supera el límite de carga permitido (10 MB). Por favor comprímela antes de subir.")
+            else:
+                messages.error(request, f"⚠️ Error al procesar archivo: {err_str}")
+
+        return redirect(f'/idols/photocards/admin/?tg_id={tg_id}&tab={target_tab}')
+
+    boxes = PhotocardBox.objects.all().prefetch_related('cards')
+    all_idols = IdolProfile.objects.all().order_by('stage_name')
+    all_cards = Photocard.objects.all().select_related('box').order_by('-created_at')
+
+    upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
+    upcoming_data = {
+        'is_active': upcoming_active,
+        'title': KingdomSetting.get_val('upcoming_box_title', ''),
+        'release_date': KingdomSetting.get_val('upcoming_box_date', ''),
+        'description': KingdomSetting.get_val('upcoming_box_desc', ''),
+        'image_url': KingdomSetting.get_val('upcoming_box_image', '')
+    }
+
+    current_tab = request.GET.get('tab', 'subir')
+
+    return render(request, 'idols/admin_photocards.html', {
+        'boxes': boxes,
+        'all_idols': all_idols,
+        'all_cards': all_cards,
+        'upcoming': upcoming_data,
+        'current_tab': current_tab,
+        'tg_id': tg_id
+    })
+
 ==================================================
 ARCHIVO: .\idols\__init__.py
 ==================================================
@@ -12760,7 +12974,7 @@ ARCHIVO: .\templates\idols\admin_photocards.html
         <button type="button" onclick="switchTab('cartas')" id="tab-btn-cartas" class="py-2.5 rounded-xl text-stone-400 hover:text-white transition-all">Cartas ({{ all_cards.count }})</button>
     </div>
 
-    <!-- SECCIÓN 1: SUBIR NUEVA PHOTOCARD DE CANVA (CON PREVIEW MOCKUP) -->
+    <!-- SECCIÓN 1: SUBIR NUEVA PHOTOCARD DE CANVA -->
     <div id="tab-subir" class="vip-panel p-5 border border-purple-500/50 rounded-3xl shadow-xl flex flex-col gap-3.5 bg-gradient-to-br from-[#180828] to-black">
         <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-500/20 pb-2">
             <span>🎴</span> Subir Diseño de Canva
@@ -12769,6 +12983,7 @@ ARCHIVO: .\templates\idols\admin_photocards.html
         <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
             {% csrf_token %}
             <input type="hidden" name="action" value="upload_card">
+            <input type="hidden" name="target_tab" value="subir">
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
             <div>
@@ -12821,10 +13036,46 @@ ARCHIVO: .\templates\idols\admin_photocards.html
                 </select>
             </div>
 
-            <div class="bg-black/50 p-3 rounded-2xl border border-vip-gold/25 flex flex-col gap-1">
-                <label class="block text-[11px] text-yellow-400 uppercase font-bold">Archivo de Canva (Imagen) *</label>
-                <input type="file" name="image" accept="image/*" required
-                       class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-[11px] file:font-bold file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+            <!-- COMPONENTE TÁCTIL PARA SUBIR FOTO CANVA -->
+            <div class="bg-black/60 p-3.5 rounded-2xl border border-purple-500/40 flex flex-col gap-2.5">
+                <div class="flex items-center justify-between">
+                    <label class="block text-[11px] text-purple-300 uppercase font-black">
+                        🎴 Archivo de Canva (Imagen) *
+                    </label>
+                    <span class="text-[9px] text-stone-400 font-mono">JPG, PNG, WEBP</span>
+                </div>
+
+                <input type="file" id="card-upload-input" name="image" 
+                       accept="image/png, image/jpeg, image/jpg, image/webp, image/*" class="hidden"
+                       onchange="previewImageSelection(this, 'card-upload-preview', 'card-upload-container', 'card-upload-filename')">
+
+                <!-- Botón táctil grande -->
+                <div onclick="document.getElementById('card-upload-input').click()"
+                     class="w-full py-3 px-4 rounded-xl border-2 border-dashed border-purple-500/60 bg-purple-950/20 hover:bg-purple-950/40 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5 text-center">
+                    <span class="text-xl">📁</span>
+                    <div class="flex flex-col text-left">
+                        <span class="text-xs font-bold text-purple-200" id="card-upload-label">Toca aquí para elegir foto de tu galería</span>
+                        <span class="text-[9px] text-stone-400">Abre directamente tus archivos o fotos</span>
+                    </div>
+                </div>
+
+                <!-- Preview del archivo -->
+                <div id="card-upload-container" class="hidden flex items-center gap-3 bg-black/90 p-2.5 rounded-xl border border-purple-500/50">
+                    <img id="card-upload-preview" src="" class="w-14 h-18 object-cover rounded-lg border border-purple-400 shadow">
+                    <div class="flex flex-col flex-1 min-w-0">
+                        <span class="text-xs font-bold text-white truncate" id="card-upload-filename">imagen.jpg</span>
+                        <span class="text-[10px] text-emerald-400 font-bold">✓ Lista para procesar</span>
+                    </div>
+                    <button type="button" onclick="clearFileSelection('card-upload-input', 'card-upload-container', 'card-upload-label', 'Toca aquí para elegir foto de tu galería')"
+                            class="text-xs bg-rose-950/90 border border-rose-600 text-rose-300 px-2 py-1.5 rounded-lg font-bold">✕ Quitar</button>
+                </div>
+
+                <!-- Fallback URL -->
+                <div class="pt-1 border-t border-white/10 flex flex-col gap-1">
+                    <span class="text-[10px] text-stone-400 font-bold">🔗 O pegar enlace de Canva / Web:</span>
+                    <input type="url" name="card_url" placeholder="https://ejemplo.com/photocard.jpg"
+                           class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-stone-200 placeholder-stone-600 focus:border-purple-400 focus:outline-none">
+                </div>
             </div>
 
             <button type="submit" class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all mt-1">
@@ -12839,43 +13090,104 @@ ARCHIVO: .\templates\idols\admin_photocards.html
             <h3 class="font-serif text-xs font-black text-yellow-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-yellow-500/20 pb-2 mb-3">
                 <span>📦</span> Crear Nueva Caja
             </h3>
+
             <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="create_box">
+                <input type="hidden" name="target_tab" value="cajas">
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
                 <div>
                     <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Caja *</label>
-                    <input type="text" name="name" required placeholder="Ej: Colección K-Pop Queens" class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+                    <input type="text" name="name" required placeholder="Ej: SM Entertainment, TWICE World..." 
+                           class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
                 </div>
+
                 <div>
                     <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Descripción</label>
-                    <input type="text" name="description" placeholder="Temática de la caja..." class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
+                    <input type="text" name="description" placeholder="Temática de la caja..." 
+                           class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
                 </div>
+
                 <div>
                     <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Precio en Oro (🪙) *</label>
-                    <input type="number" name="price" min="10" value="50" required class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white font-mono font-bold">
+                    <input type="number" name="price" min="10" value="120" required 
+                           class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white font-mono font-bold">
                 </div>
-                <div>
-                    <label class="block text-[11px] text-stone-300 uppercase font-bold mb-1">Portada de Caja (Opcional)</label>
-                    <input type="file" name="cover_image" accept="image/*" class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-2.5 file:rounded file:bg-purple-900 file:text-white cursor-pointer">
+
+                <!-- PORTADA DE LA CAJA: BOTÓN TÁCTIL ANTI-ZONAS MUERTAS + FALLBACK URL -->
+                <div class="bg-black/60 p-3.5 rounded-2xl border border-yellow-500/40 flex flex-col gap-2.5">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-[11px] text-yellow-400 uppercase font-black">
+                            🖼️ Portada de la Caja (Opcional)
+                        </label>
+                        <span class="text-[9px] text-stone-400 font-mono">JPG, PNG, WEBP</span>
+                    </div>
+
+                    <!-- Input nativo invisible -->
+                    <input type="file" id="box-cover-input" name="cover_image" 
+                           accept="image/png, image/jpeg, image/jpg, image/webp, image/*" class="hidden"
+                           onchange="previewImageSelection(this, 'box-cover-preview', 'box-cover-preview-container', 'box-cover-filename')">
+
+                    <!-- Botón de toque amplio para celular -->
+                    <div onclick="document.getElementById('box-cover-input').click()"
+                         class="w-full py-3.5 px-4 rounded-xl border-2 border-dashed border-yellow-500/50 bg-yellow-950/20 hover:bg-yellow-950/40 active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2.5 text-center">
+                        <span class="text-xl">📁</span>
+                        <div class="flex flex-col text-left">
+                            <span class="text-xs font-bold text-yellow-300" id="box-cover-label">Toca aquí para elegir foto de tu galería</span>
+                            <span class="text-[9px] text-stone-400">Abre directamente las fotos de tu celular</span>
+                        </div>
+                    </div>
+
+                    <!-- Miniatura de confirmación -->
+                    <div id="box-cover-preview-container" class="hidden flex items-center gap-3 bg-black/90 p-2.5 rounded-xl border border-yellow-500/50">
+                        <img id="box-cover-preview" src="" class="w-14 h-14 object-cover rounded-lg border border-yellow-400 shadow">
+                        <div class="flex flex-col flex-1 min-w-0">
+                            <span class="text-xs font-bold text-white truncate" id="box-cover-filename">imagen.jpg</span>
+                            <span class="text-[10px] text-emerald-400 font-bold">✓ Foto seleccionada</span>
+                        </div>
+                        <button type="button" onclick="clearFileSelection('box-cover-input', 'box-cover-preview-container', 'box-cover-label', 'Toca aquí para elegir foto de tu galería')"
+                                class="text-xs bg-rose-950/90 border border-rose-600 text-rose-300 px-2 py-1.5 rounded-lg font-bold">✕ Quitar</button>
+                    </div>
+
+                    <!-- Fallback: Enlace directo -->
+                    <div class="pt-1 border-t border-white/10 flex flex-col gap-1">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[10px] text-stone-400 font-bold">🔗 O pegar enlace directo de imagen:</span>
+                            <span class="text-[9px] text-stone-500">Postimages / Imgur / Web</span>
+                        </div>
+                        <input type="url" name="cover_url" placeholder="https://i.postimg.cc/ejemplo.jpg"
+                               class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-stone-200 placeholder-stone-600 focus:border-yellow-400 focus:outline-none">
+                    </div>
                 </div>
-                <button type="submit" class="bg-yellow-600 hover:bg-yellow-500 text-black py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">Crear Caja</button>
+
+                <button type="submit" class="bg-yellow-600 hover:bg-yellow-500 active:scale-95 text-black py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow transition-all">
+                    ✨ Crear Caja
+                </button>
             </form>
         </div>
 
+        <!-- LISTADO DE CAJAS ACTIVAS -->
         <div class="flex flex-col gap-2">
             <h4 class="text-xs font-bold text-stone-400 uppercase tracking-wider px-1">Cajas Activas</h4>
             {% for b in boxes %}
-            <div class="bg-black/60 border border-vip-gold/30 p-3.5 rounded-2xl flex flex-col gap-2 shadow">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <h4 class="text-xs font-black text-white">{{ b.name }}</h4>
-                        <span class="text-[10px] text-yellow-400 font-mono font-bold">{{ b.price }} 🪙 • {{ b.cards.count }} cartas</span>
+            <div class="bg-black/60 border border-vip-gold/30 p-3 rounded-2xl flex flex-col gap-2 shadow">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        {% if b.cover_image %}
+                            <img src="{{ b.cover_image.url }}" class="w-10 h-10 object-cover rounded-xl border border-vip-gold/50 flex-shrink-0">
+                        {% else %}
+                            <div class="w-10 h-10 rounded-xl bg-purple-950/60 border border-purple-500/30 flex items-center justify-center text-sm flex-shrink-0">📦</div>
+                        {% endif %}
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-xs font-black text-white truncate">{{ b.name }}</span>
+                            <span class="text-[10px] text-vip-gold font-mono font-bold">{{ b.price }} 🪙 • {{ b.cards.count }} cartas</span>
+                        </div>
                     </div>
                     <form method="POST" class="m-0">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="toggle_box">
+                        <input type="hidden" name="target_tab" value="cajas">
                         <input type="hidden" name="box_id" value="{{ b.id }}">
                         <button type="submit" class="text-[10px] font-bold px-2 py-0.5 rounded-full border {% if b.is_active %}bg-emerald-950 text-emerald-300 border-emerald-500{% else %}bg-stone-900 text-stone-400 border-stone-700{% endif %}">
                             {% if b.is_active %}Activa{% else %}Pausada{% endif %}
@@ -12888,20 +13200,27 @@ ARCHIVO: .\templates\idols\admin_photocards.html
                     <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-2">
                         {% csrf_token %}
                         <input type="hidden" name="action" value="edit_box">
+                        <input type="hidden" name="target_tab" value="cajas">
                         <input type="hidden" name="box_id" value="{{ b.id }}">
                         
-                        <input type="text" name="name" value="{{ b.name }}" required class="bg-black border border-white/20 p-1.5 rounded text-xs text-white">
-                        <input type="number" name="price" value="{{ b.price }}" required class="bg-black border border-white/20 p-1.5 rounded text-xs text-yellow-300 font-mono">
-                        <input type="text" name="description" value="{{ b.description }}" class="bg-black border border-white/20 p-1.5 rounded text-xs text-white">
-                        <input type="file" name="cover_image" accept="image/*" class="text-[10px] text-stone-400">
+                        <input type="text" name="name" value="{{ b.name }}" required class="bg-black border border-white/20 p-2 rounded text-xs text-white" placeholder="Nombre">
+                        <input type="number" name="price" value="{{ b.price }}" required class="bg-black border border-white/20 p-2 rounded text-xs text-yellow-300 font-mono" placeholder="Precio">
+                        <input type="text" name="description" value="{{ b.description }}" class="bg-black border border-white/20 p-2 rounded text-xs text-white" placeholder="Descripción">
+                        
+                        <div class="flex flex-col gap-1 pt-1">
+                            <label class="text-[10px] text-stone-400 font-bold">Cambiar Portada (Galería o URL):</label>
+                            <input type="file" name="cover_image" accept="image/png, image/jpeg, image/jpg, image/webp, image/*" class="text-[10px] text-stone-400">
+                            <input type="url" name="cover_url" placeholder="O pegar nuevo enlace https://..." class="bg-black border border-white/20 p-1.5 rounded text-[10px] text-stone-300">
+                        </div>
 
-                        <button type="submit" class="btn-gold py-1.5 rounded text-xs font-bold uppercase mt-1">Guardar Cambios</button>
+                        <button type="submit" class="btn-gold py-2 rounded text-xs font-bold uppercase mt-1">Guardar Cambios</button>
                     </form>
                 </details>
 
                 <form method="POST" class="m-0 self-end" onsubmit="return confirm('¿Seguro que deseas eliminar la caja {{ b.name }} y todas sus cartas?')">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="delete_box">
+                    <input type="hidden" name="target_tab" value="cajas">
                     <input type="hidden" name="box_id" value="{{ b.id }}">
                     <button type="submit" class="text-rose-400 hover:text-rose-300 text-[10px] uppercase font-bold">🗑️ Eliminar Caja</button>
                 </form>
@@ -12926,6 +13245,7 @@ ARCHIVO: .\templates\idols\admin_photocards.html
         <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3 mt-1">
             {% csrf_token %}
             <input type="hidden" name="action" value="save_upcoming_box">
+            <input type="hidden" name="target_tab" value="proxima">
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
             <div class="p-3 bg-black/60 rounded-2xl border border-white/10 flex items-center justify-between">
@@ -12957,7 +13277,7 @@ ARCHIVO: .\templates\idols\admin_photocards.html
                           class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white resize-none">{{ upcoming.description }}</textarea>
             </div>
 
-            <div class="bg-black/50 p-3 rounded-2xl border border-white/10 flex flex-col gap-1.5">
+            <div class="bg-black/50 p-3 rounded-2xl border border-white/10 flex flex-col gap-2">
                 <label class="block text-[11px] text-purple-300 uppercase font-bold">Imagen Promocional de la Caja</label>
                 {% if upcoming.image_url %}
                     <div class="flex items-center gap-2 mb-1">
@@ -12965,8 +13285,10 @@ ARCHIVO: .\templates\idols\admin_photocards.html
                         <span class="text-[10px] text-stone-400">Imagen actual activa. Sube otra solo para sustituirla.</span>
                     </div>
                 {% endif %}
-                <input type="file" name="upcoming_image" accept="image/*"
+                <input type="file" name="upcoming_image" accept="image/png, image/jpeg, image/jpg, image/webp, image/*"
                        class="w-full text-xs text-stone-300 file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-purple-900 file:text-purple-200 cursor-pointer">
+                <input type="url" name="upcoming_image_url" placeholder="O pegar URL https://..."
+                       class="w-full bg-black/80 border border-white/20 rounded-xl p-2 text-xs text-stone-300">
             </div>
 
             <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
@@ -12996,6 +13318,7 @@ ARCHIVO: .\templates\idols\admin_photocards.html
                 <form method="POST" class="m-0" onsubmit="return confirm('¿Eliminar la carta {{ c.name }}?')">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="delete_card">
+                    <input type="hidden" name="target_tab" value="cartas">
                     <input type="hidden" name="card_id" value="{{ c.id }}">
                     <button type="submit" class="text-xs bg-rose-950 border border-rose-500 text-rose-300 px-2 py-1 rounded-lg font-bold" title="Eliminar">🗑️</button>
                 </form>
@@ -13017,6 +13340,7 @@ ARCHIVO: .\templates\idols\admin_photocards.html
         <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
             {% csrf_token %}
             <input type="hidden" name="action" value="edit_card">
+            <input type="hidden" name="target_tab" value="cartas">
             <input type="hidden" name="card_id" id="modal-card-id">
 
             <div>
@@ -13048,9 +13372,10 @@ ARCHIVO: .\templates\idols\admin_photocards.html
                 </select>
             </div>
 
-            <div>
-                <label class="block text-[10px] text-stone-400 uppercase mb-0.5">Sustituir Imagen (Opcional)</label>
-                <input type="file" name="image" accept="image/*" class="text-xs text-stone-300">
+            <div class="flex flex-col gap-1">
+                <label class="block text-[10px] text-stone-400 uppercase mb-0.5">Sustituir Imagen (Galería o URL)</label>
+                <input type="file" name="image" accept="image/png, image/jpeg, image/jpg, image/webp, image/*" class="text-xs text-stone-300">
+                <input type="url" name="card_url" placeholder="O pegar enlace https://..." class="bg-black border border-white/20 p-1.5 rounded text-xs text-stone-300">
             </div>
 
             <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase mt-1">Guardar Cambios</button>
@@ -13075,6 +13400,32 @@ ARCHIVO: .\templates\idols\admin_photocards.html
         });
     }
 
+    // Selector y preview táctil para móviles
+    function previewImageSelection(input, previewImgId, containerId, filenameId) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.getElementById(previewImgId);
+                const container = document.getElementById(containerId);
+                const nameLabel = document.getElementById(filenameId);
+                if (img) img.src = e.target.result;
+                if (nameLabel) nameLabel.innerText = file.name;
+                if (container) container.classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function clearFileSelection(inputId, containerId, labelId, defaultText) {
+        const input = document.getElementById(inputId);
+        const container = document.getElementById(containerId);
+        const label = document.getElementById(labelId);
+        if (input) input.value = '';
+        if (container) container.classList.add('hidden');
+        if (label) label.innerText = defaultText;
+    }
+
     function openEditCardModal(cardId, name, idolName, rarity, boxId) {
         document.getElementById('modal-card-id').value = cardId;
         document.getElementById('modal-card-name').value = name;
@@ -13087,6 +13438,13 @@ ARCHIVO: .\templates\idols\admin_photocards.html
     function closeEditCardModal() {
         document.getElementById('edit-card-modal').classList.add('hidden');
     }
+
+    // Restaurar automáticamente la pestaña correcta si viene por parámetro URL
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tab = urlParams.get('tab') || '{{ current_tab|default:"subir" }}';
+        switchTab(tab);
+    });
 </script>
 {% endblock %}
 

@@ -1,52 +1,42 @@
-<!-- templates/idols/form.html -->
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="vip-panel p-5 mt-2 mb-36 flex flex-col gap-4 mx-auto w-full max-w-md border border-vip-gold/40 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1c0c2e] via-[#090212] to-black">
-    
-    <!-- Encabezado con navegación segura -->
-    <div class="flex justify-between items-center border-b border-white/10 pb-3">
-        <div>
-            <h2 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-wider">
-                {% if idol %}Editar a {{ idol.stage_name }}{% else %}Nueva Musa VIP{% endif %}
-            </h2>
-            <p class="text-[11px] text-stone-400">Consagración de identidad artística en el Reino</p>
-        </div>
-        <button type="button" onclick="universalNav('/idols/')" class="text-xs text-stone-400 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 active:scale-95 transition-all">
-            ⬅ Volver
+<div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
+    <!-- ENCABEZADO SUPERIOR -->
+    <div class="flex justify-between items-center px-1">
+        <button type="button" onclick="universalNav('/idols/')" 
+                class="text-xs text-stone-300 hover:text-vip-gold bg-black/80 px-4 py-2 rounded-full border border-vip-gold/40 flex items-center gap-1.5 active:scale-95 transition-all shadow-lg">
+            <span>⬅</span> <span class="font-bold">Volver</span>
         </button>
+        <span class="text-xs font-mono uppercase font-black text-vip-gold tracking-widest">
+            {% if idol %}Editar Musa Real{% else %}Consagrar Musa{% endif %}
+        </span>
     </div>
 
-    <!-- MENSAJES -->
-    {% if messages %}
-        {% for message in messages %}
-            <div class="p-3 rounded-2xl text-xs text-center border backdrop-blur-md {% if message.tags == 'success' %}bg-green-950/80 border-green-500 text-green-200{% else %}bg-rose-950/80 border-rose-500 text-rose-200{% endif %}">
-                {{ message }}
-            </div>
-        {% endfor %}
-    {% endif %}
-
-    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3.5">
+    <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-4" onsubmit="return validateIdolForm()">
         {% csrf_token %}
         <input type="hidden" name="tg_id" id="hidden_tg_id" value="{{ tg_id }}">
-        <input type="hidden" name="tg_username" id="hidden_tg_username" value="{{ tg_username|default:'' }}">
+        <input type="hidden" name="tg_username" id="hidden_tg_username" value="{{ tg_username }}">
 
         <!-- 1. IDENTIDAD ARTÍSTICA -->
-        <div class="bg-black/60 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
-            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">1. Identidad de Rol</span>
-
+        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 flex flex-col gap-3 shadow-xl">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">1. Identidad de la Musa</span>
             <div>
                 <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Nombre Artístico *</label>
-                <input type="text" name="stage_name" value="{{ idol.stage_name|default:'' }}" required placeholder="Ej: Scarlett, Luna, Mia, Karina..."
+                <input type="text" name="stage_name" id="stage_name_input" value="{{ idol.stage_name|default:'' }}" required placeholder="Ej: Scarlett, Luna, Karina..."
                        class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
-
             <div>
                 <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Grupo o Solista</label>
-                <input type="text" name="group" value="{{ idol.group|default:'' }}" placeholder="Ej: Solista, K-Pop Queens, o grupo de rol..."
+                <input type="text" name="group" value="{{ idol.group|default:'' }}" placeholder="Ej: Solista, aespa, IVE, o grupo de rol..."
                        class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
-
+            <div>
+                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Usuario de Telegram para Contacto</label>
+                <input type="text" name="owner_username" value="{{ idol.owner_username|default:tg_username|default:'' }}" placeholder="Ej: @TuUsuario"
+                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+                <span class="text-[9px] text-stone-400">Este es el @ al que los nobles escribirán al pulsar «Abrir Chat».</span>
+            </div>
             <div>
                 <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Lema o Frase de Seducción</label>
                 <input type="text" name="tagline" value="{{ idol.tagline|default:'' }}" placeholder="Ej: «La musa prohibida de la noche clandestina»"
@@ -54,9 +44,28 @@
             </div>
         </div>
 
-        <!-- 2. SELECTOR VISUAL DE AURA MÍSTICA -->
+        <!-- 2. ESTADO EN VIVO Y DISPONIBILIDAD -->
+        <div class="bg-black/70 p-3.5 rounded-2xl border border-emerald-500/30 flex flex-col gap-2">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400">2. Estado en Vivo (Disponibilidad)</span>
+            <div class="grid grid-cols-3 gap-2">
+                <label class="flex flex-col items-center gap-1 p-2 rounded-xl bg-black/60 border border-emerald-500/40 cursor-pointer hover:border-emerald-300">
+                    <input type="radio" name="status" value="online" {% if not idol or idol.status == 'online' %}checked{% endif %}>
+                    <span class="text-[11px] font-black text-emerald-300 text-center">🟢 Chateando</span>
+                </label>
+                <label class="flex flex-col items-center gap-1 p-2 rounded-xl bg-black/60 border border-rose-500/40 cursor-pointer hover:border-rose-300">
+                    <input type="radio" name="status" value="antojos" {% if idol.status == 'antojos' %}checked{% endif %}>
+                    <span class="text-[11px] font-black text-rose-300 text-center">🔥 Antojos</span>
+                </label>
+                <label class="flex flex-col items-center gap-1 p-2 rounded-xl bg-black/60 border border-stone-600 cursor-pointer hover:border-stone-400">
+                    <input type="radio" name="status" value="offline" {% if idol.status == 'offline' %}checked{% endif %}>
+                    <span class="text-[11px] font-black text-stone-400 text-center">🌙 Descanso</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- 3. SELECTOR DE AURA MÍSTICA -->
         <div class="bg-black/60 p-3.5 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
-            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-purple-300">2. Aura Mística de la Musa</span>
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-purple-300">3. Aura Mística de la Musa</span>
             <div class="grid grid-cols-2 gap-2">
                 <label class="flex items-center gap-2 p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/50 cursor-pointer hover:border-purple-300">
                     <input type="radio" name="aura_color" value="purple" {% if not idol or idol.aura_color == 'purple' %}checked{% endif %}>
@@ -72,62 +81,102 @@
                 </label>
                 <label class="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 cursor-pointer hover:border-emerald-300">
                     <input type="radio" name="aura_color" value="emerald" {% if idol.aura_color == 'emerald' %}checked{% endif %}>
-                    <span class="text-xs font-bold text-emerald-300">💚 Seducción Verde</span>
+                    <span class="text-xs font-bold text-emerald-300">💚 Seducción Esmeralda</span>
                 </label>
             </div>
         </div>
 
-        <!-- 3. ROL Y ATENCIÓN -->
+        <!-- 4. ATENCIÓN Y BIOGRAFÍA -->
         <div class="bg-black/60 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
-            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">3. Estilo de Atención</span>
-
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">4. Estilo de Atención</span>
             <div>
                 <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Especialidad de Rol</label>
-                <input type="text" name="specialty" value="{{ idol.specialty|default:'' }}" placeholder="Ej: Rol dulce, sesiones atrevidas, petición de antojos..."
+                <input type="text" name="specialty" value="{{ idol.specialty|default:'' }}" placeholder="Ej: Rol dulce, sesiones atrevidas, antojos privados..."
                        class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
-
             <div>
                 <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Saludo de Bienvenida al Chat</label>
-                <input type="text" name="welcome_message" value="{{ idol.welcome_message|default:'' }}" placeholder="Ej: Bienvenido a mis aposentos, cuéntame tus secretos..."
+                <input type="text" name="welcome_message" value="{{ idol.welcome_message|default:'' }}" placeholder="Ej: Bienvenido a mis aposentos, cuéntame tus deseos..."
                        class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
-
             <div>
                 <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Presentación / Biografía *</label>
-                <textarea name="bio" rows="3" required placeholder="Describe la personalidad de tu personaje, gustos y estilo de rol..."
+                <textarea name="bio" rows="3" required placeholder="Describe la personalidad de tu personaje..."
                           class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 resize-none">{{ idol.bio|default:'' }}</textarea>
             </div>
         </div>
 
-        <!-- 4. FOTOGRAFÍAS (RETRATO & BANNER) -->
-        <div class="bg-black/60 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
-            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">4. Retrato & Portada</span>
-
-            <!-- Foto de Perfil -->
-            <div class="bg-black/40 p-2.5 rounded-xl border border-white/5 flex flex-col gap-1.5">
+        <!-- 5. FOTOGRAFÍAS CON BLINDAJE PARA PC Y CELULARES -->
+        <div class="bg-black/60 p-3.5 rounded-2xl border border-yellow-500/40 flex flex-col gap-3">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">5. Retrato & Banner de Portada</span>
+            
+            <!-- RETRATO / FOTO DE PERFIL -->
+            <div class="bg-black/80 p-3 rounded-2xl border border-yellow-500/30 flex flex-col gap-2">
                 <label class="block text-[11px] text-yellow-300 font-bold uppercase">Foto de Perfil (Retrato) *</label>
+                
                 {% if idol and idol.photo %}
-                    <div class="flex items-center gap-3 my-1">
+                    <div class="flex items-center gap-3 bg-black/50 p-2 rounded-xl border border-white/10">
                         <img src="{{ idol.photo.url }}" class="w-12 h-12 rounded-xl object-cover border border-vip-gold/40">
-                        <span class="text-[10px] text-stone-400">Retrato actual activo. Elige otro solo si deseas reemplazarlo.</span>
+                        <span class="text-[10px] text-stone-400">Foto actual cargada. Cambia solo si lo deseas.</span>
                     </div>
                 {% endif %}
-                <input type="file" name="photo" accept="image/*" {% if not idol %}required{% endif %}
-                       class="w-full text-xs text-stone-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-vip-gold file:text-black hover:file:bg-yellow-400 cursor-pointer">
+
+                <!-- Input oculto para evitar fallos de render en navegadores de Telegram -->
+                <input type="file" id="idol-photo-file" name="photo" accept="image/*" class="hidden"
+                       onchange="previewImg(this, 'photo-preview-wrap', 'photo-preview-img', 'photo-filename')">
+
+                <!-- Botón táctil amplio -->
+                <div onclick="document.getElementById('idol-photo-file').click()"
+                     class="py-3 px-4 rounded-xl border-2 border-dashed border-yellow-500/50 bg-yellow-950/20 hover:bg-yellow-950/40 cursor-pointer flex items-center justify-center gap-2 text-center active:scale-95 transition-all">
+                    <span class="text-lg">📁</span>
+                    <span class="text-xs font-bold text-yellow-300">Toca aquí para elegir foto de tu celular / PC</span>
+                </div>
+
+                <div id="photo-preview-wrap" class="hidden flex items-center gap-3 bg-black/90 p-2 rounded-xl border border-yellow-400">
+                    <img id="photo-preview-img" src="" class="w-12 h-12 rounded-lg object-cover">
+                    <span id="photo-filename" class="text-xs font-bold text-white truncate flex-1">foto.jpg</span>
+                    <span class="text-emerald-400 text-xs font-bold">✓ Lista</span>
+                </div>
+
+                <!-- Fallback URL -->
+                <div class="pt-1.5 border-t border-white/10 flex flex-col gap-1">
+                    <span class="text-[10px] text-stone-400 font-bold">🔗 O pega el enlace directo de la imagen (PC / Imgur / Postimages):</span>
+                    <input type="url" name="photo_url" id="photo_url_input" placeholder="https://i.postimg.cc/ejemplo.jpg"
+                           class="w-full bg-black/90 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-400">
+                </div>
             </div>
 
-            <!-- Banner de Portada -->
-            <div class="bg-black/40 p-2.5 rounded-xl border border-white/5 flex flex-col gap-1.5">
+            <!-- BANNER DE PORTADA -->
+            <div class="bg-black/80 p-3 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
                 <label class="block text-[11px] text-purple-300 font-bold uppercase">Foto de Portada / Banner (Opcional)</label>
+                
                 {% if idol and idol.banner %}
-                    <div class="flex items-center gap-3 my-1">
+                    <div class="flex items-center gap-3 bg-black/50 p-2 rounded-xl border border-white/10">
                         <img src="{{ idol.banner.url }}" class="w-20 h-9 rounded-lg object-cover border border-purple-500/40">
                         <span class="text-[10px] text-stone-400">Banner actual cargado.</span>
                     </div>
                 {% endif %}
-                <input type="file" name="banner" accept="image/*"
-                       class="w-full text-xs text-stone-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-purple-900 file:text-purple-200 hover:file:bg-purple-800 cursor-pointer">
+
+                <input type="file" id="idol-banner-file" name="banner" accept="image/*" class="hidden"
+                       onchange="previewImg(this, 'banner-preview-wrap', 'banner-preview-img', 'banner-filename')">
+
+                <div onclick="document.getElementById('idol-banner-file').click()"
+                     class="py-3 px-4 rounded-xl border-2 border-dashed border-purple-500/50 bg-purple-950/20 hover:bg-purple-950/40 cursor-pointer flex items-center justify-center gap-2 text-center active:scale-95 transition-all">
+                    <span class="text-lg">🖼️</span>
+                    <span class="text-xs font-bold text-purple-300">Toca aquí para elegir banner</span>
+                </div>
+
+                <div id="banner-preview-wrap" class="hidden flex items-center gap-3 bg-black/90 p-2 rounded-xl border border-purple-400">
+                    <img id="banner-preview-img" src="" class="w-16 h-8 rounded-lg object-cover">
+                    <span id="banner-filename" class="text-xs font-bold text-white truncate flex-1">banner.jpg</span>
+                    <span class="text-emerald-400 text-xs font-bold">✓ Listo</span>
+                </div>
+
+                <div class="pt-1.5 border-t border-white/10 flex flex-col gap-1">
+                    <span class="text-[10px] text-stone-400 font-bold">🔗 O enlace directo del banner:</span>
+                    <input type="url" name="banner_url" placeholder="https://i.postimg.cc/banner.jpg"
+                           class="w-full bg-black/90 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400">
+                </div>
             </div>
         </div>
 
@@ -138,21 +187,29 @@
 </div>
 
 <script>
-    document.addEventListener("DOMContentLoaded", () => {
-        const idElem = document.getElementById('hidden_tg_id');
-        const userElem = document.getElementById('hidden_tg_username');
-        const tg = window.Telegram?.WebApp;
-        
-        if (!idElem.value || idElem.value === 'None') {
-            idElem.value = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '123456789';
+    function previewImg(input, wrapId, imgId, nameId) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = e => {
+                document.getElementById(imgId).src = e.target.result;
+                document.getElementById(nameId).innerText = file.name;
+                document.getElementById(wrapId).classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
         }
+    }
 
-        if (!userElem.value || userElem.value === 'None' || userElem.value.trim() === '') {
-            const u = tg?.initDataUnsafe?.user;
-            if (u) {
-                userElem.value = u.username ? `@${u.username}` : (u.first_name || `Musa_${idElem.value}`);
-            }
+    function validateIdolForm() {
+        const hasExistingPhoto = {% if idol and idol.photo %}true{% else %}false{% endif %};
+        const fileSelected = document.getElementById('idol-photo-file').files.length > 0;
+        const urlTyped = document.getElementById('photo_url_input').value.trim().length > 0;
+
+        if (!hasExistingPhoto && !fileSelected && !urlTyped) {
+            alert("⚠️ Debes seleccionar una foto desde tu dispositivo o pegar un enlace web directo.");
+            return false;
         }
-    });
+        return true;
+    }
 </script>
 {% endblock %}

@@ -155,6 +155,7 @@ def my_profile(request):
 
     tg_id = resolve_secure_tg_id(request)
     tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or f'Noble_{tg_id}'
+    active_tab = request.GET.get('tab', 'logros')
     
     profile, _ = UserProfile.objects.get_or_create(
         telegram_user_id=tg_id,
@@ -178,6 +179,7 @@ def my_profile(request):
         profile.title = request.POST.get('title', profile.title)
         profile.bio = request.POST.get('bio', '').strip()
         
+        # 1. Marco cosmético de avatar
         desired_frame = request.POST.get('avatar_frame', profile.avatar_frame)
         if desired_frame == 'flame' and not profile.has_custom_avatar_frame:
             messages.error(request, "⚠️ El Marco Llama Carmesí está reservado para quienes lo adquieran en el Bazar.")
@@ -186,8 +188,18 @@ def my_profile(request):
 
         profile.motto = request.POST.get('motto', profile.motto).strip()
         profile.profile_theme = request.POST.get('profile_theme', profile.profile_theme)
-        profile.vip_badge = request.POST.get('vip_badge', profile.vip_badge)
         
+        # 2. Insignia VIP
+        new_vip_badge = request.POST.get('vip_badge')
+        if new_vip_badge:
+            profile.vip_badge = new_vip_badge
+
+        # 3. Título personalizado del Bazar (si lo compró o tiene acceso)
+        if profile.has_vip_badge or profile.custom_title_text or request.POST.get('custom_title_text'):
+            new_custom_title = request.POST.get('custom_title_text', '').strip()
+            profile.custom_title_text = new_custom_title if new_custom_title else None
+        
+        # 4. Musa devota
         if not is_idol:
             fav_id = request.POST.get('favorite_idol')
             profile.favorite_idol = IdolProfile.objects.filter(id=fav_id).first() if fav_id else None
@@ -195,7 +207,9 @@ def my_profile(request):
         profile.save()
         mensaje = "✨ ¡Camerino de Musa actualizado con éxito!" if is_idol else "✨ ¡Pasaporte Noble actualizado con éxito!"
         messages.success(request, mensaje)
-        return redirect(f'/profile/?tg_id={tg_id}&tg_username={encode_param(profile.username)}')
+        
+        # 👈 Redirige manteniendo la pestaña de 'ajustes' abierta para ver los cambios de inmediato
+        return redirect(f'/profile/?tg_id={tg_id}&tg_username={encode_param(profile.username)}&tab=ajustes')
 
     total_servicios = sum(i.services_done for i in mis_idols)
     idol_posts = Post.objects.filter(idol__in=mis_idols)
@@ -253,6 +267,7 @@ def my_profile(request):
         'likes_totales': likes_totales,
         'achievements': achievements,
         'unlocks_count': unlocks_count,
+        'active_tab': active_tab,  # 👈 Enviado al template
     })
 
 

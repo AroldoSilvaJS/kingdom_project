@@ -11,9 +11,18 @@
             <span>⬅</span> <span class="font-bold">Elenco</span>
         </button>
 
-        <div class="flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3.5 py-1 rounded-full shadow-inner">
-            <span class="text-xs">⚜️</span>
-            <span class="text-[10px] font-mono uppercase font-black text-gold-gradient tracking-widest">Ficha de Musa Real</span>
+        <div class="flex items-center gap-2">
+            {% if can_edit %}
+            <button type="button" onclick="universalNav('{% url 'idols:edit' idol.id %}')"
+                    class="text-xs bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/50 px-3.5 py-1.5 rounded-full font-bold active:scale-95 transition-all flex items-center gap-1 shadow">
+                <span>✏️</span> <span>Editar Mi Musa</span>
+            </button>
+            {% endif %}
+
+            <div class="flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3 py-1 rounded-full shadow-inner">
+                <span class="text-xs">⚜️</span>
+                <span class="text-[10px] font-mono uppercase font-black text-gold-gradient tracking-widest">Ficha de Musa Real</span>
+            </div>
         </div>
     </div>
 
@@ -335,16 +344,11 @@
     function contactIdol(rawUsername, fallbackId) {
         let cleanUser = String(rawUsername || '').replace('@', '').trim();
         if (!cleanUser || cleanUser === 'None' || cleanUser === 'undefined' || cleanUser === 'MusaReal') {
-            if (fallbackId) {
-                window.location.href = `tg://user?id=${fallbackId}`;
+            if (fallbackId && fallbackId !== '0') {
+                window.location.href = `https://t.me/user?id=${fallbackId}`;
                 return;
             }
-            if (window.showVipAlert) showVipAlert("Esta Musa no tiene un enlace de contacto activo.", "Aviso", "⚠️");
-            return;
-        }
-
-        if (/^\d+$/.test(cleanUser)) {
-            window.location.href = `tg://user?id=${cleanUser}`;
+            alert("Esta Musa no tiene un enlace de contacto activo configurado.");
             return;
         }
 
@@ -355,8 +359,7 @@
                 return;
             } catch(e) {}
         }
-        window.location.href = `tg://resolve?domain=${cleanUser}`;
-        setTimeout(() => { window.open(tgWebUrl, '_blank'); }, 500);
+        window.open(tgWebUrl, '_blank');
     }
 </script>
 {% endblock %}

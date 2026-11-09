@@ -1,17 +1,19 @@
 import random
 import os
 import sys
+import urllib.request
 from io import BytesIO
 from PIL import Image
 from urllib.parse import quote as encode_param
 from django.shortcuts import render, redirect, get_object_or_404
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Avg
 from django.http import JsonResponse
 from django.contrib import messages
 from django.db import transaction
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.utils.text import slugify
 
 from .models import (
     IdolProfile, Review, Post, PostImage, PostUnlock, PostLike, 
@@ -24,11 +26,11 @@ from pets.models import Pet
 from core.telegram_notify import send_telegram_msg
 from collections import Counter
 
+
 ADMIN_CORONA_ID = '7474444797'
 
 
 def check_is_staff_or_admin(tg_id):
-    """Verifica si el usuario es Corona, Admin o Moderador tanto por rol como por staff_role"""
     if not tg_id:
         return False
     if str(tg_id) == ADMIN_CORONA_ID:
@@ -36,24 +38,38 @@ def check_is_staff_or_admin(tg_id):
     role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
     if not role_obj:
         return False
-    
     staff = getattr(role_obj, 'staff_role', 'none')
-    is_staff = (staff in ['admin', 'moderador']) or (role_obj.role in ['admin', 'moderador']) or getattr(role_obj, 'is_moderator', False)
-    return is_staff
+    return (staff in ['admin', 'moderador']) or (role_obj.role in ['admin', 'moderador']) or getattr(role_obj, 'is_moderator', False)
+
+
+def download_image_from_url(url, default_filename='downloaded_image.webp'):
+    """Descarga una imagen desde enlace web con User-Agent seguro y la retorna como buffer para Django"""
+    if not url or not str(url).strip().startswith(('http://', 'https://')):
+        return None
+    try:
+        req = urllib.request.Request(
+            url.strip(),
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = resp.read()
+            if len(data) > 12 * 1024 * 1024:
+                return None
+            bio = BytesIO(data)
+            bio.name = default_filename
+            return bio
+    except Exception as e:
+        print(f"Error descargando imagen desde URL {url}: {e}")
+        return None
 
 
 def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
-    """
-    Comprime y convierte imágenes a WebP ultraligero antes de guardar en almacenamiento.
-    Reduce el peso de ~2.5MB a ~80-120KB manteniendo nitidez en móviles.
-    """
     if not file_obj:
         return file_obj
-
     try:
         img = Image.open(file_obj)
-        
-        # Corregir orientación automática de cámaras de celular
         try:
             from PIL import ExifTags
             for orientation in ExifTags.TAGS.keys():
@@ -72,7 +88,6 @@ def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
 
         output = BytesIO()
         has_alpha = img.mode in ('RGBA', 'LA') or ('transparency' in img.info)
-
         if has_alpha:
             img.save(output, format='WEBP', quality=quality, method=4)
         else:
@@ -81,35 +96,27 @@ def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
             img.save(output, format='WEBP', quality=quality, method=4)
 
         output.seek(0)
-        base_name = os.path.splitext(file_obj.name)[0]
+        base_name = os.path.splitext(getattr(file_obj, 'name', 'img'))[0]
         filename = f"{base_name}.webp"
 
         return InMemoryUploadedFile(
-            output,
-            'ImageField',
-            filename,
-            'image/webp',
-            output.getbuffer().nbytes,
-            None
+            output, 'ImageField', filename, 'image/webp', output.getbuffer().nbytes, None
         )
     except Exception as e:
-        print(f"⚠️ No se pudo comprimir la imagen a WebP: {e}")
+        print(f"Error optimizando imagen: {e}")
+        if hasattr(file_obj, 'seek'):
+            file_obj.seek(0)
         return file_obj
 
 
 def resolve_safe_tg(request):
-    raw_id = (
-        request.POST.get('tg_id') or 
-        request.GET.get('tg_id') or 
-        request.COOKIES.get('tg_id') or 
-        request.session.get('tg_id')
-    )
+    raw_id = request.GET.get('tg_id') or request.POST.get('tg_id') or request.session.get('tg_id')
     if raw_id and str(raw_id).strip() not in ['', 'None', 'undefined', 'null']:
         try:
             val = int(raw_id)
             request.session['tg_id'] = val
             return val
-        except (ValueError, TypeError):
+        except ValueError:
             pass
     return None
 
@@ -251,10 +258,8 @@ def idol_create(request):
     tg_id = resolve_safe_tg(request)
     if not tg_id:
         return redirect('/')
-
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
     tg_username = request.POST.get('tg_username') or request.GET.get('tg_username') or (profile.username if profile else f"@{tg_id}")
-    
     if not tg_username.startswith('@'):
         tg_username = f"@{tg_username}"
 
@@ -267,20 +272,41 @@ def idol_create(request):
         group = request.POST.get('group', '').strip()
         bio = request.POST.get('bio', '').strip()
         tagline = request.POST.get('tagline', '').strip()
+        status = request.POST.get('status', 'online')
         aura_color = request.POST.get('aura_color', 'purple')
         specialty = request.POST.get('specialty', '').strip()
         welcome_message = request.POST.get('welcome_message', '').strip()
-        photo = optimize_uploaded_image(request.FILES.get('photo'))
-        banner = optimize_uploaded_image(request.FILES.get('banner'))
-        
+        custom_owner = request.POST.get('owner_username', tg_username).strip()
+        if custom_owner and not custom_owner.startswith('@'):
+            custom_owner = f"@{custom_owner}"
+
+        # Procesar Retrato (Archivo nativo o URL de rescate para PC/Celular)
+        photo_file = request.FILES.get('photo')
+        photo_url = request.POST.get('photo_url', '').strip()
+        if not photo_file and photo_url:
+            photo_file = download_image_from_url(photo_url, default_filename=f"idol_{slugify(stage_name or 'photo')}.webp")
+        photo = optimize_uploaded_image(photo_file)
+
+        # Procesar Banner (Archivo nativo o URL de rescate)
+        banner_file = request.FILES.get('banner')
+        banner_url = request.POST.get('banner_url', '').strip()
+        if not banner_file and banner_url:
+            banner_file = download_image_from_url(banner_url, default_filename=f"banner_{slugify(stage_name or 'banner')}.webp")
+        banner = optimize_uploaded_image(banner_file)
+
+        if not photo:
+            messages.error(request, "⚠️ Debes elegir una foto de perfil desde tu galería o pegar un enlace web de imagen.")
+            return render(request, 'idols/form.html', {'tg_id': tg_id, 'tg_username': tg_username})
+
         try:
-            IdolProfile.objects.create(
+            idol_obj = IdolProfile.objects.create(
                 telegram_user_id=tg_id,
-                owner_username=tg_username,
+                owner_username=custom_owner or tg_username,
                 stage_name=stage_name,
                 group=group,
                 bio=bio,
                 tagline=tagline,
+                status=status,
                 aura_color=aura_color,
                 specialty=specialty,
                 welcome_message=welcome_message,
@@ -289,7 +315,6 @@ def idol_create(request):
             )
             UserRole.objects.get_or_create(telegram_id=tg_id, defaults={'role': 'idol', 'staff_role': 'none'})
             UserRole.objects.filter(telegram_id=tg_id).update(role='idol')
-
             grant_user_xp(request, tg_id, 30, reason="Creación de Idol")
 
             group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
@@ -307,24 +332,24 @@ def idol_create(request):
                     button_url="https://t.me/KingdomPleasure_bot?start=entrar"
                 )
 
-            messages.success(request, f"✨ ¡{stage_name} ha sido registrada con éxito! (+30 EXP)")
-            return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+            messages.success(request, f"✨ ¡{stage_name} ha sido consagrada con éxito! (+30 EXP)")
+            return redirect(f'/idols/{idol_obj.id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
         except Exception as e:
             messages.error(request, f"Error al registrar: {str(e)}")
 
     return render(request, 'idols/form.html', {'tg_id': tg_id, 'tg_username': tg_username})
 
 
+
 def idol_edit(request, idol_id):
     tg_id = resolve_safe_tg(request)
     idol = get_object_or_404(IdolProfile, id=idol_id)
-    
     is_admin = check_is_staff_or_admin(tg_id)
 
     if tg_id != idol.telegram_user_id and not is_admin:
         messages.error(request, "No tienes permiso para editar esta Idol.")
         return redirect(f'/idols/?tg_id={tg_id}')
-        
+
     if request.method == 'POST':
         idol.stage_name = request.POST.get('stage_name', idol.stage_name).strip()
         idol.group = request.POST.get('group', idol.group).strip()
@@ -334,16 +359,31 @@ def idol_edit(request, idol_id):
         idol.aura_color = request.POST.get('aura_color', idol.aura_color)
         idol.specialty = request.POST.get('specialty', idol.specialty).strip()
         idol.welcome_message = request.POST.get('welcome_message', idol.welcome_message).strip()
-        
-        if 'photo' in request.FILES:
-            idol.photo = optimize_uploaded_image(request.FILES['photo'])
-        if 'banner' in request.FILES:
-            idol.banner = optimize_uploaded_image(request.FILES['banner'])
-            
+
+        custom_owner = request.POST.get('owner_username', '').strip()
+        if custom_owner:
+            idol.owner_username = custom_owner if custom_owner.startswith('@') else f"@{custom_owner}"
+
+        # Actualizar Retrato si se sube archivo o link
+        photo_file = request.FILES.get('photo')
+        photo_url = request.POST.get('photo_url', '').strip()
+        if not photo_file and photo_url:
+            photo_file = download_image_from_url(photo_url, default_filename=f"idol_{idol.id}_edit.webp")
+        if photo_file:
+            idol.photo = optimize_uploaded_image(photo_file)
+
+        # Actualizar Banner si se sube archivo o link
+        banner_file = request.FILES.get('banner')
+        banner_url = request.POST.get('banner_url', '').strip()
+        if not banner_file and banner_url:
+            banner_file = download_image_from_url(banner_url, default_filename=f"banner_{idol.id}_edit.webp")
+        if banner_file:
+            idol.banner = optimize_uploaded_image(banner_file)
+
         idol.save()
-        messages.success(request, f"¡Perfil de {idol.stage_name} actualizado!")
+        messages.success(request, f"✨ ¡Perfil de {idol.stage_name} actualizado con éxito!")
         return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
-        
+
     return render(request, 'idols/form.html', {'idol': idol, 'tg_id': tg_id})
 
 
@@ -404,30 +444,31 @@ def idol_detail(request, idol_id):
     tg_id = resolve_safe_tg(request)
     profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
     tg_username = request.GET.get('tg_username') or request.POST.get('tg_username') or (profile.username if profile else 'Noble')
-    
+    active_tab = request.GET.get('tab', 'muro')
+
     idol = get_object_or_404(IdolProfile, id=idol_id)
     reviews = idol.reviews.all()
     recent_posts = idol.posts.all().order_by('-created_at')[:6]
-    
+
     unlocked_ids = []
     if tg_id:
         unlocked_ids = list(PostUnlock.objects.filter(
             client_telegram_id=tg_id,
             post__idol=idol
         ).values_list('post_id', flat=True))
-        
         if tg_id == idol.telegram_user_id:
             unlocked_ids = list(recent_posts.values_list('id', flat=True))
 
     total_sales = PostUnlock.objects.filter(post__idol=idol).count()
     is_top_rated = (idol.rating >= 4.80 and idol.services_done >= 2)
     is_trending = (total_sales >= 3)
-    
+    is_admin = check_is_staff_or_admin(tg_id)
+    can_edit = bool(tg_id and (tg_id == idol.telegram_user_id or is_admin))
+
     if request.method == 'POST':
         try:
             rating_val = int(request.POST.get('rating', 5))
             comment_val = request.POST.get('comment', '').strip()
-            
             if not comment_val:
                 messages.error(request, "Debes escribir un comentario sobre la atención.")
             elif rating_val < 1 or rating_val > 5:
@@ -444,7 +485,6 @@ def idol_detail(request, idol_id):
                 )
                 grant_user_xp(request, tg_id, 15, reason="Reseña de Idol")
                 grant_user_xp(None, idol.telegram_user_id, 20 if rating_val == 5 else 10, reason="Calificación Recibida")
-                
                 send_telegram_msg(
                     chat_id=idol.telegram_user_id,
                     text=(
@@ -454,9 +494,10 @@ def idol_detail(request, idol_id):
                         f"💬 <i>«{comment_val}»</i>"
                     ),
                     button_text=f"🌹 Ver Perfil de {idol.stage_name}",
-                    button_url=f"https://kingdom-pleasure-app.onrender.com/idols/{idol.id}/?tg_id={idol.telegram_user_id}"
+                    button_url=f"https://kingdom-pleasure-app.onrender.com/idols/{idol.id}/?tg_id={idol.telegram_user_id}&tab=resenas"
                 )
                 messages.success(request, "¡Tu reseña fue publicada con éxito (+15 EXP)!")
+                return redirect(f'/idols/{idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}&tab=resenas')
         except Exception as e:
             messages.error(request, f"Error al procesar reseña: {str(e)}")
 
@@ -472,6 +513,8 @@ def idol_detail(request, idol_id):
         'total_sales': total_sales,
         'tg_id': tg_id,
         'tg_username': tg_username,
+        'can_edit': can_edit,
+        'active_tab': active_tab,
     }
     return render(request, 'idols/detail.html', context)
 
