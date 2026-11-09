@@ -1554,6 +1554,16 @@ def scratch_card_play_ajax(request):
             'error': f'Oro insuficiente. El cartón cuesta {cost} 🪙 y posees {wallet.balance} 🪙.'
         }, status=400)
 
+    # Colores visuales para cada símbolo en el cartón
+    symbol_colors = {
+        'grape': '#a855f7',
+        'cherry': '#f43f5e',
+        'coin': '#eab308',
+        'star': '#fbbf24',
+        'diamond': '#38bdf8',
+        'crown': '#f59e0b',
+    }
+
     with transaction.atomic():
         # Cobrar cartón y alimentar Cofre del Mecenas (8%)
         wallet.remove_funds(cost)
@@ -1573,6 +1583,8 @@ def scratch_card_play_ajax(request):
         symbols_keys = list(SCRATCH_SYMBOLS.keys())
         weights = [SCRATCH_SYMBOLS[k]["weight"] for k in symbols_keys]
         winning_key = None
+
+        serial_code = f"{random.randint(100000, 999999)}"
 
         if is_win:
             winning_key = random.choices(symbols_keys, weights=weights, k=1)[0]
@@ -1611,6 +1623,7 @@ def scratch_card_play_ajax(request):
             cells = [{
                 'symbol': SCRATCH_SYMBOLS[k]['symbol'],
                 'name': SCRATCH_SYMBOLS[k]['name'],
+                'color': symbol_colors.get(k, '#fbbf24'),
                 'key': k,
                 'is_winner': (k == winning_key)
             } for k in grid]
@@ -1619,10 +1632,14 @@ def scratch_card_play_ajax(request):
                 'success': True,
                 'is_win': True,
                 'win_amount': win_amount,
+                'payout': win_amount,
                 'winning_symbol': SCRATCH_SYMBOLS[winning_key]['symbol'],
                 'winning_name': SCRATCH_SYMBOLS[winning_key]['name'],
                 'winning_mult': SCRATCH_SYMBOLS[winning_key]['mult'],
+                'grid': cells,
                 'cells': cells,
+                'serial': serial_code,
+                'balance_after_cost': balance_after_cost,
                 'new_balance': wallet.balance,
                 'patron_vault': wallet.patron_vault,
                 'message': f'🎉 ¡Enhorabuena! Has alineado 3 {SCRATCH_SYMBOLS[winning_key]["symbol"]} y cobrado +{win_amount} 🪙.'
@@ -1642,6 +1659,7 @@ def scratch_card_play_ajax(request):
             cells = [{
                 'symbol': SCRATCH_SYMBOLS[k]['symbol'],
                 'name': SCRATCH_SYMBOLS[k]['name'],
+                'color': symbol_colors.get(k, '#fbbf24'),
                 'key': k,
                 'is_winner': False
             } for k in grid]
@@ -1650,7 +1668,11 @@ def scratch_card_play_ajax(request):
                 'success': True,
                 'is_win': False,
                 'win_amount': 0,
+                'payout': 0,
+                'grid': cells,
                 'cells': cells,
+                'serial': serial_code,
+                'balance_after_cost': balance_after_cost,
                 'new_balance': wallet.balance,
                 'patron_vault': wallet.patron_vault,
                 'message': f'💀 Sin suerte esta vez. Tu cartón no obtuvo trío. El 8% ({int(round(cost * 0.08))} 🪙) pasó a tu Cofre del Mecenas.'

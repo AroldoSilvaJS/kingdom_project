@@ -261,20 +261,22 @@ function playScratchSound() {
 
             currentTicketData = data;
 
-            // ✅ Anti-Spoiler: Solo descuenta el costo en el saldo visual inicial
+            // Saldo visual inicial
             currentDisplayedBalance = data.balance_after_cost !== undefined ? data.balance_after_cost : (currentDisplayedBalance - tierCosts[activeTier]);
             document.getElementById('user-balance').innerText = currentDisplayedBalance;
-            document.getElementById('ticket-serial').innerText = `#${data.serial}`;
+            document.getElementById('ticket-serial').innerText = `#${data.serial || '777'}`;
 
-            // Llenar cuadrícula oculta
+            // Llenar cuadrícula oculta (soporta tanto data.grid como data.cells)
             const gridContainer = document.getElementById('grid-container');
             gridContainer.innerHTML = '';
-            data.grid.forEach(cell => {
+            const cellsList = data.grid || data.cells || [];
+            
+            cellsList.forEach(cell => {
                 const cellEl = document.createElement('div');
                 cellEl.className = `flex flex-col items-center justify-center rounded-xl p-1 bg-black/60 border border-white/10 ${cell.is_winner ? 'win-pulse-cell' : ''}`;
                 cellEl.innerHTML = `
                     <span class="text-2xl">${cell.symbol}</span>
-                    <span class="text-[7.5px] font-mono uppercase font-bold truncate mt-0.5" style="color: ${cell.color};">${cell.name}</span>
+                    <span class="text-[7.5px] font-mono uppercase font-bold truncate mt-0.5" style="color: ${cell.color || '#fbbf24'};">${cell.name}</span>
                 `;
                 gridContainer.appendChild(cellEl);
             });
@@ -289,7 +291,8 @@ function playScratchSound() {
 
             try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
         } catch(err) {
-            alert('Error de conexión con la Corona.');
+            console.error("Error al procesar raspe:", err);
+            alert('Error al inicializar el cartón.');
             btn.disabled = false;
             btn.innerHTML = `Comprar Billete (${tierCosts[activeTier]} 🪙)`;
         }
