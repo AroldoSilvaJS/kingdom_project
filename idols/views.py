@@ -1802,29 +1802,33 @@ def photocard_fusion(request):
             messages.error(request, err)
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
+        try:
+            card_ids = [int(cid) for cid in raw_card_ids if str(cid).isdigit()]
+        except ValueError:
+            card_ids = []
+
+        req_single = recipe['required_count']
+        if len(card_ids) == 0 or len(card_ids) % req_single != 0:
+            err = f"Debes seleccionar cartas en múltiplos de {req_single} para esta transmutación."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
+        batch_count = len(card_ids) // req_single
+        total_cost = recipe['cost'] * batch_count
+
+        if wallet.balance < total_cost:
+            err = f"No tienes suficiente oro en tu Bóveda ({total_cost} 🪙 necesarios para {batch_count} transmutación{'es' if batch_count > 1 else ''})."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
+
         target_rarity = recipe['target_rarity']
         target_pool_exists = Photocard.objects.filter(rarity=target_rarity).exists()
         luck_pool_exists = Photocard.objects.filter(rarity=recipe['luck_target']).exists()
 
         if not target_pool_exists and not luck_pool_exists:
             err = f"⚠️ La Corona aún no ha forjado Photocards de rareza {target_rarity.upper()}."
-            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-            messages.error(request, err)
-            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
-
-        if wallet.balance < recipe['cost']:
-            err = f"No tienes suficiente oro ({recipe['cost']} 🪙 necesarios)."
-            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-            messages.error(request, err)
-            return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
-
-        try:
-            card_ids = [int(cid) for cid in raw_card_ids if str(cid).isdigit()]
-        except ValueError:
-            card_ids = []
-
-        if len(card_ids) != recipe['required_count']:
-            err = f"Debes seleccionar exactamente {recipe['required_count']} cartas para esta transmutación."
             if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
             messages.error(request, err)
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
@@ -1837,12 +1841,13 @@ def photocard_fusion(request):
                 photocard__rarity=recipe['source_rarity']
             ).select_related('photocard'))
 
-            if len(selected_cards) != recipe['required_count']:
-                err = "Algunas cartas seleccionadas ya no están disponibles, están a la venta o no coinciden en rareza."
+            if len(selected_cards) != len(card_ids):
+                err = "Algunas cartas seleccionadas ya no están disponibles, están en venta o no coinciden en rareza."
                 if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
                 messages.error(request, err)
                 return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
+            # Proteger siempre al menos 1 copia de cada carta en el álbum
             sacrificed_counts = Counter(c.photocard_id for c in selected_cards)
             for pid, count in sacrificed_counts.items():
                 total_owned = UserPhotocard.objects.filter(
@@ -1855,29 +1860,8 @@ def photocard_fusion(request):
                     messages.error(request, err)
                     return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
-            luck_prob = recipe['luck_chance']
-            if pet and pet.species == 'rabbit':
-                rabbit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
-                luck_prob += rabbit_bonus
+            wallet.remove_funds(total_cost)
 
-            roll = random.random()
-            is_lucky_jump = False
-
-            if roll < luck_prob and luck_pool_exists:
-                awarded_rarity = recipe['luck_target']
-                is_lucky_jump = True
-            elif target_pool_exists:
-                awarded_rarity = recipe['target_rarity']
-            else:
-                awarded_rarity = recipe['source_rarity']
-
-            pool = list(Photocard.objects.filter(rarity=awarded_rarity))
-            if not pool:
-                pool = list(Photocard.objects.filter(rarity=recipe['source_rarity']))
-                if not pool:
-                    pool = list(Photocard.objects.all())
-
-            wallet.remove_funds(recipe['cost'])
             consumed_ids = [c.id for c in selected_cards]
             PhotocardTrade.objects.filter(sender_card_id__in=consumed_ids, status='pending').update(status='cancelled')
             PhotocardTrade.objects.filter(receiver_card_id__in=consumed_ids, status='pending').update(status='cancelled')
@@ -1888,38 +1872,74 @@ def photocard_fusion(request):
                 .values_list('photocard_id', flat=True)
             )
 
-            unowned_in_pool = [c for c in pool if c.id not in currently_owned_card_ids]
+            luck_prob_base = recipe['luck_chance']
+            if pet and pet.species == 'rabbit':
+                rabbit_bonus = {1: 0.03, 2: 0.06, 3: 0.10}.get(pet.evolution_stage_number, 0.03)
+                luck_prob_base += rabbit_bonus
 
-            if unowned_in_pool:
-                new_card = random.choice(unowned_in_pool)
-                is_new_discovery = True
-            else:
-                new_card = random.choice(pool)
-                is_new_discovery = False
-
-            new_user_card = UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=new_card)
-
+            forged_cards = []
             xp_map = {'rare': 15, 'epic': 30, 'legendary': 60}
-            grant_user_xp(request, tg_id, xp_map.get(new_card.rarity, 20), reason="Alquimia de Photocards")
+            total_earned_xp = 0
+
+            for _ in range(batch_count):
+                roll = random.random()
+                is_lucky_jump = False
+
+                if roll < luck_prob_base and luck_pool_exists:
+                    awarded_rarity = recipe['luck_target']
+                    is_lucky_jump = True
+                elif target_pool_exists:
+                    awarded_rarity = recipe['target_rarity']
+                else:
+                    awarded_rarity = recipe['source_rarity']
+
+                pool = list(Photocard.objects.filter(rarity=awarded_rarity))
+                if not pool:
+                    pool = list(Photocard.objects.filter(rarity=recipe['source_rarity']))
+                    if not pool:
+                        pool = list(Photocard.objects.all())
+
+                unowned_in_pool = [c for c in pool if c.id not in currently_owned_card_ids]
+
+                if unowned_in_pool:
+                    new_card = random.choice(unowned_in_pool)
+                    is_new_discovery = True
+                else:
+                    new_card = random.choice(pool)
+                    is_new_discovery = False
+
+                currently_owned_card_ids.add(new_card.id)
+                new_user_card = UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=new_card)
+
+                earned_xp = xp_map.get(new_card.rarity, 20)
+                total_earned_xp += earned_xp
+                grant_user_xp(request, tg_id, earned_xp, reason="Alquimia de Photocards")
+
+                forged_cards.append({
+                    'id': new_user_card.id,
+                    'name': new_card.name,
+                    'idol_name': new_card.display_idol_name,
+                    'rarity': new_card.rarity,
+                    'rarity_display': new_card.get_rarity_display(),
+                    'color': new_card.get_color_hex(),
+                    'image_url': new_card.image.url if new_card.image else '',
+                    'is_new': is_new_discovery,
+                    'is_lucky': is_lucky_jump
+                })
 
             if is_ajax:
                 return JsonResponse({
                     'success': True,
-                    'is_lucky': is_lucky_jump,
-                    'is_new': is_new_discovery,
+                    'batch_count': batch_count,
                     'nuevo_saldo': wallet.balance,
-                    'card': {
-                        'id': new_user_card.id,
-                        'name': new_card.name,
-                        'idol_name': new_card.display_idol_name,
-                        'rarity': new_card.rarity,
-                        'rarity_display': new_card.get_rarity_display(),
-                        'color': new_card.get_color_hex(),
-                        'image_url': new_card.image.url if new_card.image else ''
-                    }
+                    'total_xp': total_earned_xp,
+                    'cards': forged_cards,
+                    'card': forged_cards[0],
+                    'is_new': any(c['is_new'] for c in forged_cards),
+                    'is_lucky': any(c['is_lucky'] for c in forged_cards)
                 })
 
-            messages.success(request, f"✨ ¡Alquimia completada! Obtuviste «{new_card.name}» ({new_card.get_rarity_display()}).")
+            messages.success(request, f"✨ ¡Alquimia completada! Obtuviste {len(forged_cards)} nuevas photocards.")
             return redirect(f'/idols/photocards/fusion/?tg_id={tg_id}')
 
     all_user_cards = UserPhotocard.objects.filter(
@@ -1950,6 +1970,7 @@ def photocard_fusion(request):
         'rares': rares,
         'epics': epics,
         'legendaries': legendaries,
+        'total_duplicates': len(duplicate_cards),
     })
 
 

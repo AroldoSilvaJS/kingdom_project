@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="flex flex-col gap-4 mt-2 pb-40 max-w-md mx-auto">
+<div class="flex flex-col gap-4 mt-2 pb-44 max-w-md mx-auto select-none">
     
     <!-- SUB-NAV SUPERIOR -->
     <div class="grid grid-cols-4 gap-1 bg-black/60 p-1 rounded-2xl border border-vip-gold/30 text-[10px] font-bold text-center shadow-lg">
@@ -11,28 +11,55 @@
         <button type="button" class="py-2 rounded-xl bg-gradient-to-r from-purple-900 via-fuchsia-900 to-purple-900 text-purple-200 border border-purple-400 font-black shadow">🔮 Caldero</button>
     </div>
 
-    <!-- BANNER HERO DEL CALDERO -->
-    <div class="vip-panel p-5 text-center relative overflow-hidden border border-purple-500/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#220738] via-[#0d0217] to-black">
-        <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-fuchsia-600/25 rounded-full blur-3xl pointer-events-none"></div>
+    <!-- EL CALDERO MÍSTICO & RANURAS DE OFRENDA (SLOTS) -->
+    <div class="vip-panel p-5 text-center relative overflow-hidden border border-purple-500/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#24063d] via-[#0d0218] to-black">
+        <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-52 h-52 bg-fuchsia-600/30 rounded-full blur-3xl pointer-events-none"></div>
 
         <div class="relative z-10 flex flex-col items-center">
-            <div class="w-14 h-14 rounded-2xl bg-purple-950/80 border border-purple-400/60 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(168,85,247,0.4)] mb-2 animate-bounce">
-                🔮
+            
+            <div class="flex items-center justify-between w-full mb-2">
+                <span class="text-[9.5px] font-mono uppercase font-black tracking-widest text-purple-300 bg-purple-950/80 border border-purple-500/40 px-3 py-0.5 rounded-full">
+                    Alquimia Imperial 🔮
+                </span>
+                <div class="inline-flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3 py-0.5 rounded-full text-xs font-mono font-bold text-yellow-400 shadow-inner">
+                    <span>🪙 Bóveda:</span> <span id="fusion-gold" class="text-white font-black">{{ wallet.balance|default:0 }}</span>
+                </div>
             </div>
-            <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
-                El Caldero Real
-            </h1>
-            <p class="text-[11px] text-stone-300 mt-1 max-w-[280px]">
-                Funde tus cartas repetidas. <strong>¡El Caldero prioriza entregarte cartas que NO tengas en tu álbum!</strong>
-            </p>
 
-            <div class="mt-2.5 inline-flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3.5 py-1 rounded-full text-xs font-mono font-bold text-yellow-400 shadow-inner">
-                <span>🪙 Bóveda:</span> <span id="fusion-gold" class="text-white font-black">{{ wallet.balance }}</span> 🪙
+            <!-- ILUSTRACIÓN DEL CALDERO Y PEDESTALES FLOTANTES -->
+            <div class="relative w-full my-1 flex flex-col items-center">
+                
+                <!-- Caldero Mágico Central Animado -->
+                <div id="main-cauldron-pot" class="relative w-28 h-28 rounded-full flex items-center justify-center transition-all duration-500">
+                    <div id="cauldron-liquid-glow" class="absolute inset-0 rounded-full bg-purple-600/40 blur-xl animate-pulse"></div>
+                    <div class="w-24 h-24 rounded-full bg-gradient-to-b from-purple-900 via-black to-[#1a032c] border-2 border-purple-400/80 shadow-[0_0_35px_rgba(168,85,247,0.6)] flex items-center justify-center relative overflow-hidden">
+                        <div class="absolute inset-x-2 top-2 h-6 bg-gradient-to-b from-fuchsia-400/40 to-transparent rounded-t-full animate-pulse"></div>
+                        <span class="text-4xl filter drop-shadow animate-bounce">🏺</span>
+                    </div>
+                </div>
+
+                <!-- RANURAS DE OFRENDA (SLOTS) FLOTANTES -->
+                <div class="w-full mt-3">
+                    <div class="flex items-center justify-between px-1 mb-1.5">
+                        <span class="text-[10px] font-mono text-stone-300 font-bold uppercase tracking-wider">
+                            Ranuras de Sacrificio:
+                        </span>
+                        <span id="slots-count-display" class="text-[10px] font-mono font-bold text-yellow-400">
+                            0 / 4 colocadas
+                        </span>
+                    </div>
+                    
+                    <div id="cauldron-slots-rack" class="flex items-center justify-center gap-2 overflow-x-auto py-1">
+                        <!-- Las ranuras se renderizan dinámicamente -->
+                    </div>
+                </div>
+
             </div>
+
         </div>
     </div>
 
-    <!-- SELECTOR DE RECETA: 4 RAREZAS (INCLUYENDO LEGENDARIAS) -->
+    <!-- SELECTOR DE RECETA: 4 RAREZAS -->
     <div class="grid grid-cols-4 gap-1 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl text-[9.5px] font-bold uppercase text-center shadow-inner">
         <button type="button" onclick="switchRecipe('common')" id="btn-tab-common" 
                 class="py-2.5 rounded-xl bg-vip-gold text-black font-black recipe-tab-btn shadow transition-all">
@@ -52,36 +79,54 @@
         </button>
     </div>
 
-    <!-- RESUMEN DE LA RECETA ACTIVA -->
-    <div class="bg-black/70 border border-white/10 p-3.5 rounded-2xl flex items-center justify-between text-xs shadow" id="recipe-summary-box">
-        <div class="flex flex-col">
-            <span class="font-bold text-white text-xs" id="recipe-title">Transmutación Común ➔ Rara 🔵</span>
-            <span class="text-[10px] text-stone-400 mt-0.5" id="recipe-desc">Sacrifica 4 comunes para forjar 1 Rara garantizada (prioriza nueva).</span>
+    <!-- RESUMEN DE RECETA + SELECTOR DE MULTI-FUSIÓN (X1 / X2 / X3 / X5) -->
+    <div class="bg-black/80 border border-white/10 p-3.5 rounded-2xl flex flex-col gap-2.5 shadow">
+        <div class="flex items-center justify-between text-xs">
+            <div class="flex flex-col min-w-0 pr-2">
+                <span class="font-bold text-white text-xs" id="recipe-title">Transmutación Común ➔ Rara 🔵</span>
+                <span class="text-[10px] text-stone-400 mt-0.5 line-clamp-1" id="recipe-desc">Funde 4 comunes para forjar 1 Rara garantizada (prioriza carta nueva).</span>
+            </div>
+            <span class="font-mono text-xs font-black text-yellow-400 bg-black border border-yellow-500/40 px-2.5 py-1 rounded-xl shadow-inner flex-shrink-0" id="recipe-cost">
+                35 🪙
+            </span>
         </div>
-        <span class="font-mono text-xs font-black text-yellow-400 bg-black/80 border border-yellow-500/40 px-2.5 py-1 rounded-xl shadow-inner" id="recipe-cost">
-            35 🪙
-        </span>
+
+        <!-- SELECTOR DE LOTE MULTI-FUSIÓN -->
+        <div class="flex items-center justify-between pt-2 border-t border-white/5">
+            <span class="text-[10.5px] font-mono text-stone-400 font-bold uppercase">Lote de Fusión:</span>
+            <div class="flex items-center gap-1 bg-black/90 p-1 rounded-xl border border-white/10 text-[9.5px] font-mono font-bold">
+                <button type="button" onclick="setBatchCount(1)" id="batch-btn-1" class="px-2.5 py-1 rounded-lg bg-purple-600 text-white font-black shadow">x1</button>
+                <button type="button" onclick="setBatchCount(2)" id="batch-btn-2" class="px-2.5 py-1 rounded-lg text-stone-400 hover:text-white">x2</button>
+                <button type="button" onclick="setBatchCount(3)" id="batch-btn-3" class="px-2.5 py-1 rounded-lg text-stone-400 hover:text-white">x3</button>
+                <button type="button" onclick="setBatchCount(5)" id="batch-btn-5" class="px-2.5 py-1 rounded-lg text-stone-400 hover:text-white">x5</button>
+            </div>
+        </div>
     </div>
 
-    <!-- SELECCIÓN DE CARTAS REPETIDAS -->
-    <div class="flex flex-col gap-2">
+    <!-- SELECCIÓN DE CARTAS REPETIDAS + BOTÓN AUTO-LLENAR -->
+    <div class="flex flex-col gap-2.5">
         <div class="flex justify-between items-center px-1">
             <span class="text-xs font-bold text-stone-300 uppercase tracking-wider">
-                Selecciona tus cartas a sacrificar:
+                Tus Cartas Repetidas:
             </span>
-            <span class="text-[10px] font-mono font-bold text-purple-300" id="selection-counter">0 / 4 seleccionadas</span>
+            
+            <!-- BOTÓN AUTO-LLENAR REPETIDAS -->
+            <button type="button" onclick="autoFillCards()" 
+                    class="btn-gold text-[10px] font-black uppercase px-3 py-1 rounded-full flex items-center gap-1 shadow active:scale-95 transition-all">
+                <span>⚡</span> <span>Auto-Llenar</span>
+            </button>
         </div>
 
         <!-- 1. Cuadrícula Comunes -->
         <div id="grid-common" class="grid grid-cols-3 gap-2.5 cards-pool-grid">
             {% for c in commons %}
-            <div onclick="toggleCardSelection(this, {{ c.id }})" 
+            <div onclick="toggleCardSelection(this, {{ c.id }}, '{{ c.photocard.image.url }}', '{{ c.photocard.name|escapejs }}')" 
                  class="selectable-card relative aspect-[5/7.2] rounded-2xl overflow-hidden border-2 border-stone-600 bg-black cursor-pointer shadow-lg active:scale-95 transition-all select-none group"
-                 data-id="{{ c.id }}" data-tier="common">
+                 data-id="{{ c.id }}" data-tier="common" data-img="{{ c.photocard.image.url }}" data-name="{{ c.photocard.name }}">
                 <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
                 <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
                 <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-purple-600 border border-white text-white flex items-center justify-center text-xs font-black shadow-lg animate-bounce">✓</div>
-                <div class="absolute bottom-1 inset-x-1 bg-black/80 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">
+                <div class="absolute bottom-1 inset-x-1 bg-black/85 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">
                     {{ c.photocard.name }}
                 </div>
             </div>
@@ -95,13 +140,13 @@
         <!-- 2. Cuadrícula Raras -->
         <div id="grid-rare" class="hidden grid grid-cols-3 gap-2.5 cards-pool-grid">
             {% for c in rares %}
-            <div onclick="toggleCardSelection(this, {{ c.id }})" 
+            <div onclick="toggleCardSelection(this, {{ c.id }}, '{{ c.photocard.image.url }}', '{{ c.photocard.name|escapejs }}')" 
                  class="selectable-card relative aspect-[5/7.2] rounded-2xl overflow-hidden border-2 border-blue-500 bg-black cursor-pointer shadow-lg active:scale-95 transition-all select-none group"
-                 data-id="{{ c.id }}" data-tier="rare">
+                 data-id="{{ c.id }}" data-tier="rare" data-img="{{ c.photocard.image.url }}" data-name="{{ c.photocard.name }}">
                 <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
                 <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
                 <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-blue-600 border border-white text-white flex items-center justify-center text-xs font-black shadow-lg animate-bounce">✓</div>
-                <div class="absolute bottom-1 inset-x-1 bg-black/80 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">
+                <div class="absolute bottom-1 inset-x-1 bg-black/85 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">
                     {{ c.photocard.name }}
                 </div>
             </div>
@@ -115,13 +160,13 @@
         <!-- 3. Cuadrícula Épicas -->
         <div id="grid-epic" class="hidden grid grid-cols-3 gap-2.5 cards-pool-grid">
             {% for c in epics %}
-            <div onclick="toggleCardSelection(this, {{ c.id }})" 
-                 class="selectable-card relative aspect-[5/7.2] rounded-2xl overflow-hidden border-2 border-purple-500 bg-black cursor-pointer shadow-lg active:scale-95 transition-all select-none group holo-card"
-                 data-id="{{ c.id }}" data-tier="epic">
+            <div onclick="toggleCardSelection(this, {{ c.id }}, '{{ c.photocard.image.url }}', '{{ c.photocard.name|escapejs }}')" 
+                 class="selectable-card relative aspect-[5/7.2] rounded-2xl overflow-hidden border-2 border-purple-500 bg-black cursor-pointer shadow-lg active:scale-95 transition-all select-none group"
+                 data-id="{{ c.id }}" data-tier="epic" data-img="{{ c.photocard.image.url }}" data-name="{{ c.photocard.name }}">
                 <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
                 <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
                 <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-purple-600 border border-white text-white flex items-center justify-center text-xs font-black shadow-lg animate-bounce">✓</div>
-                <div class="absolute bottom-1 inset-x-1 bg-black/80 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">
+                <div class="absolute bottom-1 inset-x-1 bg-black/85 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">
                     {{ c.photocard.name }}
                 </div>
             </div>
@@ -132,80 +177,278 @@
             {% endfor %}
         </div>
 
-        <!-- 4. Cuadrícula Legendarias (¡NUEVA!) -->
+        <!-- 4. Cuadrícula Legendarias -->
         <div id="grid-legendary" class="hidden grid grid-cols-3 gap-2.5 cards-pool-grid">
             {% for c in legendaries %}
-            <div onclick="toggleCardSelection(this, {{ c.id }})" 
-                 class="selectable-card relative aspect-[5/7.2] rounded-2xl overflow-hidden border-2 border-yellow-400 bg-black cursor-pointer shadow-lg active:scale-95 transition-all select-none group holo-card"
-                 data-id="{{ c.id }}" data-tier="legendary">
+            <div onclick="toggleCardSelection(this, {{ c.id }}, '{{ c.photocard.image.url }}', '{{ c.photocard.name|escapejs }}')" 
+                 class="selectable-card relative aspect-[5/7.2] rounded-2xl overflow-hidden border-2 border-yellow-500 bg-black cursor-pointer shadow-lg active:scale-95 transition-all select-none group"
+                 data-id="{{ c.id }}" data-tier="legendary" data-img="{{ c.photocard.image.url }}" data-name="{{ c.photocard.name }}">
                 <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
                 <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
-                <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-yellow-400 border border-black text-black flex items-center justify-center text-xs font-black shadow-lg animate-bounce">✓</div>
-                <div class="absolute bottom-1 inset-x-1 bg-black/80 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-yellow-300 font-black border border-yellow-500/40">
+                <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-yellow-500 border border-black text-black flex items-center justify-center text-xs font-black shadow-lg animate-bounce">✓</div>
+                <div class="absolute bottom-1 inset-x-1 bg-black/85 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">
                     {{ c.photocard.name }}
                 </div>
             </div>
             {% empty %}
             <div class="col-span-3 text-center py-8 text-stone-500 text-xs bg-black/40 rounded-2xl border border-white/5">
-                No tienes cartas Legendarias repetidas para transmutar.
+                No tienes cartas Legendarias repetidas para sacrificar.
             </div>
             {% endfor %}
         </div>
     </div>
 
-    <!-- BOTÓN DE INICIAR ALQUIMIA -->
-    <button type="button" id="btn-do-fusion" onclick="executeFusion()" disabled
-            class="btn-gold py-4 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-all opacity-40 cursor-not-allowed mt-2">
-        <span>🔮</span> <span>Encender Caldero Alquímico</span>
-    </button>
+    <!-- BOTÓN FLOTANTE INFERIOR DE ACCIÓN -->
+    <div class="fixed bottom-6 inset-x-4 max-w-md mx-auto z-40">
+        <button type="button" id="btn-do-fusion" onclick="startFusionRitual()" disabled
+                class="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-800 via-fuchsia-700 to-purple-800 border-2 border-purple-400 text-white font-black text-xs uppercase tracking-widest shadow-[0_0_35px_rgba(168,85,247,0.5)] opacity-40 cursor-not-allowed active:scale-95 transition-all flex items-center justify-center gap-2">
+            <span>🔮</span> <span>Selecciona las cartas de la ofrenda</span>
+        </button>
+    </div>
 
 </div>
 
-<!-- 🌟 MODAL CINEMATOGRÁFICO DE TRANSMUTACIÓN -->
-<div id="fusion-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 select-none">
-    <div class="w-full max-w-sm bg-gradient-to-b from-[#2a0e4a] via-[#10041f] to-black border-2 border-purple-400 rounded-3xl p-6 shadow-[0_0_60px_rgba(168,85,247,0.5)] flex flex-col items-center text-center relative overflow-hidden">
+<!-- 🔮 MODAL DE ANIMACIÓN CINEMÁTICA DEL RITUAL ALQUÍMICO -->
+<div id="fusion-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-3 select-none overflow-y-auto">
+    
+    <canvas id="fusion-canvas" class="absolute inset-0 pointer-events-none z-40"></canvas>
+
+    <div class="w-full max-w-sm bg-gradient-to-b from-[#220738] via-[#0b0214] to-black border-2 border-purple-500/70 rounded-3xl p-5 shadow-[0_0_80px_rgba(168,85,247,0.5)] flex flex-col items-center relative overflow-hidden my-auto">
         
-        <span class="text-[10px] font-mono font-bold uppercase tracking-widest px-3.5 py-1 rounded-full border mb-2 shadow" id="f-modal-tag">
-            ¡Transmutación Consumada!
-        </span>
+        <button id="fusion-close-btn" onclick="closeFusionModal()" class="absolute top-3.5 right-3.5 text-stone-400 hover:text-white text-2xl z-50 transition-transform active:scale-90">&times;</button>
 
-        <h3 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest mb-0.5 leading-tight" id="f-modal-name">
-            Nombre Carta
-        </h3>
-        <p class="text-xs text-yellow-300 font-bold mb-3" id="f-modal-idol">Idol</p>
+        <!-- FASE 1 & 2: EL CALDERO EN EBULLICIÓN Y DESINTEGRACIÓN -->
+        <div id="ritual-phase-boiling" class="w-full flex flex-col items-center py-6">
+            <span class="text-[10px] font-mono uppercase font-black tracking-widest text-purple-300 bg-purple-950/80 border border-purple-400/50 px-3 py-1 rounded-full mb-3">
+                Ritual Alquímico en Proceso 🔮
+            </span>
+            <h3 class="font-serif text-base font-black text-gold-gradient uppercase tracking-wider text-center">
+                Fundiendo Esencia Mágica
+            </h3>
+            <p id="ritual-status-msg" class="text-[11px] text-stone-400 font-mono mt-1 mb-8 text-center">
+                Las cartas se desintegran en el caldero...
+            </p>
 
-        <!-- Carta Revelada con Bisel y Sombra Neón -->
-        <div class="w-48 h-64 rounded-2xl border-4 overflow-hidden shadow-2xl bg-black relative mb-4 transition-transform duration-500" id="f-modal-card-box">
-            <img id="f-modal-img" src="" class="w-full h-full object-cover">
+            <!-- Caldero Hirviendo con Rayos -->
+            <div class="relative w-40 h-40 flex items-center justify-center my-3">
+                <div id="ritual-aura-glow" class="absolute inset-0 rounded-full bg-purple-600/50 blur-2xl animate-pulse"></div>
+                <div id="ritual-pot-shake" class="relative z-10 w-32 h-32 rounded-full bg-gradient-to-b from-purple-900 via-black to-[#1a032c] border-4 border-purple-400 shadow-[0_0_50px_rgba(168,85,247,0.8)] flex items-center justify-center">
+                    <span class="text-6xl filter drop-shadow">🏺</span>
+                </div>
+            </div>
+
+            <!-- Barra de Energía Alquímica -->
+            <div class="w-48 h-2 bg-black/80 rounded-full border border-purple-500/40 overflow-hidden mt-6">
+                <div id="ritual-progress-bar" class="h-full bg-gradient-to-r from-purple-500 via-fuchsia-400 to-yellow-400 w-0 transition-all duration-1000"></div>
+            </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-2.5 w-full mt-1">
-            <button type="button" onclick="stayInFusion()" 
-                    class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all">
-                🔮 Seguir Fundiendo
-            </button>
-            <button type="button" onclick="goToAlbum()" 
-                    class="bg-purple-950 border border-purple-500 text-purple-200 hover:bg-purple-900 py-3 rounded-xl text-xs font-bold uppercase tracking-wider active:scale-95 transition-all">
-                📖 Ver Álbum
-            </button>
+        <!-- FASE 3: REVELACIÓN GLORIOSA DE LA CARTA FORJADA (CARD FLIP 3D) -->
+        <div id="ritual-phase-reveal" class="hidden w-full flex flex-col items-center py-2 relative z-30">
+            
+            <span class="text-[10px] font-mono uppercase font-black tracking-widest px-3.5 py-1 rounded-full border mb-2 shadow" id="f-modal-tag">
+                ¡Transmutación Exitosa! ✨
+            </span>
+
+            <p class="text-xs text-yellow-300 font-bold mb-3 font-serif" id="f-modal-idol">Idol</p>
+
+            <!-- CARTA CON EFECTO CARD FLIP 3D -->
+            <div class="w-52 h-72 [perspective:1000px] mb-3">
+                <div id="f-card-flipper" class="w-full h-full relative transition-transform duration-700 [transform-style:preserve-3d]">
+                    
+                    <!-- REVERSO (BOCA ABAJO ANTES DEL FLIP) -->
+                    <div class="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#1b082e] via-black to-[#130322] border-2 border-purple-500 flex flex-col items-center justify-center shadow-2xl [backface-visibility:hidden]">
+                        <span class="text-4xl filter drop-shadow">🔮</span>
+                        <span class="text-[10px] uppercase font-black tracking-widest text-vip-gold mt-2">Kingdom</span>
+                        <span class="text-[8px] font-mono text-purple-300 mt-0.5">Alquimia Imperial</span>
+                    </div>
+
+                    <!-- ANVERSO (REVELADA) -->
+                    <div id="f-card-front" class="absolute inset-0 rounded-2xl border-4 overflow-hidden shadow-2xl bg-black flex flex-col justify-between [transform:rotateY(180deg)] [backface-visibility:hidden]">
+                        <img id="f-modal-img" src="" class="w-full h-full object-cover">
+                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent pointer-events-none"></div>
+                        <div class="absolute bottom-2.5 inset-x-2.5 text-center bg-black/85 backdrop-blur-md py-2 px-2 rounded-xl border border-white/10">
+                            <h4 class="font-serif text-xs font-black text-white leading-tight truncate" id="f-modal-name">Nombre</h4>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- CUADRÍCULA MULTI-FUSIÓN (SI SE FUNDIERON VARIAS) -->
+            <div id="f-multi-batch-row" class="hidden w-full flex gap-2 overflow-x-auto no-scrollbar py-1 px-1 mb-2">
+                <!-- Se inyectan las demás cartas si batch_count > 1 -->
+            </div>
+
+            <div class="grid grid-cols-2 gap-2.5 w-full mt-2">
+                <button type="button" onclick="stayInFusion()" 
+                        class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow active:scale-95 transition-all">
+                    🔮 Seguir Fundiendo
+                </button>
+                <button type="button" onclick="goToAlbum()" 
+                        class="bg-purple-950 border border-purple-500 text-purple-200 hover:bg-purple-900 py-3 rounded-xl text-xs font-bold uppercase tracking-wider active:scale-95 transition-all">
+                    📖 Ver Álbum
+                </button>
+            </div>
         </div>
+
     </div>
 </div>
 
+<style>
+    @keyframes potShakeAnim {
+        0%, 100% { transform: translate(0, 0) rotate(0deg); }
+        20% { transform: translate(-4px, 3px) rotate(-5deg); }
+        40% { transform: translate(4px, -3px) rotate(5deg); }
+        60% { transform: translate(-3px, 2px) rotate(-3deg); }
+        80% { transform: translate(3px, -2px) rotate(3deg); }
+    }
+    .pot-shaking {
+        animation: potShakeAnim 0.3s infinite ease-in-out;
+    }
+</style>
+
 <script>
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let fusionAudioCtx = null;
+
+    function getAudioCtx() {
+        if (!fusionAudioCtx) fusionAudioCtx = new AudioCtx();
+        if (fusionAudioCtx.state === 'suspended') fusionAudioCtx.resume();
+        return fusionAudioCtx;
+    }
+
+    function playBubblingSound() {
+        try {
+            const ctx = getAudioCtx();
+            for (let i = 0; i < 8; i++) {
+                setTimeout(() => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(220 + Math.random() * 320, ctx.currentTime);
+                    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.08);
+                }, i * 90);
+            }
+        } catch(e) {}
+    }
+
+    function playMagicFanfare(colorHex) {
+        try {
+            const ctx = getAudioCtx();
+            [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, ctx.currentTime + (idx * 0.09));
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + (idx * 0.09));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (idx * 0.09) + 0.45);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (idx * 0.09));
+                osc.stop(ctx.currentTime + (idx * 0.09) + 0.45);
+            });
+        } catch(e) {}
+    }
+
+    function launchFusionConfetti(colorHex) {
+        const canvas = document.getElementById('fusion-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const particles = [];
+        for (let i = 0; i < 70; i++) {
+            particles.push({
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                vx: (Math.random() - 0.5) * 14,
+                vy: (Math.random() - 0.7) * 14,
+                radius: Math.random() * 4 + 2,
+                color: Math.random() > 0.4 ? colorHex : '#EAB308',
+                alpha: 1,
+                decay: Math.random() * 0.015 + 0.012
+            });
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let alive = false;
+            particles.forEach(p => {
+                if (p.alpha > 0) {
+                    alive = true;
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.25;
+                    p.alpha -= p.decay;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = Math.max(0, p.alpha);
+                    ctx.fill();
+                }
+            });
+            if (alive) requestAnimationFrame(animate);
+            else ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        animate();
+    }
+
     let currentTier = 'common';
-    let selectedIds = [];
+    let batchCount = 1;
+    let selectedCards = []; // Guarda objetos: { id, img, name }
 
     const TIER_CONFIG = {
-        'common':    { need: 4, cost: 35,  title: 'Transmutación Común ➔ Rara 🔵', desc: 'Sacrifica 4 comunes para forjar 1 Rara garantizada (prioriza carta nueva).' },
-        'rare':      { need: 3, cost: 75,  title: 'Transmutación Rara ➔ Épica 🟣', desc: 'Sacrifica 3 raras para forjar 1 Épica garantizada (prioriza carta nueva).' },
-        'epic':      { need: 3, cost: 150, title: 'Gran Ritual ➔ Épica Superior o 👑', desc: 'Sacrifica 3 épicas: 25% chance de Legendaria 👑 (prioriza carta nueva).' },
-        'legendary': { need: 2, cost: 200, title: 'Transmutación Legendaria ➔ 👑', desc: 'Funde 2 Legendarias repetidas para forjar 1 Legendaria NUEVA para tu álbum.' }
+        'common':    { needSingle: 4, costSingle: 35,  title: 'Transmutación Común ➔ Rara 🔵', desc: 'Funde 4 comunes para forjar 1 Rara garantizada (prioriza carta nueva).' },
+        'rare':      { needSingle: 3, costSingle: 75,  title: 'Transmutación Rara ➔ Épica 🟣', desc: 'Funde 3 raras para forjar 1 Épica garantizada (prioriza carta nueva).' },
+        'epic':      { needSingle: 3, costSingle: 150, title: 'Gran Ritual ➔ Épica Superior o 👑', desc: 'Funde 3 épicas: chance de Legendaria 👑 (prioriza carta nueva).' },
+        'legendary': { needSingle: 2, costSingle: 200, title: 'Transmutación Legendaria ➔ 👑', desc: 'Funde 2 Legendarias repetidas para forjar 1 Legendaria NUEVA para tu álbum.' }
     };
+
+    function renderSlotsRack() {
+        const rack = document.getElementById('cauldron-slots-rack');
+        const counter = document.getElementById('slots-count-display');
+        if (!rack) return;
+
+        const totalNeeded = TIER_CONFIG[currentTier].needSingle * batchCount;
+        rack.innerHTML = '';
+
+        for (let i = 0; i < totalNeeded; i++) {
+            const card = selectedCards[i];
+            const slot = document.createElement('div');
+            slot.className = `w-14 h-20 rounded-xl border-2 flex-shrink-0 relative overflow-hidden transition-all duration-300 flex items-center justify-center select-none ${card ? 'border-purple-400 bg-black shadow-[0_0_15px_rgba(168,85,247,0.5)] cursor-pointer active:scale-90' : 'border-dashed border-purple-500/40 bg-purple-950/20'}`;
+
+            if (card) {
+                slot.onclick = () => removeCardById(card.id);
+                slot.innerHTML = `
+                    <img src="${card.img}" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-black/25"></div>
+                    <span class="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-600/90 text-white text-[9px] font-bold flex items-center justify-center shadow">×</span>
+                `;
+            } else {
+                slot.innerHTML = `
+                    <span class="text-stone-500 text-xs font-mono font-bold">+</span>
+                `;
+            }
+            rack.appendChild(slot);
+        }
+
+        if (counter) {
+            counter.innerText = `${selectedCards.length} / ${totalNeeded} colocadas`;
+        }
+
+        updateActionBtn();
+    }
 
     function switchRecipe(tier) {
         currentTier = tier;
-        selectedIds = [];
+        selectedCards = [];
 
         document.querySelectorAll('.recipe-tab-btn').forEach(b => {
             b.className = "py-2.5 rounded-xl text-stone-400 hover:text-white recipe-tab-btn transition-all";
@@ -226,72 +469,166 @@
 
         document.querySelectorAll('.selectable-card').forEach(c => {
             c.classList.remove('border-yellow-400', 'scale-105', 'shadow-[0_0_15px_rgba(234,179,8,0.7)]');
-            c.querySelector('.check-mark').classList.add('hidden');
+            c.querySelector('.check-mark')?.classList.add('hidden');
         });
 
-        const cfg = TIER_CONFIG[tier];
-        document.getElementById('recipe-title').innerText = cfg.title;
-        document.getElementById('recipe-desc').innerText = cfg.desc;
-        document.getElementById('recipe-cost').innerText = `${cfg.cost} 🪙`;
-
-        updateSelectionState();
+        updateRecipeSummary();
+        renderSlotsRack();
     }
 
-    function toggleCardSelection(el, cardId) {
-        const need = TIER_CONFIG[currentTier].need;
-        const idx = selectedIds.indexOf(cardId);
+    function setBatchCount(count) {
+        batchCount = count;
+        selectedCards = [];
 
-        if (idx > -1) {
-            selectedIds.splice(idx, 1);
+        [1, 2, 3, 5].forEach(num => {
+            const btn = document.getElementById(`batch-btn-${num}`);
+            if (btn) {
+                if (num === count) btn.className = "px-2.5 py-1 rounded-lg bg-purple-600 text-white font-black shadow";
+                else btn.className = "px-2.5 py-1 rounded-lg text-stone-400 hover:text-white";
+            }
+        });
+
+        document.querySelectorAll('.selectable-card').forEach(c => {
+            c.classList.remove('border-yellow-400', 'scale-105', 'shadow-[0_0_15px_rgba(234,179,8,0.7)]');
+            c.querySelector('.check-mark')?.classList.add('hidden');
+        });
+
+        updateRecipeSummary();
+        renderSlotsRack();
+    }
+
+    function updateRecipeSummary() {
+        const cfg = TIER_CONFIG[currentTier];
+        const totalCost = cfg.costSingle * batchCount;
+
+        const titleEl = document.getElementById('recipe-title');
+        const descEl = document.getElementById('recipe-desc');
+        const costEl = document.getElementById('recipe-cost');
+
+        if (titleEl) titleEl.innerText = `${cfg.title} (x${batchCount})`;
+        if (descEl) descEl.innerText = cfg.desc;
+        if (costEl) costEl.innerText = `${totalCost} 🪙`;
+    }
+
+    function toggleCardSelection(el, cardId, cardImg, cardName) {
+        const totalNeeded = TIER_CONFIG[currentTier].needSingle * batchCount;
+        const existingIdx = selectedCards.findIndex(c => c.id === cardId);
+
+        if (existingIdx > -1) {
+            selectedCards.splice(existingIdx, 1);
             el.classList.remove('border-yellow-400', 'scale-105', 'shadow-[0_0_15px_rgba(234,179,8,0.7)]');
-            el.querySelector('.check-mark').classList.add('hidden');
+            el.querySelector('.check-mark')?.classList.add('hidden');
         } else {
-            if (selectedIds.length >= need) {
+            if (selectedCards.length >= totalNeeded) {
                 try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('warning'); } catch(e) {}
                 return;
             }
-            selectedIds.push(cardId);
+            selectedCards.push({ id: cardId, img: cardImg, name: cardName });
             el.classList.add('border-yellow-400', 'scale-105', 'shadow-[0_0_15px_rgba(234,179,8,0.7)]');
-            el.querySelector('.check-mark').classList.remove('hidden');
+            el.querySelector('.check-mark')?.classList.remove('hidden');
         }
 
         try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
-        updateSelectionState();
+        renderSlotsRack();
     }
 
-    function updateSelectionState() {
-        const need = TIER_CONFIG[currentTier].need;
-        const counter = document.getElementById('selection-counter');
-        const btn = document.getElementById('btn-do-fusion');
-
-        counter.innerText = `${selectedIds.length} / ${need} seleccionadas`;
-
-        if (selectedIds.length === need) {
-            btn.disabled = false;
-            btn.classList.remove('opacity-40', 'cursor-not-allowed');
-            btn.innerHTML = `<span>🔮</span> <span>Encender Caldero (${TIER_CONFIG[currentTier].cost} 🪙)</span>`;
-        } else {
-            btn.disabled = true;
-            btn.classList.add('opacity-40', 'cursor-not-allowed');
-            btn.innerHTML = `<span>🔮</span> <span>Selecciona ${need - selectedIds.length} cartas más</span>`;
+    function removeCardById(cardId) {
+        const existingIdx = selectedCards.findIndex(c => c.id === cardId);
+        if (existingIdx > -1) {
+            selectedCards.splice(existingIdx, 1);
+            const cardEl = document.querySelector(`.selectable-card[data-id="${cardId}"]`);
+            if (cardEl) {
+                cardEl.classList.remove('border-yellow-400', 'scale-105', 'shadow-[0_0_15px_rgba(234,179,8,0.7)]');
+                cardEl.querySelector('.check-mark')?.classList.add('hidden');
+            }
+            renderSlotsRack();
         }
     }
 
-    async function executeFusion() {
-        const need = TIER_CONFIG[currentTier].need;
-        if (selectedIds.length !== need) return;
+    // BOTÓN ⚡ AUTO-LLENAR REPETIDAS
+    function autoFillCards() {
+        const totalNeeded = TIER_CONFIG[currentTier].needSingle * batchCount;
+        const grid = document.getElementById(`grid-${currentTier}`);
+        if (!grid) return;
+
+        const availableEls = Array.from(grid.querySelectorAll('.selectable-card'));
+        if (availableEls.length < totalNeeded) {
+            alert(`No tienes suficientes cartas repetidas de esta rareza para cubrir x${batchCount} (necesitas ${totalNeeded} cartas).`);
+            return;
+        }
+
+        // Limpiar selección previa
+        selectedCards = [];
+        availableEls.forEach(c => {
+            c.classList.remove('border-yellow-400', 'scale-105', 'shadow-[0_0_15px_rgba(234,179,8,0.7)]');
+            c.querySelector('.check-mark')?.classList.add('hidden');
+        });
+
+        // Llenar con las primeras N disponibles
+        for (let i = 0; i < totalNeeded; i++) {
+            const el = availableEls[i];
+            const cid = parseInt(el.dataset.id);
+            const cimg = el.dataset.img;
+            const cname = el.dataset.name;
+
+            selectedCards.push({ id: cid, img: cimg, name: cname });
+            el.classList.add('border-yellow-400', 'scale-105', 'shadow-[0_0_15px_rgba(234,179,8,0.7)]');
+            el.querySelector('.check-mark')?.classList.remove('hidden');
+        }
+
+        try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+        renderSlotsRack();
+    }
+
+    function updateActionBtn() {
+        const totalNeeded = TIER_CONFIG[currentTier].needSingle * batchCount;
+        const totalCost = TIER_CONFIG[currentTier].costSingle * batchCount;
+        const btn = document.getElementById('btn-do-fusion');
+        if (!btn) return;
+
+        if (selectedCards.length === totalNeeded) {
+            btn.disabled = false;
+            btn.classList.remove('opacity-40', 'cursor-not-allowed');
+            btn.innerHTML = `<span>🔮</span> <span>Encender Caldero (${totalCost} 🪙)</span>`;
+        } else {
+            btn.disabled = true;
+            btn.classList.add('opacity-40', 'cursor-not-allowed');
+            btn.innerHTML = `<span>🔮</span> <span>Selecciona ${totalNeeded - selectedCards.length} cartas más</span>`;
+        }
+    }
+
+    // EJECUCIÓN DEL RITUAL ALQUÍMICO
+    async function startFusionRitual() {
+        const totalNeeded = TIER_CONFIG[currentTier].needSingle * batchCount;
+        if (selectedCards.length !== totalNeeded) return;
 
         const btn = document.getElementById('btn-do-fusion');
         btn.disabled = true;
-        btn.innerHTML = '<span>⏳</span> Fundiendo esencia mágica...';
 
         const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
         const formData = new FormData();
         formData.append('tg_id', tgId);
         formData.append('tier', currentTier);
-        selectedIds.forEach(id => formData.append('card_ids', id));
+        selectedCards.forEach(c => formData.append('card_ids', c.id));
         formData.append('ajax', '1');
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        // Abrir Modal Cinemático en Fase 1 (Ebullición)
+        document.getElementById('ritual-phase-boiling').classList.remove('hidden');
+        document.getElementById('ritual-phase-reveal').classList.add('hidden');
+        document.getElementById('fusion-close-btn').style.display = 'none';
+
+        const potShake = document.getElementById('ritual-pot-shake');
+        potShake.classList.add('pot-shaking');
+
+        const progressBar = document.getElementById('ritual-progress-bar');
+        progressBar.style.width = '0%';
+
+        document.getElementById('fusion-modal').classList.remove('hidden');
+        playBubblingSound();
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
+
+        setTimeout(() => { progressBar.style.width = '100%'; }, 50);
 
         try {
             const resp = await fetch("{% url 'idols:photocard_fusion' %}", {
@@ -303,45 +640,93 @@
 
             if (!data.success) {
                 alert(data.error);
+                document.getElementById('fusion-modal').classList.add('hidden');
+                potShake.classList.remove('pot-shaking');
                 btn.disabled = false;
-                updateSelectionState();
+                updateActionBtn();
                 return;
             }
 
-            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
-
             document.getElementById('fusion-gold').innerText = data.nuevo_saldo;
 
-            document.getElementById('f-modal-name').innerText = data.card.name;
-            document.getElementById('f-modal-idol').innerText = `Idol: ${data.card.idol_name}`;
-            document.getElementById('f-modal-img').src = data.card.image_url;
-            
-            const cardBox = document.getElementById('f-modal-card-box');
-            cardBox.style.borderColor = data.card.color;
-            cardBox.style.boxShadow = `0 0 35px ${data.card.color}`;
+            // Esperar 1.6 segundos para la ebullición mágica y pasar a la revelación
+            setTimeout(() => {
+                potShake.classList.remove('pot-shaking');
 
-            const tag = document.getElementById('f-modal-tag');
-            if (data.is_new) {
-                tag.innerText = '✨ ¡NUEVA CARTA DESBLOQUEADA EN TU ÁLBUM! ✨';
-                tag.className = 'text-[10px] font-mono font-black uppercase tracking-widest bg-emerald-950 text-emerald-300 border border-emerald-500 px-3.5 py-1 rounded-full shadow animate-bounce';
-            } else if (data.is_lucky) {
-                tag.innerText = '🎉 ¡SALTO AFORTUNADO DE RAREZA! 🎉';
-                tag.className = 'text-[10px] font-mono font-black uppercase tracking-widest bg-purple-950 text-purple-200 border border-purple-400 px-3.5 py-1 rounded-full shadow';
-            } else {
-                tag.innerText = '✨ ¡Transmutación Exitosa! ✨';
-                tag.className = 'text-[10px] font-mono font-bold uppercase tracking-widest text-amber-300 bg-black/70 border border-yellow-500/50 px-3.5 py-1 rounded-full shadow';
-            }
+                document.getElementById('ritual-phase-boiling').classList.add('hidden');
+                document.getElementById('ritual-phase-reveal').classList.remove('hidden');
+                document.getElementById('fusion-close-btn').style.display = 'block';
 
-            document.getElementById('fusion-modal').classList.remove('hidden');
+                const primaryCard = data.cards ? data.cards[0] : data.card;
+
+                document.getElementById('f-modal-name').innerText = primaryCard.name;
+                document.getElementById('f-modal-idol').innerText = `Idol: ${primaryCard.idol_name}`;
+                document.getElementById('f-modal-img').src = primaryCard.image_url;
+
+                const cardFront = document.getElementById('f-card-front');
+                cardFront.style.borderColor = primaryCard.color;
+                cardFront.style.boxShadow = `0 0 35px ${primaryCard.color}`;
+
+                const tag = document.getElementById('f-modal-tag');
+                if (data.is_new) {
+                    tag.innerText = '✨ ¡NUEVA CARTA DESBLOQUEADA EN TU ÁLBUM! ✨';
+                    tag.className = 'text-[9.5px] font-mono font-black uppercase tracking-widest bg-emerald-950 text-emerald-300 border border-emerald-500 px-3.5 py-1 rounded-full shadow animate-bounce';
+                } else if (data.is_lucky) {
+                    tag.innerText = '🎉 ¡TRANSFORMACIÓN CRÍTICA SUPERIOR! 🎉';
+                    tag.className = 'text-[9.5px] font-mono font-black uppercase tracking-widest bg-purple-950 text-purple-200 border border-purple-400 px-3.5 py-1 rounded-full shadow';
+                } else {
+                    tag.innerText = '✨ ¡Transmutación Exitosa! ✨';
+                    tag.className = 'text-[9.5px] font-mono font-bold uppercase tracking-widest text-amber-300 bg-black/70 border border-yellow-500/50 px-3.5 py-1 rounded-full shadow';
+                }
+
+                // Si se forjaron múltiples cartas, mostrar la fila de las demás cartas
+                const multiRow = document.getElementById('f-multi-batch-row');
+                if (data.cards && data.cards.length > 1) {
+                    multiRow.innerHTML = data.cards.map(c => `
+                        <div class="w-20 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-black border relative flex flex-col justify-end p-1 shadow"
+                             style="border-color: ${c.color};">
+                            <img src="${c.image_url}" class="absolute inset-0 w-full h-full object-cover">
+                            <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+                            <span class="relative z-10 text-[8px] font-black text-white truncate text-center">${c.name}</span>
+                            ${c.is_new ? '<span class="absolute top-1 left-1 bg-yellow-400 text-black text-[6.5px] font-black px-1 rounded">NUEVA</span>' : ''}
+                        </div>
+                    `).join('');
+                    multiRow.classList.remove('hidden');
+                } else {
+                    multiRow.classList.add('hidden');
+                }
+
+                // Efecto Card Flip 3D
+                const flipper = document.getElementById('f-card-flipper');
+                flipper.style.transform = 'rotateY(0deg)';
+                setTimeout(() => {
+                    flipper.style.transform = 'rotateY(180deg)';
+                    playMagicFanfare(primaryCard.color);
+                    launchFusionConfetti(primaryCard.color);
+                    try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                }, 150);
+
+            }, 1600);
 
         } catch(e) {
             alert("Error de conexión al fundir cartas.");
+            document.getElementById('fusion-modal').classList.add('hidden');
             btn.disabled = false;
-            updateSelectionState();
+            updateActionBtn();
         }
+    }
+
+    function closeFusionModal() {
+        document.getElementById('fusion-modal').classList.add('hidden');
+        stayInFusion();
     }
 
     function stayInFusion() { universalNav('/idols/photocards/fusion/'); }
     function goToAlbum() { universalNav('/idols/photocards/album/'); }
+
+    // Inicializar al cargar
+    document.addEventListener('DOMContentLoaded', () => {
+        renderSlotsRack();
+    });
 </script>
 {% endblock %}
