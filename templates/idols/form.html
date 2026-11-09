@@ -8,205 +8,361 @@
                 class="text-xs text-stone-300 hover:text-vip-gold bg-black/80 px-4 py-2 rounded-full border border-vip-gold/40 flex items-center gap-1.5 active:scale-95 transition-all shadow-lg">
             <span>⬅</span> <span class="font-bold">Volver</span>
         </button>
-        <span class="text-xs font-mono uppercase font-black text-vip-gold tracking-widest">
-            {% if idol %}Editar Musa Real{% else %}Consagrar Musa{% endif %}
-        </span>
+        <div class="flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3.5 py-1 rounded-full shadow-inner">
+            <span class="text-xs">🎭</span>
+            <span class="text-[10px] font-mono uppercase font-black text-gold-gradient tracking-widest">
+                {% if idol %}Studio: Editar Musa{% else %}Studio: Consagrar Musa{% endif %}
+            </span>
+        </div>
     </div>
 
+    <!-- 🪞 SIMULADOR EN VIVO (LIVE PREVIEW DE LA TARJETA) -->
+    <div class="relative rounded-[28px] overflow-hidden border-2 bg-gradient-to-b from-[#180928] via-[#0b0314] to-black shadow-2xl transition-all duration-300"
+         id="previewCardBorder"
+         style="border-color: {% if idol.aura_color == 'gold' %}#F59E0B{% elif idol.aura_color == 'ruby' %}#F43F5E{% elif idol.aura_color == 'emerald' %}#10B981{% else %}#A855F7{% endif %};">
+        
+        <!-- Banner de Fondo en Vivo -->
+        <div class="w-full h-32 bg-black relative overflow-hidden">
+            <img id="previewBannerImg" 
+                 src="{% if idol.safe_banner_url %}{{ idol.safe_banner_url }}{% else %}https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&q=80{% endif %}" 
+                 class="w-full h-full object-cover filter brightness-90">
+            <div class="absolute inset-0 bg-gradient-to-t from-[#0b0314] via-[#0b0314]/40 to-transparent"></div>
+        </div>
+
+        <!-- Identidad con Avatar y Halo -->
+        <div class="px-4 pb-4 relative z-10 flex flex-col items-center text-center -mt-14">
+            <div class="relative w-24 h-24 rounded-full p-1 bg-black shadow-2xl flex items-center justify-center mb-2">
+                <div id="previewAvatarRing" class="w-full h-full rounded-full p-0.5 border-2 flex items-center justify-center overflow-hidden transition-all duration-300"
+                     style="border-color: {% if idol.aura_color == 'gold' %}#F59E0B{% elif idol.aura_color == 'ruby' %}#F43F5E{% elif idol.aura_color == 'emerald' %}#10B981{% else %}#A855F7{% endif %};">
+                    <img id="previewPhotoImg" 
+                         src="{% if idol.safe_photo_url %}{{ idol.safe_photo_url }}{% else %}https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80{% endif %}" 
+                         class="w-full h-full rounded-full object-cover">
+                </div>
+                <!-- Badge de Estado en Vivo -->
+                <div class="absolute -bottom-1 z-20 shadow-lg">
+                    <span id="previewStatusBadge" class="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border shadow
+                        {% if not idol or idol.status == 'online' %}bg-emerald-950 text-emerald-300 border-emerald-400
+                        {% elif idol.status == 'antojos' %}bg-rose-950 text-rose-300 border-rose-400
+                        {% else %}bg-neutral-900 text-stone-400 border-stone-600{% endif %}">
+                        <span id="previewStatusDot" class="w-1.5 h-1.5 rounded-full {% if not idol or idol.status == 'online' %}bg-emerald-400 animate-ping{% elif idol.status == 'antojos' %}bg-rose-400 animate-pulse{% else %}bg-stone-500{% endif %}"></span>
+                        <span id="previewStatusText">{% if not idol or idol.status == 'online' %}Chateando{% elif idol.status == 'antojos' %}Antojos{% else %}Descanso{% endif %}</span>
+                    </span>
+                </div>
+            </div>
+
+            <h3 id="previewStageName" class="font-serif text-base font-black text-white leading-tight mt-1">
+                {{ idol.stage_name|default:"Nombre Artístico" }}
+            </h3>
+            <span id="previewGroup" class="text-[9.5px] font-mono text-purple-300 uppercase tracking-widest">
+                {{ idol.group|default:"Solista" }}
+            </span>
+            <p id="previewTagline" class="text-[11px] text-stone-300 italic mt-1 line-clamp-1">
+                «{{ idol.tagline|default:"Frase de seducción de la musa..." }}»
+            </p>
+        </div>
+    </div>
+
+    <!-- PESTAÑAS DEL STUDIO DE CREACIÓN (3 PASOS) -->
+    <div class="grid grid-cols-3 gap-1 p-1 bg-black/80 border border-vip-gold/30 rounded-2xl text-[10.5px] font-bold uppercase text-center shadow-lg">
+        <button type="button" onclick="switchStudioTab('identidad')" id="s-tab-btn-identidad" 
+                class="py-2 rounded-xl bg-vip-gold text-black font-black shadow transition-all">
+            1. Identidad
+        </button>
+        <button type="button" onclick="switchStudioTab('estilo')" id="s-tab-btn-estilo" 
+                class="py-2 rounded-xl text-stone-400 hover:text-white transition-all">
+            2. Rol & Estado
+        </button>
+        <button type="button" onclick="switchStudioTab('fotos')" id="s-tab-btn-fotos" 
+                class="py-2 rounded-xl text-stone-400 hover:text-white transition-all">
+            3. Fotos
+        </button>
+    </div>
+
+    <!-- FORMULARIO PRINCIPAL -->
     <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-4" onsubmit="return validateIdolForm()">
         {% csrf_token %}
         <input type="hidden" name="tg_id" id="hidden_tg_id" value="{{ tg_id }}">
-        <input type="hidden" name="tg_username" id="hidden_tg_username" value="{{ tg_username }}">
 
-        <!-- 1. IDENTIDAD ARTÍSTICA -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 flex flex-col gap-3 shadow-xl">
-            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">1. Identidad de la Musa</span>
+        <!-- ================= PASO 1: IDENTIDAD & AURA ================= -->
+        <div id="s-tab-identidad" class="vip-panel p-5 rounded-3xl border border-vip-gold/30 flex flex-col gap-3.5 shadow-xl">
+            <span class="text-xs font-serif font-black text-vip-gold uppercase tracking-wider border-b border-white/10 pb-1.5">
+                👑 Identidad & Aura Mística
+            </span>
+
             <div>
-                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Nombre Artístico *</label>
-                <input type="text" name="stage_name" id="stage_name_input" value="{{ idol.stage_name|default:'' }}" required placeholder="Ej: Scarlett, Luna, Karina..."
-                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre Artístico *</label>
+                <input type="text" name="stage_name" id="input_stage_name" value="{{ idol.stage_name|default:'' }}" required 
+                       oninput="updatePreviewText('previewStageName', this.value, 'Nombre Artístico')"
+                       placeholder="Ej: Scarlett, Luna, Karina..."
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
+
             <div>
-                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Grupo o Solista</label>
-                <input type="text" name="group" value="{{ idol.group|default:'' }}" placeholder="Ej: Solista, aespa, IVE, o grupo de rol..."
-                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Grupo o Solista</label>
+                <input type="text" name="group" id="input_group" value="{{ idol.group|default:'' }}" 
+                       oninput="updatePreviewText('previewGroup', this.value, 'Solista')"
+                       placeholder="Ej: Solista, aespa, IVE, K-Pop..."
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
+
             <div>
-                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Usuario de Telegram para Contacto</label>
-                <input type="text" name="owner_username" value="{{ idol.owner_username|default:tg_username|default:'' }}" placeholder="Ej: @TuUsuario"
-                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
-                <span class="text-[9px] text-stone-400">Este es el @ al que los nobles escribirán al pulsar «Abrir Chat».</span>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Usuario Telegram para Contacto</label>
+                <input type="text" name="owner_username" value="{{ idol.owner_username|default:tg_username|default:'' }}" 
+                       placeholder="Ej: @TuUsuario"
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+                <span class="text-[9px] text-stone-400">El noble abrirá chat directo con este usuario al pulsar «Abrir Chat».</span>
             </div>
+
+            <!-- SELECTOR VISUAL DE AURA -->
             <div>
-                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Lema o Frase de Seducción</label>
-                <input type="text" name="tagline" value="{{ idol.tagline|default:'' }}" placeholder="Ej: «La musa prohibida de la noche clandestina»"
-                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+                <label class="block text-[11px] text-purple-300 uppercase font-bold mb-1.5">Halo & Resplandor de Aura</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center gap-2 p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/50 cursor-pointer hover:border-purple-300"
+                           onclick="changeAuraPreview('purple', '#A855F7')">
+                        <input type="radio" name="aura_color" value="purple" {% if not idol or idol.aura_color == 'purple' %}checked{% endif %}>
+                        <span class="text-xs font-bold text-purple-300">💜 Púrpura</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/50 cursor-pointer hover:border-yellow-300"
+                           onclick="changeAuraPreview('gold', '#F59E0B')">
+                        <input type="radio" name="aura_color" value="gold" {% if idol.aura_color == 'gold' %}checked{% endif %}>
+                        <span class="text-xs font-bold text-yellow-300">💛 Celestial</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/50 cursor-pointer hover:border-rose-300"
+                           onclick="changeAuraPreview('ruby', '#F43F5E')">
+                        <input type="radio" name="aura_color" value="ruby" {% if idol.aura_color == 'ruby' %}checked{% endif %}>
+                        <span class="text-xs font-bold text-rose-300">❤️ Pasión Rubí</span>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 cursor-pointer hover:border-emerald-300"
+                           onclick="changeAuraPreview('emerald', '#10B981')">
+                        <input type="radio" name="aura_color" value="emerald" {% if idol.aura_color == 'emerald' %}checked{% endif %}>
+                        <span class="text-xs font-bold text-emerald-300">💚 Esmeralda</span>
+                    </label>
+                </div>
             </div>
+
+            <button type="button" onclick="switchStudioTab('estilo')" 
+                    class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider mt-2">
+                Siguiente: Rol & Estado ➔
+            </button>
         </div>
 
-        <!-- 2. ESTADO EN VIVO Y DISPONIBILIDAD -->
-        <div class="bg-black/70 p-3.5 rounded-2xl border border-emerald-500/30 flex flex-col gap-2">
-            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400">2. Estado en Vivo (Disponibilidad)</span>
-            <div class="grid grid-cols-3 gap-2">
-                <label class="flex flex-col items-center gap-1 p-2 rounded-xl bg-black/60 border border-emerald-500/40 cursor-pointer hover:border-emerald-300">
-                    <input type="radio" name="status" value="online" {% if not idol or idol.status == 'online' %}checked{% endif %}>
-                    <span class="text-[11px] font-black text-emerald-300 text-center">🟢 Chateando</span>
-                </label>
-                <label class="flex flex-col items-center gap-1 p-2 rounded-xl bg-black/60 border border-rose-500/40 cursor-pointer hover:border-rose-300">
-                    <input type="radio" name="status" value="antojos" {% if idol.status == 'antojos' %}checked{% endif %}>
-                    <span class="text-[11px] font-black text-rose-300 text-center">🔥 Antojos</span>
-                </label>
-                <label class="flex flex-col items-center gap-1 p-2 rounded-xl bg-black/60 border border-stone-600 cursor-pointer hover:border-stone-400">
-                    <input type="radio" name="status" value="offline" {% if idol.status == 'offline' %}checked{% endif %}>
-                    <span class="text-[11px] font-black text-stone-400 text-center">🌙 Descanso</span>
-                </label>
-            </div>
-        </div>
+        <!-- ================= PASO 2: ROL & ESTADO ================= -->
+        <div id="s-tab-estilo" class="hidden vip-panel p-5 rounded-3xl border border-vip-gold/30 flex flex-col gap-3.5 shadow-xl">
+            <span class="text-xs font-serif font-black text-vip-gold uppercase tracking-wider border-b border-white/10 pb-1.5">
+                🔥 Disponibilidad & Estilo de Rol
+            </span>
 
-        <!-- 3. SELECTOR DE AURA MÍSTICA -->
-        <div class="bg-black/60 p-3.5 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
-            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-purple-300">3. Aura Mística de la Musa</span>
-            <div class="grid grid-cols-2 gap-2">
-                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-purple-950/40 border border-purple-500/50 cursor-pointer hover:border-purple-300">
-                    <input type="radio" name="aura_color" value="purple" {% if not idol or idol.aura_color == 'purple' %}checked{% endif %}>
-                    <span class="text-xs font-bold text-purple-300">💜 Púrpura Mística</span>
-                </label>
-                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/50 cursor-pointer hover:border-yellow-300">
-                    <input type="radio" name="aura_color" value="gold" {% if idol.aura_color == 'gold' %}checked{% endif %}>
-                    <span class="text-xs font-bold text-yellow-300">💛 Oro Celestial</span>
-                </label>
-                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/50 cursor-pointer hover:border-rose-300">
-                    <input type="radio" name="aura_color" value="ruby" {% if idol.aura_color == 'ruby' %}checked{% endif %}>
-                    <span class="text-xs font-bold text-rose-300">❤️ Pasión Rubí</span>
-                </label>
-                <label class="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/50 cursor-pointer hover:border-emerald-300">
-                    <input type="radio" name="aura_color" value="emerald" {% if idol.aura_color == 'emerald' %}checked{% endif %}>
-                    <span class="text-xs font-bold text-emerald-300">💚 Seducción Esmeralda</span>
-                </label>
+            <!-- SELECTOR DE DISPONIBILIDAD -->
+            <div>
+                <label class="block text-[11px] text-emerald-400 uppercase font-bold mb-1.5">Estado en Vivo</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <label class="flex flex-col items-center gap-1 p-2 rounded-xl bg-black/60 border border-emerald-500/40 cursor-pointer hover:border-emerald-300 text-center"
+                           onclick="changeStatusPreview('online')">
+                        <input type="radio" name="status" value="online" {% if not idol or idol.status == 'online' %}checked{% endif %}>
+                        <span class="text-[10.5px] font-black text-emerald-300">🟢 Chateando</span>
+                    </label>
+                    <label class="flex flex-col items-center gap-1 p-2 rounded-xl bg-black/60 border border-rose-500/40 cursor-pointer hover:border-rose-300 text-center"
+                           onclick="changeStatusPreview('antojos')">
+                        <input type="radio" name="status" value="antojos" {% if idol.status == 'antojos' %}checked{% endif %}>
+                        <span class="text-[10.5px] font-black text-rose-300">🔥 Antojos</span>
+                    </label>
+                    <label class="flex flex-col items-center gap-1 p-2 rounded-xl bg-black/60 border border-stone-600 cursor-pointer hover:border-stone-400 text-center"
+                           onclick="changeStatusPreview('offline')">
+                        <input type="radio" name="status" value="offline" {% if idol.status == 'offline' %}checked{% endif %}>
+                        <span class="text-[10.5px] font-black text-stone-400">🌙 Descanso</span>
+                    </label>
+                </div>
             </div>
-        </div>
 
-        <!-- 4. ATENCIÓN Y BIOGRAFÍA -->
-        <div class="bg-black/60 p-3.5 rounded-2xl border border-white/10 flex flex-col gap-3">
-            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">4. Estilo de Atención</span>
             <div>
-                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Especialidad de Rol</label>
-                <input type="text" name="specialty" value="{{ idol.specialty|default:'' }}" placeholder="Ej: Rol dulce, sesiones atrevidas, antojos privados..."
-                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Lema o Frase de Seducción</label>
+                <input type="text" name="tagline" value="{{ idol.tagline|default:'' }}" 
+                       oninput="updatePreviewText('previewTagline', this.value ? '«' + this.value + '»' : '«Frase de seducción...»')"
+                       placeholder="Ej: «La musa prohibida de la noche clandestina»"
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
+
             <div>
-                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Saludo de Bienvenida al Chat</label>
-                <input type="text" name="welcome_message" value="{{ idol.welcome_message|default:'' }}" placeholder="Ej: Bienvenido a mis aposentos, cuéntame tus deseos..."
-                       class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Especialidad de Atención</label>
+                <input type="text" name="specialty" value="{{ idol.specialty|default:'' }}" 
+                       placeholder="Ej: Rol dulce, sesiones atrevidas, antojos privados..."
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
             </div>
+
             <div>
-                <label class="block text-[11px] text-stone-300 font-bold uppercase mb-1">Presentación / Biografía *</label>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Saludo Íntimo al Chat</label>
+                <input type="text" name="welcome_message" value="{{ idol.welcome_message|default:'' }}" 
+                       placeholder="Ej: Bienvenido a mis aposentos, cuéntame tus deseos..."
+                       class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400">
+            </div>
+
+            <div>
+                <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Presentación / Biografía *</label>
                 <textarea name="bio" rows="3" required placeholder="Describe la personalidad de tu personaje..."
-                          class="w-full bg-black/80 border border-vip-gold/30 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 resize-none">{{ idol.bio|default:'' }}</textarea>
+                          class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 resize-none">{{ idol.bio|default:'' }}</textarea>
+            </div>
+
+            <div class="flex gap-2 mt-2">
+                <button type="button" onclick="switchStudioTab('identidad')" class="w-1/3 bg-white/10 hover:bg-white/20 text-stone-300 py-2.5 rounded-xl text-xs font-bold">
+                    ⬅ Atrás
+                </button>
+                <button type="button" onclick="switchStudioTab('fotos')" class="w-2/3 btn-gold py-2.5 rounded-xl text-xs font-black uppercase">
+                    Siguiente: Fotos ➔
+                </button>
             </div>
         </div>
 
-        <!-- 5. FOTOGRAFÍAS CON BLINDAJE PARA PC Y CELULARES -->
-        <div class="bg-black/60 p-3.5 rounded-2xl border border-yellow-500/40 flex flex-col gap-3">
-            <span class="text-[10px] font-mono font-bold uppercase tracking-wider text-vip-gold">5. Retrato & Banner de Portada</span>
-            
-            <!-- RETRATO / FOTO DE PERFIL -->
-            <div class="bg-black/80 p-3 rounded-2xl border border-yellow-500/30 flex flex-col gap-2">
+        <!-- ================= PASO 3: FOTOS & BANNER ================= -->
+        <div id="s-tab-fotos" class="hidden vip-panel p-5 rounded-3xl border border-vip-gold/30 flex flex-col gap-4 shadow-xl">
+            <span class="text-xs font-serif font-black text-vip-gold uppercase tracking-wider border-b border-white/10 pb-1.5">
+                🖼️ Retrato Circular & Portada Panorámica
+            </span>
+
+            <!-- FOTO DE PERFIL / RETRATO -->
+            <div class="bg-black/70 p-3.5 rounded-2xl border border-yellow-500/30 flex flex-col gap-2">
                 <label class="block text-[11px] text-yellow-300 font-bold uppercase">Foto de Perfil (Retrato) *</label>
-                
-                {% if idol and idol.photo %}
-                    <div class="flex items-center gap-3 bg-black/50 p-2 rounded-xl border border-white/10">
-                        <img src="{{ idol.photo.url }}" class="w-12 h-12 rounded-xl object-cover border border-vip-gold/40">
-                        <span class="text-[10px] text-stone-400">Foto actual cargada. Cambia solo si lo deseas.</span>
-                    </div>
-                {% endif %}
 
-                <!-- Input oculto para evitar fallos de render en navegadores de Telegram -->
+                <!-- Input nativo oculto -->
                 <input type="file" id="idol-photo-file" name="photo" accept="image/*" class="hidden"
-                       onchange="previewImg(this, 'photo-preview-wrap', 'photo-preview-img', 'photo-filename')">
+                       onchange="previewPhotoFile(this)">
 
-                <!-- Botón táctil amplio -->
                 <div onclick="document.getElementById('idol-photo-file').click()"
                      class="py-3 px-4 rounded-xl border-2 border-dashed border-yellow-500/50 bg-yellow-950/20 hover:bg-yellow-950/40 cursor-pointer flex items-center justify-center gap-2 text-center active:scale-95 transition-all">
-                    <span class="text-lg">📁</span>
-                    <span class="text-xs font-bold text-yellow-300">Toca aquí para elegir foto de tu celular / PC</span>
+                    <span class="text-xl">📁</span>
+                    <span class="text-xs font-bold text-yellow-300" id="photo-file-label">Toca para elegir foto de tu celular / PC</span>
                 </div>
 
-                <div id="photo-preview-wrap" class="hidden flex items-center gap-3 bg-black/90 p-2 rounded-xl border border-yellow-400">
-                    <img id="photo-preview-img" src="" class="w-12 h-12 rounded-lg object-cover">
-                    <span id="photo-filename" class="text-xs font-bold text-white truncate flex-1">foto.jpg</span>
-                    <span class="text-emerald-400 text-xs font-bold">✓ Lista</span>
-                </div>
-
-                <!-- Fallback URL -->
+                <!-- Fallback URL (PC / Web) -->
                 <div class="pt-1.5 border-t border-white/10 flex flex-col gap-1">
-                    <span class="text-[10px] text-stone-400 font-bold">🔗 O pega el enlace directo de la imagen (PC / Imgur / Postimages):</span>
-                    <input type="url" name="photo_url" id="photo_url_input" placeholder="https://i.postimg.cc/ejemplo.jpg"
+                    <span class="text-[10px] text-stone-400 font-bold">🔗 O pega el enlace directo de la foto (Imgur / Postimages / Web):</span>
+                    <input type="url" name="photo_url" id="photo_url_input" 
+                           oninput="previewPhotoUrl(this.value)"
+                           placeholder="https://i.postimg.cc/ejemplo.jpg"
                            class="w-full bg-black/90 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-400">
                 </div>
             </div>
 
-            <!-- BANNER DE PORTADA -->
-            <div class="bg-black/80 p-3 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
+            <!-- FOTO DE PORTADA / BANNER -->
+            <div class="bg-black/70 p-3.5 rounded-2xl border border-purple-500/30 flex flex-col gap-2">
                 <label class="block text-[11px] text-purple-300 font-bold uppercase">Foto de Portada / Banner (Opcional)</label>
-                
-                {% if idol and idol.banner %}
-                    <div class="flex items-center gap-3 bg-black/50 p-2 rounded-xl border border-white/10">
-                        <img src="{{ idol.banner.url }}" class="w-20 h-9 rounded-lg object-cover border border-purple-500/40">
-                        <span class="text-[10px] text-stone-400">Banner actual cargado.</span>
-                    </div>
-                {% endif %}
 
                 <input type="file" id="idol-banner-file" name="banner" accept="image/*" class="hidden"
-                       onchange="previewImg(this, 'banner-preview-wrap', 'banner-preview-img', 'banner-filename')">
+                       onchange="previewBannerFile(this)">
 
                 <div onclick="document.getElementById('idol-banner-file').click()"
                      class="py-3 px-4 rounded-xl border-2 border-dashed border-purple-500/50 bg-purple-950/20 hover:bg-purple-950/40 cursor-pointer flex items-center justify-center gap-2 text-center active:scale-95 transition-all">
-                    <span class="text-lg">🖼️</span>
-                    <span class="text-xs font-bold text-purple-300">Toca aquí para elegir banner</span>
-                </div>
-
-                <div id="banner-preview-wrap" class="hidden flex items-center gap-3 bg-black/90 p-2 rounded-xl border border-purple-400">
-                    <img id="banner-preview-img" src="" class="w-16 h-8 rounded-lg object-cover">
-                    <span id="banner-filename" class="text-xs font-bold text-white truncate flex-1">banner.jpg</span>
-                    <span class="text-emerald-400 text-xs font-bold">✓ Listo</span>
+                    <span class="text-xl">🖼️</span>
+                    <span class="text-xs font-bold text-purple-300" id="banner-file-label">Toca para elegir banner</span>
                 </div>
 
                 <div class="pt-1.5 border-t border-white/10 flex flex-col gap-1">
                     <span class="text-[10px] text-stone-400 font-bold">🔗 O enlace directo del banner:</span>
-                    <input type="url" name="banner_url" placeholder="https://i.postimg.cc/banner.jpg"
+                    <input type="url" name="banner_url" id="banner_url_input" 
+                           oninput="previewBannerUrl(this.value)"
+                           placeholder="https://i.postimg.cc/banner.jpg"
                            class="w-full bg-black/90 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400">
                 </div>
             </div>
-        </div>
 
-        <button type="submit" class="btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all mt-1">
-            {% if idol %}💾 Guardar Cambios de la Musa{% else %}✨ Consagrar Musa en el Reino{% endif %}
-        </button>
+            <!-- BOTÓN FINAL DE GUARDAR -->
+            <button type="submit" class="btn-gold py-4 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_25px_rgba(212,175,55,0.4)] active:scale-95 transition-all mt-2">
+                {% if idol %}💾 Guardar Ficha de Musa{% else %}✨ Consagrar Musa en el Reino{% endif %}
+            </button>
+        </div>
     </form>
 </div>
 
 <script>
-    function previewImg(input, wrapId, imgId, nameId) {
+    function switchStudioTab(tab) {
+        ['identidad', 'estilo', 'fotos'].forEach(t => {
+            const panel = document.getElementById(`s-tab-${t}`);
+            const btn = document.getElementById(`s-tab-btn-${t}`);
+            if (panel && btn) {
+                if (t === tab) {
+                    panel.classList.remove('hidden');
+                    btn.className = "py-2 rounded-xl bg-vip-gold text-black font-black shadow transition-all";
+                } else {
+                    panel.classList.add('hidden');
+                    btn.className = "py-2 rounded-xl text-stone-400 hover:text-white transition-all";
+                }
+            }
+        });
+    }
+
+    function updatePreviewText(elementId, value, defaultText) {
+        const el = document.getElementById(elementId);
+        if (el) el.innerText = value.trim() ? value : defaultText;
+    }
+
+    function changeAuraPreview(aura, hexColor) {
+        document.getElementById('previewCardBorder').style.borderColor = hexColor;
+        document.getElementById('previewAvatarRing').style.borderColor = hexColor;
+    }
+
+    function changeStatusPreview(status) {
+        const badge = document.getElementById('previewStatusBadge');
+        const dot = document.getElementById('previewStatusDot');
+        const text = document.getElementById('previewStatusText');
+
+        if (status === 'online') {
+            badge.className = "inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border shadow bg-emerald-950 text-emerald-300 border-emerald-400";
+            dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping";
+            text.innerText = "Chateando";
+        } else if (status === 'antojos') {
+            badge.className = "inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border shadow bg-rose-950 text-rose-300 border-rose-400";
+            dot.className = "w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse";
+            text.innerText = "Antojos";
+        } else {
+            badge.className = "inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border shadow bg-neutral-900 text-stone-400 border-stone-600";
+            dot.className = "w-1.5 h-1.5 rounded-full bg-stone-500";
+            text.innerText = "Descanso";
+        }
+    }
+
+    function previewPhotoFile(input) {
         if (input.files && input.files[0]) {
             const file = input.files[0];
             const reader = new FileReader();
             reader.onload = e => {
-                document.getElementById(imgId).src = e.target.result;
-                document.getElementById(nameId).innerText = file.name;
-                document.getElementById(wrapId).classList.remove('hidden');
+                document.getElementById('previewPhotoImg').src = e.target.result;
+                document.getElementById('photo-file-label').innerText = `✓ Foto elegida: ${file.name}`;
             };
             reader.readAsDataURL(file);
         }
     }
 
+    function previewPhotoUrl(url) {
+        if (url && url.startsWith('http')) {
+            document.getElementById('previewPhotoImg').src = url;
+        }
+    }
+
+    function previewBannerFile(input) {
+        if (input.files && input.files[0]) {
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = e => {
+                document.getElementById('previewBannerImg').src = e.target.result;
+                document.getElementById('banner-file-label').innerText = `✓ Banner elegido: ${file.name}`;
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function previewBannerUrl(url) {
+        if (url && url.startsWith('http')) {
+            document.getElementById('previewBannerImg').src = url;
+        }
+    }
+
     function validateIdolForm() {
-        const hasExistingPhoto = {% if idol and idol.photo %}true{% else %}false{% endif %};
+        const hasExistingPhoto = {% if idol and idol.safe_photo_url %}true{% else %}false{% endif %};
         const fileSelected = document.getElementById('idol-photo-file').files.length > 0;
         const urlTyped = document.getElementById('photo_url_input').value.trim().length > 0;
 
         if (!hasExistingPhoto && !fileSelected && !urlTyped) {
-            alert("⚠️ Debes seleccionar una foto desde tu dispositivo o pegar un enlace web directo.");
+            alert("⚠️ Debes elegir una foto de perfil (desde tu dispositivo o pegando un enlace web).");
+            switchStudioTab('fotos');
             return false;
         }
         return true;

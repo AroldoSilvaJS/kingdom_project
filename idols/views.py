@@ -343,48 +343,59 @@ def idol_create(request):
 
 def idol_edit(request, idol_id):
     tg_id = resolve_safe_tg(request)
+    if not tg_id:
+        return redirect('/')
+
     idol = get_object_or_404(IdolProfile, id=idol_id)
     is_admin = check_is_staff_or_admin(tg_id)
 
+    # Validar permisos
     if tg_id != idol.telegram_user_id and not is_admin:
-        messages.error(request, "No tienes permiso para editar esta Idol.")
+        messages.error(request, "⚠️ No tienes permiso para editar esta Musa.")
         return redirect(f'/idols/?tg_id={tg_id}')
 
     if request.method == 'POST':
-        idol.stage_name = request.POST.get('stage_name', idol.stage_name).strip()
-        idol.group = request.POST.get('group', idol.group).strip()
-        idol.bio = request.POST.get('bio', idol.bio).strip()
-        idol.tagline = request.POST.get('tagline', idol.tagline).strip()
-        idol.status = request.POST.get('status', idol.status)
-        idol.aura_color = request.POST.get('aura_color', idol.aura_color)
-        idol.specialty = request.POST.get('specialty', idol.specialty).strip()
-        idol.welcome_message = request.POST.get('welcome_message', idol.welcome_message).strip()
+        try:
+            idol.stage_name = request.POST.get('stage_name', idol.stage_name).strip()
+            idol.group = request.POST.get('group', idol.group).strip()
+            idol.bio = request.POST.get('bio', idol.bio).strip()
+            idol.tagline = request.POST.get('tagline', idol.tagline).strip()
+            idol.status = request.POST.get('status', idol.status)
+            idol.aura_color = request.POST.get('aura_color', idol.aura_color)
+            idol.specialty = request.POST.get('specialty', idol.specialty).strip()
+            idol.welcome_message = request.POST.get('welcome_message', idol.welcome_message).strip()
 
-        custom_owner = request.POST.get('owner_username', '').strip()
-        if custom_owner:
-            idol.owner_username = custom_owner if custom_owner.startswith('@') else f"@{custom_owner}"
+            custom_owner = request.POST.get('owner_username', '').strip()
+            if custom_owner:
+                idol.owner_username = custom_owner if custom_owner.startswith('@') else f"@{custom_owner}"
 
-        # Actualizar Retrato si se sube archivo o link
-        photo_file = request.FILES.get('photo')
-        photo_url = request.POST.get('photo_url', '').strip()
-        if not photo_file and photo_url:
-            photo_file = download_image_from_url(photo_url, default_filename=f"idol_{idol.id}_edit.webp")
-        if photo_file:
-            idol.photo = optimize_uploaded_image(photo_file)
+            # Actualizar Retrato si se sube archivo o si se pega enlace directo (PC / Celular)
+            photo_file = request.FILES.get('photo')
+            photo_url = request.POST.get('photo_url', '').strip()
+            if not photo_file and photo_url:
+                photo_file = download_image_from_url(photo_url, default_filename=f"idol_{idol.id}_edit.webp")
+            if photo_file:
+                idol.photo = optimize_uploaded_image(photo_file)
 
-        # Actualizar Banner si se sube archivo o link
-        banner_file = request.FILES.get('banner')
-        banner_url = request.POST.get('banner_url', '').strip()
-        if not banner_file and banner_url:
-            banner_file = download_image_from_url(banner_url, default_filename=f"banner_{idol.id}_edit.webp")
-        if banner_file:
-            idol.banner = optimize_uploaded_image(banner_file)
+            # Actualizar Banner si se sube archivo o link
+            banner_file = request.FILES.get('banner')
+            banner_url = request.POST.get('banner_url', '').strip()
+            if not banner_file and banner_url:
+                banner_file = download_image_from_url(banner_url, default_filename=f"banner_{idol.id}_edit.webp")
+            if banner_file:
+                idol.banner = optimize_uploaded_image(banner_file)
 
-        idol.save()
-        messages.success(request, f"✨ ¡Perfil de {idol.stage_name} actualizado con éxito!")
-        return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+            idol.save()
+            messages.success(request, f"✨ ¡Ficha de {idol.stage_name} actualizada con éxito!")
+            return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+        except Exception as e:
+            messages.error(request, f"⚠️ Error al guardar los cambios: {str(e)}")
 
-    return render(request, 'idols/form.html', {'idol': idol, 'tg_id': tg_id})
+    return render(request, 'idols/form.html', {
+        'idol': idol,
+        'tg_id': tg_id,
+        'tg_username': idol.owner_username or f"@{tg_id}",
+    })
 
 
 def idol_delete(request, idol_id):

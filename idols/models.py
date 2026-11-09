@@ -91,6 +91,22 @@ class IdolProfile(models.Model):
 
         return "@MusaReal"
 
+    @property
+    def safe_photo_url(self):
+        """Retorna la URL de la foto de forma segura sin romper el servidor si el archivo no existe"""
+        try:
+            return self.photo.url if self.photo else ""
+        except Exception:
+            return ""
+
+    @property
+    def safe_banner_url(self):
+        """Retorna la URL del banner de forma segura"""
+        try:
+            return self.banner.url if self.banner else ""
+        except Exception:
+            return ""
+
 
 class Review(models.Model):
     idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='reviews')
@@ -424,3 +440,5 @@ class IdolTribute(models.Model):
 
     def __str__(self):
         return f"{self.gift_name} para {self.idol.stage_name} de {self.client_username}"
+
+
