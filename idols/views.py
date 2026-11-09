@@ -1206,91 +1206,136 @@ def open_photocard_box_ajax(request, box_id):
     if not tg_id:
         return JsonResponse({'success': False, 'error': 'Sesión no identificada'}, status=400)
 
+    try:
+        count = int(request.POST.get('count', 1))
+        if count not in [1, 5, 10]:
+            count = 1
+    except Exception:
+        count = 1
+
     box = get_object_or_404(PhotocardBox, id=box_id, is_active=True)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-    if wallet.balance < box.price:
-        return JsonResponse({'success': False, 'error': f'No tienes suficiente oro ({box.price} 🪙 necesarios).'}, status=400)
+    total_cost = box.price * count
+    if wallet.balance < total_cost:
+        return JsonResponse({
+            'success': False, 
+            'error': f'No tienes suficiente oro ({total_cost} 🪙 necesarios para {count} cajas).'
+        }, status=400)
 
     all_cards = list(box.cards.all())
     if not all_cards:
         return JsonResponse({'success': False, 'error': 'Esta caja aún no tiene cartas cargadas.'}, status=400)
 
-    wallet.remove_funds(box.price)
+    wallet.remove_funds(total_cost)
 
+    # Bonos pasivos de mascota y amuleto
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-    extra_legendary = {1: 5.0, 2: 12.0, 3: 20.0}.get(pet.evolution_stage_number, 5.0) if (pet and pet.species == 'rabbit') else 0.0
+    extra_legendary_base = {1: 5.0, 2: 12.0, 3: 20.0}.get(pet.evolution_stage_number, 5.0) if (pet and pet.species == 'rabbit') else 0.0
 
     from economy.models import UserInventoryItem
     has_lucky_key = UserInventoryItem.consume_item(tg_id, 'lucky_charm')
     if has_lucky_key:
-        extra_legendary += 15.0
+        extra_legendary_base += 15.0
 
-    roll = random.random() * 100
-    p_legendary = 3.0 + extra_legendary
-    p_epic = p_legendary + 12.0
-    p_rare = p_epic + 25.0
-
-    if roll < p_legendary:
-        target_rarity = 'legendary'
-    elif roll < p_epic:
-        target_rarity = 'epic'
-    elif roll < p_rare:
-        target_rarity = 'rare'
-    else:
-        target_rarity = 'common'
-
-    pool = [c for c in all_cards if c.rarity == target_rarity]
-    winner = random.choice(pool) if pool else random.choice(all_cards)
-
-    UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=winner)
+    # Cartas que el usuario ya poseía antes de esta apertura
+    already_owned_ids = set(UserPhotocard.objects.filter(telegram_user_id=tg_id).values_list('photocard_id', flat=True))
 
     xp_map = {'common': 5, 'rare': 12, 'epic': 25, 'legendary': 50}
-    grant_user_xp(request, tg_id, xp_map.get(winner.rarity, 10), reason=f"Photocard {winner.get_rarity_display()}")
+    total_xp = 0
+    winners = []
+    legendary_winners = []
 
-    if winner.rarity == 'legendary':
+    for _ in range(count):
+        roll = random.random() * 100
+        p_legendary = 3.0 + extra_legendary_base
+        p_epic = p_legendary + 12.0
+        p_rare = p_epic + 25.0
+
+        if roll < p_legendary:
+            target_rarity = 'legendary'
+        elif roll < p_epic:
+            target_rarity = 'epic'
+        elif roll < p_rare:
+            target_rarity = 'rare'
+        else:
+            target_rarity = 'common'
+
+        pool = [c for c in all_cards if c.rarity == target_rarity]
+        card = random.choice(pool) if pool else random.choice(all_cards)
+
+        is_new = (card.id not in already_owned_ids)
+        already_owned_ids.add(card.id)
+
+        UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=card)
+
+        earned_xp = xp_map.get(card.rarity, 10)
+        total_xp += earned_xp
+        grant_user_xp(request, tg_id, earned_xp, reason=f"Photocard {card.get_rarity_display()}")
+
+        card_dict = {
+            'id': card.id,
+            'name': card.name,
+            'rarity': card.rarity,
+            'rarity_display': card.get_rarity_display(),
+            'color': card.get_color_hex(),
+            'image_url': card.image.url if card.image else '',
+            'idol_name': card.display_idol_name,
+            'is_new': is_new,
+        }
+        winners.append(card_dict)
+
+        if card.rarity == 'legendary':
+            legendary_winners.append(card)
+
+    # Si salió alguna legendaria, anunciar con fanfarria en el grupo oficial
+    if legendary_winners:
         group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
         if group_id:
             user_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
             noble_name = user_prof.username if user_prof else f"Noble_{tg_id}"
+            names_str = ", ".join([f"«{w.name}» ({w.display_idol_name})" for w in legendary_winners])
             send_telegram_msg(
                 chat_id=group_id,
                 text=(
                     f"👑🎉 <b>¡DESENTIERRO LEGENDARIO EN EL REINO!</b> 🎉👑\n\n"
-                    f"El afortunado <b>{noble_name}</b> abrió el relicario <i>«{box.name}»</i> y obtuvo una carta <b>LEGENDARIA</b>:\n\n"
-                    f"🎴 <b>«{winner.name}»</b> ({winner.display_idol_name})\n\n"
+                    f"El afortunado <b>{noble_name}</b> abrió el relicario <i>«{box.name}»</i> (x{count}) y obtuvo:\n\n"
+                    f"🎴 <b>{names_str}</b>\n\n"
                     f"¡Rindamos honores a su increíble fortuna en los relicarios!"
                 ),
                 button_text="🎁 Probar Mi Suerte en Cajas",
                 button_url="https://t.me/KingdomPleasure_bot?start=entrar"
             )
 
+    # Riel para compatibilidad
+    first_winner = winners[0]
     reel = []
     for i in range(35):
-        card_item = winner if i == 28 else random.choice(all_cards)
+        card_item = first_winner if i == 28 else random.choice(all_cards)
         reel.append({
-            'id': card_item.id,
-            'name': card_item.name,
-            'rarity': card_item.rarity,
-            'rarity_display': card_item.get_rarity_display(),
-            'color': card_item.get_color_hex(),
-            'image_url': card_item.image.url if card_item.image else '',
-            'idol_name': card_item.display_idol_name,
+            'id': card_item.id if hasattr(card_item, 'id') else card_item['id'],
+            'name': card_item.name if hasattr(card_item, 'name') else card_item['name'],
+            'rarity': card_item.rarity if hasattr(card_item, 'rarity') else card_item['rarity'],
+            'rarity_display': card_item.get_rarity_display() if hasattr(card_item, 'get_rarity_display') else card_item['rarity_display'],
+            'color': card_item.get_color_hex() if hasattr(card_item, 'get_color_hex') else card_item['color'],
+            'image_url': (card_item.image.url if card_item.image else '') if hasattr(card_item, 'image') else card_item['image_url'],
+            'idol_name': card_item.display_idol_name if hasattr(card_item, 'display_idol_name') else card_item['idol_name'],
         })
+
+    # Determinar la rareza más alta de toda la tirada
+    rarity_ranks = {'legendary': 4, 'epic': 3, 'rare': 2, 'common': 1}
+    highest_card = max(winners, key=lambda w: rarity_ranks.get(w['rarity'], 1))
 
     return JsonResponse({
         'success': True,
+        'count': count,
         'nuevo_saldo': wallet.balance,
+        'total_xp': total_xp,
+        'highest_rarity': highest_card['rarity'],
+        'highest_color': highest_card['color'],
+        'winner': first_winner,
+        'winners': winners,
         'winning_index': 28,
-        'winner': {
-            'id': winner.id,
-            'name': winner.name,
-            'rarity': winner.rarity,
-            'rarity_display': winner.get_rarity_display(),
-            'color': winner.get_color_hex(),
-            'image_url': winner.image.url if winner.image else '',
-            'idol_name': winner.display_idol_name,
-        },
         'reel': reel
     })
 
