@@ -44,7 +44,7 @@
             </p>
 
             <div class="mt-2.5 inline-flex items-center gap-1.5 bg-black/80 border border-vip-gold/40 px-3.5 py-1 rounded-full text-xs font-mono font-bold text-yellow-400 shadow-inner">
-                <span>🪙 Bóveda:</span> <span id="user-gold-balance" class="text-white font-black">{{ wallet.balance }}</span> 🪙
+                <span>🪙 Bóveda:</span> <span id="user-gold-balance" class="text-white font-black">{{ wallet.balance|default:0 }}</span> 🪙
             </div>
         </div>
     </div>
@@ -94,19 +94,19 @@
 
             <!-- BOTONES DE APERTURA: X1 / X5 / X10 -->
             <div class="grid grid-cols-3 gap-2 bg-black/70 p-1.5 rounded-2xl border border-vip-gold/30">
-                <button type="button" onclick="openReelModal({{ box.id }}, '{{ box.name|escapejs }}', {{ box.price }}, 1)" 
+                <button type="button" onclick="startCaseOpening({{ box.id }}, '{{ box.name|escapejs }}', {{ box.price }}, 1)" 
                         class="py-2.5 rounded-xl bg-vip-gold/15 hover:bg-vip-gold/30 border border-vip-gold/40 text-center flex flex-col items-center justify-center active:scale-95 transition-all">
                     <span class="text-xs font-black text-white">Girar x1</span>
                     <span class="text-[10px] font-mono text-yellow-400 font-bold">{{ box.price }} 🪙</span>
                 </button>
 
-                <button type="button" onclick="openReelModal({{ box.id }}, '{{ box.name|escapejs }}', {{ box.price }}, 5)" 
+                <button type="button" onclick="startCaseOpening({{ box.id }}, '{{ box.name|escapejs }}', {{ box.price }}, 5)" 
                         class="py-2.5 rounded-xl bg-purple-950/40 hover:bg-purple-900/60 border border-purple-500/50 text-center flex flex-col items-center justify-center active:scale-95 transition-all">
                     <span class="text-xs font-black text-purple-200">Ráfaga x5</span>
                     <span class="text-[10px] font-mono text-purple-300 font-bold">{% widthratio box.price 1 5 %} 🪙</span>
                 </button>
 
-                <button type="button" onclick="openReelModal({{ box.id }}, '{{ box.name|escapejs }}', {{ box.price }}, 10)" 
+                <button type="button" onclick="startCaseOpening({{ box.id }}, '{{ box.name|escapejs }}', {{ box.price }}, 10)" 
                         class="py-2.5 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/50 text-center flex flex-col items-center justify-center active:scale-95 transition-all relative overflow-hidden">
                     <span class="absolute top-0 right-0 bg-yellow-400 text-black text-[7.5px] font-black px-1.5 py-0.2 rounded-bl">HOT</span>
                     <span class="text-xs font-black text-yellow-300">Imperial x10</span>
@@ -138,34 +138,34 @@
         <!-- FASE 1: EL CARRUSEL / RULETA HORIZONTAL PRO -->
         <div id="cs-roulette-phase" class="w-full flex flex-col items-center">
             
-            <div class="flex items-center gap-1.5 mb-0.5">
-                <span class="text-xs">👑</span>
-                <h3 id="cs-box-title" class="font-serif text-sm font-black text-gold-gradient uppercase tracking-widest text-center">Relicario Real</h3>
+            <!-- Barra Superior de Tirada en Ráfaga -->
+            <div class="flex items-center justify-between w-full mb-2 px-1">
+                <span id="cs-round-badge" class="text-[10px] font-mono font-black uppercase tracking-wider px-3 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-500/40">
+                    Tirada 1 de 1
+                </span>
+                <button type="button" id="cs-skip-btn" onclick="skipAllSpins()" 
+                        class="hidden text-[9.5px] font-black uppercase text-stone-300 hover:text-white bg-black/80 px-2.5 py-1 rounded-full border border-white/20 active:scale-90">
+                    ⚡ Omitir Todo
+                </button>
             </div>
-            <p id="cs-spin-subtitle" class="text-[10.5px] text-stone-400 mb-3 font-mono">La aguja central determina tu Photocard</p>
 
             <!-- 🎴 VIEWPORT DE LA RULETA PRO -->
             <div id="cs-viewport" class="w-full h-56 bg-[#07010e] border-2 border-vip-gold/50 rounded-2xl relative overflow-hidden flex items-center shadow-[inset_0_0_50px_rgba(0,0,0,0.95)]">
                 
-                <!-- Sombras profundas de degradado lateral con viñeta -->
                 <div class="absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-black via-black/90 to-transparent z-20 pointer-events-none"></div>
                 <div class="absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-black via-black/90 to-transparent z-20 pointer-events-none"></div>
 
-                <!-- Resplandor superior e inferior del chasis -->
                 <div class="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-yellow-400/80 to-transparent pointer-events-none z-20"></div>
                 <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-yellow-400/80 to-transparent pointer-events-none z-20"></div>
 
                 <!-- ⚡ MIRA LÁSER CENTRAL NEÓN PRO -->
                 <div id="cs-laser-needle" class="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3px] bg-gradient-to-b from-yellow-300 via-rose-500 to-yellow-300 z-30 pointer-events-none transition-all duration-300 shadow-[0_0_20px_rgba(234,179,8,1),0_0_35px_rgba(244,63,94,0.8)]">
-                    <!-- Flecha Superior Láser -->
                     <div class="absolute -top-0.5 left-1/2 -translate-x-1/2 flex flex-col items-center">
                         <div class="w-3.5 h-3.5 bg-yellow-400 transform rotate-45 border border-black shadow-[0_0_12px_rgba(234,179,8,1)]"></div>
                     </div>
-                    <!-- Flecha Inferior Láser -->
                     <div class="absolute -bottom-0.5 left-1/2 -translate-x-1/2 flex flex-col items-center">
                         <div class="w-3.5 h-3.5 bg-yellow-400 transform rotate-45 border border-black shadow-[0_0_12px_rgba(234,179,8,1)]"></div>
                     </div>
-                    <!-- Núcleo Central de Escaneo -->
                     <div class="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-yellow-400/30 blur-sm animate-ping"></div>
                 </div>
 
@@ -173,48 +173,47 @@
                 <div id="cs-reel" class="flex gap-3 px-4 will-change-transform" style="transform: translateX(0px);"></div>
             </div>
 
-            <!-- Botón de Giro -->
+            <!-- BANDEJA DE BOTÍN EN VIVO (MUESTRA LAS CARTAS QUE VAN SALIENDO) -->
+            <div id="cs-live-tray-section" class="hidden w-full flex-col mt-3 bg-black/60 p-2 rounded-2xl border border-white/10">
+                <div class="flex items-center justify-between text-[9.5px] font-mono text-stone-400 mb-1.5 px-1">
+                    <span>Botín de la Ráfaga:</span>
+                    <span id="cs-tray-count" class="font-bold text-yellow-400">0/10</span>
+                </div>
+                <div id="cs-live-tray" class="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5 min-h-[52px]"></div>
+            </div>
+
+            <!-- Botón de Inicio de Giro -->
             <div class="w-full mt-4" id="cs-spin-action">
-                <button type="button" id="cs-confirm-btn" onclick="startReelSpin()" 
+                <button type="button" id="cs-confirm-btn" onclick="startMultiReelSequence()" 
                         class="w-full btn-gold py-3.5 rounded-2xl text-xs font-black uppercase tracking-wider shadow-[0_0_25px_rgba(212,175,55,0.4)] flex items-center justify-center gap-2 active:scale-95 transition-all">
                     <span>🗝️</span> <span id="cs-confirm-label">Girar Ruleta</span>
                 </button>
             </div>
+
+            <!-- Botón Siguiente durante la secuencia -->
+            <div class="w-full mt-3 hidden" id="cs-next-spin-action">
+                <button type="button" id="cs-next-btn" onclick="advanceNextSpin()" 
+                        class="w-full bg-purple-950 hover:bg-purple-900 border border-purple-500 text-purple-200 py-3 rounded-2xl text-xs font-black uppercase tracking-wider shadow flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    <span>⏭️</span> <span id="cs-next-label">Siguiente Carta</span>
+                </button>
+            </div>
         </div>
 
-        <!-- FASE 2: REVELACIÓN GLORIOSA (PODIO DE GANADORES) -->
+        <!-- FASE 2: RESUMEN FINAL EN CASCADA (SIN APARICIONES DE LA NADA) -->
         <div id="cs-reveal-phase" class="hidden w-full flex flex-col items-center py-1 relative z-30">
             
-            <!-- Resplandor giratorio celestial -->
             <div id="cs-sunburst" class="absolute w-72 h-72 rounded-full opacity-35 pointer-events-none animate-spin-slow"></div>
 
-            <div class="flex items-center gap-2 mb-2 z-10">
-                <span class="text-[10px] font-mono uppercase font-black px-3.5 py-1 rounded-full border shadow-lg" id="cs-winner-rarity">
-                    Rareza
-                </span>
-                <span id="cs-new-badge" class="hidden text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-yellow-400 text-black shadow">
-                    ✨ ¡NUEVA!
-                </span>
-            </div>
+            <h3 class="font-serif text-sm font-black text-gold-gradient uppercase tracking-widest text-center mb-0.5 z-10">
+                👑 Botín Desenterrado
+            </h3>
+            <p id="cs-final-summary-sub" class="text-[10px] text-stone-400 font-mono mb-3 z-10">
+                10 Photocards añadidas a tu colección
+            </p>
 
-            <!-- CARTA PRINCIPAL REVELADA -->
-            <div id="cs-card-reveal-box" 
-                 class="w-52 h-72 rounded-2xl border-4 overflow-hidden shadow-2xl bg-black relative transition-all duration-700 transform scale-90 opacity-0 z-10">
-                <img id="cs-winner-img" src="" class="w-full h-full object-cover">
-                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent pointer-events-none"></div>
-                
-                <div class="absolute bottom-2.5 inset-x-2.5 text-center bg-black/85 backdrop-blur-md py-2 px-2.5 rounded-xl border border-white/10">
-                    <h4 class="font-serif text-xs font-black text-white leading-tight truncate" id="cs-winner-name">Nombre</h4>
-                    <span class="text-[10px] font-bold text-yellow-300 block truncate mt-0.5" id="cs-winner-idol">Musa</span>
-                </div>
-            </div>
-
-            <!-- CUADRÍCULA MULTI-BOTÍN (SI SE ABRIÓ X5 O X10) -->
-            <div id="cs-multi-showcase" class="hidden flex-col items-center w-full mt-3 z-10">
-                <span class="text-[10px] font-mono uppercase font-bold text-stone-400 mb-2">Resto del Botín:</span>
-                <div id="cs-multi-cards-row" class="w-full flex gap-2 overflow-x-auto no-scrollbar py-1 px-1">
-                    <!-- Se inyectan las demás cartas si count > 1 -->
-                </div>
+            <!-- CUADRÍCULA EN CASCADA CON ANIMACIÓN CARD-DROP -->
+            <div id="cs-cascade-grid" class="w-full max-h-[58vh] overflow-y-auto no-scrollbar flex flex-wrap justify-center gap-2.5 p-1 z-10">
+                <!-- Se inyectan con animación secuencial escalonada -->
             </div>
 
             <!-- Botones de Acción Inmediata -->
@@ -242,12 +241,34 @@
 
     /* Carta Detenida con Efecto Slam */
     .winner-slam {
-        animation: winnerSlam 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        animation: winnerSlam 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     }
     @keyframes winnerSlam {
         0% { transform: scale(1); }
-        50% { transform: scale(1.14); filter: brightness(1.4); }
+        50% { transform: scale(1.15); filter: brightness(1.4); }
         100% { transform: scale(1.08); filter: brightness(1); }
+    }
+
+    /* Entrada suave de cartas en la bandeja */
+    .tray-pop {
+        animation: trayPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+    @keyframes trayPop {
+        0% { transform: scale(0.4) translateY(12px); opacity: 0; }
+        100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    /* Cascada de cartas repartidas al final */
+    .card-drop {
+        animation: cardDropAnim 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        opacity: 0;
+        transform: translateY(20px) scale(0.92);
+    }
+    @keyframes cardDropAnim {
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
     }
 </style>
 
@@ -261,7 +282,6 @@
         return csAudioCtx;
     }
 
-    // Tick de ruleta modulado con pitch realista
     function playCSTick(pitch = 360) {
         try {
             const ctx = getAudioCtx();
@@ -279,7 +299,6 @@
         } catch(e) {}
     }
 
-    // Sonido mecánico de cerradura al soltar el freno
     function playLockTurn() {
         try {
             const ctx = getAudioCtx();
@@ -297,7 +316,6 @@
         } catch(e) {}
     }
 
-    // Fanfarria orquestal triunfal
     function playWinFanfare(rarity) {
         try {
             const ctx = getAudioCtx();
@@ -317,7 +335,6 @@
         } catch(e) {}
     }
 
-    // Partículas y chispas doradas en Canvas
     function launchConfetti(colorHex) {
         const canvas = document.getElementById('cs-confetti-canvas');
         if (!canvas) return;
@@ -326,9 +343,7 @@
         canvas.height = window.innerHeight;
 
         const particles = [];
-        const count = 75;
-
-        for (let i = 0; i < count; i++) {
+        for (let i = 0; i < 75; i++) {
             particles.push({
                 x: canvas.width / 2,
                 y: canvas.height / 2,
@@ -370,43 +385,93 @@
     let activeCount = 1;
     let isOpening = false;
 
-    function openReelModal(boxId, boxName, boxPrice, count = 1) {
+    // Estado del Multi-Spin
+    let multiWinners = [];
+    let currentSpinIndex = 0;
+    let sampleCardsPool = [];
+    let autoNextTimeout = null;
+
+    function startCaseOpening(boxId, boxName, boxPrice, count = 1) {
         activeBoxId = boxId;
         activeBoxName = boxName;
         activeBoxPrice = boxPrice;
-        activeCount = count;
+        activeCount = parseInt(count) || 1;
 
-        const totalCost = boxPrice * count;
+        const totalCost = activeBoxPrice * activeCount;
 
-        document.getElementById('cs-box-title').innerText = boxName;
-        document.getElementById('cs-spin-subtitle').innerText = `Tirada x${count} (${totalCost} 🪙) • La aguja determina el premio`;
-        document.getElementById('cs-confirm-label').innerText = `Girar Riel x${count} (${totalCost} 🪙)`;
+        const balanceElem = document.getElementById('user-gold-balance');
+        const currentBalance = balanceElem ? (parseInt(balanceElem.innerText.replace(/[^0-9]/g, '')) || 0) : 999999;
 
-        document.getElementById('cs-roulette-phase').classList.remove('hidden');
-        document.getElementById('cs-reveal-phase').classList.add('hidden');
-        document.getElementById('cs-close-btn').style.display = 'block';
+        if (currentBalance < totalCost) {
+            const errorMsg = `Necesitas ${totalCost} 🪙 para abrir x${activeCount} cajas (tu Bóveda tiene ${currentBalance} 🪙).`;
+            if (window.showVipAlert) {
+                showVipAlert(errorMsg, "Bóveda Insuficiente", "🪙");
+            } else {
+                alert(errorMsg);
+            }
+            return;
+        }
 
-        const btn = document.getElementById('cs-confirm-btn');
-        btn.disabled = false;
+        const roundBadge = document.getElementById('cs-round-badge');
+        if (roundBadge) roundBadge.innerText = activeCount > 1 ? `Ráfaga x${activeCount}` : `Tirada x1`;
+
+        const skipBtn = document.getElementById('cs-skip-btn');
+        if (skipBtn) skipBtn.classList.add('hidden');
+
+        const liveTraySec = document.getElementById('cs-live-tray-section');
+        if (liveTraySec) liveTraySec.classList.add('hidden');
+
+        const liveTray = document.getElementById('cs-live-tray');
+        if (liveTray) liveTray.innerHTML = '';
+
+        const nextSpinAction = document.getElementById('cs-next-spin-action');
+        if (nextSpinAction) nextSpinAction.classList.add('hidden');
+
+        const spinAction = document.getElementById('cs-spin-action');
+        if (spinAction) spinAction.classList.remove('hidden');
+
+        const confirmBtn = document.getElementById('cs-confirm-btn');
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = `<span>🗝️</span> <span>Girar Riel (${totalCost} 🪙)</span>`;
+        }
+
+        const roulettePhase = document.getElementById('cs-roulette-phase');
+        if (roulettePhase) roulettePhase.classList.remove('hidden');
+
+        const revealPhase = document.getElementById('cs-reveal-phase');
+        if (revealPhase) revealPhase.classList.add('hidden');
+
+        const closeBtn = document.getElementById('cs-close-btn');
+        if (closeBtn) closeBtn.style.display = 'block';
 
         const reel = document.getElementById('cs-reel');
-        reel.style.transition = 'none';
-        reel.style.transform = 'translateX(0px)';
-        reel.innerHTML = '<span class="text-xs text-stone-500 italic py-20 px-8 text-center w-full block">Pulsa el botón dorado para desbloquear el Riel Real...</span>';
+        if (reel) {
+            reel.style.transition = 'none';
+            reel.style.transform = 'translateX(0px)';
+            reel.innerHTML = '<span class="text-xs text-stone-500 italic py-20 px-8 text-center w-full block">Pulsa el botón dorado para desbloquear el Riel Real...</span>';
+        }
 
-        document.getElementById('cs-modal').classList.remove('hidden');
+        const modal = document.getElementById('cs-modal');
+        if (modal) modal.classList.remove('hidden');
     }
 
+    window.openReelModal = startCaseOpening;
+    window.startCaseOpening = startCaseOpening;
+
     function reopenCurrentBox() {
-        openReelModal(activeBoxId, activeBoxName, activeBoxPrice, activeCount);
+        startCaseOpening(activeBoxId, activeBoxName, activeBoxPrice, activeCount);
     }
 
     function closeCSModal() {
         if (isOpening) return;
-        document.getElementById('cs-modal').classList.add('hidden');
+        if (autoNextTimeout) clearTimeout(autoNextTimeout);
+        const modal = document.getElementById('cs-modal');
+        if (modal) modal.classList.add('hidden');
     }
 
-    async function startReelSpin() {
+    // Iniciar la secuencia de giros
+    async function startMultiReelSequence() {
         if (isOpening) return;
 
         playLockTurn();
@@ -420,13 +485,12 @@
 
         const btn = document.getElementById('cs-confirm-btn');
         const closeBtn = document.getElementById('cs-close-btn');
-        const reel = document.getElementById('cs-reel');
-        const viewport = document.getElementById('cs-viewport');
-        const needle = document.getElementById('cs-laser-needle');
 
-        btn.disabled = true;
-        btn.innerHTML = '<span>⏳</span> Girando Riel Real...';
-        closeBtn.style.display = 'none';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳</span> Iniciando Ráfaga...';
+        }
+        if (closeBtn) closeBtn.style.display = 'none';
         isOpening = true;
 
         try {
@@ -440,9 +504,11 @@
                 if (window.showVipAlert) showVipAlert(data.error, "Bóveda Insuficiente", "🪙");
                 else alert(data.error);
 
-                btn.disabled = false;
-                btn.innerHTML = `<span>🗝️</span> <span>Girar Riel x${activeCount}</span>`;
-                closeBtn.style.display = 'block';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = `<span>🗝️</span> <span>Girar Riel x${activeCount}</span>`;
+                }
+                if (closeBtn) closeBtn.style.display = 'block';
                 isOpening = false;
                 return;
             }
@@ -450,148 +516,248 @@
             const balanceElem = document.getElementById('user-gold-balance');
             if (balanceElem) balanceElem.innerText = data.nuevo_saldo;
 
-            // Renderizar cartas estilizadas PRO en el riel
-            reel.style.transition = 'none';
-            reel.style.transform = 'translateX(0px)';
-            reel.innerHTML = data.reel.map((c, i) => `
-                <div id="reel-card-${i}" class="w-[125px] h-[190px] rounded-2xl flex-shrink-0 bg-[#0d0417] border-2 flex flex-col justify-between p-1.5 relative overflow-hidden select-none shadow-xl transition-transform"
-                     style="border-color: ${c.color}; box-shadow: 0 4px 20px ${c.color}35;">
-                    
-                    <!-- Brillo diagonal reflectivo -->
-                    <div class="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-transparent pointer-events-none"></div>
+            multiWinners = data.winners;
+            sampleCardsPool = data.sample_cards || [data.winner];
+            currentSpinIndex = 0;
 
-                    <!-- Foto Photocard -->
-                    <div class="w-full h-[135px] rounded-xl overflow-hidden bg-black relative">
-                        <img src="${c.image_url}" class="w-full h-full object-cover">
-                        <span class="absolute top-1 right-1 text-[7.5px] font-mono uppercase font-black px-1.5 py-0.2 rounded-md shadow"
-                              style="background-color: ${c.color}; color: #000;">
-                            ${c.rarity.substring(0, 4)}
-                        </span>
-                    </div>
+            // Ocultar botón de inicio y mostrar bandeja si es multi-apertura
+            const spinAction = document.getElementById('cs-spin-action');
+            if (spinAction) spinAction.classList.add('hidden');
 
-                    <!-- Datos Inferiores -->
-                    <div class="text-center flex flex-col mt-1">
-                        <span class="text-[9.5px] font-black text-white truncate leading-tight">${c.name}</span>
-                        <span class="text-[8px] font-bold text-yellow-300 truncate mt-0.5">${c.idol_name}</span>
-                    </div>
+            if (multiWinners.length > 1) {
+                const liveTraySec = document.getElementById('cs-live-tray-section');
+                if (liveTraySec) liveTraySec.classList.remove('hidden');
 
-                    <!-- Borde neón inferior -->
-                    <div class="absolute bottom-0 inset-x-0 h-1.5" style="background-color: ${c.color};"></div>
-                </div>
-            `).join('');
-
-            reel.offsetHeight; // Forzar reflow
-
-            const cardPitch = 137; // Ancho carta (125) + Gap (12)
-            const winningIndex = data.winning_index; // 28
-            const containerWidth = viewport.offsetWidth;
-            const cardCenter = (winningIndex * cardPitch) + 62.5;
-            // Variación aleatoria para que no quede siempre exactamente en el mismo píxel
-            const targetX = - (cardCenter - (containerWidth / 2) + (Math.random() * 20 - 10));
-
-            // Curva idéntica a CS2 con desaceleración dramática
-            reel.style.transition = 'transform 5.2s cubic-bezier(0.08, 0.95, 0.18, 1)';
-            reel.style.transform = `translateX(${targetX}px)`;
-
-            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy'); } catch(e) {}
-
-            // Tick sonoro que se desacelera progresivamente
-            let ticks = 0;
-            let tickDelay = 75;
-            function scheduleTick() {
-                if (ticks > 30) return;
-                playCSTick(380 - (ticks * 7));
-                try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
-                ticks++;
-                tickDelay += Math.floor(ticks * 4.8);
-                setTimeout(scheduleTick, tickDelay);
+                const skipBtn = document.getElementById('cs-skip-btn');
+                if (skipBtn) skipBtn.classList.remove('hidden');
             }
-            scheduleTick();
 
-            // Momento exacto de frenado
-            setTimeout(() => {
-                isOpening = false;
-                closeBtn.style.display = 'block';
-
-                // Efecto Slam en la carta ganadora del riel
-                const winnerCardInReel = document.getElementById(`reel-card-${winningIndex}`);
-                if (winnerCardInReel) {
-                    winnerCardInReel.classList.add('winner-slam');
-                }
-
-                needle.style.boxShadow = `0 0 45px ${data.winner.color}, 0 0 70px ${data.winner.color}`;
-
-                playWinFanfare(data.winner.rarity);
-                launchConfetti(data.winner.color);
-                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
-
-                // Tras 1 segundo de apreciar el resultado en el riel, se abre la revelación en podio
-                setTimeout(() => {
-                    document.getElementById('cs-roulette-phase').classList.add('hidden');
-
-                    const revealPhase = document.getElementById('cs-reveal-phase');
-                    const winnerBox = document.getElementById('cs-card-reveal-box');
-                    const winnerImg = document.getElementById('cs-winner-img');
-                    const winnerName = document.getElementById('cs-winner-name');
-                    const winnerIdol = document.getElementById('cs-winner-idol');
-                    const winnerRarity = document.getElementById('cs-winner-rarity');
-                    const newBadge = document.getElementById('cs-new-badge');
-                    const sunburst = document.getElementById('cs-sunburst');
-
-                    winnerImg.src = data.winner.image_url;
-                    winnerName.innerText = data.winner.name;
-                    winnerIdol.innerText = `Idol: ${data.winner.idol_name}`;
-
-                    winnerRarity.innerText = data.winner.rarity_display;
-                    winnerRarity.style.borderColor = data.winner.color;
-                    winnerRarity.style.color = data.winner.color;
-                    winnerRarity.style.backgroundColor = `${data.winner.color}22`;
-
-                    if (data.winner.is_new) {
-                        newBadge.classList.remove('hidden');
-                    } else {
-                        newBadge.classList.add('hidden');
-                    }
-
-                    winnerBox.style.borderColor = data.winner.color;
-                    winnerBox.style.boxShadow = `0 0 50px ${data.winner.color}`;
-                    sunburst.style.background = `radial-gradient(circle, ${data.winner.color} 0%, transparent 65%)`;
-
-                    // Si se abrieron 5 o 10 cartas, mostrar el resto del botín abajo
-                    const multiShowcase = document.getElementById('cs-multi-showcase');
-                    const multiRow = document.getElementById('cs-multi-cards-row');
-                    if (data.winners && data.winners.length > 1) {
-                        multiRow.innerHTML = data.winners.map(c => `
-                            <div class="w-20 h-28 flex-shrink-0 rounded-xl overflow-hidden bg-black border relative flex flex-col justify-end p-1 shadow"
-                                 style="border-color: ${c.color};">
-                                <img src="${c.image_url}" class="absolute inset-0 w-full h-full object-cover">
-                                <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
-                                <span class="relative z-10 text-[8px] font-black text-white truncate text-center">${c.name}</span>
-                                ${c.is_new ? '<span class="absolute top-1 left-1 bg-yellow-400 text-black text-[6.5px] font-black px-1 rounded">NUEVA</span>' : ''}
-                            </div>
-                        `).join('');
-                        multiShowcase.classList.remove('hidden');
-                    } else {
-                        multiShowcase.classList.add('hidden');
-                    }
-
-                    revealPhase.classList.remove('hidden');
-
-                    setTimeout(() => {
-                        winnerBox.style.opacity = '1';
-                        winnerBox.style.transform = 'scale(1)';
-                    }, 60);
-
-                }, 1100);
-
-            }, 5250);
+            // Ejecutar el primer giro
+            executeSingleSpin(currentSpinIndex);
 
         } catch(e) {
             alert("Error de conexión al girar el relicario.");
-            btn.disabled = false;
-            closeBtn.style.display = 'block';
+            if (btn) btn.disabled = false;
+            if (closeBtn) closeBtn.style.display = 'block';
             isOpening = false;
         }
     }
+
+    // Ejecuta 1 giro del carrusel para la carta 'index'
+    function executeSingleSpin(index) {
+        if (index >= multiWinners.length) {
+            finishAllSpins();
+            return;
+        }
+
+        const currentCard = multiWinners[index];
+        const roundBadge = document.getElementById('cs-round-badge');
+        if (roundBadge) {
+            roundBadge.innerText = `Tirada ${index + 1} de ${multiWinners.length}`;
+        }
+
+        const nextAction = document.getElementById('cs-next-spin-action');
+        if (nextAction) nextAction.classList.add('hidden');
+
+        const reel = document.getElementById('cs-reel');
+        const viewport = document.getElementById('cs-viewport');
+        const needle = document.getElementById('cs-laser-needle');
+
+        // Construir 32 cartas de relleno + la ganadora en la posición 24
+        const winningSlot = 24;
+        const reelCards = [];
+        for (let i = 0; i < 32; i++) {
+            if (i === winningSlot) {
+                reelCards.push(currentCard);
+            } else {
+                const randSample = sampleCardsPool[Math.floor(Math.random() * sampleCardsPool.length)] || currentCard;
+                reelCards.push(randSample);
+            }
+        }
+
+        // Resetear riel instantáneo
+        reel.style.transition = 'none';
+        reel.style.transform = 'translateX(0px)';
+        reel.innerHTML = reelCards.map((c, i) => `
+            <div id="reel-item-${i}" class="w-[125px] h-[190px] rounded-2xl flex-shrink-0 bg-[#0d0417] border-2 flex flex-col justify-between p-1.5 relative overflow-hidden select-none shadow-xl transition-transform"
+                 style="border-color: ${c.color}; box-shadow: 0 4px 20px ${c.color}35;">
+                <div class="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-transparent pointer-events-none"></div>
+                <div class="w-full h-[135px] rounded-xl overflow-hidden bg-black relative">
+                    <img src="${c.image_url}" class="w-full h-full object-cover">
+                    <span class="absolute top-1 right-1 text-[7.5px] font-mono uppercase font-black px-1.5 py-0.2 rounded-md shadow"
+                          style="background-color: ${c.color}; color: #000;">
+                        ${c.rarity.substring(0, 4)}
+                    </span>
+                </div>
+                <div class="text-center flex flex-col mt-1">
+                    <span class="text-[9.5px] font-black text-white truncate leading-tight">${c.name}</span>
+                    <span class="text-[8px] font-bold text-yellow-300 truncate mt-0.5">${c.idol_name}</span>
+                </div>
+                <div class="absolute bottom-0 inset-x-0 h-1.5" style="background-color: ${c.color};"></div>
+            </div>
+        `).join('');
+
+        reel.offsetHeight; // Forzar reflow
+
+        const cardPitch = 137; // Ancho + Gap
+        const containerWidth = viewport ? viewport.offsetWidth : 350;
+        const cardCenter = (winningSlot * cardPitch) + 62.5;
+        const targetX = - (cardCenter - (containerWidth / 2) + (Math.random() * 16 - 8));
+
+        // Duración: si es 1 sola carta es más lenta (4.8s). Si es ráfaga es dinámica (2.6s)
+        const spinDuration = (multiWinners.length === 1) ? 4.8 : 2.6;
+        reel.style.transition = `transform ${spinDuration}s cubic-bezier(0.08, 0.95, 0.18, 1)`;
+        reel.style.transform = `translateX(${targetX}px)`;
+
+        try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium'); } catch(e) {}
+
+        // Ticks de sonido durante el frenado
+        let ticks = 0;
+        const maxTicks = (multiWinners.length === 1) ? 28 : 16;
+        let tickDelay = (multiWinners.length === 1) ? 80 : 50;
+        function scheduleTick() {
+            if (ticks > maxTicks) return;
+            playCSTick(380 - (ticks * 8));
+            try { window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('light'); } catch(e) {}
+            ticks++;
+            tickDelay += Math.floor(ticks * 4.5);
+            setTimeout(scheduleTick, tickDelay);
+        }
+        scheduleTick();
+
+        // Al detenerse la aguja sobre la carta ganadora
+        setTimeout(() => {
+            const winnerEl = document.getElementById(`reel-item-${winningSlot}`);
+            if (winnerEl) winnerEl.classList.add('winner-slam');
+
+            if (needle) {
+                needle.style.boxShadow = `0 0 40px ${currentCard.color}, 0 0 65px ${currentCard.color}`;
+            }
+
+            playWinFanfare(currentCard.rarity);
+            if (currentCard.rarity === 'legendary' || currentCard.rarity === 'epic') {
+                launchConfetti(currentCard.color);
+            }
+            try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+
+            // Agregar a la bandeja inferior con animación Pop
+            addCardToLiveTray(currentCard, index + 1);
+
+            // Si es la última carta, finalizar tras 1.2 segundos
+            if (index + 1 >= multiWinners.length) {
+                setTimeout(finishAllSpins, 1300);
+            } else {
+                // Mostrar botón de pasar rápido o avanzar automáticamente
+                const nextAction = document.getElementById('cs-next-spin-action');
+                const nextLabel = document.getElementById('cs-next-label');
+                if (nextAction && nextLabel) {
+                    nextLabel.innerText = `Siguiente Carta (${index + 2}/${multiWinners.length})`;
+                    nextAction.classList.remove('hidden');
+                }
+
+                autoNextTimeout = setTimeout(() => {
+                    advanceNextSpin();
+                }, 1600);
+            }
+
+        }, spinDuration * 1000 + 50);
+    }
+
+    // Añade la carta ganadora a la bandeja en vivo con sonido Pop
+    function addCardToLiveTray(card, currentCount) {
+        const tray = document.getElementById('cs-live-tray');
+        const countEl = document.getElementById('cs-tray-count');
+        if (!tray) return;
+
+        if (countEl) countEl.innerText = `${currentCount}/${multiWinners.length}`;
+
+        const item = document.createElement('div');
+        item.className = 'w-12 h-16 flex-shrink-0 rounded-xl overflow-hidden bg-black border relative flex flex-col justify-end p-0.5 shadow-md tray-pop';
+        item.style.borderColor = card.color;
+        item.innerHTML = `
+            <img src="${card.image_url}" class="absolute inset-0 w-full h-full object-cover">
+            <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
+            <span class="relative z-10 text-[7px] font-black text-white truncate text-center">${card.name}</span>
+            ${card.is_new ? '<span class="absolute top-0.5 left-0.5 bg-yellow-400 text-black text-[5.5px] font-black px-1 rounded">NUEVA</span>' : ''}
+        `;
+        tray.appendChild(item);
+        tray.scrollLeft = tray.scrollWidth;
+    }
+
+    function advanceNextSpin() {
+        if (autoNextTimeout) clearTimeout(autoNextTimeout);
+        currentSpinIndex++;
+        executeSingleSpin(currentSpinIndex);
+    }
+
+    // Saltar todos los giros y mostrar el podio completo inmediatamente
+    function skipAllSpins() {
+        if (autoNextTimeout) clearTimeout(autoNextTimeout);
+        finishAllSpins();
+    }
+
+    // Fase final: Despliegue de cartas en cascada
+    function finishAllSpins() {
+        isOpening = false;
+        const closeBtn = document.getElementById('cs-close-btn');
+        if (closeBtn) closeBtn.style.display = 'block';
+
+        const roulettePhase = document.getElementById('cs-roulette-phase');
+        if (roulettePhase) roulettePhase.classList.add('hidden');
+
+        const revealPhase = document.getElementById('cs-reveal-phase');
+        const grid = document.getElementById('cs-cascade-grid');
+        const sub = document.getElementById('cs-final-summary-sub');
+
+        if (sub) {
+            sub.innerText = `${multiWinners.length} Photocard${multiWinners.length > 1 ? 's' : ''} añadidas a tu colección`;
+        }
+
+        if (grid) {
+            grid.innerHTML = '';
+            // Inyectar cartas con animación escalonada (card-drop)
+            multiWinners.forEach((card, idx) => {
+                const cardEl = document.createElement('div');
+                cardEl.className = 'card-drop w-28 h-40 flex-shrink-0 rounded-2xl bg-[#0c0416] border-2 overflow-hidden shadow-2xl relative flex flex-col justify-between p-1.5 select-none';
+                cardEl.style.borderColor = card.color;
+                cardEl.style.boxShadow = `0 4px 20px ${card.color}35`;
+                cardEl.style.animationDelay = `${idx * 75}ms`;
+
+                cardEl.innerHTML = `
+                    <div class="w-full h-[105px] rounded-xl overflow-hidden bg-black relative">
+                        <img src="${card.image_url}" class="w-full h-full object-cover">
+                        ${card.is_new ? `
+                            <span class="absolute top-1 left-1 bg-yellow-400 text-black text-[7px] font-black uppercase px-1.5 py-0.2 rounded shadow">
+                                ¡NUEVA!
+                            </span>
+                        ` : `
+                            <span class="absolute top-1 left-1 bg-black/80 text-stone-300 text-[6.5px] font-mono px-1 rounded border border-white/20">
+                                Repetida
+                            </span>
+                        `}
+                        <span class="absolute top-1 right-1 text-[7px] font-mono uppercase font-black px-1.5 py-0.2 rounded shadow"
+                              style="background-color: ${card.color}; color: #000;">
+                            ${card.rarity.substring(0, 4)}
+                        </span>
+                    </div>
+
+                    <div class="text-center flex flex-col mt-0.5">
+                        <span class="text-[9px] font-black text-white truncate leading-tight">${card.name}</span>
+                        <span class="text-[7.5px] font-bold text-yellow-300 truncate mt-0.2">${card.idol_name}</span>
+                    </div>
+
+                    <div class="absolute bottom-0 inset-x-0 h-1" style="background-color: ${card.color};"></div>
+                `;
+                grid.appendChild(cardEl);
+            });
+        }
+
+        if (revealPhase) revealPhase.classList.remove('hidden');
+        launchConfetti('#F59E0B');
+    }
+
+    // Alias de seguridad
+    window.confirmOpenCase = startMultiReelSequence;
+    window.startReelSpin = startMultiReelSequence;
 </script>
 {% endblock %}

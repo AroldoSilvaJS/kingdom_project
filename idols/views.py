@@ -1220,7 +1220,7 @@ def open_photocard_box_ajax(request, box_id):
     if wallet.balance < total_cost:
         return JsonResponse({
             'success': False, 
-            'error': f'No tienes suficiente oro ({total_cost} 🪙 necesarios para {count} cajas).'
+            'error': f'No tienes suficiente oro en tu Bóveda. Necesitas {total_cost} 🪙 para abrir {count} cajas (tienes {wallet.balance} 🪙).'
         }, status=400)
 
     all_cards = list(box.cards.all())
@@ -1229,7 +1229,7 @@ def open_photocard_box_ajax(request, box_id):
 
     wallet.remove_funds(total_cost)
 
-    # Bonos de suerte (conejo / amuleto)
+    # Bonos de mascota y amuleto
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
     extra_legendary_base = {1: 5.0, 2: 12.0, 3: 20.0}.get(pet.evolution_stage_number, 5.0) if (pet and pet.species == 'rabbit') else 0.0
 
@@ -1305,20 +1305,18 @@ def open_photocard_box_ajax(request, box_id):
                 button_url="https://t.me/KingdomPleasure_bot?start=entrar"
             )
 
-    first_winner = winners[0]
-    reel = []
-    for i in range(35):
-        card_item = first_winner if i == 28 else random.choice(all_cards)
-        reel.append({
-            'id': card_item.id if hasattr(card_item, 'id') else card_item['id'],
-            'name': card_item.name if hasattr(card_item, 'name') else card_item['name'],
-            'rarity': card_item.rarity if hasattr(card_item, 'rarity') else card_item['rarity'],
-            'rarity_display': card_item.get_rarity_display() if hasattr(card_item, 'get_rarity_display') else card_item['rarity_display'],
-            'color': card_item.get_color_hex() if hasattr(card_item, 'get_color_hex') else card_item['color'],
-            'image_url': (card_item.image.url if card_item.image else '') if hasattr(card_item, 'image') else card_item['image_url'],
-            'idol_name': card_item.display_idol_name if hasattr(card_item, 'display_idol_name') else card_item['idol_name'],
-        })
+    # Muestra de cartas para el relleno visual del carrusel
+    sample_cards = [{
+        'id': c.id,
+        'name': c.name,
+        'rarity': c.rarity,
+        'rarity_display': c.get_rarity_display(),
+        'color': c.get_color_hex(),
+        'image_url': c.image.url if c.image else '',
+        'idol_name': c.display_idol_name,
+    } for c in all_cards]
 
+    first_winner = winners[0]
     rarity_ranks = {'legendary': 4, 'epic': 3, 'rare': 2, 'common': 1}
     highest_card = max(winners, key=lambda w: rarity_ranks.get(w['rarity'], 1))
 
@@ -1331,8 +1329,7 @@ def open_photocard_box_ajax(request, box_id):
         'highest_color': highest_card['color'],
         'winner': first_winner,
         'winners': winners,
-        'winning_index': 28,
-        'reel': reel
+        'sample_cards': sample_cards,
     })
 
 
