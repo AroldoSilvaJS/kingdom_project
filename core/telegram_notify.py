@@ -10,15 +10,28 @@ def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None, mess
         return False
 
     url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
+
+    # Enrutamiento automático al Tema/Topic oficial del Reino si el destino es el Grupo
+    group_id = getattr(settings, 'TELEGRAM_GROUP_ID', None)
+    if message_thread_id is None and group_id and str(chat_id) == str(group_id):
+        default_topic = getattr(settings, 'TELEGRAM_TOPIC_ID', None)
+        if default_topic:
+            message_thread_id = default_topic
+
     payload = {
         'chat_id': chat_id,
         'text': text,
         'parse_mode': 'HTML'
     }
 
-    # Si se envía a un tema/foro específico
+    # Si se envía a un tema/foro específico (message_thread_id)
     if message_thread_id:
-        payload['message_thread_id'] = int(message_thread_id)
+        try:
+            tid = int(message_thread_id)
+            if tid > 0:
+                payload['message_thread_id'] = tid
+        except (ValueError, TypeError):
+            pass
 
     if button_text and button_url:
         try:
