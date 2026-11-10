@@ -1,3 +1,4 @@
+
 import random
 import os
 import sys
@@ -18,7 +19,7 @@ from django.utils.text import slugify
 
 from .models import (
     IdolProfile, Review, Post, PostImage, PostUnlock, PostLike, 
-    CustomRequest, PostComment, PhotocardBox, Photocard, UserPhotocard, PhotocardTrade
+    CustomRequest, PostComment, PhotocardBox, Photocard, UserPhotocard, PhotocardTrade, RoleSessionRequest
 )
 from economy.models import Wallet
 from core.models import UserProfile, UserRole, KingdomSetting
@@ -541,6 +542,14 @@ def idol_detail(request, idol_id):
 
         return redirect(f'/idols/{idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
 
+    # Solicitudes de Rol para la dueña de la Idol
+    roleplay_requests = []
+    if can_edit:
+        try:
+            roleplay_requests = list(RoleSessionRequest.objects.filter(idol=idol).order_by('-created_at')[:8])
+        except Exception:
+            roleplay_requests = []
+
     context = {
         'idol': idol,
         'reviews': reviews,
@@ -553,6 +562,7 @@ def idol_detail(request, idol_id):
         'tg_username': tg_username,
         'can_edit': can_edit,
         'active_tab': active_tab,
+        'roleplay_requests': roleplay_requests,
     }
     return render(request, 'idols/detail.html', context)
 
@@ -2204,8 +2214,6 @@ def handle_trade_offer(request, trade_id, action):
 
     return redirect('/idols/photocards/market/')
 
-
-
     tg_id = resolve_safe_tg(request)
     is_admin = check_is_staff_or_admin(tg_id)
     if not is_admin:
@@ -2388,3 +2396,167 @@ def handle_trade_offer(request, trade_id, action):
         'current_tab': current_tab,
         'tg_id': tg_id
     })
+
+
+
+# ==============================================================================
+# 🎭 MÓDULO DE DISPONIBILIDAD & SOLICITUDES DE ROL
+# ==============================================================================
+def toggle_roleplay_status(request, idol_id):
+    """Permite a la idol encender/apagar su anuncio de disponibilidad de rol."""
+    tg_id = resolve_safe_tg(request)
+    idol = get_object_or_404(IdolProfile, id=idol_id)
+    is_admin = check_is_staff_or_admin(tg_id)
+    if not (tg_id and (tg_id == idol.telegram_user_id or is_admin)):
+        messages.error(request, "Acceso exclusivo para la dueña de la Musa.")
+        return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+    
+    if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+        is_open = request.POST.get('is_roleplay_open') in ['1', 'true', 'on', True]
+        notice = request.POST.get('roleplay_notice', '').strip()
+        try:
+            price = max(50, int(request.POST.get('roleplay_price', 100)))
+        except (ValueError, TypeError):
+            price = 100
+        
+        idol.is_roleplay_open = is_open
+        if notice:
+            idol.roleplay_notice = notice[:160]
+        idol.roleplay_price = price
+        if is_open:
+            idol.status = 'online'
+        idol.save(update_fields=['is_roleplay_open', 'roleplay_notice', 'roleplay_price', 'status'])
+        
+        status_label = "🟢 DISPONIBLE PARA ROL" if is_open else "🌙 Modo Descanso / Pausado"
+        msg = f"✨ Tu cartel en vivo ha sido actualizado a: {status_label}."
+        if is_ajax:
+            return JsonResponse({'success': True, 'is_open': is_open, 'message': msg})
+        messages.success(request, msg)
+    return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+
+def request_roleplay_session(request, idol_id):
+    """Permite al cliente solicitar una sesión de rol depositando oro en custodia."""
+    if request.method != 'POST':
+        return redirect(f'/idols/{idol_id}/')
+    
+    tg_id = resolve_safe_tg(request)
+    idol = get_object_or_404(IdolProfile, id=idol_id)
+    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+    client_username = request.POST.get('client_username') or (profile.username if profile else 'Noble')
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+
+    if tg_id and tg_id == idol.telegram_user_id:
+        err = "No puedes solicitarte una sesión de rol a ti misma."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
+        return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+    theme = request.POST.get('theme', '').strip()
+    details = request.POST.get('details', '').strip()
+    try:
+        bounty = int(request.POST.get('bounty', idol.roleplay_price))
+    except (ValueError, TypeError):
+        bounty = idol.roleplay_price
+
+    if not theme:
+        err = "Debes indicar una temática o idea para la sesión de rol."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
+        return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+    min_price = idol.roleplay_price or 100
+    if bounty < min_price:
+        err = f"La ofrenda mínima para esta Musa es de {min_price} 🪙."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
+        return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+    from economy.models import Wallet
+    client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    if client_wallet.balance < bounty:
+        err = f"Oro insuficiente ({client_wallet.balance}/{bounty} 🪙) para formalizar la petición."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
+        return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+    with transaction.atomic():
+        client_wallet.remove_funds(bounty)
+        session_req = RoleSessionRequest.objects.create(
+            idol=idol,
+            client_telegram_id=tg_id,
+            client_username=client_username,
+            theme=theme,
+            details=details,
+            bounty=bounty,
+            status='pending'
+        )
+
+    # Enviar notificación inmediata a la idol por Telegram
+    notif_text = (
+        f"🎭 <b>¡NUEVA SOLICITUD DE ROL PARA {idol.stage_name}!</b>\n\n"
+        f"👤 <b>Cliente:</b> @{client_username}\n"
+        f"📜 <b>Temática:</b> {theme}\n"
+        f"🪙 <b>Ofrenda en custodia:</b> {bounty} 🪙\n\n"
+        f"<i>Abre tu perfil en el bot para Aceptar el rol y comenzar el chat.</i>"
+    )
+    send_telegram_msg(chat_id=idol.telegram_user_id, text=notif_text)
+
+    msg = f"💌 ¡Petición de rol enviada a {idol.stage_name}! Tu oro ({bounty} 🪙) quedó en custodia hasta que se complete la sesión."
+    if is_ajax:
+        return JsonResponse({'success': True, 'message': msg, 'request_id': session_req.id})
+    messages.success(request, msg)
+    return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+
+
+def handle_roleplay_request(request, request_id, action):
+    """Permite a la idol aceptar, completar o rechazar la solicitud de rol."""
+    tg_id = resolve_safe_tg(request)
+    session_req = get_object_or_404(RoleSessionRequest, id=request_id)
+    idol = session_req.idol
+    is_owner = bool(tg_id and tg_id == idol.telegram_user_id)
+    is_client = bool(tg_id and tg_id == session_req.client_telegram_id)
+    is_admin = check_is_staff_or_admin(tg_id)
+
+    if not (is_owner or is_client or is_admin):
+        messages.error(request, "Acceso no autorizado.")
+        return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+
+    from economy.models import Wallet
+
+    if action == 'accept' and (is_owner or is_admin):
+        session_req.status = 'accepted'
+        session_req.save(update_fields=['status', 'updated_at'])
+        client_msg = f"✨ <b>¡{idol.stage_name} ha ACEPTADO tu solicitud de rol!</b>\nTemática: {session_req.theme}\nTe contactará en breve por Telegram."
+        send_telegram_msg(chat_id=session_req.client_telegram_id, text=client_msg)
+        messages.success(request, f"¡Petición aceptada! Ya puedes abrir chat con @{session_req.client_username}.")
+
+    elif action == 'complete' and (is_owner or is_admin):
+        with transaction.atomic():
+            session_req.status = 'completed'
+            session_req.save(update_fields=['status', 'updated_at'])
+            idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=idol.telegram_user_id)
+            idol_wallet.add_funds(session_req.bounty)
+            idol.services_done += 1
+            idol.save(update_fields=['services_done'])
+        
+        grant_user_xp(request, idol.telegram_user_id, 25, reason=f"Sesión de Rol con {idol.stage_name}")
+        grant_user_xp(None, session_req.client_telegram_id, 15, reason=f"Rol con {idol.stage_name}")
+
+        done_msg = f"👑 <b>¡Sesión de rol con {idol.stage_name} completada!</b>\nSe han transferido {session_req.bounty} 🪙 a la Musa."
+        send_telegram_msg(chat_id=session_req.client_telegram_id, text=done_msg)
+        messages.success(request, f"🎉 ¡Rol completado! Se han depositado {session_req.bounty} 🪙 en tu bóveda.")
+
+    elif action == 'reject' and (is_owner or is_admin):
+        with transaction.atomic():
+            session_req.status = 'rejected'
+            session_req.save(update_fields=['status', 'updated_at'])
+            client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=session_req.client_telegram_id)
+            client_wallet.add_funds(session_req.bounty)
+
+        rej_msg = f"ℹ️ <b>Tu solicitud de rol para {idol.stage_name} no pudo ser atendida.</b>\nTus {session_req.bounty} 🪙 fueron devueltos a tu bóveda."
+        send_telegram_msg(chat_id=session_req.client_telegram_id, text=rej_msg)
+        messages.info(request, f"Petición rechazada. Fondos reembolsados a @{session_req.client_username}.")
+
+    return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')

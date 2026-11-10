@@ -33,5 +33,9 @@ urlpatterns = [
     path('photocards/trade/create/<int:user_card_id>/', views.create_trade_offer, name='create_trade_offer'),
     path('photocards/trade/<int:trade_id>/<str:action>/', views.handle_trade_offer, name='handle_trade_offer'),
     path('feed/react/<int:post_id>/', views.toggle_reaction, name='toggle_reaction'),
+    # Módulo de Disponibilidad y Solicitudes de Rol
+    path('<int:idol_id>/toggle-roleplay/', views.toggle_roleplay_status, name='toggle_roleplay_status'),
+    path('<int:idol_id>/request-roleplay/', views.request_roleplay_session, name='request_roleplay_session'),
+    path('roleplay-request/<int:request_id>/<str:action>/', views.handle_roleplay_request, name='handle_roleplay_request'),
   
 ]

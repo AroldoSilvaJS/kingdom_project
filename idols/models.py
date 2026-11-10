@@ -41,6 +41,11 @@ class IdolProfile(models.Model):
 
     specialty = models.CharField(max_length=100, blank=True, null=True, verbose_name="Especialidad")
 
+    # Disponibilidad en Vivo para Sesiones de Rol
+    is_roleplay_open = models.BooleanField("¿Disponible para Rol Ahora?", default=False)
+    roleplay_notice = models.CharField("Anuncio de Rol en Vivo", max_length=160, blank=True, null=True, default="¡Disponible para sesiones de rol!")
+    roleplay_price = models.PositiveIntegerField("Tarifa Mínima de Rol (🪙)", default=100)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -441,4 +446,31 @@ class IdolTribute(models.Model):
     def __str__(self):
         return f"{self.gift_name} para {self.idol.stage_name} de {self.client_username}"
 
+class RoleSessionRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('accepted', 'Aceptada'),
+        ('completed', 'Completada'),
+        ('rejected', 'Rechazada'),
+        ('cancelled', 'Cancelada'),
+    ]
+    idol = models.ForeignKey(IdolProfile, on_delete=models.CASCADE, related_name='role_requests')
+    client_telegram_id = models.BigIntegerField("ID del Noble / Cliente", db_index=True)
+    client_username = models.CharField("Usuario Telegram del Cliente", max_length=100)
+    
+    theme = models.CharField("Temática o Trama del Rol", max_length=150)
+    details = models.TextField("Detalles / Preferencias de la Escena", max_length=500, blank=True, null=True)
+    bounty = models.PositiveIntegerField("Ofrenda en Oro (🪙)", default=100)
+    status = models.CharField("Estado", max_length=15, choices=STATUS_CHOICES, default='pending')
+    
+    response_note = models.TextField("Nota de la Musa", max_length=250, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        verbose_name = "Solicitud de Sesión de Rol"
+        verbose_name_plural = "Solicitudes de Sesión de Rol"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Rol: {self.idol.stage_name} con @{self.client_username} ({self.status})"

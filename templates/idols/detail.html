@@ -120,17 +120,147 @@
                 <span class="text-yellow-400 font-bold">{{ idol.get_display_owner }}</span>
             </div>
 
+            <!-- ============================================================== -->
+            <!-- 🎭 MÓDULO DE DISPONIBILIDAD & SOLICITUDES DE ROL              -->
+            <!-- ============================================================== -->
+
+            <!-- SI ES LA DUEÑA: PANEL RÁPIDO PARA ANUNCIARSE Y GESTIONAR ROL -->
+            {% if can_edit %}
+            <div class="w-full mt-3 p-3.5 rounded-2xl bg-black/80 border border-purple-500/40 shadow-xl flex flex-col gap-2.5">
+                <div class="flex items-center justify-between border-b border-white/10 pb-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-sm">📢</span>
+                        <span class="text-[10px] font-black uppercase text-purple-300 tracking-wider">Mi Anuncio de Rol en Vivo</span>
+                    </div>
+                    <span class="text-[9px] font-mono px-2 py-0.5 rounded-full {% if idol.is_roleplay_open %}bg-emerald-950 text-emerald-300 border border-emerald-500/40{% else %}bg-stone-800 text-stone-400{% endif %}">
+                        {% if idol.is_roleplay_open %}🟢 Disponible Ahora{% else %}🌙 Descansando{% endif %}
+                    </span>
+                </div>
+
+                <form action="{% url 'idols:toggle_roleplay_status' idol.id %}" method="POST" class="flex flex-col gap-2">
+                    {% csrf_token %}
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-1.5 text-[10px] font-bold text-white cursor-pointer bg-stone-900 border border-white/10 px-2.5 py-1.5 rounded-xl">
+                            <input type="checkbox" name="is_roleplay_open" value="1" {% if idol.is_roleplay_open %}checked{% endif %} class="rounded text-emerald-500">
+                            <span>Anunciarme Disponible</span>
+                        </label>
+                        <input type="number" name="roleplay_price" value="{{ idol.roleplay_price|default:100 }}" placeholder="Ofrenda 🪙" title="Tarifa mínima sugerida"
+                               class="w-24 bg-black/70 border border-white/20 rounded-xl px-2 py-1 text-[10px] text-amber-300 font-bold text-center">
+                    </div>
+                    <input type="text" name="roleplay_notice" value="{{ idol.roleplay_notice|default:'' }}" 
+                           placeholder="Mensaje de anuncio (ej: Disponible ahora para tramas de romance)"
+                           class="w-full bg-black/70 border border-white/20 rounded-xl px-2.5 py-1.5 text-[10px] text-white">
+                    <button type="submit" class="w-full py-1.5 bg-purple-700 hover:bg-purple-600 text-white font-black text-[9px] uppercase rounded-xl transition-all shadow">
+                        Guardar Estado en Vivo
+                    </button>
+                </form>
+
+                <!-- Bandeja de Solicitudes Recibidas -->
+                {% if roleplay_requests %}
+                <div class="mt-2 border-t border-white/10 pt-2 flex flex-col gap-2">
+                    <span class="text-[9px] font-black uppercase text-amber-300">📬 Solicitudes de Rol Recibidas:</span>
+                    {% for req in roleplay_requests %}
+                    <div class="p-2.5 rounded-xl bg-stone-950 border border-white/10 flex flex-col gap-1.5">
+                        <div class="flex items-center justify-between text-[9px]">
+                            <span class="font-bold text-white">@{{ req.client_username }}</span>
+                            <span class="text-amber-300 font-bold font-mono">{{ req.bounty }} 🪙</span>
+                        </div>
+                        <p class="text-[9px] text-stone-300 italic leading-tight">«{{ req.theme }}»</p>
+                        <div class="flex items-center gap-1.5 mt-1">
+                            {% if req.status == 'pending' %}
+                            <a href="{% url 'idols:handle_roleplay_request' req.id 'accept' %}" class="w-1/2 py-1 text-center bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[8px] uppercase rounded-lg">
+                                ✅ Aceptar
+                            </a>
+                            <a href="{% url 'idols:handle_roleplay_request' req.id 'reject' %}" class="w-1/2 py-1 text-center bg-rose-900 hover:bg-rose-800 text-rose-200 font-bold text-[8px] uppercase rounded-lg">
+                                ✕ Rechazar
+                            </a>
+                            {% elif req.status == 'accepted' %}
+                            <button type="button" onclick="contactIdol('{{ req.client_username }}', '{{ req.client_telegram_id }}')" class="w-1/2 py-1 bg-purple-600 text-white font-bold text-[8px] uppercase rounded-lg">
+                                💬 Abrir Chat
+                            </button>
+                            <a href="{% url 'idols:handle_roleplay_request' req.id 'complete' %}" class="w-1/2 py-1 text-center bg-amber-500 hover:bg-amber-400 text-black font-black text-[8px] uppercase rounded-lg">
+                                ⭐ Completar Rol
+                            </a>
+                            {% else %}
+                            <span class="text-[8px] font-mono text-stone-400 uppercase">Estado: {{ req.get_status_display }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- SI ES CLIENTE Y LA MUSA ESTÁ DISPONIBLE: BANNER EN VIVO -->
+            {% if not can_edit and idol.is_roleplay_open %}
+            <div class="w-full mt-3 p-3 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-black to-emerald-950/80 border border-emerald-500/50 shadow-lg shadow-emerald-950/40 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+                    <div>
+                        <span class="text-[9px] font-black uppercase text-emerald-300 tracking-wider block">¡Disponible para Rol Ahora!</span>
+                        <p class="text-[9.5px] text-stone-300 line-clamp-1 leading-tight">«{{ idol.roleplay_notice|default:"Abierta a sesiones de rol" }}»</p>
+                    </div>
+                </div>
+                <button type="button" onclick="toggleRoleplayModal()" class="shrink-0 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-[9px] uppercase px-3 py-1.5 rounded-xl shadow active:scale-95 transition-all">
+                    🎭 Pedir Rol ({{ idol.roleplay_price }} 🪙)
+                </button>
+            </div>
+            {% endif %}
+
             <!-- BOTONES DE ACCIÓN PRINCIPALES -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full mt-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full mt-3">
                 <button type="button" onclick="contactIdol('{{ idol.owner_username }}', '{{ idol.telegram_user_id }}')" 
-                        class="w-full bg-gradient-to-r from-purple-900 via-fuchsia-900 to-purple-950 hover:brightness-110 border border-purple-400 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-95 transition-all">
+                        class="w-full bg-gradient-to-r from-purple-900 via-fuchsia-900 to-purple-950 hover:brightness-110 border border-purple-400 text-white py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-95 transition-all">
                     <span>💬</span> <span>Abrir Chat Telegram</span>
                 </button>
 
+                {% if not can_edit and idol.is_roleplay_open %}
+                <button type="button" onclick="toggleRoleplayModal()" 
+                        class="w-full bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 text-white py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95 transition-all">
+                    <span>🎭</span> <span>Solicitar Rol ({{ idol.roleplay_price }} 🪙)</span>
+                </button>
+                {% else %}
                 <button type="button" onclick="toggleCustomRequestModal()" 
-                        class="w-full btn-gold py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
+                        class="w-full btn-gold py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
                     <span>💌</span> <span>Pedir Antojo Privado</span>
                 </button>
+                {% endif %}
+            </div>
+
+            <!-- MODAL FLOTANTE PARA SOLICITAR ROL (CLIENTE) -->
+            <div id="roleplay-request-modal" class="hidden w-full mt-3.5 p-4 rounded-3xl bg-black/95 border-2 border-emerald-500/60 shadow-2xl text-left">
+                <div class="flex items-center justify-between border-b border-emerald-500/30 pb-2 mb-2">
+                    <h4 class="font-serif text-xs font-black text-emerald-300 uppercase tracking-wider">
+                        🎭 Petición de Sesión de Rol para {{ idol.stage_name }}
+                    </h4>
+                    <button type="button" onclick="toggleRoleplayModal()" class="text-stone-400 hover:text-white text-xs">✕</button>
+                </div>
+                <p class="text-[10px] text-stone-300 mb-3">
+                    Tu oro queda en custodia. Solo se transferirá a la Musa cuando ella acepte y complete la sesión.
+                </p>
+                <form action="{% url 'idols:request_roleplay_session' idol.id %}" method="POST" class="flex flex-col gap-2.5">
+                    {% csrf_token %}
+                    <input type="hidden" name="client_username" value="{{ tg_username }}">
+                    <div>
+                        <label class="block text-[9px] text-emerald-400 uppercase font-bold mb-1">Temática / Trama Deseada *</label>
+                        <input type="text" name="theme" placeholder="Ej: Encuentro casual en palacio, enemigos a aliados..." required
+                               class="w-full bg-stone-900 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400">
+                    </div>
+                    <div>
+                        <label class="block text-[9px] text-emerald-400 uppercase font-bold mb-1">Detalles / Preferencias de la Escena</label>
+                        <textarea name="details" rows="2" placeholder="Escribe aquí el tono, situación o contexto que prefieras..."
+                                  class="w-full bg-stone-900 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-[9px] text-amber-300 uppercase font-bold mb-1">Ofrenda en Oro Imperial (🪙)</label>
+                        <input type="number" name="bounty" value="{{ idol.roleplay_price|default:100 }}" min="{{ idol.roleplay_price|default:100 }}" required
+                               class="w-full bg-stone-900 border border-white/20 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400">
+                    </div>
+                    <button type="submit" class="w-full mt-1 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-xs uppercase rounded-xl shadow-lg transition-all">
+                        ✨ Enviar Solicitud de Rol
+                    </button>
+                </form>
             </div>
 
             <!-- MODAL FLOTANTE DE ANTOJO -->
@@ -360,6 +490,11 @@
             } catch(e) {}
         }
         window.open(tgWebUrl, '_blank');
+    }
+
+    function toggleRoleplayModal() {
+    const m = document.getElementById('roleplay-request-modal');
+    if (m) m.classList.toggle('hidden');
     }
 </script>
 {% endblock %}
