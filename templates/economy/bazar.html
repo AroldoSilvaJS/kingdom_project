@@ -151,6 +151,45 @@
         100% { background-position: 0% 50%; }
     }
 
+
+    /* Restriccion rigida para que ninguna imagen se desborde */
+    #centerpiece-avatar {
+        width: 56px !important;
+        height: 56px !important;
+        min-width: 56px !important;
+        min-height: 56px !important;
+        max-width: 56px !important;
+        max-height: 56px !important;
+        overflow: hidden !important;
+        position: relative !important;
+        flex-shrink: 0 !important;
+    }
+    #centerpiece-img {
+        width: 100% !important;
+        height: 100% !important;
+        max-width: 56px !important;
+        max-height: 56px !important;
+        object-fit: contain !important;
+        display: block !important;
+    }
+    .vitrina-card .aspect-square,
+    .acrylic-stand .aspect-square {
+        height: 82px !important;
+        max-height: 82px !important;
+        overflow: hidden !important;
+    }
+    .vitrina-card img,
+    .acrylic-stand img {
+        max-height: 76px !important;
+        max-width: 100% !important;
+        object-fit: contain !important;
+    }
+    #figure-detail-modal img#detail-modal-img {
+        max-height: 190px !important;
+        max-width: 190px !important;
+        object-fit: contain !important;
+    }
+
 </style>
 
 <!-- Canvas de Confetti para Aperturas Épicas -->
@@ -488,15 +527,19 @@
             <div id="vitrina-centerpiece-container" class="relative z-10 bg-black/60 border border-amber-500/40 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-xl backdrop-blur-md">
                 <div class="flex items-center gap-3">
                     <div id="centerpiece-avatar" onclick="openFigureDetailModal({{ first_item.item.id }}, '{{ first_item.item.name|escapejs }}', '{% if first_item.item.image %}{{ first_item.item.image.url }}{% endif %}', '{{ first_item.item.series.name|default:'Pop Mart'|escapejs }}', {{ first_item.item.is_secret|yesno:'true,false' }}, true, {{ first_item.quantity }}, {{ first_item.item.price }}, {{ first_item.item.series.id|default:0 }}, {{ first_item.item.series.blind_box_price|default:160 }})"
-                         class="w-13 h-13 rounded-2xl bg-radial-[circle] from-amber-400/40 via-purple-600/20 to-transparent p-1 border border-amber-400/50 flex items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.4)] cursor-pointer hover:scale-105 transition-all relative shrink-0">
+                         class="w-14 h-14 rounded-2xl bg-black/60 p-1 border border-amber-400/50 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.3)] cursor-pointer hover:scale-105 transition-all relative shrink-0 overflow-hidden"
+                         style="width: 56px; height: 56px; min-width: 56px; min-height: 56px; max-width: 56px; max-height: 56px;">
                         {% if first_item.item.image %}
-                        <img id="centerpiece-img" src="{{ first_item.item.image.url }}" alt="{{ first_item.item.name }}" class="w-full h-full object-contain rounded-xl">
+                        <img id="centerpiece-img" src="{{ first_item.item.image.url }}" alt="{{ first_item.item.name }}"
+                             class="w-full h-full object-contain rounded-xl"
+                             style="width: 100%; height: 100%; max-width: 56px; max-height: 56px; object-fit: contain;">
                         {% else %}
                         <span id="centerpiece-fallback" class="text-2xl">🎎</span>
                         {% endif %}
-                        <div class="absolute -top-2 -left-2 bg-gradient-to-r from-amber-400 to-yellow-300 text-black text-[7px] font-black px-1.5 py-0.5 rounded-full shadow flex items-center gap-0.5">
+                        <div class="absolute -top-1 -left-1 bg-gradient-to-r from-amber-400 to-yellow-300 text-black text-[6.5px] font-black px-1.5 py-0.5 rounded-full shadow flex items-center gap-0.5 z-10">
                             👑 HONOR
                         </div>
+                    </div>
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5">
