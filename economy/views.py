@@ -1816,6 +1816,131 @@ def buy_blind_box_action(request, series_id):
     messages.success(request, msg)
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
+def admin_edit_series(request, series_id):
+    """Permite al admin modificar los datos y precios de una colección."""
+    tg_id = get_safe_tg_id(request)
+    if not check_is_staff_or_admin(tg_id):
+        messages.error(request, "Acceso exclusivo para administradores.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+    
+    series = get_object_or_404(CollectibleSeries, id=series_id)
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        tagline = request.POST.get('tagline', '').strip()
+        description = request.POST.get('description', '').strip()
+        blind_price = request.POST.get('blind_box_price')
+        single_price = request.POST.get('single_price')
+        cover_image = request.FILES.get('cover_image')
+        
+        if name: series.name = name
+        if tagline: series.tagline = tagline
+        if description is not None: series.description = description
+        if blind_price: series.blind_box_price = max(10, int(blind_price))
+        if single_price: series.single_price = max(10, int(single_price))
+        if cover_image:
+            series.cover_image = optimize_uploaded_image(cover_image)
+        series.save()
+        messages.success(request, f"Colección «{series.name}» actualizada exitosamente.")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+def admin_delete_series(request, series_id):
+    """Retira la colección de la tienda sin romper los inventarios de los usuarios."""
+    tg_id = get_safe_tg_id(request)
+    if not check_is_staff_or_admin(tg_id):
+        messages.error(request, "Acceso denegado.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+    
+    series = get_object_or_404(CollectibleSeries, id=series_id)
+    series_name = series.name
+    series.is_active = False
+    series.save(update_fields=['is_active'])
+    series.items.update(is_active=False)
+    messages.info(request, f"La colección «{series_name}» ha sido retirada de la Boutique.")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+def admin_add_figure_to_series(request, series_id):
+    """Permite añadir nuevas figuras a una serie existente en cualquier momento."""
+    tg_id = get_safe_tg_id(request)
+    if not check_is_staff_or_admin(tg_id):
+        messages.error(request, "Acceso denegado.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+    
+    series = get_object_or_404(CollectibleSeries, id=series_id)
+    if request.method == 'POST':
+        figure_images = request.FILES.getlist('figures')
+        figure_names = request.POST.getlist('figure_names')
+        secret_indices = request.POST.getlist('is_secret_index')
+        created_count = 0
+        for idx, img in enumerate(figure_images):
+            opt_img = optimize_uploaded_image(img)
+            name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else f"{series.name} #{series.items.count() + 1}"
+            is_sec = str(idx) in secret_indices
+            BazarCollectible.objects.create(
+                series=series,
+                name=name,
+                category='figura',
+                price=series.single_price,
+                image=opt_img,
+                stock=-1,
+                is_secret=is_sec,
+                idol_name=name
+            )
+            created_count += 1
+        messages.success(request, f"✨ Se añadieron {created_count} figuras a la colección «{series.name}».")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+def admin_delete_figure(request, figure_id):
+    """Retira una figura individual del estante."""
+    tg_id = get_safe_tg_id(request)
+    if not check_is_staff_or_admin(tg_id):
+        messages.error(request, "Acceso denegado.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+    
+    fig = get_object_or_404(BazarCollectible, id=figure_id)
+    fig.is_active = False
+    fig.save(update_fields=['is_active'])
+    messages.info(request, f"La figura «{fig.name}» fue retirada del estante.")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+def recycle_duplicate_action(request, item_id):
+    """Permite al usuario empeñar figuras duplicadas a cambio de oro."""
+    if request.method != 'POST':
+        return redirect('/economy/bazar/')
+    
+    tg_id = get_safe_tg_id(request)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+    uc = get_object_or_404(UserCollectible, telegram_user_id=tg_id, item_id=item_id)
+    
+    if uc.quantity <= 1:
+        err = "Solo puedes empeñar figuras repetidas (debes conservar al menos una en tu vitrina)."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+    
+    item_price = uc.item.price or (uc.item.series.single_price if uc.item.series else 260)
+    recycle_gold = max(120, int(item_price * 0.6))
+    
+    with transaction.atomic():
+        uc.quantity -= 1
+        uc.save(update_fields=['quantity'])
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        wallet.add_funds(recycle_gold)
+    
+    msg = f"♻️ ¡Has vendido un duplicado de «{uc.item.name}» por {recycle_gold} 🪙 de oro!"
+    if is_ajax:
+        return JsonResponse({
+            'success': True,
+            'message': msg,
+            'gold_earned': recycle_gold,
+            'new_quantity': uc.quantity,
+            'nuevo_saldo': wallet.balance
+        })
+    messages.success(request, msg)
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 # ==============================================================================
 # 🎫 RASPA Y GANA IMPERIAL (SCRATCH CARDS)

@@ -27,10 +27,19 @@ urlpatterns = [
     path('bazar/collectible/add/', views.admin_add_collectible, name='add_collectible'),
     path('bazar/collectible/delete/<int:item_id>/', views.admin_delete_collectible, name='delete_collectible'),
 
-    # Pop Mart: Creación por lote y Blind Box con alias de seguridad
+    # Pop Mart: Creación por lote y Blind Box
     path('bazar/series/create-batch/', views.admin_create_series_batch, name='create_series_batch'),
     path('bazar/series/admin-create-batch/', views.admin_create_series_batch, name='admin_create_series_batch'),
     path('bazar/series/blind-box/<int:series_id>/', views.buy_blind_box_action, name='buy_blind_box'),
+
+    # 👑 NUEVAS RUTAS: Edición, Añadir Figuras y Eliminar Series
+    path('bazar/series/edit/<int:series_id>/', views.admin_edit_series, name='edit_series'),
+    path('bazar/series/delete/<int:series_id>/', views.admin_delete_series, name='delete_series'),
+    path('bazar/series/add-figure/<int:series_id>/', views.admin_add_figure_to_series, name='add_figure_to_series'),
+    path('bazar/figure/delete/<int:figure_id>/', views.admin_delete_figure, name='delete_figure'),
+
+    # ♻️ NUEVA RUTA: Empeño de Duplicados
+    path('bazar/collectible/recycle/<int:item_id>/', views.recycle_duplicate_action, name='recycle_duplicate'),
 
     path('scratch/', views.scratch_card_view, name='scratch'),
     path('scratch/play/', views.scratch_card_play_ajax, name='scratch_play'),
