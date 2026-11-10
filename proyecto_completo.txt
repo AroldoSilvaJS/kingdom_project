@@ -3441,7 +3441,8 @@ def bazar_shop(request):
     inventory_items = UserInventoryItem.objects.filter(telegram_user_id=tg_id)
     inv_dict = {item.item_code: item.quantity for item in inventory_items}
     
-    # Coleccionables con Foto disponibles en la Boutique
+    # Coleccionables y Colecciones Pop Mart disponibles en la Boutique
+    collectibles = BazarCollectible.objects.filter(is_active=True).select_related('series').order_by('-created_at')
     series_list = CollectibleSeries.objects.filter(is_active=True).prefetch_related('items').order_by('-created_at')
     user_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item', 'item__series')
     user_item_ids = set(user_collectibles.values_list('item_id', flat=True))

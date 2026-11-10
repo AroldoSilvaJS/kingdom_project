@@ -886,19 +886,35 @@ def bazar_shop(request):
     inventory_items = UserInventoryItem.objects.filter(telegram_user_id=tg_id)
     inv_dict = {item.item_code: item.quantity for item in inventory_items}
     
-    # Coleccionables y Colecciones Pop Mart disponibles en la Boutique
-    collectibles = BazarCollectible.objects.filter(is_active=True).select_related('series').order_by('-created_at')
-    series_list = CollectibleSeries.objects.filter(is_active=True).prefetch_related('items').order_by('-created_at')
-    user_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item', 'item__series')
-    user_item_ids = set(user_collectibles.values_list('item_id', flat=True))
+    # Coleccionables y Colecciones Pop Mart disponibles en la Boutique (Defensivo contra migraciones pendientes)
+    try:
+        collectibles = list(BazarCollectible.objects.filter(is_active=True).select_related('series').order_by('-created_at'))
+    except Exception:
+        collectibles = []
+
+    try:
+        series_list = list(CollectibleSeries.objects.filter(is_active=True).prefetch_related('items').order_by('-created_at'))
+    except Exception:
+        series_list = []
+
+    try:
+        user_collectibles = list(UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item', 'item__series'))
+        user_item_ids = set(uc.item_id for uc in user_collectibles)
+    except Exception:
+        user_collectibles = []
+        user_item_ids = set()
 
     # Progreso de cada serie para el usuario (ej: 3/9)
     for s in series_list:
-        s_items = list(s.items.filter(is_active=True))
-        s.items_cache = s_items
-        s.owned_count = sum(1 for it in s_items if it.id in user_item_ids)
-    is_staff = check_is_staff_or_admin(tg_id)
+        try:
+            s_items = [it for it in s.items.all() if it.is_active]
+            s.items_cache = s_items
+            s.owned_count = sum(1 for it in s_items if it.id in user_item_ids)
+        except Exception:
+            s.items_cache = []
+            s.owned_count = 0
 
+    is_staff = check_is_staff_or_admin(tg_id)
     from idols.models import IdolProfile
     todas_idols = IdolProfile.objects.all().order_by('stage_name')
     mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).order_by('stage_name') if tg_id else IdolProfile.objects.none()
@@ -1603,8 +1619,10 @@ def buy_collectible_action(request, item_id):
 
     grant_user_xp(request, tg_id, max(10, item.price // 15), reason=f"Colección Boutique: {item.name}")
     msg = f"👑 ¡Has adquirido la reliquia «{item.name}»! Ahora reposa en tu vitrina de honor."
+
     if is_ajax:
         return JsonResponse({'success': True, 'message': msg, 'nuevo_saldo': wallet.balance})
+
     messages.success(request, msg)
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
@@ -1683,7 +1701,6 @@ def admin_create_series_batch(request):
                 single_price=max(10, single_price)
             )
 
-            # Recorrer todas las figuras subidas en lote
             figure_images = request.FILES.getlist('figures')
             figure_names = request.POST.getlist('figure_names')
             secret_indices = request.POST.getlist('is_secret_index')
@@ -1749,7 +1766,6 @@ def buy_blind_box_action(request, series_id):
             uc.save(update_fields=['quantity'])
 
     grant_user_xp(request, tg_id, 20, reason=f"Blind Box: {series.name}")
-
     msg = f"🎉 ¡Has abierto una Caja Sorpresa de {series.name} y obtuviste a «{chosen_item.name}»!"
     if chosen_item.is_secret:
         msg = f"⭐👑 ¡FIESTA REAL! ¡Has desenterrado la FIGURA SECRETA: «{chosen_item.name}»!"
@@ -1766,6 +1782,7 @@ def buy_blind_box_action(request, series_id):
 
     messages.success(request, msg)
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
 
 # ==============================================================================
 # 🎫 RASPA Y GANA IMPERIAL (SCRATCH CARDS)

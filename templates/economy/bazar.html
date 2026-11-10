@@ -5,348 +5,91 @@
 <div class="flex flex-col gap-4 mt-2 pb-36 max-w-md mx-auto">
     
     <!-- ENCABEZADO Y BALANCE -->
-    <div class="flex justify-between items-center px-1">
-        <button type="button" onclick="universalNav('/')" 
-           class="text-xs text-vip-text/70 hover:text-vip-gold bg-black/70 px-3.5 py-1.5 rounded-full border border-vip-gold/30 flex items-center gap-1.5 active:scale-95 transition-all shadow-md">
-            <span>⬅</span> <span>Menú</span>
+    <div class="vip-panel p-4 rounded-3xl flex items-center justify-between shadow-2xl relative overflow-hidden border border-amber-500/30">
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-600 to-yellow-300 flex items-center justify-center text-2xl shadow-lg shadow-amber-500/20 border border-yellow-200/50">
+                🏪
+            </div>
+            <div>
+                <h1 class="text-base font-black text-white uppercase tracking-wider">El Gran Bazar</h1>
+                <p class="text-[10px] text-amber-200/80 font-medium">Boutique Imperial & Pop Mart</p>
+            </div>
+        </div>
+        <div class="text-right">
+            <span class="text-[9px] uppercase tracking-wider text-stone-400 font-bold block">Tu Fortuna</span>
+            <div class="flex items-center gap-1.5 justify-end">
+                <span class="text-base font-black text-amber-400 font-mono" id="bazar-user-balance">{{ wallet.balance }}</span>
+                <span class="text-sm">🪙</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- PESTAÑAS DE NAVEGACIÓN -->
+    <div class="grid grid-cols-3 gap-1.5 p-1 bg-black/60 rounded-2xl border border-white/10 backdrop-blur-md">
+        <button type="button" onclick="switchBazarTab('popmart')" id="tab-btn-popmart"
+                class="py-2 rounded-xl text-[10px] font-black uppercase transition-all duration-300 bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-lg">
+            🎎 Pop Mart
         </button>
-
-        <div class="flex items-center gap-1.5 bg-black/80 border border-vip-gold/50 px-3 py-1.5 rounded-full shadow-inner">
-            <span class="text-xs">🪙</span>
-            <span class="text-xs font-mono font-black text-gold-gradient" id="bazar-user-balance">{{ wallet.balance }}</span>
-            <span class="text-[9px] uppercase font-bold text-yellow-400">Oro</span>
-        </div>
+        <button type="button" onclick="switchBazarTab('bazar')" id="tab-btn-bazar"
+                class="py-2 rounded-xl text-[10px] font-black uppercase transition-all duration-300 text-stone-400 hover:text-white">
+            🛍️ Artículos VIP
+        </button>
+        <button type="button" onclick="switchBazarTab('vitrina')" id="tab-btn-vitrina"
+                class="py-2 rounded-xl text-[10px] font-black uppercase transition-all duration-300 text-stone-400 hover:text-white">
+            🏆 Mi Vitrina
+        </button>
     </div>
 
-    <!-- BANNER HERO DEL BAZAR -->
-    <div class="vip-panel p-5 text-center relative overflow-hidden border border-vip-gold/50 shadow-2xl rounded-3xl bg-gradient-to-br from-[#1a0c28] via-[#090212] to-black">
-        <div class="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-purple-600/25 rounded-full blur-3xl pointer-events-none"></div>
+    <!-- TOAST / NOTIFICACIONES -->
+    <div id="bazar-toast-box" class="transition-all duration-300"></div>
 
-        <div class="relative z-10 flex flex-col items-center">
-            <span class="text-3xl mb-1 filter drop-shadow">🏛️</span>
-            <h1 class="font-serif text-lg font-black text-gold-gradient uppercase tracking-widest leading-tight">
-                El Bazar de la Corona
-            </h1>
-            <p class="text-[11px] text-stone-300 mt-1 max-w-[280px]">
-                Adquiere privilegios imperiales, protección de corte, regalos para Musas y colecciones Pop Mart.
-            </p>
-            {% if profile.is_shield_active %}
-                <span class="mt-2 text-[9.5px] font-mono font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-500/50 px-3 py-0.5 rounded-full">
-                    🛡️ Inmunidad Activa: {{ profile.days_of_shield_remaining }} días restantes
-                </span>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- PESTAÑAS DE LAS 5 VITRINAS -->
-    <div class="grid grid-cols-5 gap-1 p-1 bg-black/70 border border-vip-gold/30 rounded-2xl text-[8px] sm:text-[9.5px] font-bold uppercase text-center shadow-inner">
-        <button type="button" onclick="switchBazarTab('salvaguardas')" id="tab-btn-salvaguardas" class="py-2 rounded-xl bg-vip-gold text-black font-black">🛡️ Escudos</button>
-        <button type="button" onclick="switchBazarTab('estatus')" id="tab-btn-estatus" class="py-2 rounded-xl text-stone-400 hover:text-white">👑 Estatus</button>
-        <button type="button" onclick="switchBazarTab('musas')" id="tab-btn-musas" class="py-2 rounded-xl text-stone-400 hover:text-white">🌹 Musas</button>
-        <button type="button" onclick="switchBazarTab('juego')" id="tab-btn-juego" class="py-2 rounded-xl text-stone-400 hover:text-white">🎴 Fortuna</button>
-        <button type="button" onclick="switchBazarTab('boutique')" id="tab-btn-boutique" class="py-2 rounded-xl text-yellow-300 hover:text-white">🎎 Pop Mart</button>
-    </div>
-
-    <!-- TOAST DE COMPRA EN VIVO -->
-    <div id="bazar-toast-box" class="w-full"></div>
-
-    <!-- 🛡️ VITRINA 1: SALVAGUARDAS DEL GRUPO -->
-    <div id="vitrina-salvaguardas" class="flex flex-col gap-3">
+    <!-- ================================================================= -->
+    <!-- PESTAÑA 1: POP MART (SERIES Y CAJAS SORPRESA) -->
+    <!-- ================================================================= -->
+    <div id="tab-popmart" class="flex flex-col gap-4">
         
-        <!-- Salvoconducto 15 Días -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex items-center justify-between gap-3 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-amber-950/80 border border-amber-500/50 flex items-center justify-center text-xl flex-shrink-0">
-                    🛡️
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-white truncate">Salvoconducto Real (15 Días)</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Inmunidad ante purgas de inactividad del grupo.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">350 🪙</span>
-                </div>
+        <!-- Botón para Administradores: Crear Colección Pop Mart en Lote -->
+        {% if is_admin or is_staff %}
+        <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-lg">✨</span>
+                <span class="text-xs font-bold text-amber-200">Panel de Colecciones Pop Mart</span>
             </div>
-            <button type="button" onclick="buyBazarItem('shield_15', 'Salvoconducto de 15 Días', 350)"
-                    class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                Comprar
+            <button type="button" onclick="openCreateSeriesModal()"
+                    class="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black text-[10px] font-black uppercase rounded-xl shadow active:scale-95 transition-all">
+                + Nueva Colección
             </button>
-        </div>
-
-        <!-- Salvoconducto 30 Días -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex items-center justify-between gap-3 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-yellow-950/80 border border-vip-gold/60 flex items-center justify-center text-xl flex-shrink-0">
-                    ⚜️
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-white truncate">Salvoconducto Mensual (30 Días)</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Cobertura mensual extendida con honor.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">600 🪙</span>
-                </div>
-            </div>
-            <button type="button" onclick="buyBazarItem('shield_30', 'Salvoconducto de 30 Días', 600)"
-                    class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                Comprar
-            </button>
-        </div>
-
-        <!-- Indulto de Mazmorra -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex items-center justify-between gap-3 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-rose-950/80 border border-rose-500/60 flex items-center justify-center text-xl flex-shrink-0">
-                    ⚖️
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-white truncate">Indulto de Mazmorra (Fianza)</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Levanta sanciones de rol o muteos leves al instante.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">500 🪙</span>
-                </div>
-            </div>
-            <button type="button" onclick="buyBazarItem('dungeon_bail', 'Indulto de Mazmorra', 500)"
-                    class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                Comprar
-            </button>
-        </div>
-
-    </div>
-
-    <!-- 👑 VITRINA 2: ESTATUS, TÍTULOS Y HERÁLDICA -->
-    <div id="vitrina-estatus" class="hidden flex flex-col gap-3">
-        
-        <!-- Edicto de Título Libre -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex flex-col gap-2.5 shadow">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3 min-w-0">
-                    <div class="w-11 h-11 rounded-2xl bg-purple-950/80 border border-purple-500/60 flex items-center justify-center text-xl flex-shrink-0">
-                        📜
-                    </div>
-                    <div class="flex flex-col min-w-0">
-                        <h3 class="text-xs font-black text-white truncate">Edicto de Título Libre</h3>
-                        <p class="text-[10px] text-stone-300 mt-0.5">Tu apodo o título personalizado visible en tu perfil.</p>
-                        <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">450 🪙</span>
-                    </div>
-                </div>
-            </div>
-            <div class="flex gap-2 pt-1 border-t border-white/5">
-                <input type="text" id="input-custom-title" placeholder="Ej: Gran Sultán del Placer, Dama de Ébano..."
-                       class="flex-1 bg-black border border-vip-gold/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-stone-500">
-                <button type="button" onclick="buyCustomTitle()"
-                        class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                    Consagrar
-                </button>
-            </div>
-        </div>
-
-        <!-- Marco Imperial Llama Carmesí -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex items-center justify-between gap-3 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-rose-950/80 border border-rose-500/60 flex items-center justify-center text-xl flex-shrink-0">
-                    🔥
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-white truncate">Marco Imperial Llama Carmesí</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Borde resplandeciente para tu foto de perfil.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">400 🪙</span>
-                </div>
-            </div>
-            <button type="button" onclick="buyBazarItem('imperial_frame', 'Marco Imperial Carmesí', 400)"
-                    class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                Comprar
-            </button>
-        </div>
-
-        <!-- Distintivo de Linaje VIP -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex items-center justify-between gap-3 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-yellow-950/80 border border-yellow-500/60 flex items-center justify-center text-xl flex-shrink-0">
-                    👑
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-white truncate">Distintivo de Linaje VIP</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Insignia dorada [👑 NOBLE VIP] en tus comentarios.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">300 🪙</span>
-                </div>
-            </div>
-            <button type="button" onclick="buyBazarItem('vip_badge', 'Distintivo de Linaje VIP', 300)"
-                    class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                Comprar
-            </button>
-        </div>
-
-    </div>
-
-    <!-- 🌹 VITRINA 3: EL SALÓN DE MUSAS -->
-    <div id="vitrina-musas" class="hidden flex flex-col gap-3">
-        
-        <!-- Tributo de Joyería de Corte -->
-        <div class="vip-panel p-4 rounded-3xl border border-purple-500/40 bg-black/60 flex flex-col gap-2.5 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-purple-950 border border-purple-400 flex items-center justify-center text-xl flex-shrink-0">
-                    💎
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-white truncate">Gargantilla de Rubíes Imperial</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Envía un tributo a una Musa: ella cobra 280 🪙 netos y recibe aviso en Telegram.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">350 🪙</span>
-                </div>
-            </div>
-            
-            <div class="flex gap-2 pt-1 border-t border-white/5">
-                <select id="select-tribute-idol" class="flex-1 bg-black border border-purple-500/40 rounded-xl px-2.5 py-1.5 text-xs text-white">
-                    <option value="">-- Elige a la Musa --</option>
-                    {% for i in todas_idols %}
-                        <option value="{{ i.id }}">🌹 {{ i.stage_name }}</option>
-                    {% endfor %}
-                </select>
-                <button type="button" onclick="sendTributeToIdol()"
-                        class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                    Obsequiar
-                </button>
-            </div>
-        </div>
-
-        <!-- Sello de Antojo Prioritario -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex items-center justify-between gap-3 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-amber-950 border border-amber-500 flex items-center justify-center text-xl flex-shrink-0">
-                    📜
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-white truncate">Sello de Antojo Prioritario</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Coloca tu petición en la cima de la bandeja de la Idol.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">200 🪙 (Tienes: {{ inv_priority }})</span>
-                </div>
-            </div>
-            <button type="button" onclick="buyBazarItem('priority_antojo', 'Sello de Antojo Prioritario', 200)"
-                    class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                Comprar
-            </button>
-        </div>
-
-        <!-- Pase de Musa Destacada (Para Idols) -->
-        {% if is_idol %}
-        <div class="vip-panel p-4 rounded-3xl border border-yellow-500/50 bg-gradient-to-r from-yellow-950/40 to-black flex flex-col gap-2.5 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-yellow-500 text-black flex items-center justify-center text-xl flex-shrink-0 font-black">
-                    ⭐
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-yellow-300 truncate">Pase de Musa Destacada (Exclusivo Idol)</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Fija tu perfil al tope de la Galería con brillo dorado por 3 días.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">450 🪙</span>
-                </div>
-            </div>
-            <div class="flex gap-2 pt-1 border-t border-white/5">
-                <select id="select-my-idol" class="flex-1 bg-black border border-yellow-500/40 rounded-xl px-2.5 py-1.5 text-xs text-white">
-                    {% for mi in mis_idols %}
-                        <option value="{{ mi.id }}">{{ mi.stage_name }}</option>
-                    {% endfor %}
-                </select>
-                <button type="button" onclick="featureMyIdol()"
-                        class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                    Destacar
-                </button>
-            </div>
         </div>
         {% endif %}
 
-    </div>
-
-    <!-- 🎴 VITRINA 4: RELICARIOS & SANTUARIO -->
-    <div id="vitrina-juego" class="hidden flex flex-col gap-3">
-        
-        <!-- Llave Dorada de la Fortuna -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex items-center justify-between gap-3 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-yellow-950 border border-yellow-500 flex items-center justify-center text-xl flex-shrink-0">
-                    🗝️
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-white truncate">Llave Dorada de la Fortuna</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Duplica la probabilidad de cartas Épicas y Legendarias en tu próximo Relicario.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">250 🪙 (Tienes: {{ inv_lucky }})</span>
-                </div>
-            </div>
-            <button type="button" onclick="buyBazarItem('lucky_charm', 'Llave Dorada de la Fortuna', 250)"
-                    class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                Comprar
-            </button>
-        </div>
-
-        <!-- Patente de Comercio Libre -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex items-center justify-between gap-3 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-purple-950 border border-purple-500 flex items-center justify-center text-xl flex-shrink-0">
-                    📜
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-white truncate">Patente de Comercio Libre (0% Tax)</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Exonera el 10% de impuesto real en tu siguiente venta de Photocard en el Mercado.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">150 🪙 (Tienes: {{ inv_market }})</span>
-                </div>
-            </div>
-            <button type="button" onclick="buyBazarItem('free_market', 'Patente de Comercio Libre', 150)"
-                    class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                Comprar
-            </button>
-        </div>
-
-        <!-- Elixir de Vitalidad Espiritual -->
-        <div class="vip-panel p-4 rounded-3xl border border-vip-gold/30 bg-black/60 flex items-center justify-between gap-3 shadow">
-            <div class="flex items-center gap-3 min-w-0">
-                <div class="w-11 h-11 rounded-2xl bg-emerald-950 border border-emerald-500 flex items-center justify-center text-xl flex-shrink-0">
-                    🍖
-                </div>
-                <div class="flex flex-col min-w-0">
-                    <h3 class="text-xs font-black text-white truncate">Elixir de Vitalidad Espiritual</h3>
-                    <p class="text-[10px] text-stone-300 mt-0.5">Rellena al 100% la energía de tu mascota al instante para volver a explorar.</p>
-                    <span class="text-[9px] text-yellow-400 font-mono font-bold mt-1">120 🪙</span>
-                </div>
-            </div>
-            <button type="button" onclick="buyBazarItem('energy_potion', 'Elixir de Vitalidad', 120)"
-                    class="btn-gold text-[10px] font-black uppercase px-3.5 py-2 rounded-xl shadow active:scale-95 transition-all">
-                Comprar
-            </button>
-        </div>
-
-    </div>
-
-    <!-- 🏺 VITRINA 5: POP MART & SERIES DE COLECCIÓN -->
-    <div id="vitrina-boutique" class="hidden flex flex-col gap-4">
-        
-        <!-- CABECERA DE LA BOUTIQUE -->
-        <div class="p-4 rounded-3xl bg-gradient-to-r from-purple-950/60 via-black to-yellow-950/40 border border-vip-gold/40 flex items-center justify-between shadow-xl">
-            <div class="flex flex-col">
-                <span class="text-xs font-black text-yellow-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🎎</span> Figuras Pop Mart & Sets Temáticos
-                </span>
-                <span class="text-[9.5px] text-stone-400 mt-0.5">Colecciones de Idols. Abre Cajas Sorpresa o completa el Set.</span>
-            </div>
-            {% if is_admin or is_staff %}
-            <button type="button" onclick="openCreateSeriesModal()"
-                    class="btn-gold px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider shadow flex items-center gap-1.5 active:scale-95 transition-all">
-                <span>✨</span> Nueva Serie
-            </button>
-            {% endif %}
-        </div>
-
-        <!-- LISTA DE COLECCIONES ACTIVAS -->
+        <!-- Listado de Colecciones Disponibles -->
         {% for series in series_list %}
-        <div class="vip-panel rounded-3xl border border-vip-gold/30 bg-black/70 overflow-hidden shadow-2xl flex flex-col gap-3 p-4">
+        <div class="vip-panel p-4 rounded-3xl flex flex-col gap-3 relative overflow-hidden border border-white/10 hover:border-amber-500/30 transition-all">
             
-            <!-- Portada y Datos del Set -->
-            <div class="flex items-center gap-3">
-                {% if series.cover_image %}
-                <img src="{{ series.cover_image.url }}" class="w-16 h-16 rounded-2xl object-cover border border-vip-gold/50 shadow">
-                {% else %}
-                <div class="w-16 h-16 rounded-2xl bg-purple-950/80 border border-vip-gold/40 flex items-center justify-center text-2xl shadow">
-                    🎁
+            <div class="flex items-start gap-3">
+                <!-- Portada de la Serie -->
+                <div class="w-20 h-20 rounded-2xl bg-stone-900 border border-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center relative">
+                    {% if series.cover_image %}
+                    <img src="{{ series.cover_image.url }}" alt="{{ series.name }}" class="w-full h-full object-cover">
+                    {% else %}
+                    <span class="text-3xl">🎎</span>
+                    {% endif %}
+                    <span class="absolute bottom-1 right-1 text-[7px] font-mono bg-black/80 px-1 py-0.5 rounded text-amber-300 border border-amber-500/30">
+                        Pop Mart
+                    </span>
                 </div>
-                {% endif %}
-                <div class="flex flex-col flex-1 min-w-0">
-                    <span class="text-[8.5px] font-mono text-yellow-400 font-bold uppercase">{{ series.tagline }}</span>
-                    <h3 class="text-sm font-black text-white truncate">{{ series.name }}</h3>
-                    <div class="flex items-center gap-2 mt-1">
-                        <span class="text-[9px] font-mono bg-purple-950 border border-purple-500/50 text-purple-300 px-2 py-0.5 rounded-full font-bold">
+
+                <!-- Detalles de la Serie -->
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <h2 class="text-sm font-black text-white truncate">{{ series.name }}</h2>
+                    </div>
+                    <p class="text-[9px] text-amber-300 font-bold uppercase tracking-wider mb-1">{{ series.tagline }}</p>
+                    <p class="text-[10px] text-stone-300 line-clamp-2 leading-relaxed">{{ series.description|default:"Colección temática exclusiva de figuras coleccionables para tu vitrina imperial." }}</p>
+
+                    <!-- Barra de Progreso del Usuario -->
+                    <div class="mt-2 flex items-center justify-between text-[8px] font-bold">
+                        <span class="text-stone-400">
                             Coleccionadas: {{ series.owned_count }} / {{ series.total_items }}
                         </span>
                         {% if series.owned_count == series.total_items and series.total_items > 0 %}
@@ -373,9 +116,8 @@
             <!-- Estante con las figuras del Set (Desplegable) -->
             <div id="series-shelf-{{ series.id }}" class="hidden grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
                 {% for fig in series.items_cache %}
-                {% with is_owned=fig.id in user_item_ids %}
                 <div class="rounded-2xl p-2 flex flex-col items-center text-center relative border transition-all
-                    {% if is_owned %}bg-gradient-to-b from-purple-950/60 to-black border-yellow-500/50 shadow-lg
+                    {% if fig.id in user_item_ids %}bg-gradient-to-b from-purple-950/60 to-black border-yellow-500/50 shadow-lg
                     {% else %}bg-black/50 border-white/10 opacity-60 hover:opacity-100{% endif %}">
                     
                     {% if fig.is_secret %}
@@ -383,13 +125,17 @@
                     {% endif %}
 
                     <div class="w-full aspect-square rounded-xl overflow-hidden mb-1.5 flex items-center justify-center p-1">
+                        {% if fig.image %}
                         <img src="{{ fig.image.url }}" alt="{{ fig.name }}"
-                             class="w-full h-full object-contain {% if not is_owned %}filter brightness-0 contrast-50{% endif %}">
+                             class="w-full h-full object-contain {% if fig.id not in user_item_ids %}filter brightness-0 contrast-50{% endif %}">
+                        {% else %}
+                        <span class="text-2xl">🎎</span>
+                        {% endif %}
                     </div>
 
                     <span class="text-[9px] font-bold text-white truncate w-full">{{ fig.name }}</span>
 
-                    {% if is_owned %}
+                    {% if fig.id in user_item_ids %}
                         <span class="text-[8px] font-mono text-emerald-400 font-black mt-0.5">En Vitrina ✓</span>
                     {% else %}
                         <button type="button" onclick="buyBoutiqueItem({{ fig.id }}, '{{ fig.name|escapejs }}', {{ series.single_price }})"
@@ -398,7 +144,6 @@
                         </button>
                     {% endif %}
                 </div>
-                {% endwith %}
                 {% endfor %}
             </div>
 
@@ -413,111 +158,174 @@
 
     </div>
 
+    <!-- ================================================================= -->
+    <!-- PESTAÑA 2: ARTÍCULOS VIP DEL BAZAR -->
+    <!-- ================================================================= -->
+    <div id="tab-bazar" class="hidden flex flex-col gap-3">
+        {% for item in bazar_items %}
+        <div class="vip-panel p-3.5 rounded-2xl flex items-center justify-between border border-white/10 hover:border-amber-500/20 transition-all">
+            <div class="flex items-center gap-3">
+                <span class="text-2xl">{{ item.icon }}</span>
+                <div>
+                    <h3 class="text-xs font-bold text-white">{{ item.name }}</h3>
+                    <p class="text-[10px] text-stone-400 leading-tight">{{ item.desc }}</p>
+                </div>
+            </div>
+            <button type="button" onclick="buyBazarItem('{{ item.code }}', '{{ item.name|escapejs }}', {{ item.price }})"
+                    class="btn-gold px-3 py-1.5 rounded-xl text-[10px] font-black uppercase shadow active:scale-95 transition-all flex-shrink-0">
+                {{ item.price }} 🪙
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- PESTAÑA 3: MI VITRINA DE COLECCIÓN -->
+    <!-- ================================================================= -->
+    <div id="tab-vitrina" class="hidden flex flex-col gap-3">
+        {% if user_collectibles %}
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {% for uc in user_collectibles %}
+            <div class="vip-panel p-2.5 rounded-2xl flex flex-col items-center text-center relative border border-amber-500/30">
+                {% if uc.item.is_secret %}
+                <span class="absolute top-1 right-1 text-[7px] font-black bg-yellow-500 text-black px-1 rounded-md">CHASE ⭐</span>
+                {% endif %}
+
+                <div class="w-full aspect-square rounded-xl overflow-hidden mb-2 flex items-center justify-center p-1 bg-black/40">
+                    {% if uc.item.image %}
+                    <img src="{{ uc.item.image.url }}" alt="{{ uc.item.name }}" class="w-full h-full object-contain">
+                    {% else %}
+                    <span class="text-3xl">🎎</span>
+                    {% endif %}
+                </div>
+
+                <span class="text-[10px] font-bold text-white truncate w-full">{{ uc.item.name }}</span>
+                <span class="text-[8px] text-stone-400 mt-0.5">{{ uc.item.series.name|default:"Colección Real" }}</span>
+                <span class="text-[8px] font-mono text-amber-400 font-bold mt-1">x{{ uc.quantity }} en posesión</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
+            <span class="text-4xl my-2">🏛️</span>
+            <p class="text-sm font-bold text-white mb-1">Tu Vitrina está vacía</p>
+            <p class="text-xs text-stone-400 max-w-xs">Abre Cajas Sorpresa o adquiere figuras exclusivas para comenzar a llenar tu vitrina imperial.</p>
+        </div>
+        {% endif %}
+    </div>
+
 </div>
 
-<!-- ✨ MODAL FLOTANTE: CREACIÓN DE COLECCIÓN EN LOTE (STAFF) -->
-<div id="modal-create-series" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="bg-[#12081f] border border-vip-gold/50 rounded-3xl w-full max-w-md max-h-[92vh] overflow-y-auto p-4 flex flex-col gap-3 shadow-2xl relative">
-        <button type="button" onclick="closeCreateSeriesModal()" class="absolute top-3.5 right-3.5 w-7 h-7 rounded-full bg-stone-900 border border-white/20 text-stone-400 hover:text-white flex items-center justify-center text-xs">✕</button>
-        
-        <div class="flex items-center gap-2">
-            <span class="text-2xl">✨</span>
-            <div>
-                <h3 class="text-xs font-black uppercase text-yellow-300">Crear Colección Pop Mart</h3>
-                <p class="text-[9.5px] text-stone-400">Publica un set temático completo seleccionando las fotos en lote.</p>
-            </div>
+<!-- ================================================================= -->
+<!-- MODAL: CREAR COLECCIÓN POP MART EN LOTE (ADMIN/STAFF) -->
+<!-- ================================================================= -->
+{% if is_admin or is_staff %}
+<div id="modal-create-series" class="fixed inset-0 bg-black/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="vip-panel max-w-md w-full p-5 rounded-3xl border border-amber-500/40 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between pb-3 border-b border-white/10 mb-3">
+            <h3 class="text-xs font-black text-white uppercase tracking-wider">Nueva Colección Pop Mart</h3>
+            <button type="button" onclick="closeCreateSeriesModal()" class="text-stone-400 hover:text-white text-base">✕</button>
         </div>
 
-        <form action="{% url 'economy:create_series_batch' %}" method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
+        <form action="/economy/bazar/series/create-batch/" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
             {% csrf_token %}
             <input type="hidden" name="tg_id" value="{{ tg_id }}">
 
             <div>
-                <label class="block text-[9.5px] text-yellow-400 uppercase font-bold mb-1">Nombre de la Colección *</label>
-                <input type="text" name="series_name" required placeholder="Ej: TWICE — Like OOH-AHH"
-                       class="w-full bg-black border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
+                <label class="text-[10px] text-stone-300 font-bold block mb-1">Nombre de la Colección *</label>
+                <input type="text" name="series_name" placeholder="Ej: TWICE Like OOH-AHH" required
+                       class="w-full bg-stone-900 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
             </div>
 
             <div class="grid grid-cols-2 gap-2">
                 <div>
-                    <label class="block text-[9.5px] text-stone-300 uppercase font-bold mb-1">Subtítulo / Edición</label>
-                    <input type="text" name="tagline" value="Pop Mart Series Vol. 1"
-                           class="w-full bg-black border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
+                    <label class="text-[10px] text-stone-300 font-bold block mb-1">Edición / Subtítulo</label>
+                    <input type="text" name="tagline" value="Pop Mart Series"
+                           class="w-full bg-stone-900 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
                 </div>
                 <div>
-                    <label class="block text-[9.5px] text-stone-300 uppercase font-bold mb-1">Portada / Caja del Set</label>
-                    <input type="file" name="cover_image" accept="image/*" class="text-[9px] text-stone-400">
+                    <label class="text-[10px] text-stone-300 font-bold block mb-1">Imagen de Portada / Caja</label>
+                    <input type="file" name="cover_image" accept="image/*"
+                           class="w-full text-[9px] text-stone-300 file:mr-2 file:py-1.5 file:px-2 file:rounded-lg file:border-0 file:text-[9px] file:bg-stone-800 file:text-white">
                 </div>
+            </div>
+
+            <div>
+                <label class="text-[10px] text-stone-300 font-bold block mb-1">Descripción de la Serie</label>
+                <textarea name="description" rows="2" placeholder="Detalla la temática del set..."
+                          class="w-full bg-stone-900 border border-white/20 rounded-xl px-3 py-2 text-xs text-white"></textarea>
             </div>
 
             <div class="grid grid-cols-2 gap-2">
                 <div>
-                    <label class="block text-[9.5px] text-yellow-400 uppercase font-bold mb-1">Precio Blind Box (🪙)</label>
-                    <input type="number" name="blind_box_price" value="160" min="10" required
-                           class="w-full bg-black border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-yellow-300 font-mono font-bold">
+                    <label class="text-[10px] text-stone-300 font-bold block mb-1">Precio Caja Sorpresa (🪙)</label>
+                    <input type="number" name="blind_box_price" value="160" min="10"
+                           class="w-full bg-stone-900 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
                 </div>
                 <div>
-                    <label class="block text-[9.5px] text-yellow-400 uppercase font-bold mb-1">Precio Compra Directa (🪙)</label>
-                    <input type="number" name="single_price" value="260" min="10" required
-                           class="w-full bg-black border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-yellow-300 font-mono font-bold">
+                    <label class="text-[10px] text-stone-300 font-bold block mb-1">Precio Compra Directa (🪙)</label>
+                    <input type="number" name="single_price" value="260" min="10"
+                           class="w-full bg-stone-900 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
                 </div>
             </div>
 
-            <!-- SUBIDA MÚLTIPLE DE FIGURAS -->
-            <div class="p-3 bg-black/60 border-2 border-dashed border-vip-gold/40 rounded-2xl flex flex-col gap-2 mt-1">
-                <label class="cursor-pointer flex flex-col items-center text-center">
-                    <span class="text-xl mb-0.5">📂</span>
-                    <span class="text-[10px] font-bold text-yellow-300 uppercase">Seleccionar Figuras del Set (Múltiple)</span>
-                    <span class="text-[8.5px] text-stone-400">Elige todas las fotos de las figuras a la vez (ej: 9 integrantes)</span>
-                    <input type="file" name="figures" id="batch-figures-input" accept="image/*" multiple required class="hidden" onchange="handleBatchFigures(this)">
-                </label>
-
-                <!-- Lista de previsualización de cada figura -->
-                <div id="batch-preview-container" class="grid grid-cols-3 gap-2 mt-2 max-h-48 overflow-y-auto"></div>
+            <!-- Subida masiva de imágenes de figuras -->
+            <div class="border-t border-white/10 pt-2">
+                <label class="text-[10px] text-amber-300 font-black block mb-1">Seleccionar todas las Figuras del Set *</label>
+                <input type="file" name="figures" multiple accept="image/*" required onchange="handleBatchFigures(this)"
+                       class="w-full text-[10px] text-stone-300 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-bold file:bg-yellow-500 file:text-black">
+                <p class="text-[8px] text-stone-400 mt-1">Puedes seleccionar las 9 imágenes juntas (ej: Nayeon, Jeongyeon, Momo, Sana...).</p>
             </div>
 
-            <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg mt-1 active:scale-95 transition-all">
-                👑 Publicar Colección Completa
+            <!-- Contenedor dinámico de previsualización con nombres y Chase -->
+            <div id="batch-preview-container" class="grid grid-cols-3 gap-1.5 max-h-48 overflow-y-auto p-1 bg-black/40 rounded-xl border border-white/10"></div>
+
+            <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider mt-2 shadow-lg">
+                ✨ Publicar Colección Completa
             </button>
         </form>
     </div>
 </div>
+{% endif %}
 
-<!-- 🎁 MODAL DESEMPAQUE DE BLIND BOX -->
-<div id="modal-blindbox-result" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="bg-[#150a24] border-2 border-vip-gold rounded-3xl w-full max-w-xs p-5 flex flex-col items-center text-center shadow-2xl relative">
-        <span class="text-3xl mb-1 animate-bounce">🎁</span>
-        <span class="text-[9px] font-mono text-yellow-400 uppercase tracking-widest font-black">Caja Sorpresa Desempaquetada</span>
-        
-        <div class="w-36 h-36 rounded-2xl bg-black/80 border border-vip-gold/40 my-3 flex items-center justify-center p-2 shadow-inner">
-            <img id="blindbox-result-img" class="w-full h-full object-contain filter drop-shadow-[0_4px_12px_rgba(212,175,55,0.6)]">
+<!-- ================================================================= -->
+<!-- MODAL: RESULTADO DE CAJA SORPRESA (POP MART REVEAL) -->
+<!-- ================================================================= -->
+<div id="modal-blindbox-result" class="fixed inset-0 bg-black/90 backdrop-blur-xl z-50 hidden flex items-center justify-center p-4">
+    <div class="vip-panel max-w-xs w-full p-6 rounded-3xl border border-yellow-500/50 flex flex-col items-center text-center animate-fade-in relative shadow-2xl">
+        <span id="blindbox-result-chase" class="hidden absolute top-3 right-3 text-[9px] font-black bg-gradient-to-r from-amber-400 to-yellow-300 text-black px-2 py-0.5 rounded-full shadow-lg">
+            ⭐ CHASE SECRETA ⭐
+        </span>
+        <div class="w-16 h-16 rounded-full bg-amber-500/20 flex items-center justify-center text-3xl mb-2 animate-bounce">
+            🎁
+        </div>
+        <h3 class="text-xs font-bold uppercase tracking-wider text-amber-300 mb-1">¡Caja Abierta!</h3>
+        <p class="text-[10px] text-stone-400 mb-3">Has desenterrado una figura para tu vitrina:</p>
+
+        <div class="w-40 h-40 rounded-2xl bg-black/60 border border-white/20 p-2 flex items-center justify-center mb-3 shadow-inner">
+            <img id="blindbox-result-img" src="" alt="Figura" class="w-full h-full object-contain">
         </div>
 
-        <h3 id="blindbox-result-name" class="text-base font-black text-white"></h3>
-        <span id="blindbox-result-chase" class="hidden mt-1 text-[9px] bg-yellow-400 text-black font-black px-2 py-0.5 rounded-full">¡FIGURA SECRETA CHASE ⭐!</span>
-        <p class="text-[10px] text-stone-300 mt-2">¡Ha sido consagrada en tu estante de la colección!</p>
+        <h4 id="blindbox-result-name" class="text-sm font-black text-white mb-4"></h4>
 
         <button type="button" onclick="closeBlindBoxResult()"
-                class="btn-gold px-6 py-2 rounded-xl text-xs font-black uppercase tracking-wider mt-4 shadow active:scale-95 transition-all">
-            Guardar en Vitrina
+                class="btn-gold w-full py-2.5 rounded-xl text-xs font-black uppercase tracking-wider">
+            Guardar en Mi Vitrina
         </button>
     </div>
 </div>
 
-<!-- SCRIPTS INTERACTIVOS -->
 <script>
     function switchBazarTab(tab) {
-        ['salvaguardas', 'estatus', 'musas', 'juego', 'boutique'].forEach(t => {
-            const v = document.getElementById(`vitrina-${t}`);
-            const b = document.getElementById(`tab-btn-${t}`);
-            if (v && b) {
-                if (t === tab) {
-                    v.classList.remove('hidden');
-                    b.className = "py-2 rounded-xl bg-vip-gold text-black font-black";
-                } else {
-                    b.className = "py-2 rounded-xl text-stone-400 hover:text-white";
-                    v.classList.add('hidden');
-                }
+        ['popmart', 'bazar', 'vitrina'].forEach(t => {
+            const btn = document.getElementById(`tab-btn-${t}`);
+            const pane = document.getElementById(`tab-${t}`);
+            if (t === tab) {
+                btn.className = "py-2 rounded-xl text-[10px] font-black uppercase transition-all duration-300 bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-lg";
+                pane.classList.remove('hidden');
+            } else {
+                btn.className = "py-2 rounded-xl text-[10px] font-black uppercase transition-all duration-300 text-stone-400 hover:text-white";
+                pane.classList.add('hidden');
             }
         });
     }
@@ -526,16 +334,15 @@
         const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
         formData.append('tg_id', tgId);
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
+        
         try {
             window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
-            const resp = await fetch("{% url 'economy:bazar_buy' %}", {
+            const resp = await fetch('/economy/bazar/buy/', {
                 method: 'POST',
                 body: formData,
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
             const data = await resp.json();
-
             const toast = document.getElementById('bazar-toast-box');
             if (data.success) {
                 window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
@@ -566,36 +373,6 @@
         executeBuy(fd);
     }
 
-    function buyCustomTitle() {
-        const val = document.getElementById('input-custom-title').value.trim();
-        if (!val) { alert("Ingresa el título que deseas consagrar."); return; }
-        if (!confirm(`¿Consagrar el título «${val}» por 450 🪙?`)) return;
-        const fd = new FormData();
-        fd.append('item_key', 'custom_title');
-        fd.append('custom_title_text', val);
-        executeBuy(fd);
-    }
-
-    function sendTributeToIdol() {
-        const idolId = document.getElementById('select-tribute-idol').value;
-        if (!idolId) { alert("Selecciona a la Musa que recibirá el tributo."); return; }
-        if (!confirm("¿Enviar la Gargantilla de Rubíes por 350 🪙? (La Idol recibirá 280 🪙 netos en su Bóveda).")) return;
-        const fd = new FormData();
-        fd.append('item_key', 'tribute_gift');
-        fd.append('target_idol_id', idolId);
-        executeBuy(fd);
-    }
-
-    function featureMyIdol() {
-        const idolId = document.getElementById('select-my-idol').value;
-        if (!idolId) return;
-        if (!confirm("¿Fijar a tu Musa al tope de la Galería por 3 días (450 🪙)?")) return;
-        const fd = new FormData();
-        fd.append('item_key', 'featured_idol');
-        fd.append('target_idol_id', idolId);
-        executeBuy(fd);
-    }
-
     /* POP MART & BLIND BOX SCRIPTS */
     function toggleSeriesShelf(id) {
         const shelf = document.getElementById(`series-shelf-${id}`);
@@ -612,6 +389,7 @@
     function openCreateSeriesModal() {
         document.getElementById('modal-create-series').classList.remove('hidden');
     }
+
     function closeCreateSeriesModal() {
         document.getElementById('modal-create-series').classList.add('hidden');
     }
@@ -620,7 +398,6 @@
         const container = document.getElementById('batch-preview-container');
         container.innerHTML = '';
         const files = Array.from(input.files);
-
         files.forEach((file, index) => {
             const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
             const reader = new FileReader();
@@ -656,7 +433,6 @@
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
             const data = await resp.json();
-
             if (data.success) {
                 window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
                 if (data.nuevo_saldo !== undefined) {
@@ -695,7 +471,6 @@
             });
             const data = await resp.json();
             const toast = document.getElementById('bazar-toast-box');
-
             if (data.success) {
                 window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
                 if (data.nuevo_saldo !== undefined) {
