@@ -179,6 +179,8 @@ MAILERS = {
 # Configuraciones de Telegram
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '8966798192:AAHTaCsfbW9Mlzrkoa8PiZJT-DrlryD4dP8')
 
+TELEGRAM_TOPIC_ID = int(os.environ.get('TELEGRAM_TOPIC_ID', 106999)) or None
+
 # ID de tu grupo privado de rol en Telegram
 TELEGRAM_GROUP_ID = int(os.environ.get('TELEGRAM_GROUP_ID', -1003743374036))
 
