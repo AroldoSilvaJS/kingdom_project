@@ -86,6 +86,8 @@ ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = [
     'https://*.onrender.com',
     'https://*.trycloudflare.com',
+    'https://*.telegram.org',
+    'https://web.telegram.org',
 ]
 
 # Application definition
@@ -852,13 +854,21 @@ def is_user_in_group(user_tg_id: int) -> bool:
             if data.get('ok'):
                 status = data.get('result', {}).get('status')
                 is_member = status in ['creator', 'administrator', 'member', 'restricted']
-                # Guardar resultado en caché por 30 minutos (1800 seg)
                 cache.set(cache_key, is_member, timeout=1800)
                 return is_member
+            else:
+                # Si Telegram respondió ok: False de forma certera (ej: usuario inexistente en el grupo)
+                cache.set(cache_key, False, timeout=600)
+                return False
+    except urllib.error.HTTPError as e:
+        # Error 400 de Telegram: 'user not found' en el chat -> NO es miembro
+        if e.code == 400:
+            cache.set(cache_key, False, timeout=600)
+            return False
+        print(f"⚠️ Error HTTP getChatMember para {user_tg_id}: {e}")
     except Exception as e:
-        print(f"⚠️ Error getChatMember para {user_tg_id}: {e}")
-
-    # En caso de timeout transitorio de Telegram, no bloquear al usuario
+        print(f"⚠️ Error general getChatMember para {user_tg_id}: {e}")
+    # Solo en timeouts transitorios de red se permite pasar temporalmente
     return True
 
 ==================================================
@@ -888,14 +898,20 @@ def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None, mess
         payload['message_thread_id'] = int(message_thread_id)
 
     if button_text and button_url:
-        is_group = int(chat_id) < 0
+        try:
+            is_group = int(chat_id) < 0
+        except (ValueError, TypeError):
+            is_group = str(chat_id).startswith('-')
+            
         btn_dict = {'text': button_text}
         
-        if is_group:
+        # Telegram Bot API prohíbe dominios t.me dentro de web_app:
+        is_telegram_link = ('t.me/' in button_url) or ('telegram.me/' in button_url)
+        if is_group or is_telegram_link:
             btn_dict['url'] = button_url
         else:
             btn_dict['web_app'] = {'url': button_url}
-
+            
         payload['reply_markup'] = {
             'inline_keyboard': [[btn_dict]]
         }
@@ -1437,10 +1453,10 @@ def my_profile(request):
         profile.title = request.POST.get('title', profile.title)
         profile.bio = request.POST.get('bio', '').strip()
         
-        # 1. Marco cosmético de avatar
+        # 1. Marco cosmético de avatar (Protección de Marcos Imperiales)
         desired_frame = request.POST.get('avatar_frame', profile.avatar_frame)
-        if desired_frame == 'flame' and not profile.has_custom_avatar_frame:
-            messages.error(request, "⚠️ El Marco Llama Carmesí está reservado para quienes lo adquieran en el Bazar.")
+        if desired_frame in ['flame', 'diamond', 'neon'] and not profile.has_custom_avatar_frame:
+            messages.error(request, "⚠️ Los Marcos Imperiales (Carmesí, Diamante y Neón) requieren la compra del marco en el Bazar.")
         else:
             profile.avatar_frame = desired_frame
 
@@ -1452,10 +1468,11 @@ def my_profile(request):
         if new_vip_badge:
             profile.vip_badge = new_vip_badge
 
-        # 3. Título personalizado del Bazar (si lo compró o tiene acceso)
-        if profile.has_vip_badge or profile.custom_title_text or request.POST.get('custom_title_text'):
+        # 3. Título personalizado (Solo editable si compró el ítem en el Bazar o tiene el permiso activo)
+        if profile.has_vip_badge or profile.custom_title_text:
             new_custom_title = request.POST.get('custom_title_text', '').strip()
-            profile.custom_title_text = new_custom_title if new_custom_title else None
+            if new_custom_title:
+                profile.custom_title_text = new_custom_title[:60]
         
         # 4. Musa devota
         if not is_idol:
@@ -3119,13 +3136,22 @@ def blackjack_game(request):
                     player_hand = [draw_card(), draw_card()]
                     dealer_hand = [draw_card(), draw_card()]
 
-                    # Alternancia para evitar rachas frustrantes
+                    # Alternancia para evitar rachas frustrantes (Blindada con 'points' e 'is_red' dinámico)
                     if bj_losses >= 2:
                         p_check = calculate_hand_value(player_hand)
                         if p_check < 15:
                             high_vals = ['10', 'J', 'Q', 'K', 'A']
                             suits = ['♠', '♥', '♦', '♣']
-                            player_hand[1] = {'val': random.choice(high_vals), 'suit': random.choice(suits), 'is_red': False}
+                            chosen_suit = random.choice(suits)
+                            chosen_val = random.choice(high_vals)
+                            is_red_card = chosen_suit in ['♥', '♦']
+                            pts = 10 if chosen_val in ['10', 'J', 'Q', 'K'] else 11
+                            player_hand[1] = {
+                                'val': chosen_val,
+                                'suit': chosen_suit,
+                                'is_red': is_red_card,
+                                'points': pts
+                            }
 
                     p_val = calculate_hand_value(player_hand)
                     d_init_val = calculate_hand_value(dealer_hand)
@@ -3397,19 +3423,46 @@ def bazar_buy_action(request):
         return redirect('/economy/bazar/')
         
     tg_id = get_safe_tg_id(request)
-    item_code = request.POST.get('item_code')
-    
+    item_code = request.POST.get('item_code') or request.POST.get('item_key')
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+
+    # ⚖️ LIBERACIÓN DE MAZMORRA (FIANZA REAL DE 500 🪙)
+    if item_code == 'dungeon_bail':
+        BAIL_PRICE = 500
+        if wallet.balance < BAIL_PRICE:
+            err = f"No tienes suficiente oro ({wallet.balance}/{BAIL_PRICE} 🪙) para pagar la fianza."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
+        with transaction.atomic():
+            wallet.remove_funds(BAIL_PRICE)
+            UserRole.objects.filter(telegram_id=tg_id).update(is_banned=False, ban_reason=None)
+        
+        grant_user_xp(request, tg_id, 15, reason="Pago de Fianza Real")
+        msg = "⚖️ ¡Fianza aceptada por la Corona! Has sido indultado y liberado de las mazmorras."
+        if is_ajax:
+            return JsonResponse({'success': True, 'message': msg})
+        messages.success(request, msg)
+        return redirect(f'/?tg_id={tg_id}')
+
     matched_item = next((item for item in BAZAR_ITEMS if item['code'] == item_code), None)
     if not matched_item:
-        messages.error(request, "El artículo solicitado no existe en los estantes del Bazar.")
+        err = "El artículo solicitado no existe en los estantes del Bazar."
+        if is_ajax:
+            return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
         
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-
     price = matched_item['price']
     if wallet.balance < price:
-        messages.error(request, f"No tienes suficiente oro imperial ({wallet.balance}/{price} 🪙).")
+        err = f"No tienes suficiente oro imperial ({wallet.balance}/{price} 🪙)."
+        if is_ajax:
+            return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
     now = timezone.now()
@@ -5525,7 +5578,7 @@ def unlock_post(request, post_id):
                     'video_url': post.video.url if post.video else ''
                 })
                 
-        return redirect(f'/idols/feed/?tg_id={tg_id}')
+    return redirect(f'/idols/feed/?tg_id={tg_id}')
 
 
 def create_post(request):
@@ -5812,8 +5865,8 @@ def send_tip(request, post_id):
             if is_ajax:
                 return JsonResponse({'success': False, 'error': 'No tienes suficiente oro en tu Bóveda.'}, status=400)
             messages.error(request, "No tienes suficiente oro en tu Bóveda.")
-            
-        return redirect(f'/idols/feed/?tg_id={tg_id}')
+        
+    return redirect(f'/idols/feed/?tg_id={tg_id}')
 
 
 def create_custom_request(request, idol_id):
@@ -5956,7 +6009,7 @@ def add_comment(request, post_id):
 
             messages.success(request, "Comentario publicado (+3 EXP).")
             
-        return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={tg_username}')
+    return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={tg_username}')
 
 
 # ==========================================
@@ -6915,8 +6968,6 @@ def handle_trade_offer(request, trade_id, action):
     return redirect('/idols/photocards/market/')
 
 
-import urllib.request
-
 def download_image_from_url(url, default_filename='downloaded_image.webp'):
     """
     Descarga una imagen desde una URL pública con User-Agent de navegador
@@ -7551,8 +7602,8 @@ def interact_pet(request):
                     'new_buff': pet.get_buff_description()
                 })
             messages.success(request, f"💖 ¡Acariciaste a {pet.name}!")
-
-        return redirect(f'/pets/?tg_id={tg_id}')
+        
+    return redirect(f'/pets/?tg_id={tg_id}')
 
 
 def expedition_pet(request):

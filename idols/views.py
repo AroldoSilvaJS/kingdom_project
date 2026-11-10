@@ -191,13 +191,21 @@ def idol_list(request):
             
         elif action in ['accept_request', 'reject_request']:
             req_id = request.POST.get('request_id')
-            req_obj = get_object_or_404(CustomRequest, id=req_id, idol__telegram_user_id=tg_id)
-            
-            if action == 'reject_request':
-                client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=req_obj.client_telegram_id)
-                client_wallet.add_funds(req_obj.bounty)
-                req_obj.status = 'rejected'
-                req_obj.save()
+            with transaction.atomic():
+                req_obj = CustomRequest.objects.select_for_update().filter(id=req_id, idol__telegram_user_id=tg_id).first()
+                if not req_obj:
+                    messages.error(request, "Petición no encontrada.")
+                    return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+                
+                if req_obj.status != 'pending':
+                    messages.warning(request, f"Esta petición ya se encuentra {req_obj.get_status_display().lower()}.")
+                    return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+                
+                if action == 'reject_request':
+                    client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=req_obj.client_telegram_id)
+                    client_wallet.add_funds(req_obj.bounty)
+                    req_obj.status = 'rejected'
+                    req_obj.save()
                 
                 send_telegram_msg(
                     chat_id=req_obj.client_telegram_id,
@@ -211,7 +219,7 @@ def idol_list(request):
                 )
                 messages.info(request, f"Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al cliente.")
                 
-            elif action == 'accept_request':
+        elif action == 'accept_request':
                 delivered_photo = request.FILES.get('delivered_photo')
                 if not delivered_photo:
                     messages.error(request, "Debes adjuntar la foto para completar la entrega.")
@@ -237,7 +245,7 @@ def idol_list(request):
                     )
                     messages.success(request, f"¡Petición entregada con éxito! Recibiste +{req_obj.bounty} 🪙 (+25 EXP).")
                     
-            return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+        return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
     
     idols = list(IdolProfile.objects.filter(telegram_user_id=tg_id))
     pending_requests = CustomRequest.objects.filter(
@@ -993,8 +1001,6 @@ def toggle_reaction(request, post_id):
         })
         
     return JsonResponse({'error': 'Invalid method'}, status=405)
-
-
 
 
 def my_collection(request):
@@ -1787,20 +1793,23 @@ def photocard_buy_action(request, user_card_id):
     if request.method == 'POST':
         tg_id = resolve_safe_tg(request)
         buyer_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-        user_card = get_object_or_404(UserPhotocard, id=user_card_id, is_for_sale=True)
-
-        if user_card.telegram_user_id == tg_id:
-            messages.info(request, "No puedes comprar tu propia carta.")
-            return redirect('/idols/photocards/market/')
-
-        price = user_card.sale_price or 50
-        if buyer_wallet.balance < price:
-            messages.error(request, f"No tienes suficiente oro ({price} 🪙 necesarios).")
-            return redirect('/idols/photocards/market/')
 
         with transaction.atomic():
-            buyer_wallet.remove_funds(price)
+            user_card = UserPhotocard.objects.select_for_update().filter(id=user_card_id, is_for_sale=True).first()
+            if not user_card:
+                messages.error(request, "Esta carta ya ha sido adquirida por otro noble o retirada del mercado.")
+                return redirect('/idols/photocards/market/')
 
+            if user_card.telegram_user_id == tg_id:
+                messages.info(request, "No puedes comprar tu propia carta.")
+                return redirect('/idols/photocards/market/')
+
+            price = user_card.sale_price or 50
+            if buyer_wallet.balance < price:
+                messages.error(request, f"No tienes suficiente oro ({price} 🪙 necesarios).")
+                return redirect('/idols/photocards/market/')
+
+            buyer_wallet.remove_funds(price)
             vendedor_id = user_card.telegram_user_id
             
             from economy.models import UserInventoryItem
@@ -2139,17 +2148,20 @@ def handle_trade_offer(request, trade_id, action):
                     is_for_sale=False
                 ).first()
 
+            if not receiver_card:
+                messages.error(request, "⚠️ Debes seleccionar una carta válida de tu colección para completar el intercambio recíproco.")
+                return redirect('/idols/photocards/market/')
+
             sender_card.telegram_user_id = tg_id
             sender_card.is_for_sale = False
             sender_card.sale_price = 0
             sender_card.save()
 
-            if receiver_card:
-                receiver_card.telegram_user_id = trade.sender_telegram_id
-                receiver_card.is_for_sale = False
-                receiver_card.sale_price = 0
-                receiver_card.save()
-                trade.receiver_card = receiver_card
+            receiver_card.telegram_user_id = trade.sender_telegram_id
+            receiver_card.is_for_sale = False
+            receiver_card.sale_price = 0
+            receiver_card.save()
+            trade.receiver_card = receiver_card
 
             trade.receiver_telegram_id = tg_id
             receiver_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
@@ -2193,34 +2205,7 @@ def handle_trade_offer(request, trade_id, action):
     return redirect('/idols/photocards/market/')
 
 
-def download_image_from_url(url, default_filename='downloaded_image.webp'):
-    """
-    Descarga una imagen desde una URL pública con User-Agent de navegador
-    para evitar bloqueos 403, retornando un buffer compatible con PIL/Django.
-    """
-    if not url or not str(url).strip().startswith(('http://', 'https://')):
-        return None
-    try:
-        req = urllib.request.Request(
-            url.strip(),
-            headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = resp.read()
-            # Límite de seguridad: máximo 10MB
-            if len(data) > 10 * 1024 * 1024:
-                return None
-            bio = BytesIO(data)
-            bio.name = default_filename
-            return bio
-    except Exception as e:
-        print(f"Error descargando imagen desde URL {url}: {e}")
-        return None
 
-
-def admin_photocards_manage(request):
     tg_id = resolve_safe_tg(request)
     is_admin = check_is_staff_or_admin(tg_id)
     if not is_admin:

@@ -219,7 +219,6 @@ def claim_bonus(request):
             messages.success(request, f"🎡 ¡La Ruleta te ha otorgado +{bonus_amount} 🪙 de oro{extra_msg} y +25 EXP!")
         else:
             messages.error(request, "Ya has reclamado tu ofrenda de hoy. La Ruleta se reinicia cada día a las 12:00 PM.")
-        
     return redirect(f'/economy/wallet/?tg_id={tg_id}')
 
 
@@ -890,8 +889,11 @@ def bazar_shop(request):
     # Coleccionables con Foto disponibles en la Boutique
     collectibles = BazarCollectible.objects.filter(is_active=True).order_by('-created_at')
     user_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item')
-
     is_staff = check_is_staff_or_admin(tg_id)
+
+    from idols.models import IdolProfile
+    todas_idols = IdolProfile.objects.filter(is_active=True).order_by('stage_name')
+    mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id, is_active=True)
 
     return render(request, 'economy/bazar.html', {
         'tg_id': tg_id,
@@ -900,7 +902,14 @@ def bazar_shop(request):
         'bazar_items': BAZAR_ITEMS,
         'inventory': inv_dict,
         'collectibles': collectibles,
+        'boutique_items': collectibles,
         'user_collectibles': user_collectibles,
+        'my_collectibles': user_collectibles,
+        'todas_idols': todas_idols,
+        'mis_idols': mis_idols,
+        'inv_priority': inv_dict.get('priority_antojo', 0),
+        'inv_lucky': inv_dict.get('lucky_charm', 0),
+        'inv_market': inv_dict.get('free_market', 0),
         'is_staff': is_staff,
     })
 
@@ -914,7 +923,7 @@ def bazar_buy_action(request):
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-    # ⚖️ LIBERACIÓN DE MAZMORRA (FIANZA REAL DE 500 🪙)
+# ⚖️ LIBERACIÓN DE MAZMORRA (FIANZA REAL DE 500 🪙)
     if item_code == 'dungeon_bail':
         BAIL_PRICE = 500
         if wallet.balance < BAIL_PRICE:
@@ -935,7 +944,91 @@ def bazar_buy_action(request):
         messages.success(request, msg)
         return redirect(f'/?tg_id={tg_id}')
 
+    # 🌹 TRIBUTO A MUSA (350 🪙 -> 280 🪙 netos a su Bóveda)
+    if item_code == 'tribute_gift':
+        TRIBUTE_PRICE = 350
+        NET_TRIBUTE = 280
+        target_idol_id = request.POST.get('target_idol_id')
+        from idols.models import IdolProfile
+        idol = IdolProfile.objects.filter(id=target_idol_id, is_active=True).first() if target_idol_id else None
+        if not idol:
+            err = "Debes seleccionar una Musa válida de la corte para entregar el tributo."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        if wallet.balance < TRIBUTE_PRICE:
+            err = f"No tienes suficiente oro ({wallet.balance}/{TRIBUTE_PRICE} 🪙)."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        with transaction.atomic():
+            wallet.remove_funds(TRIBUTE_PRICE)
+            idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=idol.telegram_user_id)
+            idol_wallet.add_funds(NET_TRIBUTE)
+        grant_user_xp(request, tg_id, 30, reason=f"Tributo a Musa {idol.stage_name}")
+        from core.telegram_notify import send_telegram_msg
+        send_telegram_msg(
+            chat_id=idol.telegram_user_id,
+            text=f"🎁 <b>¡Tributo Real Recibido!</b>\n\nUn noble te ha enviado una Gargantilla de Rubíes desde el Bazar Real.\nSe han acreditado <b>+{NET_TRIBUTE} 🪙</b> en tu Bóveda Imperial."
+        )
+        msg = f"💎 Has enviado un distinguido tributo a {idol.stage_name}. ¡Recibió {NET_TRIBUTE} 🪙 netos en su Bóveda!"
+        if is_ajax: return JsonResponse({'success': True, 'message': msg})
+        messages.success(request, msg)
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+    # 🌟 MUSA DESTACADA (450 🪙 por 3 días)
+    if item_code == 'featured_idol':
+        FEATURE_PRICE = 450
+        target_idol_id = request.POST.get('target_idol_id')
+        from idols.models import IdolProfile
+        idol = IdolProfile.objects.filter(id=target_idol_id, telegram_user_id=tg_id, is_active=True).first() if target_idol_id else None
+        if not idol:
+            err = "Selecciona una Musa consagrada bajo tu tutela."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        if wallet.balance < FEATURE_PRICE:
+            err = f"No tienes suficiente oro ({wallet.balance}/{FEATURE_PRICE} 🪙)."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        with transaction.atomic():
+            wallet.remove_funds(FEATURE_PRICE)
+            idol.is_featured = True
+            idol.save(update_fields=['is_featured'])
+        grant_user_xp(request, tg_id, 40, reason=f"Musa Destacada: {idol.stage_name}")
+        msg = f"✨ ¡{idol.stage_name} ahora resplandece como Musa Destacada en la Galería del Reino!"
+        if is_ajax: return JsonResponse({'success': True, 'message': msg})
+        messages.success(request, msg)
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+    # 🧪 ELIXIR DE VITALIDAD (120 🪙 -> Restaura energía de mascota al 100%)
+    if item_code == 'energy_potion':
+        POTION_PRICE = 120
+        from pets.models import Pet
+        pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+        if not pet:
+            err = "No tienes una mascota en tu Santuario para vigorizar."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        if wallet.balance < POTION_PRICE:
+            err = f"No tienes suficiente oro ({wallet.balance}/{POTION_PRICE} 🪙)."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        with transaction.atomic():
+            wallet.remove_funds(POTION_PRICE)
+            pet.energy = 100
+            pet.save(update_fields=['energy'])
+        grant_user_xp(request, tg_id, 10, reason="Elixir de Vitalidad")
+        msg = f"🧪 ¡{pet.evolved_name} ha bebido el Elixir! Su energía se ha restaurado al 100%."
+        if is_ajax: return JsonResponse({'success': True, 'message': msg})
+        messages.success(request, msg)
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
     matched_item = next((item for item in BAZAR_ITEMS if item['code'] == item_code), None)
+    
     if not matched_item:
         err = "El artículo solicitado no existe en los estantes del Bazar."
         if is_ajax:
