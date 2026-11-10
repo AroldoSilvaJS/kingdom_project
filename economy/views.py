@@ -623,13 +623,22 @@ def blackjack_game(request):
                     player_hand = [draw_card(), draw_card()]
                     dealer_hand = [draw_card(), draw_card()]
 
-                    # Alternancia para evitar rachas frustrantes
+                    # Alternancia para evitar rachas frustrantes (Blindada con 'points' e 'is_red' dinámico)
                     if bj_losses >= 2:
                         p_check = calculate_hand_value(player_hand)
                         if p_check < 15:
                             high_vals = ['10', 'J', 'Q', 'K', 'A']
                             suits = ['♠', '♥', '♦', '♣']
-                            player_hand[1] = {'val': random.choice(high_vals), 'suit': random.choice(suits), 'is_red': False}
+                            chosen_suit = random.choice(suits)
+                            chosen_val = random.choice(high_vals)
+                            is_red_card = chosen_suit in ['♥', '♦']
+                            pts = 10 if chosen_val in ['10', 'J', 'Q', 'K'] else 11
+                            player_hand[1] = {
+                                'val': chosen_val,
+                                'suit': chosen_suit,
+                                'is_red': is_red_card,
+                                'points': pts
+                            }
 
                     p_val = calculate_hand_value(player_hand)
                     d_init_val = calculate_hand_value(dealer_hand)
@@ -901,19 +910,46 @@ def bazar_buy_action(request):
         return redirect('/economy/bazar/')
         
     tg_id = get_safe_tg_id(request)
-    item_code = request.POST.get('item_code')
-    
+    item_code = request.POST.get('item_code') or request.POST.get('item_key')
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+
+    # ⚖️ LIBERACIÓN DE MAZMORRA (FIANZA REAL DE 500 🪙)
+    if item_code == 'dungeon_bail':
+        BAIL_PRICE = 500
+        if wallet.balance < BAIL_PRICE:
+            err = f"No tienes suficiente oro ({wallet.balance}/{BAIL_PRICE} 🪙) para pagar la fianza."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+        
+        with transaction.atomic():
+            wallet.remove_funds(BAIL_PRICE)
+            UserRole.objects.filter(telegram_id=tg_id).update(is_banned=False, ban_reason=None)
+        
+        grant_user_xp(request, tg_id, 15, reason="Pago de Fianza Real")
+        msg = "⚖️ ¡Fianza aceptada por la Corona! Has sido indultado y liberado de las mazmorras."
+        if is_ajax:
+            return JsonResponse({'success': True, 'message': msg})
+        messages.success(request, msg)
+        return redirect(f'/?tg_id={tg_id}')
+
     matched_item = next((item for item in BAZAR_ITEMS if item['code'] == item_code), None)
     if not matched_item:
-        messages.error(request, "El artículo solicitado no existe en los estantes del Bazar.")
+        err = "El artículo solicitado no existe en los estantes del Bazar."
+        if is_ajax:
+            return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
         
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-
     price = matched_item['price']
     if wallet.balance < price:
-        messages.error(request, f"No tienes suficiente oro imperial ({wallet.balance}/{price} 🪙).")
+        err = f"No tienes suficiente oro imperial ({wallet.balance}/{price} 🪙)."
+        if is_ajax:
+            return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
     now = timezone.now()

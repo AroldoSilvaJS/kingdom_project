@@ -1,6 +1,7 @@
 import random
 import os
 import sys
+import uuid
 import urllib.request
 from io import BytesIO
 from PIL import Image
@@ -70,6 +71,8 @@ def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
         return file_obj
     try:
         img = Image.open(file_obj)
+
+        # Corregir rotación automática de celular
         try:
             from PIL import ExifTags
             for orientation in ExifTags.TAGS.keys():
@@ -96,16 +99,14 @@ def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
             img.save(output, format='WEBP', quality=quality, method=4)
 
         output.seek(0)
-        base_name = os.path.splitext(getattr(file_obj, 'name', 'img'))[0]
-        filename = f"{base_name}.webp"
+        # 🛡️ BLINDAJE ANTI-VARCHAR(100): Nombre ultracorto aleatorio (ej: musa_a1b2c3d4.webp)
+        filename = f"musa_{uuid.uuid4().hex[:10]}.webp"
 
         return InMemoryUploadedFile(
             output, 'ImageField', filename, 'image/webp', output.getbuffer().nbytes, None
         )
     except Exception as e:
         print(f"Error optimizando imagen: {e}")
-        if hasattr(file_obj, 'seek'):
-            file_obj.seek(0)
         return file_obj
 
 
@@ -356,40 +357,58 @@ def idol_edit(request, idol_id):
 
     if request.method == 'POST':
         try:
-            idol.stage_name = request.POST.get('stage_name', idol.stage_name).strip()
-            idol.group = request.POST.get('group', idol.group).strip()
-            idol.bio = request.POST.get('bio', idol.bio).strip()
-            idol.tagline = request.POST.get('tagline', idol.tagline).strip()
+            # 🛡️ Sanitización y recorte seguro a los límites de la base de datos (max 100 caracteres)
+            raw_stage = request.POST.get('stage_name', idol.stage_name).strip()
+            idol.stage_name = raw_stage[:100]
+
+            raw_group = request.POST.get('group', idol.group or '').strip()
+            idol.group = raw_group[:100] if raw_group else None
+
+            # Limpiar usuario de telegram (eliminar https://t.me/ si lo pegaron completo)
+            raw_owner = request.POST.get('owner_username', idol.owner_username or '').strip()
+            raw_owner = raw_owner.replace('https://t.me/', '').replace('http://t.me/', '').replace('t.me/', '').strip('/')
+            if raw_owner and not raw_owner.startswith('@'):
+                raw_owner = f"@{raw_owner}"
+            idol.owner_username = raw_owner[:100] if raw_owner else None
+
+            raw_specialty = request.POST.get('specialty', idol.specialty or '').strip()
+            idol.specialty = raw_specialty[:100] if raw_specialty else None
+
+            raw_tagline = request.POST.get('tagline', idol.tagline or '').strip()
+            idol.tagline = raw_tagline[:120] if raw_tagline else None
+
+            raw_welcome = request.POST.get('welcome_message', idol.welcome_message or '').strip()
+            idol.welcome_message = raw_welcome[:200] if raw_welcome else None
+
+            idol.bio = request.POST.get('bio', idol.bio).strip()[:500]
             idol.status = request.POST.get('status', idol.status)
             idol.aura_color = request.POST.get('aura_color', idol.aura_color)
-            idol.specialty = request.POST.get('specialty', idol.specialty).strip()
-            idol.welcome_message = request.POST.get('welcome_message', idol.welcome_message).strip()
 
-            custom_owner = request.POST.get('owner_username', '').strip()
-            if custom_owner:
-                idol.owner_username = custom_owner if custom_owner.startswith('@') else f"@{custom_owner}"
-
-            # Actualizar Retrato si se sube archivo o si se pega enlace directo (PC / Celular)
+            # Retrato con nombre corto
             photo_file = request.FILES.get('photo')
             photo_url = request.POST.get('photo_url', '').strip()
             if not photo_file and photo_url:
-                photo_file = download_image_from_url(photo_url, default_filename=f"idol_{idol.id}_edit.webp")
+                photo_file = download_image_from_url(photo_url, default_filename=f"p_{uuid.uuid4().hex[:8]}.webp")
             if photo_file:
-                idol.photo = optimize_uploaded_image(photo_file)
+                opt_photo = optimize_uploaded_image(photo_file)
+                if opt_photo:
+                    idol.photo = opt_photo
 
-            # Actualizar Banner si se sube archivo o link
+            # Banner con nombre corto
             banner_file = request.FILES.get('banner')
             banner_url = request.POST.get('banner_url', '').strip()
             if not banner_file and banner_url:
-                banner_file = download_image_from_url(banner_url, default_filename=f"banner_{idol.id}_edit.webp")
+                banner_file = download_image_from_url(banner_url, default_filename=f"b_{uuid.uuid4().hex[:8]}.webp")
             if banner_file:
-                idol.banner = optimize_uploaded_image(banner_file)
+                opt_banner = optimize_uploaded_image(banner_file)
+                if opt_banner:
+                    idol.banner = opt_banner
 
             idol.save()
             messages.success(request, f"✨ ¡Ficha de {idol.stage_name} actualizada con éxito!")
             return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
         except Exception as e:
-            messages.error(request, f"⚠️ Error al guardar los cambios: {str(e)}")
+            messages.error(request, f"⚠️ Error al guardar: {str(e)}")
 
     return render(request, 'idols/form.html', {
         'idol': idol,
@@ -784,7 +803,7 @@ def unlock_post(request, post_id):
                     'video_url': post.video.url if post.video else ''
                 })
                 
-        return redirect(f'/idols/feed/?tg_id={tg_id}')
+    return redirect(f'/idols/feed/?tg_id={tg_id}')
 
 
 def create_post(request):
@@ -1071,8 +1090,8 @@ def send_tip(request, post_id):
             if is_ajax:
                 return JsonResponse({'success': False, 'error': 'No tienes suficiente oro en tu Bóveda.'}, status=400)
             messages.error(request, "No tienes suficiente oro en tu Bóveda.")
-            
-        return redirect(f'/idols/feed/?tg_id={tg_id}')
+        
+    return redirect(f'/idols/feed/?tg_id={tg_id}')
 
 
 def create_custom_request(request, idol_id):
@@ -1215,7 +1234,7 @@ def add_comment(request, post_id):
 
             messages.success(request, "Comentario publicado (+3 EXP).")
             
-        return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={tg_username}')
+    return redirect(f'/idols/feed/?tg_id={tg_id}&tg_username={tg_username}')
 
 
 # ==========================================
@@ -2173,8 +2192,6 @@ def handle_trade_offer(request, trade_id, action):
 
     return redirect('/idols/photocards/market/')
 
-
-import urllib.request
 
 def download_image_from_url(url, default_filename='downloaded_image.webp'):
     """

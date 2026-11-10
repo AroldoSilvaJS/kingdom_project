@@ -136,8 +136,8 @@ def interact_pet(request):
                     'new_buff': pet.get_buff_description()
                 })
             messages.success(request, f"💖 ¡Acariciaste a {pet.name}!")
-
-        return redirect(f'/pets/?tg_id={tg_id}')
+        
+    return redirect(f'/pets/?tg_id={tg_id}')
 
 
 def expedition_pet(request):

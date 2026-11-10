@@ -31,6 +31,8 @@ ALLOWED_HOSTS = ['*']
 CSRF_TRUSTED_ORIGINS = [
     'https://*.onrender.com',
     'https://*.trycloudflare.com',
+    'https://*.telegram.org',
+    'https://web.telegram.org',
 ]
 
 # Application definition

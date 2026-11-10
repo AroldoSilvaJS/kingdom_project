@@ -14,9 +14,9 @@ class IdolProfile(models.Model):
     telegram_user_id = models.BigIntegerField(db_index=True)
     owner_username = models.CharField("Usuario de Telegram", max_length=100, blank=True, null=True)
     
-    stage_name = models.CharField("Nombre Artístico", max_length=100)
+    stage_name = models.CharField("Nombre Artístico", max_length=150)
     group = models.CharField("Grupo/Solista", max_length=100, blank=True, null=True)
-    bio = models.TextField("Biografía / Presentación", max_length=500)
+    bio = models.TextField("Biografía / Presentación", max_length=800)
     status = models.CharField("Estado Actual", max_length=10, choices=STATUS_CHOICES, default='online')
 
     photo = models.ImageField("Foto de Perfil", upload_to='idols_photos/', blank=True, null=True)

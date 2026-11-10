@@ -179,10 +179,10 @@ def my_profile(request):
         profile.title = request.POST.get('title', profile.title)
         profile.bio = request.POST.get('bio', '').strip()
         
-        # 1. Marco cosmético de avatar
+        # 1. Marco cosmético de avatar (Protección de Marcos Imperiales)
         desired_frame = request.POST.get('avatar_frame', profile.avatar_frame)
-        if desired_frame == 'flame' and not profile.has_custom_avatar_frame:
-            messages.error(request, "⚠️ El Marco Llama Carmesí está reservado para quienes lo adquieran en el Bazar.")
+        if desired_frame in ['flame', 'diamond', 'neon'] and not profile.has_custom_avatar_frame:
+            messages.error(request, "⚠️ Los Marcos Imperiales (Carmesí, Diamante y Neón) requieren la compra del marco en el Bazar.")
         else:
             profile.avatar_frame = desired_frame
 
@@ -194,10 +194,11 @@ def my_profile(request):
         if new_vip_badge:
             profile.vip_badge = new_vip_badge
 
-        # 3. Título personalizado del Bazar (si lo compró o tiene acceso)
-        if profile.has_vip_badge or profile.custom_title_text or request.POST.get('custom_title_text'):
+        # 3. Título personalizado (Solo editable si compró el ítem en el Bazar o tiene el permiso activo)
+        if profile.has_vip_badge or profile.custom_title_text:
             new_custom_title = request.POST.get('custom_title_text', '').strip()
-            profile.custom_title_text = new_custom_title if new_custom_title else None
+            if new_custom_title:
+                profile.custom_title_text = new_custom_title[:60]
         
         # 4. Musa devota
         if not is_idol:

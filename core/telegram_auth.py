@@ -49,11 +49,19 @@ def is_user_in_group(user_tg_id: int) -> bool:
             if data.get('ok'):
                 status = data.get('result', {}).get('status')
                 is_member = status in ['creator', 'administrator', 'member', 'restricted']
-                # Guardar resultado en caché por 30 minutos (1800 seg)
                 cache.set(cache_key, is_member, timeout=1800)
                 return is_member
+            else:
+                # Si Telegram respondió ok: False de forma certera (ej: usuario inexistente en el grupo)
+                cache.set(cache_key, False, timeout=600)
+                return False
+    except urllib.error.HTTPError as e:
+        # Error 400 de Telegram: 'user not found' en el chat -> NO es miembro
+        if e.code == 400:
+            cache.set(cache_key, False, timeout=600)
+            return False
+        print(f"⚠️ Error HTTP getChatMember para {user_tg_id}: {e}")
     except Exception as e:
-        print(f"⚠️ Error getChatMember para {user_tg_id}: {e}")
-
-    # En caso de timeout transitorio de Telegram, no bloquear al usuario
+        print(f"⚠️ Error general getChatMember para {user_tg_id}: {e}")
+    # Solo en timeouts transitorios de red se permite pasar temporalmente
     return True

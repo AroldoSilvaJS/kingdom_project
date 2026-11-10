@@ -21,14 +21,20 @@ def _do_send_telegram_msg(chat_id, text, button_text=None, button_url=None, mess
         payload['message_thread_id'] = int(message_thread_id)
 
     if button_text and button_url:
-        is_group = int(chat_id) < 0
+        try:
+            is_group = int(chat_id) < 0
+        except (ValueError, TypeError):
+            is_group = str(chat_id).startswith('-')
+            
         btn_dict = {'text': button_text}
         
-        if is_group:
+        # Telegram Bot API prohíbe dominios t.me dentro de web_app:
+        is_telegram_link = ('t.me/' in button_url) or ('telegram.me/' in button_url)
+        if is_group or is_telegram_link:
             btn_dict['url'] = button_url
         else:
             btn_dict['web_app'] = {'url': button_url}
-
+            
         payload['reply_markup'] = {
             'inline_keyboard': [[btn_dict]]
         }
