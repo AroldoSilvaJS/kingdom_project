@@ -26,7 +26,7 @@ from .models import (
     CourtJob,
     UserCollectible,
     UserInventoryItem,
-    Wallet,
+    Wallet, CollectibleSeries,
 )
 
 
@@ -886,9 +886,17 @@ def bazar_shop(request):
     inventory_items = UserInventoryItem.objects.filter(telegram_user_id=tg_id)
     inv_dict = {item.item_code: item.quantity for item in inventory_items}
     
-    # Coleccionables con Foto disponibles en la Boutique
-    collectibles = BazarCollectible.objects.filter(is_active=True).order_by('-created_at')
-    user_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item')
+    # Coleccionables y Colecciones Pop Mart disponibles en la Boutique
+    collectibles = BazarCollectible.objects.filter(is_active=True).select_related('series').order_by('-created_at')
+    series_list = CollectibleSeries.objects.filter(is_active=True).prefetch_related('items').order_by('-created_at')
+    user_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item', 'item__series')
+    user_item_ids = set(user_collectibles.values_list('item_id', flat=True))
+
+    # Progreso de cada serie para el usuario (ej: 3/9)
+    for s in series_list:
+        s_items = list(s.items.filter(is_active=True))
+        s.items_cache = s_items
+        s.owned_count = sum(1 for it in s_items if it.id in user_item_ids)
     is_staff = check_is_staff_or_admin(tg_id)
 
     from idols.models import IdolProfile
@@ -923,6 +931,8 @@ def bazar_shop(request):
         'inv_market': inv_dict.get('free_market', 0),
         'is_staff': is_staff,
         'is_admin': is_staff,
+        'series_list': series_list,
+        'user_item_ids': user_item_ids,
     })
 
 
@@ -1641,6 +1651,121 @@ def admin_delete_collectible(request, item_id):
     messages.info(request, f"El artículo «{item.name}» ha sido retirado de los estantes de la Boutique.")
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
+def admin_create_series_batch(request):
+    """Crea una colección Pop Mart completa con múltiples figuras de golpe."""
+    tg_id = get_safe_tg_id(request)
+    if not check_is_staff_or_admin(tg_id):
+        messages.error(request, "Acceso exclusivo para la corte de administración.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+    if request.method == 'POST':
+        from .models import CollectibleSeries
+        series_name = request.POST.get('series_name', '').strip()
+        tagline = request.POST.get('tagline', 'Pop Mart Series').strip()
+        description = request.POST.get('description', '').strip()
+        blind_price = int(request.POST.get('blind_box_price', 160))
+        single_price = int(request.POST.get('single_price', 260))
+        cover_file = request.FILES.get('cover_image')
+
+        if not series_name:
+            messages.error(request, "El nombre de la colección es requerido.")
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+        optimized_cover = optimize_uploaded_image(cover_file) if cover_file else None
+
+        with transaction.atomic():
+            series = CollectibleSeries.objects.create(
+                name=series_name,
+                tagline=tagline,
+                description=description,
+                cover_image=optimized_cover,
+                blind_box_price=max(10, blind_price),
+                single_price=max(10, single_price)
+            )
+
+            # Recorrer todas las figuras subidas en lote
+            figure_images = request.FILES.getlist('figures')
+            figure_names = request.POST.getlist('figure_names')
+            secret_indices = request.POST.getlist('is_secret_index')
+
+            for idx, img in enumerate(figure_images):
+                opt_img = optimize_uploaded_image(img)
+                fig_name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else f"{series_name} #{idx+1}"
+                is_sec = str(idx) in secret_indices
+
+                BazarCollectible.objects.create(
+                    series=series,
+                    name=fig_name,
+                    category='figura',
+                    price=single_price,
+                    image=opt_img,
+                    stock=-1,
+                    is_secret=is_sec,
+                    idol_name=fig_name
+                )
+
+        messages.success(request, f"✨ ¡Colección «{series_name}» publicada con éxito ({len(figure_images)} figuras)!")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+def buy_blind_box_action(request, series_id):
+    """Mecánica Blind Box: adquiere una figura aleatoria de la colección."""
+    if request.method != 'POST':
+        return redirect('/economy/bazar/')
+
+    tg_id = get_safe_tg_id(request)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+
+    from .models import CollectibleSeries
+    series = get_object_or_404(CollectibleSeries, id=series_id, is_active=True)
+    available_items = list(series.items.filter(is_active=True))
+
+    if not available_items:
+        err = "Esta colección aún no tiene figuras disponibles."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    if wallet.balance < series.blind_box_price:
+        err = f"Oro insuficiente para la Caja Sorpresa ({wallet.balance}/{series.blind_box_price} 🪙)."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+    # Ponderación: las secretas tienen 5% de probabilidad, las regulares 95%
+    secrets = [it for it in available_items if it.is_secret]
+    regulars = [it for it in available_items if not it.is_secret]
+
+    if secrets and random.random() < 0.05:
+        chosen_item = random.choice(secrets)
+    else:
+        chosen_item = random.choice(regulars) if regulars else random.choice(available_items)
+
+    with transaction.atomic():
+        wallet.remove_funds(series.blind_box_price)
+        uc, created = UserCollectible.objects.get_or_create(telegram_user_id=tg_id, item=chosen_item)
+        if not created:
+            uc.quantity += 1
+            uc.save(update_fields=['quantity'])
+
+    grant_user_xp(request, tg_id, 20, reason=f"Blind Box: {series.name}")
+
+    msg = f"🎉 ¡Has abierto una Caja Sorpresa de {series.name} y obtuviste a «{chosen_item.name}»!"
+    if chosen_item.is_secret:
+        msg = f"⭐👑 ¡FIESTA REAL! ¡Has desenterrado la FIGURA SECRETA: «{chosen_item.name}»!"
+
+    if is_ajax:
+        return JsonResponse({
+            'success': True,
+            'message': msg,
+            'figure_name': chosen_item.name,
+            'figure_image': chosen_item.image.url if chosen_item.image else '',
+            'is_secret': chosen_item.is_secret,
+            'nuevo_saldo': wallet.balance
+        })
+
+    messages.success(request, msg)
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 # ==============================================================================
 # 🎫 RASPA Y GANA IMPERIAL (SCRATCH CARDS)

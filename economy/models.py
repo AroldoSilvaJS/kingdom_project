@@ -165,31 +165,53 @@ class CourtJob(models.Model):
 # BOUTIQUE REAL: ARTÍCULOS & COLECCIONABLES CON FOTO
 # ==========================================
 
-class BazarCollectible(models.Model):
-    CATEGORY_CHOICES = [
-        ('figura', '🎎 Figura / Escultura de Colección'),
-        ('joya', '💎 Joyería & Reliquia Imperial'),
-        ('souvenir', '🎀 Merchandising & Recuerdos VIP'),
-        ('especial', '✨ Objeto de Edición Especial'),
-    ]
-
-    name = models.CharField("Nombre del Artículo", max_length=120)
-    category = models.CharField("Categoría", max_length=20, choices=CATEGORY_CHOICES, default='figura')
-    description = models.TextField("Descripción / Detalle", max_length=300, blank=True, null=True)
-    price = models.PositiveIntegerField("Precio en Oro (🪙)", default=150)
-    image = models.ImageField("Fotografía del Artículo", upload_to='bazar_collectibles/')
-    
-    # Stock: -1 = Ilimitado, o unidades fijas (ej: 5 para ediciones limitadas)
-    stock = models.IntegerField("Unidades en Existencia (-1 = Ilimitado)", default=-1)
-    
-    idol_name = models.CharField("Idol o Personaje Asociado (Opcional)", max_length=100, blank=True, null=True)
-    is_active = models.BooleanField("¿Disponible en Tienda?", default=True)
+class CollectibleSeries(models.Model):
+    name = models.CharField("Nombre de la Colección", max_length=150)
+    tagline = models.CharField("Subtítulo / Edición", max_length=150, blank=True, null=True, default="Pop Mart Edition")
+    description = models.TextField("Descripción del Set", max_length=400, blank=True, null=True)
+    cover_image = models.ImageField("Caja / Portada de la Serie", upload_to='bazar_series/', blank=True, null=True)
+    blind_box_price = models.PositiveIntegerField("Precio Caja Sorpresa (🪙)", default=160)
+    single_price = models.PositiveIntegerField("Precio Compra Directa (🪙)", default=260)
+    is_active = models.BooleanField("¿Serie Disponible?", default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = "Artículo de Boutique"
-        verbose_name_plural = "Artículos de Boutique"
+        verbose_name = "Colección / Serie Pop Mart"
+        verbose_name_plural = "Colecciones / Series Pop Mart"
         ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def total_items(self):
+        return self.items.filter(is_active=True).count()
+
+
+class BazarCollectible(models.Model):
+    CATEGORY_CHOICES = [
+        ('figura', '🎎 Figura Pop Mart'),
+        ('joya', '💎 Joyería & Reliquia'),
+        ('souvenir', '🎀 Merchandising VIP'),
+        ('especial', '✨ Objeto Exclusivo'),
+    ]
+
+    series = models.ForeignKey(CollectibleSeries, on_delete=models.CASCADE, null=True, blank=True, related_name='items')
+    name = models.CharField("Nombre de la Figura", max_length=120)
+    category = models.CharField("Categoría", max_length=20, choices=CATEGORY_CHOICES, default='figura')
+    description = models.TextField("Detalle", max_length=300, blank=True, null=True)
+    price = models.PositiveIntegerField("Precio en Oro (🪙)", default=260)
+    image = models.ImageField("Fotografía de la Figura", upload_to='bazar_collectibles/')
+    stock = models.IntegerField("Stock (-1 = Ilimitado)", default=-1)
+    idol_name = models.CharField("Idol o Personaje", max_length=100, blank=True, null=True)
+    is_secret = models.BooleanField("¿Figura Secreta / Chase ⭐?", default=False)
+    is_active = models.BooleanField("¿Disponible?", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Figura Coleccionable"
+        verbose_name_plural = "Figuras Coleccionables"
+        ordering = ['created_at']
 
     def __str__(self):
         return f"{self.name} ({self.price} 🪙)"

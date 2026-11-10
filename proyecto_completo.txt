@@ -2431,31 +2431,53 @@ class CourtJob(models.Model):
 # BOUTIQUE REAL: ARTÍCULOS & COLECCIONABLES CON FOTO
 # ==========================================
 
-class BazarCollectible(models.Model):
-    CATEGORY_CHOICES = [
-        ('figura', '🎎 Figura / Escultura de Colección'),
-        ('joya', '💎 Joyería & Reliquia Imperial'),
-        ('souvenir', '🎀 Merchandising & Recuerdos VIP'),
-        ('especial', '✨ Objeto de Edición Especial'),
-    ]
-
-    name = models.CharField("Nombre del Artículo", max_length=120)
-    category = models.CharField("Categoría", max_length=20, choices=CATEGORY_CHOICES, default='figura')
-    description = models.TextField("Descripción / Detalle", max_length=300, blank=True, null=True)
-    price = models.PositiveIntegerField("Precio en Oro (🪙)", default=150)
-    image = models.ImageField("Fotografía del Artículo", upload_to='bazar_collectibles/')
-    
-    # Stock: -1 = Ilimitado, o unidades fijas (ej: 5 para ediciones limitadas)
-    stock = models.IntegerField("Unidades en Existencia (-1 = Ilimitado)", default=-1)
-    
-    idol_name = models.CharField("Idol o Personaje Asociado (Opcional)", max_length=100, blank=True, null=True)
-    is_active = models.BooleanField("¿Disponible en Tienda?", default=True)
+class CollectibleSeries(models.Model):
+    name = models.CharField("Nombre de la Colección", max_length=150)
+    tagline = models.CharField("Subtítulo / Edición", max_length=150, blank=True, null=True, default="Pop Mart Edition")
+    description = models.TextField("Descripción del Set", max_length=400, blank=True, null=True)
+    cover_image = models.ImageField("Caja / Portada de la Serie", upload_to='bazar_series/', blank=True, null=True)
+    blind_box_price = models.PositiveIntegerField("Precio Caja Sorpresa (🪙)", default=160)
+    single_price = models.PositiveIntegerField("Precio Compra Directa (🪙)", default=260)
+    is_active = models.BooleanField("¿Serie Disponible?", default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = "Artículo de Boutique"
-        verbose_name_plural = "Artículos de Boutique"
+        verbose_name = "Colección / Serie Pop Mart"
+        verbose_name_plural = "Colecciones / Series Pop Mart"
         ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def total_items(self):
+        return self.items.filter(is_active=True).count()
+
+
+class BazarCollectible(models.Model):
+    CATEGORY_CHOICES = [
+        ('figura', '🎎 Figura Pop Mart'),
+        ('joya', '💎 Joyería & Reliquia'),
+        ('souvenir', '🎀 Merchandising VIP'),
+        ('especial', '✨ Objeto Exclusivo'),
+    ]
+
+    series = models.ForeignKey(CollectibleSeries, on_delete=models.CASCADE, null=True, blank=True, related_name='items')
+    name = models.CharField("Nombre de la Figura", max_length=120)
+    category = models.CharField("Categoría", max_length=20, choices=CATEGORY_CHOICES, default='figura')
+    description = models.TextField("Detalle", max_length=300, blank=True, null=True)
+    price = models.PositiveIntegerField("Precio en Oro (🪙)", default=260)
+    image = models.ImageField("Fotografía de la Figura", upload_to='bazar_collectibles/')
+    stock = models.IntegerField("Stock (-1 = Ilimitado)", default=-1)
+    idol_name = models.CharField("Idol o Personaje", max_length=100, blank=True, null=True)
+    is_secret = models.BooleanField("¿Figura Secreta / Chase ⭐?", default=False)
+    is_active = models.BooleanField("¿Disponible?", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Figura Coleccionable"
+        verbose_name_plural = "Figuras Coleccionables"
+        ordering = ['created_at']
 
     def __str__(self):
         return f"{self.name} ({self.price} 🪙)"
@@ -2518,6 +2540,11 @@ urlpatterns = [
     path('bazar/collectible/buy/<int:item_id>/', views.buy_collectible_action, name='buy_collectible'),
     path('bazar/collectible/add/', views.admin_add_collectible, name='add_collectible'),
     path('bazar/collectible/delete/<int:item_id>/', views.admin_delete_collectible, name='delete_collectible'),
+    # Pop Mart: Creación por lote y Blind Box
+    path('bazar/series/create-batch/', views.admin_create_series_batch, name='create_series_batch'),
+    path('bazar/series/blind-box/<int:series_id>/', views.buy_blind_box_action, name='buy_blind_box'),
+
+    
     path('scratch/', views.scratch_card_view, name='scratch'),
     path('scratch/play/', views.scratch_card_play_ajax, name='scratch_play'),
 ]
@@ -2554,7 +2581,7 @@ from .models import (
     CourtJob,
     UserCollectible,
     UserInventoryItem,
-    Wallet,
+    Wallet, CollectibleSeries,
 )
 
 
@@ -3415,13 +3442,30 @@ def bazar_shop(request):
     inv_dict = {item.item_code: item.quantity for item in inventory_items}
     
     # Coleccionables con Foto disponibles en la Boutique
-    collectibles = BazarCollectible.objects.filter(is_active=True).order_by('-created_at')
-    user_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item')
+    series_list = CollectibleSeries.objects.filter(is_active=True).prefetch_related('items').order_by('-created_at')
+    user_collectibles = UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item', 'item__series')
+    user_item_ids = set(user_collectibles.values_list('item_id', flat=True))
+
+    # Progreso de cada serie para el usuario (ej: 3/9)
+    for s in series_list:
+        s_items = list(s.items.filter(is_active=True))
+        s.items_cache = s_items
+        s.owned_count = sum(1 for it in s_items if it.id in user_item_ids)
     is_staff = check_is_staff_or_admin(tg_id)
 
     from idols.models import IdolProfile
-    todas_idols = IdolProfile.objects.filter(is_active=True).order_by('stage_name')
-    mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id, is_active=True)
+    todas_idols = IdolProfile.objects.all().order_by('stage_name')
+    mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).order_by('stage_name') if tg_id else IdolProfile.objects.none()
+
+    # Detección limpia de rol Idol para desbloquear pestaña exclusiva
+    is_idol = False
+    if tg_id:
+        try:
+            role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+            if (role_obj and role_obj.role == 'idol') or mis_idols.exists():
+                is_idol = True
+        except Exception:
+            is_idol = mis_idols.exists()
 
     return render(request, 'economy/bazar.html', {
         'tg_id': tg_id,
@@ -3435,10 +3479,14 @@ def bazar_shop(request):
         'my_collectibles': user_collectibles,
         'todas_idols': todas_idols,
         'mis_idols': mis_idols,
+        'is_idol': is_idol,
         'inv_priority': inv_dict.get('priority_antojo', 0),
         'inv_lucky': inv_dict.get('lucky_charm', 0),
         'inv_market': inv_dict.get('free_market', 0),
         'is_staff': is_staff,
+        'is_admin': is_staff,
+        'series_list': series_list,
+        'user_item_ids': user_item_ids,
     })
 
 
@@ -3451,7 +3499,7 @@ def bazar_buy_action(request):
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-# ⚖️ LIBERACIÓN DE MAZMORRA (FIANZA REAL DE 500 🪙)
+    # ⚖️ LIBERACIÓN DE MAZMORRA (FIANZA REAL DE 500 🪙)
     if item_code == 'dungeon_bail':
         BAIL_PRICE = 500
         if wallet.balance < BAIL_PRICE:
@@ -3468,7 +3516,7 @@ def bazar_buy_action(request):
         grant_user_xp(request, tg_id, 15, reason="Pago de Fianza Real")
         msg = "⚖️ ¡Fianza aceptada por la Corona! Has sido indultado y liberado de las mazmorras."
         if is_ajax:
-            return JsonResponse({'success': True, 'message': msg})
+            return JsonResponse({'success': True, 'message': msg, 'nuevo_saldo': wallet.balance})
         messages.success(request, msg)
         return redirect(f'/?tg_id={tg_id}')
 
@@ -3478,7 +3526,7 @@ def bazar_buy_action(request):
         NET_TRIBUTE = 280
         target_idol_id = request.POST.get('target_idol_id')
         from idols.models import IdolProfile
-        idol = IdolProfile.objects.filter(id=target_idol_id, is_active=True).first() if target_idol_id else None
+        idol = IdolProfile.objects.filter(id=target_idol_id).first() if target_idol_id else None
         if not idol:
             err = "Debes seleccionar una Musa válida de la corte para entregar el tributo."
             if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
@@ -3500,7 +3548,7 @@ def bazar_buy_action(request):
             text=f"🎁 <b>¡Tributo Real Recibido!</b>\n\nUn noble te ha enviado una Gargantilla de Rubíes desde el Bazar Real.\nSe han acreditado <b>+{NET_TRIBUTE} 🪙</b> en tu Bóveda Imperial."
         )
         msg = f"💎 Has enviado un distinguido tributo a {idol.stage_name}. ¡Recibió {NET_TRIBUTE} 🪙 netos en su Bóveda!"
-        if is_ajax: return JsonResponse({'success': True, 'message': msg})
+        if is_ajax: return JsonResponse({'success': True, 'message': msg, 'nuevo_saldo': wallet.balance})
         messages.success(request, msg)
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
@@ -3509,7 +3557,7 @@ def bazar_buy_action(request):
         FEATURE_PRICE = 450
         target_idol_id = request.POST.get('target_idol_id')
         from idols.models import IdolProfile
-        idol = IdolProfile.objects.filter(id=target_idol_id, telegram_user_id=tg_id, is_active=True).first() if target_idol_id else None
+        idol = IdolProfile.objects.filter(id=target_idol_id, telegram_user_id=tg_id).first() if target_idol_id else None
         if not idol:
             err = "Selecciona una Musa consagrada bajo tu tutela."
             if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
@@ -3522,11 +3570,15 @@ def bazar_buy_action(request):
             return redirect(f'/economy/bazar/?tg_id={tg_id}')
         with transaction.atomic():
             wallet.remove_funds(FEATURE_PRICE)
-            idol.is_featured = True
-            idol.save(update_fields=['is_featured'])
+            from django.utils import timezone
+            from datetime import timedelta
+            now_feat = timezone.now()
+            base_time = idol.is_featured_until if (idol.is_featured_until and idol.is_featured_until > now_feat) else now_feat
+            idol.is_featured_until = base_time + timedelta(days=3)
+            idol.save(update_fields=['is_featured_until'])
         grant_user_xp(request, tg_id, 40, reason=f"Musa Destacada: {idol.stage_name}")
         msg = f"✨ ¡{idol.stage_name} ahora resplandece como Musa Destacada en la Galería del Reino!"
-        if is_ajax: return JsonResponse({'success': True, 'message': msg})
+        if is_ajax: return JsonResponse({'success': True, 'message': msg, 'nuevo_saldo': wallet.balance})
         messages.success(request, msg)
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
@@ -3551,7 +3603,7 @@ def bazar_buy_action(request):
             pet.save(update_fields=['energy'])
         grant_user_xp(request, tg_id, 10, reason="Elixir de Vitalidad")
         msg = f"🧪 ¡{pet.evolved_name} ha bebido el Elixir! Su energía se ha restaurado al 100%."
-        if is_ajax: return JsonResponse({'success': True, 'message': msg})
+        if is_ajax: return JsonResponse({'success': True, 'message': msg, 'nuevo_saldo': wallet.balance})
         messages.success(request, msg)
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
@@ -3574,6 +3626,7 @@ def bazar_buy_action(request):
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
     now = timezone.now()
+    success_msg = ""
 
     # Procesar compra según categoría
     if item_code == 'shield_15':
@@ -3581,45 +3634,53 @@ def bazar_buy_action(request):
         profile.inactivity_shield_until = current_until + timedelta(days=15)
         profile.save()
         wallet.remove_funds(price)
-        messages.success(request, "🛡️ ¡Inmunidad adquirida! Tu rango está protegido por 15 días.")
+        success_msg = "🛡️ ¡Inmunidad adquirida! Tu rango está protegido por 15 días."
 
     elif item_code == 'shield_30':
         current_until = profile.inactivity_shield_until if (profile.inactivity_shield_until and profile.inactivity_shield_until > now) else now
         profile.inactivity_shield_until = current_until + timedelta(days=30)
         profile.save()
         wallet.remove_funds(price)
-        messages.success(request, "🛡️ ¡Inmunidad Imperial concedida! Tu rango está protegido por 30 días.")
+        success_msg = "🛡️ ¡Inmunidad Imperial concedida! Tu rango está protegido por 30 días."
 
     elif item_code == 'custom_title':
         custom_txt = request.POST.get('custom_title_text', '').strip()
         if not custom_txt:
-            messages.warning(request, "Debes ingresar el texto para tu nuevo título personalizado.")
+            err = "Debes ingresar el texto para tu nuevo título personalizado."
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.warning(request, err)
             return redirect(f'/economy/bazar/?tg_id={tg_id}')
         if len(custom_txt) > 60:
             custom_txt = custom_txt[:60]
         profile.custom_title_text = custom_txt
         profile.save()
         wallet.remove_funds(price)
-        messages.success(request, f"📜 ¡Título proclamado con éxito: «{custom_txt}»!")
+        success_msg = f"📜 ¡Título proclamado con éxito: «{custom_txt}»!"
 
     elif item_code == 'imperial_frame':
         profile.has_custom_avatar_frame = True
         profile.save()
         wallet.remove_funds(price)
-        messages.success(request, "👑 ¡Acceso a Marcos Imperiales desbloqueado! Puedes elegirlo en tu perfil.")
+        success_msg = "👑 ¡Acceso a Marcos Imperiales desbloqueado! Puedes elegirlo en tu perfil."
 
     elif item_code == 'vip_badge':
         profile.has_vip_badge = True
         profile.save()
         wallet.remove_funds(price)
-        messages.success(request, "🎖️ ¡Insignia de Linaje VIP otorgada permanentemente en tu blasón!")
+        success_msg = "🎖️ ¡Insignia de Linaje VIP otorgada permanentemente en tu blasón!"
 
     elif matched_item['type'] == 'consumable':
         UserInventoryItem.add_item(tg_id, item_code, 1)
         wallet.remove_funds(price)
-        messages.success(request, f"✨ Has adquirido {matched_item['name']}. Ha sido guardado en tus alforjas.")
+        success_msg = f"✨ Has adquirido {matched_item['name']}. Ha sido guardado en tus alforjas."
 
     grant_user_xp(request, tg_id, max(5, price // 20), reason=f"Compra en Bazar: {matched_item['name']}")
+
+    if is_ajax:
+        return JsonResponse({'success': True, 'message': success_msg, 'nuevo_saldo': wallet.balance})
+
+    messages.success(request, success_msg)
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
@@ -4068,27 +4129,38 @@ def buy_collectible_action(request, item_id):
         return redirect('/economy/bazar/')
         
     tg_id = get_safe_tg_id(request)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
     item = get_object_or_404(BazarCollectible, id=item_id, is_active=True)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-    if item.stock <= 0:
-        messages.error(request, "Este artículo exclusivo se encuentra agotado.")
+    if not item.is_in_stock:
+        err = "Este artículo exclusivo se encuentra agotado."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
     if wallet.balance < item.price:
-        messages.error(request, f"Oro insuficiente ({wallet.balance}/{item.price} 🪙).")
+        err = f"Oro insuficiente ({wallet.balance}/{item.price} 🪙)."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
         return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
     with transaction.atomic():
         wallet.remove_funds(item.price)
-        item.stock -= 1
-        item.save()
-        UserCollectible.objects.create(telegram_user_id=tg_id, item=item)
+        if item.stock > 0:
+            item.stock -= 1
+            item.save(update_fields=['stock'])
+        uc, created = UserCollectible.objects.get_or_create(telegram_user_id=tg_id, item=item)
+        if not created:
+            uc.quantity += 1
+            uc.save(update_fields=['quantity'])
 
     grant_user_xp(request, tg_id, max(10, item.price // 15), reason=f"Colección Boutique: {item.name}")
-    messages.success(request, f"👑 ¡Has adquirido la reliquia «{item.name}»! Ahora reposa en tu vitrina de honor.")
+    msg = f"👑 ¡Has adquirido la reliquia «{item.name}»! Ahora reposa en tu vitrina de honor."
+    if is_ajax:
+        return JsonResponse({'success': True, 'message': msg, 'nuevo_saldo': wallet.balance})
+    messages.success(request, msg)
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
-
 
 def admin_add_collectible(request):
     tg_id = get_safe_tg_id(request)
@@ -4133,6 +4205,121 @@ def admin_delete_collectible(request, item_id):
     messages.info(request, f"El artículo «{item.name}» ha sido retirado de los estantes de la Boutique.")
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
+def admin_create_series_batch(request):
+    """Crea una colección Pop Mart completa con múltiples figuras de golpe."""
+    tg_id = get_safe_tg_id(request)
+    if not check_is_staff_or_admin(tg_id):
+        messages.error(request, "Acceso exclusivo para la corte de administración.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+    if request.method == 'POST':
+        from .models import CollectibleSeries
+        series_name = request.POST.get('series_name', '').strip()
+        tagline = request.POST.get('tagline', 'Pop Mart Series').strip()
+        description = request.POST.get('description', '').strip()
+        blind_price = int(request.POST.get('blind_box_price', 160))
+        single_price = int(request.POST.get('single_price', 260))
+        cover_file = request.FILES.get('cover_image')
+
+        if not series_name:
+            messages.error(request, "El nombre de la colección es requerido.")
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+        optimized_cover = optimize_uploaded_image(cover_file) if cover_file else None
+
+        with transaction.atomic():
+            series = CollectibleSeries.objects.create(
+                name=series_name,
+                tagline=tagline,
+                description=description,
+                cover_image=optimized_cover,
+                blind_box_price=max(10, blind_price),
+                single_price=max(10, single_price)
+            )
+
+            # Recorrer todas las figuras subidas en lote
+            figure_images = request.FILES.getlist('figures')
+            figure_names = request.POST.getlist('figure_names')
+            secret_indices = request.POST.getlist('is_secret_index')
+
+            for idx, img in enumerate(figure_images):
+                opt_img = optimize_uploaded_image(img)
+                fig_name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else f"{series_name} #{idx+1}"
+                is_sec = str(idx) in secret_indices
+
+                BazarCollectible.objects.create(
+                    series=series,
+                    name=fig_name,
+                    category='figura',
+                    price=single_price,
+                    image=opt_img,
+                    stock=-1,
+                    is_secret=is_sec,
+                    idol_name=fig_name
+                )
+
+        messages.success(request, f"✨ ¡Colección «{series_name}» publicada con éxito ({len(figure_images)} figuras)!")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+def buy_blind_box_action(request, series_id):
+    """Mecánica Blind Box: adquiere una figura aleatoria de la colección."""
+    if request.method != 'POST':
+        return redirect('/economy/bazar/')
+
+    tg_id = get_safe_tg_id(request)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+
+    from .models import CollectibleSeries
+    series = get_object_or_404(CollectibleSeries, id=series_id, is_active=True)
+    available_items = list(series.items.filter(is_active=True))
+
+    if not available_items:
+        err = "Esta colección aún no tiene figuras disponibles."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+    if wallet.balance < series.blind_box_price:
+        err = f"Oro insuficiente para la Caja Sorpresa ({wallet.balance}/{series.blind_box_price} 🪙)."
+        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+        messages.error(request, err)
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+    # Ponderación: las secretas tienen 5% de probabilidad, las regulares 95%
+    secrets = [it for it in available_items if it.is_secret]
+    regulars = [it for it in available_items if not it.is_secret]
+
+    if secrets and random.random() < 0.05:
+        chosen_item = random.choice(secrets)
+    else:
+        chosen_item = random.choice(regulars) if regulars else random.choice(available_items)
+
+    with transaction.atomic():
+        wallet.remove_funds(series.blind_box_price)
+        uc, created = UserCollectible.objects.get_or_create(telegram_user_id=tg_id, item=chosen_item)
+        if not created:
+            uc.quantity += 1
+            uc.save(update_fields=['quantity'])
+
+    grant_user_xp(request, tg_id, 20, reason=f"Blind Box: {series.name}")
+
+    msg = f"🎉 ¡Has abierto una Caja Sorpresa de {series.name} y obtuviste a «{chosen_item.name}»!"
+    if chosen_item.is_secret:
+        msg = f"⭐👑 ¡FIESTA REAL! ¡Has desenterrado la FIGURA SECRETA: «{chosen_item.name}»!"
+
+    if is_ajax:
+        return JsonResponse({
+            'success': True,
+            'message': msg,
+            'figure_name': chosen_item.name,
+            'figure_image': chosen_item.image.url if chosen_item.image else '',
+            'is_secret': chosen_item.is_secret,
+            'nuevo_saldo': wallet.balance
+        })
+
+    messages.success(request, msg)
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 # ==============================================================================
 # 🎫 RASPA Y GANA IMPERIAL (SCRATCH CARDS)
@@ -10007,7 +10194,7 @@ ARCHIVO: .\templates\economy\bazar.html
                 El Bazar de la Corona
             </h1>
             <p class="text-[11px] text-stone-300 mt-1 max-w-[280px]">
-                Adquiere privilegios imperiales, protección de corte, regalos para Musas y sellos de fortuna.
+                Adquiere privilegios imperiales, protección de corte, regalos para Musas y colecciones Pop Mart.
             </p>
             {% if profile.is_shield_active %}
                 <span class="mt-2 text-[9.5px] font-mono font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-500/50 px-3 py-0.5 rounded-full">
@@ -10017,14 +10204,14 @@ ARCHIVO: .\templates\economy\bazar.html
         </div>
     </div>
 
-    <!-- PESTAÑAS DE LAS 4 VITRINAS -->
+    <!-- PESTAÑAS DE LAS 5 VITRINAS -->
     <div class="grid grid-cols-5 gap-1 p-1 bg-black/70 border border-vip-gold/30 rounded-2xl text-[8px] sm:text-[9.5px] font-bold uppercase text-center shadow-inner">
-    <button type="button" onclick="switchBazarTab('salvaguardas')" id="tab-btn-salvaguardas" class="py-2 rounded-xl bg-vip-gold text-black font-black">🛡️ Escudos</button>
-    <button type="button" onclick="switchBazarTab('estatus')" id="tab-btn-estatus" class="py-2 rounded-xl text-stone-400 hover:text-white">👑 Estatus</button>
-    <button type="button" onclick="switchBazarTab('musas')" id="tab-btn-musas" class="py-2 rounded-xl text-stone-400 hover:text-white">🌹 Musas</button>
-    <button type="button" onclick="switchBazarTab('juego')" id="tab-btn-juego" class="py-2 rounded-xl text-stone-400 hover:text-white">🎴 Fortuna</button>
-    <button type="button" onclick="switchBazarTab('boutique')" id="tab-btn-boutique" class="py-2 rounded-xl text-yellow-300 hover:text-white">🏺 Boutique</button>
-</div>
+        <button type="button" onclick="switchBazarTab('salvaguardas')" id="tab-btn-salvaguardas" class="py-2 rounded-xl bg-vip-gold text-black font-black">🛡️ Escudos</button>
+        <button type="button" onclick="switchBazarTab('estatus')" id="tab-btn-estatus" class="py-2 rounded-xl text-stone-400 hover:text-white">👑 Estatus</button>
+        <button type="button" onclick="switchBazarTab('musas')" id="tab-btn-musas" class="py-2 rounded-xl text-stone-400 hover:text-white">🌹 Musas</button>
+        <button type="button" onclick="switchBazarTab('juego')" id="tab-btn-juego" class="py-2 rounded-xl text-stone-400 hover:text-white">🎴 Fortuna</button>
+        <button type="button" onclick="switchBazarTab('boutique')" id="tab-btn-boutique" class="py-2 rounded-xl text-yellow-300 hover:text-white">🎎 Pop Mart</button>
+    </div>
 
     <!-- TOAST DE COMPRA EN VIVO -->
     <div id="bazar-toast-box" class="w-full"></div>
@@ -10289,227 +10476,217 @@ ARCHIVO: .\templates\economy\bazar.html
 
     </div>
 
-    <!-- 🏺 VITRINA 5: LA BOUTIQUE REAL (COLECCIONABLES CON FOTO) -->
-    <div id="vitrina-boutique" class="hidden flex flex-col gap-3.5">
+    <!-- 🏺 VITRINA 5: POP MART & SERIES DE COLECCIÓN -->
+    <div id="vitrina-boutique" class="hidden flex flex-col gap-4">
         
-        <!-- PANEL DE SUBIDA PARA STAFF / CORONA -->
-        {% if is_admin %}
-        <div class="vip-panel p-4 rounded-3xl border border-yellow-500/50 bg-gradient-to-r from-amber-950/50 to-black shadow-lg">
-            <details class="text-xs">
-                <summary class="font-bold text-yellow-300 uppercase cursor-pointer flex items-center justify-between">
-                    <span>👑 Agregar Artículo a la Boutique</span>
-                    <span class="text-[10px] bg-yellow-500/20 text-yellow-300 px-2 py-0.5 rounded-full border border-yellow-500/40 font-mono">Staff ▾</span>
-                </summary>
-                
-                <form action="{% url 'economy:add_collectible' %}" method="POST" enctype="multipart/form-data" class="mt-3 flex flex-col gap-2.5 pt-2 border-t border-white/10">
-                    {% csrf_token %}
-                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
-
-                    <div>
-                        <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Nombre del Artículo *</label>
-                        <input type="text" name="name" required placeholder="Ej: Figura de Resina Jennie, Corona de Rubíes, Peluche..."
-                               class="w-full bg-black/80 border border-white/20 rounded-xl p-2 text-xs text-white">
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Categoría</label>
-                            <select name="category" class="w-full bg-black border border-white/20 rounded-xl p-2 text-xs text-white">
-                                <option value="figura">🎎 Figura / Escultura</option>
-                                <option value="joya">💎 Joyería & Reliquia</option>
-                                <option value="souvenir">🎀 Merchandising VIP</option>
-                                <option value="especial">✨ Objeto Exclusivo</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Idol o Personaje</label>
-                            <input type="text" name="idol_name" placeholder="Ej: Jennie, Karina, Corte..."
-                                   class="w-full bg-black border border-white/20 rounded-xl p-2 text-xs text-white">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Precio en Oro (🪙) *</label>
-                            <input type="number" name="price" value="150" min="10" required
-                                   class="w-full bg-black border border-white/20 rounded-xl p-2 text-xs text-yellow-300 font-mono font-bold">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Stock (-1 = Ilimitado)</label>
-                            <input type="number" name="stock" value="-1" required
-                                   class="w-full bg-black border border-white/20 rounded-xl p-2 text-xs text-white font-mono">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-[10px] text-stone-300 uppercase font-bold mb-1">Descripción / Historia</label>
-                        <input type="text" name="description" placeholder="Detalle artesanal, edición numerada..."
-                               class="w-full bg-black border border-white/20 rounded-xl p-2 text-xs text-white">
-                    </div>
-
-                    <div class="bg-black/60 p-2.5 rounded-xl border border-white/10">
-                        <label class="block text-[10px] text-stone-300 uppercase font-bold mb-1">Fotografía del Artículo *</label>
-                        <input type="file" name="image" accept="image/*" required class="text-xs text-stone-300 file:mr-2 file:py-1 file:px-2.5 file:rounded file:bg-yellow-500 file:text-black font-bold">
-                    </div>
-
-                    <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-                        Publicar en Boutique
-                    </button>
-                </form>
-            </details>
+        <!-- CABECERA DE LA BOUTIQUE -->
+        <div class="p-4 rounded-3xl bg-gradient-to-r from-purple-950/60 via-black to-yellow-950/40 border border-vip-gold/40 flex items-center justify-between shadow-xl">
+            <div class="flex flex-col">
+                <span class="text-xs font-black text-yellow-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🎎</span> Figuras Pop Mart & Sets Temáticos
+                </span>
+                <span class="text-[9.5px] text-stone-400 mt-0.5">Colecciones de Idols. Abre Cajas Sorpresa o completa el Set.</span>
+            </div>
+            {% if is_admin or is_staff %}
+            <button type="button" onclick="openCreateSeriesModal()"
+                    class="btn-gold px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider shadow flex items-center gap-1.5 active:scale-95 transition-all">
+                <span>✨</span> Nueva Serie
+            </button>
+            {% endif %}
         </div>
-        {% endif %}
 
-        <!-- 📦 VITRINA PERSONAL DEL NOBLE (MIS ADQUISICIONES) -->
-        {% if my_collectibles %}
-        <div class="p-4 rounded-3xl bg-gradient-to-r from-purple-950/60 to-black border border-purple-500/40 shadow-xl">
-            <span class="text-xs font-black text-purple-200 uppercase tracking-wider flex items-center gap-1.5 mb-2.5">
-                <span>🏛️</span> Tu Vitrina de Adquisiciones ({{ my_collectibles.count }})
-            </span>
-            <div class="grid grid-cols-3 gap-2">
-                {% for uc in my_collectibles %}
-                <div class="bg-black/80 border border-purple-500/30 rounded-2xl p-1.5 flex flex-col items-center text-center shadow">
-                    <img src="{{ uc.item.image.url }}" alt="{{ uc.item.name }}" class="w-full aspect-square object-contain rounded-xl bg-black mb-1 p-1">
-                    <span class="text-[9px] font-black text-white truncate w-full block leading-tight">{{ uc.item.name }}</span>
-                    <span class="text-[8px] font-mono text-purple-300 font-bold">Posees: x{{ uc.quantity }}</span>
+        <!-- LISTA DE COLECCIONES ACTIVAS -->
+        {% for series in series_list %}
+        <div class="vip-panel rounded-3xl border border-vip-gold/30 bg-black/70 overflow-hidden shadow-2xl flex flex-col gap-3 p-4">
+            
+            <!-- Portada y Datos del Set -->
+            <div class="flex items-center gap-3">
+                {% if series.cover_image %}
+                <img src="{{ series.cover_image.url }}" class="w-16 h-16 rounded-2xl object-cover border border-vip-gold/50 shadow">
+                {% else %}
+                <div class="w-16 h-16 rounded-2xl bg-purple-950/80 border border-vip-gold/40 flex items-center justify-center text-2xl shadow">
+                    🎁
                 </div>
+                {% endif %}
+                <div class="flex flex-col flex-1 min-w-0">
+                    <span class="text-[8.5px] font-mono text-yellow-400 font-bold uppercase">{{ series.tagline }}</span>
+                    <h3 class="text-sm font-black text-white truncate">{{ series.name }}</h3>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="text-[9px] font-mono bg-purple-950 border border-purple-500/50 text-purple-300 px-2 py-0.5 rounded-full font-bold">
+                            Coleccionadas: {{ series.owned_count }} / {{ series.total_items }}
+                        </span>
+                        {% if series.owned_count == series.total_items and series.total_items > 0 %}
+                            <span class="text-[8px] font-mono bg-emerald-950 border border-emerald-500 text-emerald-300 px-2 py-0.5 rounded-full font-black">
+                                👑 SET COMPLETO
+                            </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botones de Acción de la Serie -->
+            <div class="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+                <button type="button" onclick="openBlindBoxModal({{ series.id }}, '{{ series.name|escapejs }}', {{ series.blind_box_price }})"
+                        class="btn-gold py-2 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow active:scale-95 transition-all">
+                    <span>🎁</span> Caja Sorpresa ({{ series.blind_box_price }} 🪙)
+                </button>
+                <button type="button" onclick="toggleSeriesShelf({{ series.id }})"
+                        class="bg-stone-900 hover:bg-stone-800 border border-white/20 text-stone-200 py-2 rounded-xl text-[10px] font-bold uppercase flex items-center justify-center gap-1 active:scale-95 transition-all">
+                    <span>👁️</span> <span id="shelf-btn-txt-{{ series.id }}">Ver Vitrina ({{ series.total_items }})</span>
+                </button>
+            </div>
+
+            <!-- Estante con las figuras del Set (Desplegable) -->
+            <div id="series-shelf-{{ series.id }}" class="hidden grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
+                {% for fig in series.items_cache %}
+                {% with is_owned=fig.id in user_item_ids %}
+                <div class="rounded-2xl p-2 flex flex-col items-center text-center relative border transition-all
+                    {% if is_owned %}bg-gradient-to-b from-purple-950/60 to-black border-yellow-500/50 shadow-lg
+                    {% else %}bg-black/50 border-white/10 opacity-60 hover:opacity-100{% endif %}">
+                    
+                    {% if fig.is_secret %}
+                    <span class="absolute top-1 right-1 text-[7px] font-black bg-yellow-500 text-black px-1 rounded-md">CHASE ⭐</span>
+                    {% endif %}
+
+                    <div class="w-full aspect-square rounded-xl overflow-hidden mb-1.5 flex items-center justify-center p-1">
+                        <img src="{{ fig.image.url }}" alt="{{ fig.name }}"
+                             class="w-full h-full object-contain {% if not is_owned %}filter brightness-0 contrast-50{% endif %}">
+                    </div>
+
+                    <span class="text-[9px] font-bold text-white truncate w-full">{{ fig.name }}</span>
+
+                    {% if is_owned %}
+                        <span class="text-[8px] font-mono text-emerald-400 font-black mt-0.5">En Vitrina ✓</span>
+                    {% else %}
+                        <button type="button" onclick="buyBoutiqueItem({{ fig.id }}, '{{ fig.name|escapejs }}', {{ series.single_price }})"
+                                class="mt-1 text-[8px] font-bold uppercase bg-stone-800 hover:bg-yellow-500 hover:text-black border border-white/20 text-stone-300 px-2 py-0.5 rounded-lg active:scale-95 transition-all">
+                            Elegir ({{ series.single_price }} 🪙)
+                        </button>
+                    {% endif %}
+                </div>
+                {% endwith %}
                 {% endfor %}
             </div>
+
         </div>
-        {% endif %}
-
-        <!-- CATÁLOGO DE LA BOUTIQUE -->
-        <div class="grid grid-cols-2 gap-3" id="boutique-catalog-grid">
-            {% for item in boutique_items %}
-            <div class="vip-panel p-3 rounded-3xl border border-vip-gold/30 bg-black/60 flex flex-col justify-between shadow-xl relative overflow-hidden group">
-                
-                <!-- Insignia de Stock -->
-                <div class="absolute top-2.5 left-2.5 z-10">
-                    {% if item.stock == -1 %}
-                        <span class="bg-emerald-950/90 border border-emerald-500 text-emerald-300 text-[8px] font-mono font-bold px-2 py-0.5 rounded-full shadow">
-                            Disponible
-                        </span>
-                    {% elif item.stock > 0 %}
-                        <span class="bg-amber-950/90 border border-yellow-500 text-yellow-300 text-[8px] font-mono font-bold px-2 py-0.5 rounded-full shadow">
-                            Stock: {{ item.stock }}
-                        </span>
-                    {% else %}
-                        <span class="bg-rose-950/90 border border-rose-500 text-rose-300 text-[8px] font-mono font-bold px-2 py-0.5 rounded-full shadow">
-                            Agotado
-                        </span>
-                    {% endif %}
-                </div>
-
-                <!-- Imagen del Producto -->
-                <div class="w-full aspect-square rounded-2xl overflow-hidden bg-black/80 border border-white/10 mb-2 flex items-center justify-center p-2 relative group-hover:scale-105 transition-transform duration-300">
-                    <img src="{{ item.image.url }}" alt="{{ item.name }}" class="w-full h-full object-contain filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]">
-                </div>
-
-                <!-- Datos del Artículo -->
-                <div class="flex flex-col gap-0.5 mb-2">
-                    {% if item.idol_name %}
-                        <span class="text-[8.5px] font-mono uppercase font-bold text-yellow-400 truncate">Vínculo: {{ item.idol_name }}</span>
-                    {% endif %}
-                    <h4 class="text-xs font-black text-white leading-tight truncate">{{ item.name }}</h4>
-                    {% if item.description %}
-                        <p class="text-[9.5px] text-stone-400 line-clamp-2 mt-0.5 leading-snug">{{ item.description }}</p>
-                    {% endif %}
-                </div>
-
-                <!-- Precio y Compra -->
-                <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-1">
-                    <span class="text-xs font-mono font-black text-yellow-300">🪙 {{ item.price }}</span>
-                    
-                    {% if item.is_in_stock %}
-                        <button type="button" onclick="buyBoutiqueItem({{ item.id }}, '{{ item.name|escapejs }}', {{ item.price }})"
-                                class="btn-gold px-3 py-1.5 rounded-xl text-[9.5px] font-black uppercase tracking-wider shadow active:scale-95 transition-all">
-                            Adquirir
-                        </button>
-                    {% else %}
-                        <button type="button" disabled class="bg-stone-900 border border-stone-700 text-stone-500 px-3 py-1.5 rounded-xl text-[9.5px] font-bold uppercase cursor-not-allowed">
-                            Agotado
-                        </button>
-                    {% endif %}
-                </div>
-
-                <!-- Retirar para Staff -->
-                {% if is_admin %}
-                <form action="{% url 'economy:delete_collectible' item.id %}" method="POST" class="m-0 mt-1.5 text-right" onsubmit="return confirm('¿Retirar este artículo de la boutique?')">
-                    {% csrf_token %}
-                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
-                    <button type="submit" class="text-[9px] text-rose-400 hover:text-rose-300 font-bold">🗑️ Retirar</button>
-                </form>
-                {% endif %}
-
-            </div>
-            {% empty %}
-            <div class="col-span-2 vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
-                <span class="text-4xl my-2">🏺</span>
-                <p class="text-sm font-bold text-white mb-1">Boutique en Preparación</p>
-                <p class="text-xs text-stone-400 max-w-xs leading-relaxed">Próximamente se exhibirán las primeras reliquias y recuerdos de las Idols.</p>
-            </div>
-            {% endfor %}
+        {% empty %}
+        <div class="vip-panel p-8 text-center flex flex-col items-center rounded-3xl">
+            <span class="text-4xl my-2">🎎</span>
+            <p class="text-sm font-bold text-white mb-1">Próximamente Series Pop Mart</p>
+            <p class="text-xs text-stone-400 max-w-xs">Muy pronto la corte presentará los sets temáticos de figuras exclusivas.</p>
         </div>
+        {% endfor %}
 
     </div>
 
 </div>
 
-<!-- SCRIPT AJAX DE COMPRA SIN PARPADEO -->
+<!-- ✨ MODAL FLOTANTE: CREACIÓN DE COLECCIÓN EN LOTE (STAFF) -->
+<div id="modal-create-series" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-[#12081f] border border-vip-gold/50 rounded-3xl w-full max-w-md max-h-[92vh] overflow-y-auto p-4 flex flex-col gap-3 shadow-2xl relative">
+        <button type="button" onclick="closeCreateSeriesModal()" class="absolute top-3.5 right-3.5 w-7 h-7 rounded-full bg-stone-900 border border-white/20 text-stone-400 hover:text-white flex items-center justify-center text-xs">✕</button>
+        
+        <div class="flex items-center gap-2">
+            <span class="text-2xl">✨</span>
+            <div>
+                <h3 class="text-xs font-black uppercase text-yellow-300">Crear Colección Pop Mart</h3>
+                <p class="text-[9.5px] text-stone-400">Publica un set temático completo seleccionando las fotos en lote.</p>
+            </div>
+        </div>
+
+        <form action="{% url 'economy:create_series_batch' %}" method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
+            {% csrf_token %}
+            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+
+            <div>
+                <label class="block text-[9.5px] text-yellow-400 uppercase font-bold mb-1">Nombre de la Colección *</label>
+                <input type="text" name="series_name" required placeholder="Ej: TWICE — Like OOH-AHH"
+                       class="w-full bg-black border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[9.5px] text-stone-300 uppercase font-bold mb-1">Subtítulo / Edición</label>
+                    <input type="text" name="tagline" value="Pop Mart Series Vol. 1"
+                           class="w-full bg-black border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
+                </div>
+                <div>
+                    <label class="block text-[9.5px] text-stone-300 uppercase font-bold mb-1">Portada / Caja del Set</label>
+                    <input type="file" name="cover_image" accept="image/*" class="text-[9px] text-stone-400">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[9.5px] text-yellow-400 uppercase font-bold mb-1">Precio Blind Box (🪙)</label>
+                    <input type="number" name="blind_box_price" value="160" min="10" required
+                           class="w-full bg-black border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-yellow-300 font-mono font-bold">
+                </div>
+                <div>
+                    <label class="block text-[9.5px] text-yellow-400 uppercase font-bold mb-1">Precio Compra Directa (🪙)</label>
+                    <input type="number" name="single_price" value="260" min="10" required
+                           class="w-full bg-black border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-yellow-300 font-mono font-bold">
+                </div>
+            </div>
+
+            <!-- SUBIDA MÚLTIPLE DE FIGURAS -->
+            <div class="p-3 bg-black/60 border-2 border-dashed border-vip-gold/40 rounded-2xl flex flex-col gap-2 mt-1">
+                <label class="cursor-pointer flex flex-col items-center text-center">
+                    <span class="text-xl mb-0.5">📂</span>
+                    <span class="text-[10px] font-bold text-yellow-300 uppercase">Seleccionar Figuras del Set (Múltiple)</span>
+                    <span class="text-[8.5px] text-stone-400">Elige todas las fotos de las figuras a la vez (ej: 9 integrantes)</span>
+                    <input type="file" name="figures" id="batch-figures-input" accept="image/*" multiple required class="hidden" onchange="handleBatchFigures(this)">
+                </label>
+
+                <!-- Lista de previsualización de cada figura -->
+                <div id="batch-preview-container" class="grid grid-cols-3 gap-2 mt-2 max-h-48 overflow-y-auto"></div>
+            </div>
+
+            <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow-lg mt-1 active:scale-95 transition-all">
+                👑 Publicar Colección Completa
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- 🎁 MODAL DESEMPAQUE DE BLIND BOX -->
+<div id="modal-blindbox-result" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-[#150a24] border-2 border-vip-gold rounded-3xl w-full max-w-xs p-5 flex flex-col items-center text-center shadow-2xl relative">
+        <span class="text-3xl mb-1 animate-bounce">🎁</span>
+        <span class="text-[9px] font-mono text-yellow-400 uppercase tracking-widest font-black">Caja Sorpresa Desempaquetada</span>
+        
+        <div class="w-36 h-36 rounded-2xl bg-black/80 border border-vip-gold/40 my-3 flex items-center justify-center p-2 shadow-inner">
+            <img id="blindbox-result-img" class="w-full h-full object-contain filter drop-shadow-[0_4px_12px_rgba(212,175,55,0.6)]">
+        </div>
+
+        <h3 id="blindbox-result-name" class="text-base font-black text-white"></h3>
+        <span id="blindbox-result-chase" class="hidden mt-1 text-[9px] bg-yellow-400 text-black font-black px-2 py-0.5 rounded-full">¡FIGURA SECRETA CHASE ⭐!</span>
+        <p class="text-[10px] text-stone-300 mt-2">¡Ha sido consagrada en tu estante de la colección!</p>
+
+        <button type="button" onclick="closeBlindBoxResult()"
+                class="btn-gold px-6 py-2 rounded-xl text-xs font-black uppercase tracking-wider mt-4 shadow active:scale-95 transition-all">
+            Guardar en Vitrina
+        </button>
+    </div>
+</div>
+
+<!-- SCRIPTS INTERACTIVOS -->
 <script>
-   function switchBazarTab(tab) {
-    ['salvaguardas', 'estatus', 'musas', 'juego', 'boutique'].forEach(t => {
-        const v = document.getElementById(`vitrina-${t}`);
-        const b = document.getElementById(`tab-btn-${t}`);
-        if (v && b) {
-            if (t === tab) {
-                v.classList.remove('hidden');
-                b.className = "py-2 rounded-xl bg-vip-gold text-black font-black";
-            } else {
-                b.className = "py-2 rounded-xl text-stone-400 hover:text-white";
-                v.classList.add('hidden');
+    function switchBazarTab(tab) {
+        ['salvaguardas', 'estatus', 'musas', 'juego', 'boutique'].forEach(t => {
+            const v = document.getElementById(`vitrina-${t}`);
+            const b = document.getElementById(`tab-btn-${t}`);
+            if (v && b) {
+                if (t === tab) {
+                    v.classList.remove('hidden');
+                    b.className = "py-2 rounded-xl bg-vip-gold text-black font-black";
+                } else {
+                    b.className = "py-2 rounded-xl text-stone-400 hover:text-white";
+                    v.classList.add('hidden');
+                }
             }
-        }
-    });
-}
-
-async function buyBoutiqueItem(itemId, itemName, price) {
-    if (!confirm(`¿Confirmas adquirir «${itemName}» por ${price} 🪙 para tu vitrina?`)) return;
-    const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
-    const formData = new FormData();
-    formData.append('tg_id', tgId);
-    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-
-    try {
-        window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
-        const resp = await fetch(`/economy/bazar/collectible/buy/${itemId}/`, {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
-        const data = await resp.json();
-        const toast = document.getElementById('bazar-toast-box');
-
-        if (data.success) {
-            window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
-            document.getElementById('bazar-user-balance').innerText = data.nuevo_saldo;
-            toast.innerHTML = `
-                <div class="p-3 bg-emerald-950/90 border border-emerald-500 rounded-2xl text-emerald-200 text-xs font-bold text-center shadow-lg">
-                    ${data.message}
-                </div>`;
-            setTimeout(() => { location.reload(); }, 1800);
-        } else {
-            window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
-            toast.innerHTML = `
-                <div class="p-3 bg-rose-950/90 border border-rose-500 rounded-2xl text-rose-200 text-xs font-bold text-center shadow-lg">
-                    ${data.error}
-                </div>`;
-            setTimeout(() => { toast.innerHTML = ''; }, 3500);
-        }
-    } catch(e) {
-        alert("Error de conexión al procesar la adquisición.");
     }
-}
 
     async function executeBuy(formData) {
         const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
@@ -10528,7 +10705,9 @@ async function buyBoutiqueItem(itemId, itemName, price) {
             const toast = document.getElementById('bazar-toast-box');
             if (data.success) {
                 window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
-                document.getElementById('bazar-user-balance').innerText = data.nuevo_saldo;
+                if (data.nuevo_saldo !== undefined) {
+                    document.getElementById('bazar-user-balance').innerText = data.nuevo_saldo;
+                }
                 toast.innerHTML = `
                     <div class="p-3 bg-emerald-950/90 border border-emerald-500 rounded-2xl text-emerald-200 text-xs font-bold text-center shadow-lg">
                         ${data.message}
@@ -10581,6 +10760,134 @@ async function buyBoutiqueItem(itemId, itemName, price) {
         fd.append('item_key', 'featured_idol');
         fd.append('target_idol_id', idolId);
         executeBuy(fd);
+    }
+
+    /* POP MART & BLIND BOX SCRIPTS */
+    function toggleSeriesShelf(id) {
+        const shelf = document.getElementById(`series-shelf-${id}`);
+        const btnTxt = document.getElementById(`shelf-btn-txt-${id}`);
+        if (shelf.classList.contains('hidden')) {
+            shelf.classList.remove('hidden');
+            btnTxt.innerText = 'Ocultar Vitrina';
+        } else {
+            shelf.classList.add('hidden');
+            btnTxt.innerText = 'Ver Vitrina';
+        }
+    }
+
+    function openCreateSeriesModal() {
+        document.getElementById('modal-create-series').classList.remove('hidden');
+    }
+    function closeCreateSeriesModal() {
+        document.getElementById('modal-create-series').classList.add('hidden');
+    }
+
+    function handleBatchFigures(input) {
+        const container = document.getElementById('batch-preview-container');
+        container.innerHTML = '';
+        const files = Array.from(input.files);
+
+        files.forEach((file, index) => {
+            const cleanName = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const card = document.createElement('div');
+                card.className = "bg-black/80 border border-white/20 rounded-xl p-1.5 flex flex-col items-center gap-1 text-[8.5px]";
+                card.innerHTML = `
+                    <img src="${e.target.result}" class="w-full aspect-square object-contain rounded-lg bg-stone-900">
+                    <input type="text" name="figure_names" value="${cleanName}" class="w-full bg-stone-900 border border-white/10 rounded px-1 py-0.5 text-[8.5px] text-white text-center">
+                    <label class="flex items-center gap-1 text-[7.5px] text-yellow-300 cursor-pointer">
+                        <input type="checkbox" name="is_secret_index" value="${index}">
+                        Chase ⭐
+                    </label>
+                `;
+                container.appendChild(card);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function openBlindBoxModal(seriesId, seriesName, price) {
+        if (!confirm(`¿Abrir una Caja Sorpresa de «${seriesName}» por ${price} 🪙?`)) return;
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('heavy');
+            const resp = await fetch(`/economy/bazar/series/blind-box/${seriesId}/`, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+
+            if (data.success) {
+                window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+                if (data.nuevo_saldo !== undefined) {
+                    document.getElementById('bazar-user-balance').innerText = data.nuevo_saldo;
+                }
+                document.getElementById('blindbox-result-img').src = data.figure_image;
+                document.getElementById('blindbox-result-name').innerText = data.figure_name;
+                
+                const chaseTag = document.getElementById('blindbox-result-chase');
+                if (data.is_secret) chaseTag.classList.remove('hidden');
+                else chaseTag.classList.add('hidden');
+
+                document.getElementById('modal-blindbox-result').classList.remove('hidden');
+            } else {
+                window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
+                alert(data.error);
+            }
+        } catch(e) {
+            alert("Error de conexión al abrir la caja.");
+        }
+    }
+
+    async function buyBoutiqueItem(itemId, itemName, price) {
+        if (!confirm(`¿Confirmas adquirir a «${itemName}» por ${price} 🪙 para tu vitrina?`)) return;
+        const tgId = (typeof window.getGlobalTgId === 'function') ? window.getGlobalTgId() : '{{ tg_id }}';
+        const formData = new FormData();
+        formData.append('tg_id', tgId);
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        try {
+            window.Telegram?.WebApp?.HapticFeedback?.impactOccurred('medium');
+            const resp = await fetch(`/economy/bazar/collectible/buy/${itemId}/`, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+            const toast = document.getElementById('bazar-toast-box');
+
+            if (data.success) {
+                window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success');
+                if (data.nuevo_saldo !== undefined) {
+                    document.getElementById('bazar-user-balance').innerText = data.nuevo_saldo;
+                }
+                toast.innerHTML = `
+                    <div class="p-3 bg-emerald-950/90 border border-emerald-500 rounded-2xl text-emerald-200 text-xs font-bold text-center shadow-lg">
+                        ${data.message}
+                    </div>`;
+                setTimeout(() => { location.reload(); }, 1600);
+            } else {
+                window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error');
+                toast.innerHTML = `
+                    <div class="p-3 bg-rose-950/90 border border-rose-500 rounded-2xl text-rose-200 text-xs font-bold text-center shadow-lg">
+                        ${data.error}
+                    </div>`;
+                setTimeout(() => { toast.innerHTML = ''; }, 3500);
+            }
+        } catch(e) {
+            alert("Error de conexión al procesar la adquisición.");
+        }
+    }
+
+    function closeBlindBoxResult() {
+        document.getElementById('modal-blindbox-result').classList.add('hidden');
+        location.reload();
     }
 </script>
 {% endblock %}
