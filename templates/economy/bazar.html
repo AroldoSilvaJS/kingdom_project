@@ -2,7 +2,9 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<!-- ESTILOS VISUALES BOUTIQUE POP MART & VITRINA ACRÍLICA LUXURY -->
 <style>
+    /* Vitrina Principal de Acrílico Ahumado */
     .popmart-cabinet {
         background: radial-gradient(circle at 50% 0%, rgba(45, 20, 80, 0.75) 0%, rgba(13, 7, 24, 0.98) 100%);
         border: 1px solid rgba(212, 175, 55, 0.35);
@@ -10,6 +12,8 @@
         border-radius: 28px;
         position: relative;
     }
+
+    /* Pedestal Acrílico Iluminado para Figuras */
     .acrylic-stand {
         position: relative;
         background: radial-gradient(circle at 50% 120%, rgba(212, 175, 55, 0.22) 0%, rgba(255, 255, 255, 0.04) 55%, rgba(10, 5, 20, 0.85) 100%);
@@ -23,16 +27,22 @@
         border-color: rgba(245, 158, 11, 0.6);
         box-shadow: 0 16px 32px -4px rgba(245, 158, 11, 0.25), inset 0 1px 2px rgba(255, 255, 255, 0.4);
     }
+
+    /* Pedestal de Figura Desbloqueada / Poseída */
     .acrylic-stand-owned {
         background: radial-gradient(circle at 50% 120%, rgba(16, 185, 129, 0.25) 0%, rgba(255, 255, 255, 0.06) 60%, rgba(10, 5, 20, 0.9) 100%);
         border: 1px solid rgba(16, 185, 129, 0.45);
         box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.3);
     }
+
+    /* Pedestal Chase Secreto Holográfico */
     .acrylic-stand-chase {
         background: radial-gradient(circle at 50% 120%, rgba(245, 158, 11, 0.4) 0%, rgba(168, 85, 247, 0.3) 55%, rgba(10, 5, 20, 0.95) 100%);
         border: 1.5px solid rgba(245, 158, 11, 0.7);
         box-shadow: 0 0 30px rgba(245, 158, 11, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.5);
     }
+
+    /* Caja Sorpresa Blind Box 3D Foil */
     .blind-box-card {
         background: linear-gradient(135deg, rgba(60, 20, 110, 0.95) 0%, rgba(20, 10, 40, 0.98) 50%, rgba(80, 30, 130, 0.9) 100%);
         border: 1.5px solid rgba(245, 158, 11, 0.5);
@@ -43,7 +53,10 @@
     .blind-box-card::before {
         content: '';
         position: absolute;
-        top: -50%; left: -50%; width: 200%; height: 200%;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
         background: linear-gradient(45deg, transparent 40%, rgba(255, 255, 255, 0.12) 50%, transparent 60%);
         transform: rotate(35deg);
         animation: foilShine 4s infinite linear;
@@ -53,6 +66,8 @@
         0% { transform: translateX(-100%) rotate(35deg); }
         100% { transform: translateX(100%) rotate(35deg); }
     }
+
+    /* Wobble de la Caja Sorpresa */
     @keyframes boxWobble {
         0%, 100% { transform: rotate(0deg) scale(1); }
         20% { transform: rotate(-7deg) scale(1.06); }
@@ -60,32 +75,108 @@
         60% { transform: rotate(-5deg) scale(1.06); }
         80% { transform: rotate(5deg) scale(1.03); }
     }
-    .animate-box-wobble { animation: boxWobble 0.7s infinite ease-in-out; }
-    .glow-aura-burst { background: radial-gradient(circle, rgba(245, 158, 11, 0.5) 0%, rgba(168, 85, 247, 0.3) 45%, transparent 70%); }
+    .animate-box-wobble {
+        animation: boxWobble 0.7s infinite ease-in-out;
+    }
+
+    /* Destello Celestial */
+    .glow-aura-burst {
+        background: radial-gradient(circle, rgba(245, 158, 11, 0.5) 0%, rgba(168, 85, 247, 0.3) 45%, transparent 70%);
+    }
+
+    /* Pestañas de Navegación */
     .bazar-tab-active {
         background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
         color: #ffffff !important;
         border-color: #fcd34d !important;
         box-shadow: 0 4px 15px rgba(217, 119, 6, 0.4);
     }
+
+    /* Utilidades para 3D Flip Card y Vitrina Acrílica Pop Mart */
+    .perspective-1000 { perspective: 1000px; }
+    .transform-style-3d { transform-style: preserve-3d; }
+    .backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+    .rotate-y-180 { transform: rotateY(180deg); }
+
+    /* Modos de Iluminación LED de Vitrina */
+    .cabinet-led-palace {
+        background: radial-gradient(circle at 50% 0%, rgba(55, 25, 95, 0.85) 0%, rgba(13, 7, 24, 0.98) 100%) !important;
+        border-color: rgba(245, 158, 11, 0.45) !important;
+        box-shadow: 0 0 50px rgba(245, 158, 11, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+    }
+    .cabinet-led-neon {
+        background: radial-gradient(circle at 50% 0%, rgba(95, 20, 85, 0.85) 0%, rgba(15, 5, 20, 0.98) 100%) !important;
+        border-color: rgba(236, 72, 153, 0.45) !important;
+        box-shadow: 0 0 50px rgba(217, 70, 239, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+    }
+    .cabinet-led-diamond {
+        background: radial-gradient(circle at 50% 0%, rgba(20, 45, 80, 0.85) 0%, rgba(8, 12, 22, 0.98) 100%) !important;
+        border-color: rgba(56, 189, 248, 0.45) !important;
+        box-shadow: 0 0 50px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+    }
+    .cabinet-led-stealth {
+        background: #09060f !important;
+        border-color: rgba(255, 255, 255, 0.1) !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9) !important;
+    }
+
+    /* Estante de Cristal Biselado */
+    .acrylic-shelf-tier {
+        position: relative;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 40%, rgba(0, 0, 0, 0.6) 100%);
+        border-top: 1.5px solid rgba(255, 255, 255, 0.45);
+        border-bottom: 2px solid rgba(0, 0, 0, 0.9);
+        box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.8), inset 0 1px 2px rgba(255, 255, 255, 0.4);
+    }
+    .shelf-reflection {
+        position: absolute;
+        bottom: -14px;
+        left: 10%;
+        right: 10%;
+        height: 12px;
+        background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.2) 0%, transparent 75%);
+        filter: blur(3px);
+        pointer-events: none;
+    }
+
+    /* Certificado Holográfico Foil */
+    .hologram-foil {
+        background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,215,0,0.2) 25%, rgba(255,105,180,0.2) 50%, rgba(0,255,255,0.2) 75%, rgba(255,255,255,0.05) 100%);
+        background-size: 250% 250%;
+        animation: holoShift 6s ease infinite;
+    }
+    @keyframes holoShift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
 </style>
 
+<!-- Canvas de Confetti para Aperturas Épicas -->
 <canvas id="gacha-confetti-canvas" class="fixed inset-0 pointer-events-none z-[100]"></canvas>
 
 <div class="flex flex-col gap-4 mt-1 pb-36 max-w-md mx-auto px-1">
-    <!-- Encabezado con Saldo -->
+
+    <!-- ============================================================== -->
+    <!-- ENCABEZADO REAL: SALDO, ESTATUS Y BIENVENIDA                   -->
+    <!-- ============================================================== -->
     <div class="popmart-cabinet p-4 flex items-center justify-between overflow-hidden relative">
         <div class="flex items-center gap-3 z-10">
             <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-600 via-amber-400 to-yellow-300 p-0.5 shadow-lg shadow-amber-500/20">
-                <div class="w-full h-full bg-stone-950 rounded-[14px] flex items-center justify-center text-2xl">🎎</div>
+                <div class="w-full h-full bg-stone-950 rounded-[14px] flex items-center justify-center text-2xl">
+                    🎎
+                </div>
             </div>
             <div>
                 <h1 class="text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-500 uppercase tracking-wider">
                     Boutique Pop Mart
                 </h1>
-                <p class="text-[10px] text-amber-200/70 font-medium">Figuras Exclusivas & Lightbox 3D</p>
+                <p class="text-[10px] text-amber-200/70 font-medium">Figuras Exclusivas & Colecciones del Reino</p>
             </div>
         </div>
+
+        <!-- Saldo de Oro Imperial -->
         <div class="z-10 bg-black/60 border border-amber-500/30 rounded-2xl px-3 py-1.5 flex flex-col items-end backdrop-blur-md">
             <span class="text-[8px] uppercase tracking-widest text-amber-300/80 font-bold">Tu Fortuna</span>
             <div class="flex items-center gap-1.5">
@@ -95,7 +186,9 @@
         </div>
     </div>
 
-    <!-- Pestañas -->
+    <!-- ============================================================== -->
+    <!-- BARRA DE PESTAÑAS (TABS TÁCTILES)                              -->
+    <!-- ============================================================== -->
     <div class="grid grid-cols-3 gap-1.5 p-1 bg-black/60 rounded-2xl border border-white/10 backdrop-blur-md">
         <button type="button" onclick="switchBazarTab('popmart')" id="tab-btn-popmart"
                 class="bazar-tab-active py-2 px-1 text-[10px] font-black uppercase rounded-xl transition-all border border-transparent text-stone-300 text-center flex items-center justify-center gap-1">
@@ -111,114 +204,154 @@
         </button>
     </div>
 
+    <!-- Pestaña Adicional de Administración (si es Staff) -->
     {% if is_staff or is_admin %}
     <div class="flex items-center justify-between px-2.5 py-2 bg-purple-950/50 border border-purple-500/40 rounded-2xl backdrop-blur-md">
         <div class="flex items-center gap-1.5 text-[10px] text-purple-300 font-bold">
             <span>👑</span> Panel de Administración
         </div>
         <button type="button" onclick="switchBazarTab('admin')" id="tab-btn-admin"
-                class="text-[9px] font-black uppercase px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white rounded-xl transition-all shadow-md active:scale-95">
+                class="text-[9px] font-black uppercase px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl transition-all shadow-md active:scale-95">
             + Crear Nueva Colección
         </button>
     </div>
     {% endif %}
 
-    <!-- Pestaña 1: Series Pop Mart -->
+
+    <!-- ============================================================== -->
+    <!-- PESTAÑA 1: COLECCIONES POP MART & BLIND BOX                     -->
+    <!-- ============================================================== -->
     <div id="section-popmart" class="flex flex-col gap-5">
         {% for series in series_list %}
         <div class="popmart-cabinet p-4 flex flex-col gap-4 relative" id="series-container-{{ series.id }}">
+            
+            <!-- Portada y Cabecera de la Colección -->
             <div class="flex items-start justify-between gap-3 border-b border-amber-500/20 pb-3">
                 <div class="flex items-center gap-3">
                     {% if series.cover_image %}
                     <img src="{{ series.cover_image.url }}" alt="{{ series.name }}" 
-                         class="w-14 h-14 rounded-2xl object-cover border border-amber-400/40 shadow-md">
+                         onclick="inspectImage('{{ series.cover_image.url }}', '{{ series.name|escapejs }}', 'Portada de la Colección')"
+                         class="w-14 h-14 rounded-2xl object-cover border border-amber-400/40 shadow-md cursor-pointer hover:scale-105 transition-transform">
                     {% else %}
-                    <div class="w-14 h-14 rounded-2xl bg-purple-900/50 border border-amber-400/30 flex items-center justify-center text-2xl shadow">🎁</div>
+                    <div class="w-14 h-14 rounded-2xl bg-purple-900/50 border border-amber-400/30 flex items-center justify-center text-2xl shadow">
+                        🎁
+                    </div>
                     {% endif %}
                     <div>
-                        <span class="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            {{ series.tagline|default:"Pop Mart Edition" }}
-                        </span>
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                {{ series.tagline|default:"Pop Mart Edition" }}
+                            </span>
+                        </div>
                         <h2 class="text-sm font-black text-white mt-0.5 leading-snug">{{ series.name }}</h2>
                         {% if series.description %}
                         <p class="text-[9px] text-stone-300/80 leading-tight line-clamp-2 mt-0.5">{{ series.description }}</p>
                         {% endif %}
                     </div>
                 </div>
+
+                <!-- Progreso de la Colección -->
                 <div class="flex flex-col items-end shrink-0">
                     <span class="text-[8px] uppercase tracking-wider text-amber-300/70 font-bold">Progreso</span>
-                    <span class="text-xs font-black text-amber-300">{{ series.owned_count }} / {{ series.total_count }}</span>
+                    <span class="text-xs font-black text-amber-300">
+                        {{ series.owned_count }} / {{ series.total_count }}
+                    </span>
                 </div>
             </div>
 
-            <!-- Gestión de Serie para Staff -->
+            <!-- Menú de Acciones de Administración (si es Staff) -->
             {% if is_staff or is_admin %}
             <div class="flex items-center justify-between gap-1.5 bg-black/50 border border-purple-500/30 rounded-xl px-2.5 py-1.5">
                 <span class="text-[8px] uppercase font-bold text-purple-300">Gestión de Serie:</span>
                 <div class="flex items-center gap-1.5">
                     <button type="button" 
                             onclick="openEditSeriesModal({{ series.id }}, '{{ series.name|escapejs }}', '{{ series.tagline|default:''|escapejs }}', '{{ series.description|default:''|escapejs }}', {{ series.blind_box_price }}, {{ series.single_price }})"
-                            class="text-[8px] font-bold text-amber-300 bg-amber-950/60 hover:bg-amber-900 border border-amber-500/30 px-2 py-0.5 rounded-lg">
+                            class="text-[8px] font-bold text-amber-300 bg-amber-950/60 hover:bg-amber-900 border border-amber-500/30 px-2 py-0.5 rounded-lg transition-all">
                         ✏️ Editar
                     </button>
                     <button type="button" 
                             onclick="openAddFigureModal({{ series.id }}, '{{ series.name|escapejs }}')"
-                            class="text-[8px] font-bold text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/30 px-2 py-0.5 rounded-lg">
+                            class="text-[8px] font-bold text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-500/30 px-2 py-0.5 rounded-lg transition-all">
                         ➕ Añadir Figura
                     </button>
                     <button type="button" 
                             onclick="confirmDeleteSeries({{ series.id }}, '{{ series.name|escapejs }}')"
-                            class="text-[8px] font-bold text-rose-300 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/30 px-2 py-0.5 rounded-lg">
+                            class="text-[8px] font-bold text-rose-300 bg-rose-950/60 hover:bg-rose-900 border border-rose-500/30 px-2 py-0.5 rounded-lg transition-all">
                         🗑️ Eliminar
                     </button>
                 </div>
             </div>
             {% endif %}
 
-            <!-- Progreso -->
-            <div class="w-full bg-stone-900/80 h-2 rounded-full overflow-hidden border border-white/10 p-0.5">
-                <div class="bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-300 h-full rounded-full transition-all duration-500"
-                     style="width: {{ series.progress_pct }}%;"></div>
+            <!-- Barra de Progreso Visual -->
+            <div>
+                <div class="w-full bg-stone-900/80 h-2 rounded-full overflow-hidden border border-white/10 p-0.5">
+                    <div class="bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-300 h-full rounded-full transition-all duration-500"
+                         style="width: {{ series.progress_pct }}%;">
+                    </div>
+                </div>
+                {% if series.progress_pct == 100 and series.total_count > 0 %}
+                <div class="text-center mt-1">
+                    <span class="text-[8px] font-black text-amber-300 uppercase tracking-widest bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-400/30 shadow">
+                        👑 ¡Colección Completada al 100%!
+                    </span>
+                </div>
+                {% endif %}
             </div>
 
-            <!-- Caja Sorpresa -->
+            <!-- ========================================================== -->
+            <!-- CAJA SORPRESA (BLIND BOX)                                   -->
+            <!-- ========================================================== -->
             <div class="blind-box-card rounded-2xl p-3.5 flex items-center justify-between gap-3">
                 <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-xl bg-purple-900/60 border border-amber-400/40 flex items-center justify-center text-2xl shadow-inner animate-pulse">🎲</div>
+                    <div class="w-12 h-12 rounded-xl bg-purple-900/60 border border-amber-400/40 flex items-center justify-center text-2xl shadow-inner animate-pulse">
+                        🎲
+                    </div>
                     <div>
                         <div class="flex items-center gap-1.5">
                             <span class="text-[8px] font-black uppercase text-amber-300 tracking-wider">Caja Sorpresa</span>
                             <span class="text-[7px] bg-amber-400 text-black font-black px-1 rounded">5% CHASE ⭐</span>
                         </div>
-                        <p class="text-[9px] text-stone-300 leading-tight">Figura aleatoria con posibilidad de Chase.</p>
+                        <p class="text-[9px] text-stone-300 leading-tight">Figura aleatoria del set con posibilidad de Chase.</p>
                         <span class="text-xs font-black text-amber-300">{{ series.blind_box_price }} 🪙</span>
                     </div>
                 </div>
+
                 <button type="button" 
                         onclick="openBlindBox({{ series.id }}, '{{ series.name|escapejs }}', {{ series.blind_box_price }})"
-                        class="bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 text-black font-black text-[10px] uppercase py-2 px-3 rounded-xl shadow-lg shadow-amber-500/30 active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap">
+                        class="bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-black font-black text-[10px] uppercase py-2 px-3 rounded-xl shadow-lg shadow-amber-500/30 active:scale-95 transition-all flex items-center gap-1.5 whitespace-nowrap">
                     <span>✨</span> Abrir Caja
                 </button>
             </div>
 
-            <!-- Grid de Pedestales -->
+            <!-- ========================================================== -->
+            <!-- VITRINA DE PEDESTALES ACRÍLICOS (3 COLUMNAS)               -->
+            <!-- ========================================================== -->
             <div>
                 <div class="flex items-center justify-between mb-2 px-1">
-                    <span class="text-[9px] font-bold uppercase tracking-wider text-stone-400">Figuras (Toca para ver en Grande)</span>
+                    <span class="text-[9px] font-bold uppercase tracking-wider text-stone-400 flex items-center gap-1">
+                        <span>Figuras de la Colección</span>
+                        <span class="text-[8px] text-stone-500 font-normal">(Toca una para ampliar)</span>
+                    </span>
                     <span class="text-[9px] text-amber-300/80 font-bold">Compra directa: {{ series.single_price }} 🪙</span>
                 </div>
+
                 <div class="grid grid-cols-3 gap-2.5 p-2 bg-black/60 rounded-2xl border border-white/5">
                     {% for fig in series.items_cache %}
-                    <div class="acrylic-stand rounded-2xl p-2 flex flex-col items-center text-center relative {% if fig.is_owned %}acrylic-stand-owned{% endif %} {% if fig.is_secret %}acrylic-stand-chase{% endif %}">
+                    <div class="acrylic-stand rounded-2xl p-2 flex flex-col items-center text-center relative {% if fig.is_owned %}acrylic-stand-owned{% endif %} {% if fig.is_secret %}acrylic-stand-chase{% endif %}"
+                         id="fig-card-{{ fig.id }}">
+                        
+                        <!-- Botón Admin para eliminar figura individual -->
                         {% if is_staff or is_admin %}
                         <button type="button" 
                                 onclick="event.stopPropagation(); confirmDeleteFigure({{ fig.id }}, '{{ fig.name|escapejs }}')"
-                                title="Eliminar figura"
-                                class="absolute top-1 left-1 z-20 w-4 h-4 bg-red-600/80 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-[8px] font-black">
+                                title="Eliminar figura del estante"
+                                class="absolute top-1 left-1 z-20 w-4 h-4 bg-red-600/80 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-[8px] font-black transition-all">
                             ✕
                         </button>
                         {% endif %}
 
+                        <!-- Badge de Rareza Chase -->
                         {% if fig.is_secret %}
                         <div class="absolute -top-1.5 right-1 z-10">
                             <span class="text-[7px] font-black bg-gradient-to-r from-amber-400 to-yellow-300 text-black px-1.5 py-0.5 rounded-md shadow uppercase tracking-wider">
@@ -227,29 +360,39 @@
                         </div>
                         {% endif %}
 
-                        <!-- Al tocar, abre Lightbox -->
+                        <!-- Contenedor Táctil: Abre el Lightbox para ver en grande -->
                         <div onclick="openFigureDetailModal({{ fig.id }}, '{{ fig.name|escapejs }}', '{% if fig.image %}{{ fig.image.url }}{% endif %}', '{{ series.name|escapejs }}', {{ fig.is_secret|yesno:'true,false' }}, {{ fig.is_owned|yesno:'true,false' }}, {{ fig.user_qty|default:0 }}, {{ series.single_price }}, {{ series.id }}, {{ series.blind_box_price }})"
-                             class="w-full aspect-square rounded-xl overflow-hidden mb-1 flex items-center justify-center relative p-1 cursor-pointer group">
+                             class="w-full aspect-square rounded-xl overflow-hidden mb-1.5 flex items-center justify-center relative p-1 cursor-pointer group">
+                            
                             {% if fig.image %}
                             <img src="{{ fig.image.url }}" alt="{{ fig.name }}" 
                                  class="w-full h-full object-contain transition-all duration-300 group-hover:scale-105 {% if not fig.is_owned %}opacity-45 grayscale contrast-125{% endif %}">
                             {% else %}
                             <span class="text-2xl">🎎</span>
                             {% endif %}
+
+                            <!-- Candado si está bloqueada -->
                             {% if not fig.is_owned %}
                             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <span class="text-sm opacity-75">🔒</span>
+                                <span class="text-sm opacity-75 drop-shadow">🔒</span>
                             </div>
                             {% endif %}
+
+                            <!-- Lupa discreta en hover -->
+                            <div class="absolute bottom-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 rounded px-1 text-[7px] text-amber-300">
+                                🔍
+                            </div>
                         </div>
 
+                        <!-- Nombre de la Figura -->
                         <span class="text-[9.5px] font-bold text-white truncate w-full leading-tight">{{ fig.name }}</span>
 
+                        <!-- Estado: En Vitrina o Botón de Compra Directa -->
                         <div class="mt-1.5 w-full">
                             {% if fig.is_owned %}
                                 <div onclick="openFigureDetailModal({{ fig.id }}, '{{ fig.name|escapejs }}', '{% if fig.image %}{{ fig.image.url }}{% endif %}', '{{ series.name|escapejs }}', {{ fig.is_secret|yesno:'true,false' }}, true, {{ fig.user_qty|default:1 }}, {{ series.single_price }}, {{ series.id }}, {{ series.blind_box_price }})"
                                      class="cursor-pointer inline-flex items-center justify-center gap-1 w-full py-1 text-[8px] font-mono text-emerald-400 bg-emerald-950/70 border border-emerald-500/40 rounded-lg font-black hover:bg-emerald-900 transition-all">
-                                    <span>✓</span> En Vitrina {% if fig.user_qty > 1 %}<span class="text-amber-300">(x{{ fig.user_qty }})</span>{% endif %}
+                                    <span>✓</span> En Vitrina {% if fig.user_qty > 1 %}<span class="text-amber-300 font-bold">(x{{ fig.user_qty }})</span>{% endif %}
                                 </div>
                             {% else %}
                                 <button type="button" 
@@ -263,49 +406,186 @@
                     {% endfor %}
                 </div>
             </div>
+
         </div>
         {% empty %}
+        <!-- Estado Vacío cuando no hay series creadas -->
         <div class="popmart-cabinet p-6 text-center flex flex-col items-center justify-center gap-3">
-            <span class="text-3xl">🎎</span>
-            <h3 class="text-sm font-black text-white uppercase">Aún no hay Colecciones Publicadas</h3>
-            <p class="text-[10px] text-stone-400 mt-1 max-w-xs">¡Usa el panel de administración para publicar la primera serie!</p>
+            <div class="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-400/20 flex items-center justify-center text-3xl">
+                🎎
+            </div>
+            <div>
+                <h3 class="text-sm font-black text-white uppercase">Aún no hay Colecciones Publicadas</h3>
+                <p class="text-[10px] text-stone-400 mt-1 max-w-xs">
+                    Los artesanos reales están preparando las nuevas series. ¡Pronto llegarán vitrinas exclusivas!
+                </p>
+            </div>
+            {% if is_staff or is_admin %}
+            <button type="button" onclick="switchBazarTab('admin')"
+                    class="mt-2 text-[10px] font-black uppercase px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl shadow">
+                + Publicar Primera Colección
+            </button>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
 
-    <!-- Pestaña 2: Mi Vitrina -->
-    <div id="section-vitrina" class="hidden flex-col gap-4">
-        <div class="popmart-cabinet p-4">
-            <div class="flex items-center justify-between border-b border-amber-500/20 pb-3 mb-3">
-                <div class="flex items-center gap-2">
-                    <span class="text-xl">🎒</span>
+
+        <!-- ============================================================== -->
+    <!-- PESTAÑA 2: MI VITRINA DE COLECCIONISTA (3D LED SHOWCASE)        -->
+    <!-- ============================================================== -->
+    <div id="section-vitrina" class="hidden flex-col gap-3.5">
+
+        <!-- 1. Barra de Control de Vitrina (Iluminación LED & Vista) -->
+        <div class="bg-black/70 border border-white/10 rounded-2xl p-2.5 flex items-center justify-between gap-2 backdrop-blur-md">
+            <!-- Iluminación LED -->
+            <div class="flex items-center gap-1.5">
+                <span class="text-[8px] uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1">
+                    💡 LED:
+                </span>
+                <div class="flex items-center gap-1 bg-stone-900/90 p-0.5 rounded-lg border border-white/5">
+                    <button type="button" onclick="setVitrinaLed('palace')" id="led-btn-palace"
+                            class="px-1.5 py-0.5 text-[8px] font-bold rounded-md bg-amber-500 text-black shadow transition-all">
+                        👑 Oro
+                    </button>
+                    <button type="button" onclick="setVitrinaLed('neon')" id="led-btn-neon"
+                            class="px-1.5 py-0.5 text-[8px] font-bold rounded-md text-stone-400 hover:text-white transition-all">
+                        💖 Neón
+                    </button>
+                    <button type="button" onclick="setVitrinaLed('diamond')" id="led-btn-diamond"
+                            class="px-1.5 py-0.5 text-[8px] font-bold rounded-md text-stone-400 hover:text-white transition-all">
+                        💎 Fría
+                    </button>
+                    <button type="button" onclick="setVitrinaLed('stealth')" id="led-btn-stealth"
+                            class="px-1.5 py-0.5 text-[8px] font-bold rounded-md text-stone-400 hover:text-white transition-all">
+                        🌙 Noche
+                    </button>
+                </div>
+            </div>
+
+            <!-- Vista: Estantes 3D vs Grid -->
+            <div class="flex items-center gap-1 bg-stone-900/90 p-0.5 rounded-lg border border-white/5">
+                <button type="button" onclick="setVitrinaViewMode('shelves')" id="view-btn-shelves"
+                        class="px-2 py-0.5 rounded-md text-[8px] font-bold bg-purple-600 text-white shadow transition-all flex items-center gap-1">
+                    <span>🗄️</span> Estantes
+                </button>
+                <button type="button" onclick="setVitrinaViewMode('grid')" id="view-btn-grid"
+                        class="px-2 py-0.5 rounded-md text-[8px] font-bold text-stone-400 hover:text-white transition-all flex items-center gap-1">
+                    <span>📦</span> Grid
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. Gabinete Acrílico Principal de Vitrina -->
+        <div id="vitrina-cabinet" class="popmart-cabinet cabinet-led-palace p-4 flex flex-col gap-4 relative overflow-hidden transition-all duration-500">
+            
+            <!-- Resplandor Cenital LED -->
+            <div id="vitrina-spotlight" class="absolute -top-16 left-1/2 -translate-x-1/2 w-72 h-32 bg-radial-[circle] from-amber-400/35 via-yellow-500/10 to-transparent filter blur-xl pointer-events-none"></div>
+
+            {% if user_collectibles %}
+            <!-- 👑 3. Pedestal de Honor / Centerpiece Spotlight -->
+            {% with first_item=user_collectibles.0 %}
+            <div id="vitrina-centerpiece-container" class="relative z-10 bg-black/60 border border-amber-500/40 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-xl backdrop-blur-md">
+                <div class="flex items-center gap-3">
+                    <div id="centerpiece-avatar" onclick="openFigureDetailModal({{ first_item.item.id }}, '{{ first_item.item.name|escapejs }}', '{% if first_item.item.image %}{{ first_item.item.image.url }}{% endif %}', '{{ first_item.item.series.name|default:'Pop Mart'|escapejs }}', {{ first_item.item.is_secret|yesno:'true,false' }}, true, {{ first_item.quantity }}, {{ first_item.item.price }}, {{ first_item.item.series.id|default:0 }}, {{ first_item.item.series.blind_box_price|default:160 }})"
+                         class="w-13 h-13 rounded-2xl bg-radial-[circle] from-amber-400/40 via-purple-600/20 to-transparent p-1 border border-amber-400/50 flex items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.4)] cursor-pointer hover:scale-105 transition-all relative shrink-0">
+                        {% if first_item.item.image %}
+                        <img id="centerpiece-img" src="{{ first_item.item.image.url }}" alt="{{ first_item.item.name }}" class="w-full h-full object-contain rounded-xl">
+                        {% else %}
+                        <span id="centerpiece-fallback" class="text-2xl">🎎</span>
+                        {% endif %}
+                        <div class="absolute -top-2 -left-2 bg-gradient-to-r from-amber-400 to-yellow-300 text-black text-[7px] font-black px-1.5 py-0.5 rounded-full shadow flex items-center gap-0.5">
+                            👑 HONOR
+                        </div>
+                    </div>
                     <div>
-                        <h2 class="text-xs font-black text-white uppercase tracking-wider">Gabinete de Coleccionista</h2>
-                        <p class="text-[9px] text-stone-400">Tus figuras conseguidas</p>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[7.5px] font-black uppercase text-amber-300 tracking-wider">Figura de Honor de tu Vitrina</span>
+                            <span id="centerpiece-chase-badge" class="{% if not first_item.item.is_secret %}hidden{% endif %} text-[6.5px] bg-amber-400 text-black font-black px-1 rounded">CHASE ⭐</span>
+                        </div>
+                        <h3 id="centerpiece-name" class="text-xs font-black text-white leading-tight mt-0.5">{{ first_item.item.name }}</h3>
+                        <p id="centerpiece-series" class="text-[8.5px] text-stone-300/80 font-mono mt-0.5">{{ first_item.item.series.name|default:'Edición Coleccionista Real' }}</p>
                     </div>
                 </div>
-                <span class="text-xs font-black text-amber-300 bg-black/60 px-2.5 py-1 rounded-xl border border-amber-500/30">
-                    {{ user_collectibles|length }} Piezas
-                </span>
+                <div class="flex flex-col items-end shrink-0 gap-1">
+                    <span class="text-[7.5px] text-amber-300/80 font-bold bg-amber-950/80 px-2 py-0.5 rounded-lg border border-amber-500/30">
+                        Exhibición VIP
+                    </span>
+                    <span class="text-[7px] text-stone-400">Toca para inspeccionar</span>
+                </div>
             </div>
-            {% if user_collectibles %}
-            <div class="grid grid-cols-3 gap-2.5">
+            {% endwith %}
+
+            <!-- 4. Panel de Filtros y Búsqueda en Vivo -->
+            <div class="flex flex-col gap-2 relative z-10">
+                <div class="flex items-center gap-2">
+                    <div class="relative flex-1">
+                        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-stone-400">🔍</span>
+                        <input type="text" id="vitrina-search-input" oninput="filterVitrinaCards()"
+                               placeholder="Buscar en tu vitrina..."
+                               class="w-full bg-black/60 border border-white/10 rounded-xl pl-7 pr-2.5 py-1.5 text-[9.5px] text-white placeholder-stone-400 focus:outline-none focus:border-amber-400/50">
+                    </div>
+                    <select id="vitrina-sort-select" onchange="sortVitrinaCards()"
+                            class="bg-black/60 border border-white/10 rounded-xl px-2 py-1.5 text-[9px] text-amber-300 focus:outline-none">
+                        <option value="default">Por Defecto</option>
+                        <option value="chase">⭐ Secretas Chase</option>
+                        <option value="qty">♻️ Más Duplicadas</option>
+                        <option value="name">🔤 Nombre (A-Z)</option>
+                    </select>
+                </div>
+
+                <!-- Botones de Filtro Rápido -->
+                <div class="flex items-center gap-1 overflow-x-auto pb-0.5 text-[8.5px] font-bold">
+                    <button type="button" onclick="setVitrinaFilter('all')" id="filter-btn-all"
+                            class="px-2.5 py-1 rounded-lg bg-amber-500 text-black font-black whitespace-nowrap transition-all">
+                        Todas ({{ user_collectibles|length }})
+                    </button>
+                    <button type="button" onclick="setVitrinaFilter('chase')" id="filter-btn-chase"
+                            class="px-2.5 py-1 rounded-lg bg-black/50 text-stone-400 border border-white/5 whitespace-nowrap transition-all flex items-center gap-1">
+                        <span>⭐</span> Secretas
+                    </button>
+                    <button type="button" onclick="setVitrinaFilter('duplicates')" id="filter-btn-duplicates"
+                            class="px-2.5 py-1 rounded-lg bg-black/50 text-stone-400 border border-white/5 whitespace-nowrap transition-all flex items-center gap-1">
+                        <span>♻️</span> Duplicadas
+                    </button>
+                </div>
+            </div>
+
+            <!-- 5. Contenedor de Figuras (Con Soporte para Estantes 3D y Grid) -->
+            <div id="vitrina-cards-container" class="grid grid-cols-3 gap-2.5 relative z-10">
                 {% for uc in user_collectibles %}
                 <div onclick="openFigureDetailModal({{ uc.item.id }}, '{{ uc.item.name|escapejs }}', '{% if uc.item.image %}{{ uc.item.image.url }}{% endif %}', '{{ uc.item.series.name|default:'Pop Mart'|escapejs }}', {{ uc.item.is_secret|yesno:'true,false' }}, true, {{ uc.quantity }}, {{ uc.item.price }}, {{ uc.item.series.id|default:0 }}, {{ uc.item.series.blind_box_price|default:160 }})"
-                     class="acrylic-stand acrylic-stand-owned rounded-2xl p-2.5 flex flex-col items-center text-center relative border border-emerald-500/40 cursor-pointer hover:scale-105 transition-all">
+                     data-id="{{ uc.item.id }}"
+                     data-name="{{ uc.item.name|lower }}"
+                     data-series="{{ uc.item.series.name|default:''|lower }}"
+                     data-secret="{{ uc.item.is_secret|yesno:'1,0' }}"
+                     data-qty="{{ uc.quantity }}"
+                     class="vitrina-card acrylic-stand acrylic-stand-owned rounded-2xl p-2.5 flex flex-col items-center text-center relative border border-emerald-500/40 cursor-pointer hover:scale-105 transition-all">
+                    
                     {% if uc.item.is_secret %}
                     <div class="absolute -top-1.5 right-1 z-10">
-                        <span class="text-[6.5px] font-black bg-gradient-to-r from-amber-400 to-yellow-300 text-black px-1.5 py-0.5 rounded shadow uppercase">CHASE ⭐</span>
+                        <span class="text-[6.5px] font-black bg-gradient-to-r from-amber-400 to-yellow-300 text-black px-1.5 py-0.5 rounded shadow uppercase">
+                            CHASE ⭐
+                        </span>
                     </div>
                     {% endif %}
-                    <div class="w-full aspect-square rounded-xl overflow-hidden mb-1 flex items-center justify-center p-1 bg-black/40">
+
+                    <div class="w-full aspect-square rounded-xl overflow-hidden mb-1 flex items-center justify-center p-1 bg-black/40 relative">
                         {% if uc.item.image %}
                         <img src="{{ uc.item.image.url }}" alt="{{ uc.item.name }}" class="w-full h-full object-contain">
                         {% else %}
                         <span class="text-2xl">🎎</span>
                         {% endif %}
+                        <div class="absolute bottom-1 right-1 bg-black/80 rounded px-1 text-[7px] text-amber-300">
+                            🔍
+                        </div>
                     </div>
+
                     <span class="text-[9px] font-bold text-white truncate w-full">{{ uc.item.name }}</span>
+                    {% if uc.item.series %}
+                    <span class="text-[7.5px] text-amber-300/80 truncate w-full">{{ uc.item.series.name }}</span>
+                    {% endif %}
+
                     <div class="flex items-center gap-1 mt-1">
                         <span class="text-[7.5px] font-mono text-emerald-300 font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded">
                             x{{ uc.quantity }}
@@ -319,16 +599,48 @@
                 </div>
                 {% endfor %}
             </div>
+
+            <!-- Balda de Cristal Acrílico Biselado Inferior (Estante Físico) -->
+            <div id="vitrina-shelf-bar" class="w-full h-4 rounded-xl border-t-2 border-b-2 acrylic-shelf-tier border-amber-400/50 mt-1 relative">
+                <div class="shelf-reflection"></div>
+            </div>
+
+            <!-- 6. Barra de Resumen del Coleccionista -->
+            <div class="bg-black/70 border border-amber-500/20 rounded-2xl p-3 flex items-center justify-between gap-2 backdrop-blur-md relative z-10">
+                <div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[8px] uppercase tracking-wider text-amber-300 font-bold">Colección:</span>
+                        <span class="text-[8.5px] font-black text-white">{{ user_collectibles|length }} Figuras Exhibidas</span>
+                    </div>
+                    <p class="text-[7.5px] text-stone-400 mt-0.5">Toca cualquier figura para ver su certificado 3D o empeñar duplicados.</p>
+                </div>
+                <button type="button" onclick="switchBazarTab('popmart')"
+                        class="text-[8px] font-black uppercase px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black rounded-xl transition-all shrink-0">
+                    + Conseguir Más
+                </button>
+            </div>
+
             {% else %}
-            <div class="text-center py-8">
-                <span class="text-3xl opacity-50">🪞</span>
-                <p class="text-[10px] text-stone-400 mt-2">Tu vitrina está esperando su primera figura.</p>
+            <!-- Estado Vacío -->
+            <div class="text-center py-10 relative z-10">
+                <div class="w-16 h-16 rounded-3xl bg-purple-900/40 border border-amber-400/30 flex items-center justify-center text-3xl mx-auto mb-3 shadow-inner">
+                    🪞
+                </div>
+                <h3 class="text-xs font-black text-amber-300 uppercase tracking-wider">Tu Vitrina está esperando</h3>
+                <p class="text-[9.5px] text-stone-300/80 max-w-xs mx-auto mt-1">Abre Cajas Sorpresa o elige tu figura favorita en la Boutique para exhibirla con pedestales e iluminación LED.</p>
+                <button type="button" onclick="switchBazarTab('popmart')"
+                        class="mt-4 text-[9px] font-black uppercase px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-black rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition-all">
+                    ✨ Abrir Cajas Sorpresa
+                </button>
             </div>
             {% endif %}
+
         </div>
     </div>
 
-    <!-- Pestaña 3: Bazar Real (Objetos Normales) -->
+    <!-- ============================================================== -->
+    <!-- PESTAÑA 3: BAZAR REAL (OBJETOS, TÍTULOS, ESCUDOS, MAZMORRA)     -->
+    <!-- ============================================================== -->
     <div id="section-bazar" class="hidden flex-col gap-3">
         {% for item in bazar_items %}
         <div class="popmart-cabinet p-3.5 flex items-center justify-between gap-3">
@@ -339,298 +651,750 @@
                 <div>
                     <h3 class="text-xs font-black text-white leading-tight">{{ item.name }}</h3>
                     <p class="text-[9px] text-stone-400 leading-tight max-w-[180px] mt-0.5">{{ item.desc }}</p>
-                    <span class="text-xs font-black text-amber-300 mt-1 block">{{ item.price }} 🪙</span>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="text-xs font-black text-amber-300">{{ item.price }} 🪙</span>
+                        {% if item.stock != -1 %}
+                        <span class="text-[8px] text-stone-500 font-mono">Stock: {{ item.stock }}</span>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
+
+            <!-- Botones Específicos según el Tipo de Objeto -->
             {% if item.code == 'custom_title' %}
-            <button type="button" onclick="openCustomTitleModal({{ item.price }})" class="bg-purple-600 text-white font-black text-[9px] uppercase px-3 py-2 rounded-xl">Proclamar</button>
+            <button type="button" onclick="openCustomTitleModal({{ item.price }})"
+                    class="bg-purple-600 hover:bg-purple-500 text-white font-black text-[9px] uppercase px-3 py-2 rounded-xl transition-all shadow">
+                Proclamar
+            </button>
             {% elif item.code == 'tribute_gift' %}
-            <button type="button" onclick="openTributeModal({{ item.price }})" class="bg-rose-600 text-white font-black text-[9px] uppercase px-3 py-2 rounded-xl">Entregar</button>
+            <button type="button" onclick="openTributeModal({{ item.price }})"
+                    class="bg-rose-600 hover:bg-rose-500 text-white font-black text-[9px] uppercase px-3 py-2 rounded-xl transition-all shadow">
+                Entregar
+            </button>
             {% else %}
-            <button type="button" onclick="buyStandardItem('{{ item.code }}', '{{ item.name|escapejs }}', {{ item.price }})" class="bg-amber-500 text-black font-black text-[9px] uppercase px-3 py-2 rounded-xl">Comprar</button>
+            <button type="button" onclick="buyStandardItem('{{ item.code }}', '{{ item.name|escapejs }}', {{ item.price }})"
+                    class="bg-amber-500 hover:bg-amber-400 text-black font-black text-[9px] uppercase px-3 py-2 rounded-xl transition-all shadow active:scale-95">
+                Comprar
+            </button>
             {% endif %}
         </div>
         {% endfor %}
     </div>
 
-    <!-- Pestaña 4: Panel Admin Creación Completa -->
+
+    <!-- ============================================================== -->
+    <!-- PESTAÑA 4: PANEL DE ADMINISTRACIÓN (CREACIÓN EN LOTE)          -->
+    <!-- ============================================================== -->
     {% if is_staff or is_admin %}
     <div id="section-admin" class="hidden flex-col gap-4">
         <div class="popmart-cabinet p-4 border border-purple-500/40">
-            <h2 class="text-xs font-black text-purple-300 uppercase mb-3">👑 Crear Nueva Colección Pop Mart</h2>
+            <div class="flex items-center gap-2 border-b border-purple-500/20 pb-3 mb-3">
+                <span class="text-xl">👑</span>
+                <div>
+                    <h2 class="text-xs font-black text-purple-300 uppercase tracking-wider">Crear Nueva Colección Pop Mart</h2>
+                    <p class="text-[9px] text-stone-400">Publica un set completo con portada y múltiples figuras</p>
+                </div>
+            </div>
+
             <form action="/economy/bazar/series/create-batch/" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
                 {% csrf_token %}
-                <input type="text" name="series_name" placeholder="Nombre (Ej: TWICE - Like OOH-AHH)" required class="w-full bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
-                <input type="text" name="tagline" placeholder="Subtítulo / Edición" class="w-full bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
-                <textarea name="description" rows="2" placeholder="Descripción de la colección..." class="w-full bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white"></textarea>
-                <div class="grid grid-cols-2 gap-2">
-                    <input type="number" name="blind_box_price" value="160" placeholder="Precio Caja" required class="bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
-                    <input type="number" name="single_price" value="260" placeholder="Precio Directo" required class="bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
-                </div>
+                
                 <div>
-                    <label class="text-[9px] font-bold text-stone-300 uppercase">Foto de Portada</label>
-                    <input type="file" name="cover_image" accept="image/*" class="w-full mt-1 text-[9px] text-stone-400">
+                    <label class="text-[9px] font-bold text-stone-300 uppercase">Nombre de la Colección</label>
+                    <input type="text" name="series_name" placeholder="Ej: TWICE - Like OOH-AHH" required
+                           class="w-full mt-1 bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-600 focus:outline-none focus:border-purple-400">
                 </div>
-                <div class="border-t border-white/10 pt-2">
-                    <label class="text-[9px] font-bold text-amber-300 uppercase">Figuras de la Colección (Múltiples Fotos)</label>
-                    <input type="file" name="figures" accept="image/*" multiple required onchange="previewBatchFigures(this)" class="w-full mt-1 text-[9px] text-stone-400">
+
+                <div>
+                    <label class="text-[9px] font-bold text-stone-300 uppercase">Subtítulo / Edición</label>
+                    <input type="text" name="tagline" placeholder="Ej: Pop Mart Debut Series"
+                           class="w-full mt-1 bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-600 focus:outline-none focus:border-purple-400">
                 </div>
+
+                <div>
+                    <label class="text-[9px] font-bold text-stone-300 uppercase">Descripción</label>
+                    <textarea name="description" rows="2" placeholder="Detalles de la colección..."
+                              class="w-full mt-1 bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white placeholder-stone-600 focus:outline-none focus:border-purple-400"></textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[9px] font-bold text-stone-300 uppercase">Precio Caja Sorpresa (🪙)</label>
+                        <input type="number" name="blind_box_price" value="160" required
+                               class="w-full mt-1 bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400">
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-stone-300 uppercase">Precio Compra Directa (🪙)</label>
+                        <input type="number" name="single_price" value="260" required
+                               class="w-full mt-1 bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[9px] font-bold text-stone-300 uppercase">Foto de Portada / Caja Principal</label>
+                    <input type="file" name="cover_image" accept="image/*"
+                           class="w-full mt-1 text-[9px] text-stone-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-purple-600 file:text-white file:font-bold">
+                </div>
+
+                <div class="border-t border-white/10 pt-3">
+                    <label class="text-[9px] font-bold text-amber-300 uppercase flex items-center justify-between">
+                        <span>Figuras de la Colección (Múltiples Fotos)</span>
+                        <span class="text-[8px] text-stone-400">Selecciona varias fotos a la vez</span>
+                    </label>
+                    <input type="file" id="batch-figures-input" name="figures" accept="image/*" multiple required
+                           onchange="previewBatchFigures(this)"
+                           class="w-full mt-1 text-[9px] text-stone-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-amber-500 file:text-black file:font-bold">
+                </div>
+
+                <!-- Previsualizador de Figuras con Nombres y Rarity -->
                 <div id="batch-preview-container" class="grid grid-cols-2 gap-2 mt-2"></div>
-                <button type="submit" class="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-xs uppercase rounded-xl">
+
+                <button type="submit" 
+                        class="w-full mt-2 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs uppercase rounded-xl shadow-lg transition-all">
                     ✨ Publicar Colección Completa
                 </button>
             </form>
         </div>
     </div>
     {% endif %}
+
 </div>
 
-<!-- 🔍 LIGHTBOX MODAL: VER EN GRANDE -->
+
+<!-- ============================================================== -->
+<!-- 🔍 LIGHTBOX: VISUALIZADOR 3D EN GRANDE DE FIGURA              -->
+<!-- ============================================================== -->
 <div id="figure-detail-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden items-center justify-center p-4">
     <div class="popmart-cabinet p-5 w-full max-w-sm flex flex-col items-center text-center relative border border-amber-500/40 shadow-2xl">
-        <button type="button" onclick="closeFigureDetailModal()" class="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold">✕</button>
+        
+        <!-- Botón Cerrar -->
+        <button type="button" onclick="closeFigureDetailModal()" 
+                class="absolute top-3 right-3 w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold transition-all">
+            ✕
+        </button>
+
+        <!-- Contenedor Iluminado de Figura en Grande -->
         <div class="w-56 h-56 rounded-3xl glow-aura-burst p-3 relative flex items-center justify-center mb-3 bg-black/40 border border-white/10">
-            <img id="detail-modal-img" src="" alt="Figura" class="w-full h-full object-contain drop-shadow-[0_12px_24px_rgba(245,158,11,0.45)]">
+            <img id="detail-modal-img" src="" alt="Figura" 
+                 class="w-full h-full object-contain drop-shadow-[0_12px_24px_rgba(245,158,11,0.45)] transition-transform duration-300 hover:scale-110">
+            
+            <!-- Badges Superiores -->
             <div id="detail-modal-secret-badge" class="hidden absolute top-2 right-2">
-                <span class="text-[8px] font-black bg-gradient-to-r from-amber-400 to-yellow-300 text-black px-2 py-0.5 rounded shadow uppercase tracking-wider">CHASE ⭐ SECRETA</span>
+                <span class="text-[8px] font-black bg-gradient-to-r from-amber-400 to-yellow-300 text-black px-2 py-0.5 rounded shadow uppercase tracking-wider">
+                    CHASE ⭐ SECRETA
+                </span>
             </div>
         </div>
+
+        <!-- Info de la Figura -->
         <span id="detail-modal-series" class="text-[9px] uppercase tracking-widest text-amber-300 font-bold">Pop Mart Series</span>
-        <h3 id="detail-modal-name" class="text-base font-black text-white mt-0.5 mb-1">Nombre</h3>
-        <div id="detail-modal-status-badge" class="mb-4"></div>
-        <div id="detail-modal-actions" class="w-full flex flex-col gap-2"></div>
+        <h3 id="detail-modal-name" class="text-base font-black text-white mt-0.5 mb-1">Nombre de la Figura</h3>
+        
+        <div id="detail-modal-status-badge" class="mb-4">
+            <!-- Rellenado dinámicamente: Poseída / Bloqueada -->
+        </div>
+
+        <!-- Acciones en el Modal -->
+        <div id="detail-modal-actions" class="w-full flex flex-col gap-2">
+            <!-- Rellenado dinámicamente con botones de compra o empeño -->
+        </div>
+
     </div>
 </div>
 
-<!-- ✏️ MODAL EDITAR SERIE -->
+
+<!-- ============================================================== -->
+<!-- ✏️ MODAL EDITAR SERIE POP MART (ADMIN)                         -->
+<!-- ============================================================== -->
 {% if is_staff or is_admin %}
 <div id="edit-series-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
     <div class="popmart-cabinet p-5 w-full max-w-sm flex flex-col gap-3">
         <div class="flex items-center justify-between border-b border-purple-500/20 pb-2">
-            <h3 class="text-xs font-black text-amber-300 uppercase">✏️ Editar Colección Pop Mart</h3>
+            <h3 class="text-xs font-black text-amber-300 uppercase tracking-wider">✏️ Editar Colección Pop Mart</h3>
             <button type="button" onclick="closeEditSeriesModal()" class="text-stone-400 hover:text-white text-xs">✕</button>
         </div>
+
         <form id="edit-series-form" action="" method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
             {% csrf_token %}
-            <input type="text" id="edit-series-name" name="name" required class="bg-black/60 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
-            <input type="text" id="edit-series-tagline" name="tagline" class="bg-black/60 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
-            <textarea id="edit-series-desc" name="description" rows="2" class="bg-black/60 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white"></textarea>
-            <div class="grid grid-cols-2 gap-2">
-                <input type="number" id="edit-series-blind" name="blind_box_price" required class="bg-black/60 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
-                <input type="number" id="edit-series-single" name="single_price" required class="bg-black/60 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
+            <div>
+                <label class="text-[8px] font-bold text-stone-300 uppercase">Nombre</label>
+                <input type="text" id="edit-series-name" name="name" required
+                       class="w-full bg-black/60 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
             </div>
-            <input type="file" name="cover_image" accept="image/*" class="text-[8px] text-stone-400">
+            <div>
+                <label class="text-[8px] font-bold text-stone-300 uppercase">Subtítulo / Edición</label>
+                <input type="text" id="edit-series-tagline" name="tagline"
+                       class="w-full bg-black/60 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
+            </div>
+            <div>
+                <label class="text-[8px] font-bold text-stone-300 uppercase">Descripción</label>
+                <textarea id="edit-series-desc" name="description" rows="2"
+                          class="w-full bg-black/60 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-[8px] font-bold text-stone-300 uppercase">Caja Sorpresa (🪙)</label>
+                    <input type="number" id="edit-series-blind" name="blind_box_price" required
+                           class="w-full bg-black/60 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
+                </div>
+                <div>
+                    <label class="text-[8px] font-bold text-stone-300 uppercase">Compra Directa (🪙)</label>
+                    <input type="number" id="edit-series-single" name="single_price" required
+                           class="w-full bg-black/60 border border-white/20 rounded-xl px-2.5 py-1.5 text-xs text-white">
+                </div>
+            </div>
+            <div>
+                <label class="text-[8px] font-bold text-stone-300 uppercase">Actualizar Foto Portada (Opcional)</label>
+                <input type="file" name="cover_image" accept="image/*"
+                       class="w-full text-[8px] text-stone-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-purple-600 file:text-white file:font-bold">
+            </div>
+
             <div class="flex gap-2 mt-2">
                 <button type="button" onclick="closeEditSeriesModal()" class="w-1/2 py-2 bg-stone-800 text-stone-300 rounded-xl text-xs font-bold">Cancelar</button>
-                <button type="submit" class="w-1/2 py-2 bg-amber-500 text-black rounded-xl text-xs font-black">Guardar</button>
+                <button type="submit" class="w-1/2 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-xl text-xs font-black">Guardar Cambios</button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- ➕ MODAL AÑADIR FIGURA A SERIE -->
+<!-- ➕ MODAL AÑADIR FIGURAS A SERIE EXISTENTE (ADMIN) -->
 <div id="add-figure-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
     <div class="popmart-cabinet p-5 w-full max-w-sm flex flex-col gap-3">
         <div class="flex items-center justify-between border-b border-purple-500/20 pb-2">
-            <h3 class="text-xs font-black text-emerald-300 uppercase">➕ Añadir Figuras al Set</h3>
-            <button type="button" onclick="closeAddFigureModal()" class="text-stone-400 text-xs">✕</button>
+            <div>
+                <h3 class="text-xs font-black text-emerald-300 uppercase tracking-wider">➕ Añadir Figuras</h3>
+                <span id="add-figure-series-name" class="text-[8px] text-stone-400">A la colección actual</span>
+            </div>
+            <button type="button" onclick="closeAddFigureModal()" class="text-stone-400 hover:text-white text-xs">✕</button>
         </div>
+
         <form id="add-figure-form" action="" method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
             {% csrf_token %}
-            <input type="file" id="add-single-figures-input" name="figures" accept="image/*" multiple required onchange="previewAddFigures(this)" class="text-[8px] text-stone-400">
-            <div id="add-figure-preview-container" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto"></div>
+            <div>
+                <label class="text-[8px] font-bold text-stone-300 uppercase">Selecciona Fotos de Figuras</label>
+                <input type="file" id="add-single-figures-input" name="figures" accept="image/*" multiple required
+                       onchange="previewAddFigures(this)"
+                       class="w-full mt-1 text-[8px] text-stone-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-white file:font-bold">
+            </div>
+
+            <div id="add-figure-preview-container" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto mt-1"></div>
+
             <div class="flex gap-2 mt-2">
                 <button type="button" onclick="closeAddFigureModal()" class="w-1/2 py-2 bg-stone-800 text-stone-300 rounded-xl text-xs font-bold">Cancelar</button>
-                <button type="submit" class="w-1/2 py-2 bg-emerald-500 text-black rounded-xl text-xs font-black">Añadir</button>
+                <button type="submit" class="w-1/2 py-2 bg-emerald-500 hover:bg-emerald-400 text-black rounded-xl text-xs font-black">Añadir Figuras</button>
             </div>
         </form>
     </div>
 </div>
 {% endif %}
 
-<!-- MODAL UNBOXING RESULT -->
+
+<!-- ============================================================== -->
+<!-- MODAL DE APERTURA DE CAJA SORPRESA (BLIND BOX GACHA REVEAL)    -->
+<!-- ============================================================== -->
 <div id="blind-box-modal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md hidden flex-col items-center justify-center p-4">
     <div class="relative w-full max-w-sm flex flex-col items-center text-center">
+        
+        <!-- Fase 1: Caja Tambaleándose -->
         <div id="unbox-anim-container" class="flex flex-col items-center">
-            <div class="w-32 h-32 rounded-3xl bg-purple-900/80 border-2 border-amber-400 flex items-center justify-center text-6xl shadow-2xl animate-box-wobble mb-4">🎁</div>
+            <div id="unbox-box-icon" class="w-32 h-32 rounded-3xl bg-purple-900/80 border-2 border-amber-400 flex items-center justify-center text-6xl shadow-2xl animate-box-wobble mb-4">
+                🎁
+            </div>
             <h3 class="text-sm font-black text-amber-300 uppercase tracking-widest animate-pulse">Abriendo Caja Sorpresa...</h3>
+            <p class="text-[10px] text-stone-400 mt-1">Los dados del destino están girando</p>
         </div>
+
+        <!-- Fase 2: Revelación de la Figura -->
         <div id="unbox-result-container" class="hidden flex-col items-center w-full">
             <div class="w-48 h-48 rounded-3xl glow-aura-burst p-2 relative flex items-center justify-center mb-3">
-                <img id="reveal-figure-img" src="" alt="Figura" class="w-full h-full object-contain">
+                <img id="reveal-figure-img" src="" alt="Figura Revelada" class="w-full h-full object-contain drop-shadow-[0_10px_20px_rgba(245,158,11,0.5)]">
                 <div id="reveal-secret-badge" class="hidden absolute top-2 right-2">
-                    <span class="text-[8px] font-black bg-gradient-to-r from-amber-400 to-yellow-300 text-black px-2 py-0.5 rounded shadow">CHASE ⭐ SECRETA</span>
+                    <span class="text-[8px] font-black bg-gradient-to-r from-amber-400 to-yellow-300 text-black px-2 py-0.5 rounded-md shadow uppercase tracking-wider">
+                        CHASE ⭐ SECRETA
+                    </span>
                 </div>
             </div>
-            <span id="reveal-series-name" class="text-[9px] uppercase tracking-widest text-amber-300 font-bold"></span>
-            <h3 id="reveal-figure-name" class="text-lg font-black text-white mt-0.5 mb-1"></h3>
-            <p id="reveal-message" class="text-[10px] text-emerald-300 font-medium mb-4"></p>
-            <button type="button" onclick="closeBlindBoxModal()" class="w-full py-2.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-black text-xs uppercase rounded-xl">✨ ¡Guardar en mi Vitrina!</button>
+
+            <span id="reveal-series-name" class="text-[9px] uppercase tracking-widest text-amber-300 font-bold">Pop Mart Series</span>
+            <h3 id="reveal-figure-name" class="text-lg font-black text-white mt-0.5 mb-1">Nombre de la Figura</h3>
+            <p id="reveal-message" class="text-[10px] text-emerald-300 font-medium max-w-xs mb-4">¡Añadida a tu vitrina!</p>
+
+            <button type="button" onclick="closeBlindBoxModal()"
+                    class="w-full py-2.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-black font-black text-xs uppercase rounded-xl shadow-lg active:scale-95 transition-all">
+                ✨ ¡Guardar en mi Vitrina!
+            </button>
+        </div>
+
+    </div>
+</div>
+
+
+<!-- ============================================================== -->
+<!-- MODALES PARA OBJETOS DEL BAZAR (TÍTULOS, TRIBUTOS, FIANZA)     -->
+<!-- ============================================================== -->
+
+<!-- Modal Título Personalizado -->
+<div id="custom-title-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="popmart-cabinet p-5 w-full max-w-sm flex flex-col gap-3">
+        <h3 class="text-xs font-black text-amber-300 uppercase tracking-wider">📜 Proclamar Título Personalizado</h3>
+        <p class="text-[10px] text-stone-300">Este título aparecerá con honor en tu perfil público.</p>
+        <input type="text" id="custom-title-input" placeholder="Ej: El Conquistador de Musas" maxlength="60"
+               class="w-full bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400">
+        <div class="flex gap-2 mt-2">
+            <button type="button" onclick="closeCustomTitleModal()" class="w-1/2 py-2 bg-stone-800 text-stone-300 rounded-xl text-xs font-bold">Cancelar</button>
+            <button type="button" onclick="confirmCustomTitle()" class="w-1/2 py-2 bg-amber-500 text-black rounded-xl text-xs font-black">Proclamar</button>
         </div>
     </div>
 </div>
 
+<!-- Modal Tributo a Musa -->
+<div id="tribute-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="popmart-cabinet p-5 w-full max-w-sm flex flex-col gap-3">
+        <h3 class="text-xs font-black text-rose-300 uppercase tracking-wider">🌹 Tributo de Admiración</h3>
+        <p class="text-[10px] text-stone-300">Elige la Musa de la corte que recibirá tu ofrenda (280 🪙 a su bóveda privada).</p>
+        <select id="tribute-idol-select" class="w-full bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-400">
+            {% for idol in todas_idols %}
+            <option value="{{ idol.id }}">{{ idol.stage_name }} ({{ idol.full_name|default:"Musa" }})</option>
+            {% endfor %}
+        </select>
+        <div class="flex gap-2 mt-2">
+            <button type="button" onclick="closeTributeModal()" class="w-1/2 py-2 bg-stone-800 text-stone-300 rounded-xl text-xs font-bold">Cancelar</button>
+            <button type="button" onclick="confirmTribute()" class="w-1/2 py-2 bg-rose-500 text-white rounded-xl text-xs font-black">Entregar</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================== -->
+<!-- JAVASCRIPT DE LA BOUTIQUE POP MART, AUDIO & COMPRAS ASÍNCRONAS -->
+<!-- ============================================================== -->
 <script>
+    // Sintetizador de Audio Web API Nativo (Sin librerías externas)
     function playCollectorAudio(type) {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const now = ctx.currentTime;
+
             if (type === 'wobble') {
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
+                osc.type = 'sine';
                 osc.frequency.setValueAtTime(180, now);
                 osc.frequency.exponentialRampToValueAtTime(320, now + 0.15);
                 gain.gain.setValueAtTime(0.15, now);
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-                osc.connect(gain); gain.connect(ctx.destination);
-                osc.start(now); osc.stop(now + 0.2);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'fanfare_regular') {
+                [440, 554, 659, 880].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+                    gain.gain.setValueAtTime(0.2, now + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.08 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now + idx * 0.08);
+                    osc.stop(now + idx * 0.08 + 0.35);
+                });
             } else if (type === 'fanfare_secret') {
                 [523, 659, 784, 1046, 1318].forEach((freq, idx) => {
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
+                    osc.type = 'sine';
                     osc.frequency.setValueAtTime(freq, now + idx * 0.06);
                     gain.gain.setValueAtTime(0.25, now + idx * 0.06);
-                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.06 + 0.4);
-                    osc.connect(gain); gain.connect(ctx.destination);
-                    osc.start(now + idx * 0.06); osc.stop(now + idx * 0.06 + 0.45);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.06 + 0.5);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now + idx * 0.06);
+                    osc.stop(now + idx * 0.06 + 0.55);
                 });
             } else if (type === 'recycle') {
                 [800, 1000, 1200].forEach((freq, idx) => {
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
+                    osc.type = 'sine';
                     osc.frequency.setValueAtTime(freq, now + idx * 0.05);
                     gain.gain.setValueAtTime(0.18, now + idx * 0.05);
                     gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.05 + 0.2);
-                    osc.connect(gain); gain.connect(ctx.destination);
-                    osc.start(now + idx * 0.05); osc.stop(now + idx * 0.05 + 0.25);
-                });
-            } else {
-                [440, 554, 659, 880].forEach((freq, idx) => {
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.frequency.setValueAtTime(freq, now + idx * 0.08);
-                    gain.gain.setValueAtTime(0.2, now + idx * 0.08);
-                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.08 + 0.3);
-                    osc.connect(gain); gain.connect(ctx.destination);
-                    osc.start(now + idx * 0.08); osc.stop(now + idx * 0.08 + 0.35);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now + idx * 0.05);
+                    osc.stop(now + idx * 0.05 + 0.25);
                 });
             }
-        } catch(e){}
+        } catch (e) {}
     }
 
+    // Efecto de Confetti de Partículas
+    function launchConfetti(isGold = false) {
+        const canvas = document.getElementById('gacha-confetti-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const particles = [];
+        const colors = isGold 
+            ? ['#f59e0b', '#fbbf24', '#fef08a', '#d97706', '#ffffff'] 
+            : ['#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b'];
+
+        for (let i = 0; i < 70; i++) {
+            particles.push({
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                vx: (Math.random() - 0.5) * 14,
+                vy: (Math.random() - 0.7) * 16,
+                size: Math.random() * 7 + 4,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                rotation: Math.random() * 360,
+                rotSpeed: (Math.random() - 0.5) * 10,
+                alpha: 1
+            });
+        }
+
+        let animFrame;
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let activeCount = 0;
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.35; // Gravedad
+                p.rotation += p.rotSpeed;
+                p.alpha -= 0.015;
+                if (p.alpha > 0) {
+                    activeCount++;
+                    ctx.save();
+                    ctx.globalAlpha = p.alpha;
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate((p.rotation * Math.PI) / 180);
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                    ctx.restore();
+                }
+            });
+            if (activeCount > 0) {
+                animFrame = requestAnimationFrame(render);
+            } else {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                cancelAnimationFrame(animFrame);
+            }
+        }
+        render();
+    }
+
+    // Cambio Dinámico de Pestañas
     function switchBazarTab(tabName) {
-        ['popmart', 'vitrina', 'bazar', 'admin'].forEach(s => {
+        const sections = ['popmart', 'vitrina', 'bazar', 'admin'];
+        sections.forEach(s => {
             const el = document.getElementById('section-' + s);
             const btn = document.getElementById('tab-btn-' + s);
-            if (el) el.classList.toggle('hidden', s !== tabName);
-            if (btn) btn.classList.toggle('bazar-tab-active', s === tabName);
+            if (el) {
+                if (s === tabName) {
+                    el.classList.remove('hidden');
+                    el.classList.add('flex');
+                } else {
+                    el.classList.add('hidden');
+                    el.classList.remove('flex');
+                }
+            }
+            if (btn) {
+                if (s === tabName) {
+                    btn.classList.add('bazar-tab-active');
+                } else {
+                    btn.classList.remove('bazar-tab-active');
+                }
+            }
         });
     }
 
+    // Actualizador de Saldo en Pantalla
+    function updateWalletUI(newBalance) {
+        const el = document.getElementById('user-wallet-balance');
+        if (el && newBalance !== undefined) el.textContent = newBalance;
+    }
+
+    // Feedback Háptico para Telegram WebApp
+    function triggerHaptic(type = 'impact') {
+        try {
+            if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+                if (type === 'success') window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+                else if (type === 'error') window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
+                else window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+            }
+        } catch (e) {}
+    }
+
+    // ==============================================================
+    // 🔍 1. LIGHTBOX VISUALIZADOR EN GRANDE DE FIGURA
+    // ==============================================================
+    let currentDetailItem = null;
+
     function openFigureDetailModal(id, name, imgUrl, seriesName, isSecret, isOwned, userQty, singlePrice, seriesId, blindPrice) {
+        currentDetailItem = { id, name, imgUrl, seriesName, isSecret, isOwned, userQty, singlePrice, seriesId, blindPrice };
+        // Reset card flip
+        isCardFlipped = false;
+        const flipper = document.getElementById('detail-card-flipper');
+        if (flipper) flipper.classList.remove('rotate-y-180');
+
+        // Fill Certificate Data
+        const certName = document.getElementById('cert-figure-name');
+        const certSeries = document.getElementById('cert-series-name');
+        const certRarity = document.getElementById('cert-rarity-tier');
+        const certSerial = document.getElementById('cert-serial-no');
+        if (certName) certName.textContent = name;
+        if (certSeries) certSeries.textContent = seriesName || 'Pop Mart';
+        if (certRarity) {
+            certRarity.textContent = isSecret ? 'Chase Secreta (1/144) ⭐' : 'Regular (1/12)';
+            certRarity.className = isSecret ? 'font-bold text-amber-300' : 'font-bold text-emerald-400';
+        }
+        if (certSerial) certSerial.textContent = 'KP-POP-' + String(id).padStart(3, '0') + (isSecret ? '-CHASE' : '-REG');
+        triggerHaptic('impact');
+
         document.getElementById('detail-modal-name').textContent = name;
         document.getElementById('detail-modal-series').textContent = seriesName || 'Pop Mart';
+        
         const imgEl = document.getElementById('detail-modal-img');
-        if (imgUrl) { imgEl.src = imgUrl; imgEl.classList.remove('hidden'); }
-        else { imgEl.src = ''; imgEl.classList.add('hidden'); }
-        document.getElementById('detail-modal-secret-badge').classList.toggle('hidden', !isSecret);
+        if (imgUrl) {
+            imgEl.src = imgUrl;
+            imgEl.classList.remove('hidden');
+        } else {
+            imgEl.src = '';
+            imgEl.classList.add('hidden');
+        }
+
+        const secretBadge = document.getElementById('detail-modal-secret-badge');
+        if (isSecret) secretBadge.classList.remove('hidden');
+        else secretBadge.classList.add('hidden');
 
         const statusContainer = document.getElementById('detail-modal-status-badge');
         const actionsContainer = document.getElementById('detail-modal-actions');
-        statusContainer.innerHTML = ''; actionsContainer.innerHTML = '';
+        statusContainer.innerHTML = '';
+        actionsContainer.innerHTML = '';
 
         if (isOwned) {
-            statusContainer.innerHTML = `<div class="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-950/80 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-bold font-mono"><span>✓</span> En tu Vitrina (x${userQty})</div>`;
+            actionsContainer.innerHTML += `
+                <button type="button" onclick="setCenterpieceFromModal()"
+                        class="w-full py-2 bg-amber-500 hover:bg-amber-400 text-black font-black text-xs uppercase rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5">
+                    <span>👑</span> Colocar en Pedestal de Honor
+                </button>
+            `;
+            statusContainer.innerHTML = `
+                <div class="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-950/80 border border-emerald-500/40 rounded-xl text-emerald-300 text-xs font-bold font-mono">
+                    <span>✓</span> En tu Vitrina (Posees x${userQty})
+                </div>
+            `;
             if (userQty > 1) {
-                actionsContainer.innerHTML = `<button type="button" onclick="recycleDuplicate(${id}, '${name.replace(/'/g, "\\\\'")}')" class="w-full py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 text-white font-black text-xs uppercase rounded-xl"><span>♻️</span> Empeñar Duplicado (+150 🪙 de Oro)</button>`;
+                actionsContainer.innerHTML = `
+                    <button type="button" onclick="recycleDuplicate(${id}, '${name.replace(/'/g, "\\\\'")}')"
+                            class="w-full py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-black text-xs uppercase rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5">
+                        <span>♻️</span> Empeñar Duplicado (+150 🪙 de Oro)
+                    </button>
+                `;
             }
         } else {
-            statusContainer.innerHTML = `<div class="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-900 border border-white/20 rounded-xl text-stone-400 text-xs font-bold"><span>🔒</span> No descubierta aún</div>`;
+            statusContainer.innerHTML = `
+                <div class="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-900 border border-white/20 rounded-xl text-stone-400 text-xs font-bold">
+                    <span>🔒</span> No descubierta aún
+                </div>
+            `;
             actionsContainer.innerHTML = `
-                <button type="button" onclick="closeFigureDetailModal(); buyBoutiqueItem(${id}, '${name.replace(/'/g, "\\\\'")}', ${singlePrice})" class="w-full py-2.5 bg-gradient-to-r from-yellow-500 to-amber-400 text-black font-black text-xs uppercase rounded-xl">✨ Compra Directa (${singlePrice} 🪙)</button>
-                ${seriesId ? `<button type="button" onclick="closeFigureDetailModal(); openBlindBox(${seriesId}, '${seriesName.replace(/'/g, "\\\\'")}', ${blindPrice})" class="w-full py-2 bg-purple-950 border border-purple-500/40 text-purple-200 font-bold text-xs uppercase rounded-xl">🎲 Abrir Caja Sorpresa (${blindPrice} 🪙)</button>` : ''}
+                <button type="button" onclick="closeFigureDetailModal(); buyBoutiqueItem(${id}, '${name.replace(/'/g, "\\\\'")}', ${singlePrice})"
+                        class="w-full py-2.5 bg-gradient-to-r from-yellow-500 to-amber-400 hover:from-yellow-400 hover:to-amber-300 text-black font-black text-xs uppercase rounded-xl shadow-lg active:scale-95 transition-all">
+                    ✨ Compra Directa (${singlePrice} 🪙)
+                </button>
+                ${seriesId ? `
+                <button type="button" onclick="closeFigureDetailModal(); openBlindBox(${seriesId}, '${seriesName.replace(/'/g, "\\\\'")}', ${blindPrice})"
+                        class="w-full py-2 bg-purple-950 hover:bg-purple-900 border border-purple-500/40 text-purple-200 font-bold text-xs uppercase rounded-xl transition-all">
+                    🎲 Probar Suerte en Caja Sorpresa (${blindPrice} 🪙)
+                </button>` : ''}
             `;
         }
+
         const modal = document.getElementById('figure-detail-modal');
-        modal.classList.remove('hidden'); modal.classList.add('flex');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     }
+
     function closeFigureDetailModal() {
-        const m = document.getElementById('figure-detail-modal');
-        m.classList.add('hidden'); m.classList.remove('flex');
+        const modal = document.getElementById('figure-detail-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
     }
 
+    // 2. Empeño / Reciclaje de Duplicados
     async function recycleDuplicate(itemId, itemName) {
-        if (!confirm(`¿Deseas empeñar 1 duplicado de «${itemName}» por oro?`)) return;
-        const formData = new FormData();
-        formData.append('ajax', '1');
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        const resp = await fetch(`/economy/bazar/collectible/recycle/${itemId}/`, { method: 'POST', body: formData });
-        const data = await resp.json();
-        if (data.success) {
-            playCollectorAudio('recycle');
-            alert(data.message);
-            window.location.reload();
-        } else alert(data.error);
-    }
+        if (!confirm(`¿Deseas empeñar 1 figura duplicada de «${itemName}» a la Real Casa de Empeño a cambio de oro?`)) return;
+        triggerHaptic('impact');
 
-    async function openBlindBox(seriesId, seriesName, price) {
-        if (!confirm(`¿Abrir Caja Sorpresa de «${seriesName}» por ${price} 🪙?`)) return;
-        playCollectorAudio('wobble');
-        const modal = document.getElementById('blind-box-modal');
-        const anim = document.getElementById('unbox-anim-container');
-        const res = document.getElementById('unbox-result-container');
-        modal.classList.remove('hidden'); modal.classList.add('flex');
-        anim.classList.remove('hidden'); res.classList.add('hidden');
+        try {
+            const formData = new FormData();
+            formData.append('ajax', '1');
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-        const formData = new FormData();
-        formData.append('ajax', '1');
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        const resp = await fetch(`/economy/bazar/series/blind-box/${seriesId}/`, { method: 'POST', body: formData });
-        const data = await resp.json();
-        setTimeout(() => {
+            const resp = await fetch(`/economy/bazar/collectible/recycle/${itemId}/`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+            const data = await resp.json();
             if (data.success) {
-                if (data.is_secret) playCollectorAudio('fanfare_secret');
-                else playCollectorAudio('fanfare_regular');
-                anim.classList.add('hidden'); res.classList.remove('hidden'); res.classList.add('flex');
-                document.getElementById('reveal-series-name').textContent = seriesName;
-                document.getElementById('reveal-figure-name').textContent = data.figure_name;
-                document.getElementById('reveal-message').textContent = data.message;
-                if (data.figure_image) document.getElementById('reveal-figure-img').src = data.figure_image;
-                document.getElementById('reveal-secret-badge').classList.toggle('hidden', !data.is_secret);
+                playCollectorAudio('recycle');
+                triggerHaptic('success');
+                alert(data.message);
+                if (data.nuevo_saldo !== undefined) updateWalletUI(data.nuevo_saldo);
+                closeFigureDetailModal();
+                window.location.reload();
             } else {
-                closeBlindBoxModal(); alert(data.error);
+                triggerHaptic('error');
+                alert(data.error || 'No se pudo realizar el empeño.');
             }
-        }, 1200);
+        } catch (e) {
+            alert('Error al conectar con la casa de empeño real.');
+        }
     }
+
+    // 3. Apertura de Caja Sorpresa (Blind Box)
+    async function openBlindBox(seriesId, seriesName, price) {
+        if (!confirm(`¿Deseas abrir una Caja Sorpresa de «${seriesName}» por ${price} 🪙?`)) return;
+        triggerHaptic('impact');
+        playCollectorAudio('wobble');
+
+        const modal = document.getElementById('blind-box-modal');
+        const animContainer = document.getElementById('unbox-anim-container');
+        const resultContainer = document.getElementById('unbox-result-container');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        animContainer.classList.remove('hidden');
+        resultContainer.classList.add('hidden');
+
+        try {
+            const formData = new FormData();
+            formData.append('ajax', '1');
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+            const resp = await fetch(`/economy/bazar/series/blind-box/${seriesId}/`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+            const data = await resp.json();
+
+            setTimeout(() => {
+                if (data.success) {
+                    if (data.is_secret) {
+                        playCollectorAudio('fanfare_secret');
+                        launchConfetti(true);
+                    } else {
+                        playCollectorAudio('fanfare_regular');
+                        launchConfetti(false);
+                    }
+                    triggerHaptic('success');
+                    animContainer.classList.add('hidden');
+                    resultContainer.classList.remove('hidden');
+                    resultContainer.classList.add('flex');
+
+                    document.getElementById('reveal-series-name').textContent = seriesName;
+                    document.getElementById('reveal-figure-name').textContent = data.figure_name;
+                    document.getElementById('reveal-message').textContent = data.message;
+                    if (data.figure_image) {
+                        document.getElementById('reveal-figure-img').src = data.figure_image;
+                    }
+                    const secretBadge = document.getElementById('reveal-secret-badge');
+                    if (data.is_secret) secretBadge.classList.remove('hidden');
+                    else secretBadge.classList.add('hidden');
+
+                    if (data.nuevo_saldo !== undefined) updateWalletUI(data.nuevo_saldo);
+                } else {
+                    triggerHaptic('error');
+                    closeBlindBoxModal();
+                    alert(data.error || 'No se pudo abrir la caja.');
+                }
+            }, 1400);
+
+        } catch (err) {
+            closeBlindBoxModal();
+            alert('Error de conexión al abrir la caja sorpresa.');
+        }
+    }
+
     function closeBlindBoxModal() {
-        const m = document.getElementById('blind-box-modal');
-        m.classList.add('hidden'); m.classList.remove('flex');
+        const modal = document.getElementById('blind-box-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
         window.location.reload();
     }
 
+    // 4. Compra Directa de Figura Específica
     async function buyBoutiqueItem(itemId, itemName, price) {
-        if (!confirm(`¿Comprar directamente «${itemName}» por ${price} 🪙?`)) return;
-        const formData = new FormData();
-        formData.append('ajax', '1');
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        const resp = await fetch(`/economy/bazar/collectible/buy/${itemId}/`, { method: 'POST', body: formData });
-        const data = await resp.json();
-        if (data.success) { alert(data.message); window.location.reload(); }
-        else alert(data.error);
+        if (!confirm(`¿Deseas comprar directamente la figura «${itemName}» por ${price} 🪙?`)) return;
+        triggerHaptic('impact');
+
+        try {
+            const formData = new FormData();
+            formData.append('ajax', '1');
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+            const resp = await fetch(`/economy/bazar/collectible/buy/${itemId}/`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+            const data = await resp.json();
+            if (data.success) {
+                playCollectorAudio('fanfare_regular');
+                triggerHaptic('success');
+                alert(data.message);
+                if (data.nuevo_saldo !== undefined) updateWalletUI(data.nuevo_saldo);
+                window.location.reload();
+            } else {
+                triggerHaptic('error');
+                alert(data.error || 'No se pudo realizar la compra.');
+            }
+        } catch (e) {
+            alert('Error de comunicación con la tesorería real.');
+        }
     }
 
+    // 5. Compra de Objeto Estándar del Bazar
     async function buyStandardItem(itemCode, itemName, price) {
-        if (!confirm(`¿Comprar «${itemName}» por ${price} 🪙?`)) return;
-        const formData = new FormData();
-        formData.append('item_code', itemCode);
-        formData.append('ajax', '1');
-        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        const resp = await fetch("/economy/bazar/buy/", { method: 'POST', body: formData });
-        const data = await resp.json();
-        if (data.success) { alert(data.message); window.location.reload(); }
-        else alert(data.error);
+        if (!confirm(`¿Deseas adquirir «${itemName}» por ${price} 🪙?`)) return;
+        triggerHaptic('impact');
+
+        try {
+            const formData = new FormData();
+            formData.append('item_code', itemCode);
+            formData.append('ajax', '1');
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+            const resp = await fetch("/economy/bazar/buy/", {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: formData
+            });
+            const data = await resp.json();
+            if (data.success) {
+                triggerHaptic('success');
+                alert(data.message);
+                if (data.nuevo_saldo !== undefined) updateWalletUI(data.nuevo_saldo);
+                window.location.reload();
+            } else {
+                triggerHaptic('error');
+                alert(data.error || 'Fondos insuficientes.');
+            }
+        } catch (e) {
+            alert('Error al procesar la transacción.');
+        }
     }
 
+    // ==============================================================
+    // 👑 6. GESTIÓN ADMIN: EDITAR, AÑADIR FIGURAS Y ELIMINAR SERIES
+    // ==============================================================
     function openEditSeriesModal(id, name, tagline, desc, blindPrice, singlePrice) {
         document.getElementById('edit-series-form').action = `/economy/bazar/series/edit/${id}/`;
         document.getElementById('edit-series-name').value = name;
@@ -638,69 +1402,294 @@
         document.getElementById('edit-series-desc').value = desc;
         document.getElementById('edit-series-blind').value = blindPrice;
         document.getElementById('edit-series-single').value = singlePrice;
-        const m = document.getElementById('edit-series-modal');
-        m.classList.remove('hidden'); m.classList.add('flex');
+
+        const modal = document.getElementById('edit-series-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     }
     function closeEditSeriesModal() {
-        const m = document.getElementById('edit-series-modal');
-        m.classList.add('hidden'); m.classList.remove('flex');
+        const modal = document.getElementById('edit-series-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
     }
 
     function openAddFigureModal(seriesId, seriesName) {
         document.getElementById('add-figure-form').action = `/economy/bazar/series/add-figure/${seriesId}/`;
-        const m = document.getElementById('add-figure-modal');
-        m.classList.remove('hidden'); m.classList.add('flex');
+        document.getElementById('add-figure-series-name').textContent = `Añadiendo a: ${seriesName}`;
+        document.getElementById('add-figure-preview-container').innerHTML = '';
+        document.getElementById('add-single-figures-input').value = '';
+
+        const modal = document.getElementById('add-figure-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     }
     function closeAddFigureModal() {
-        const m = document.getElementById('add-figure-modal');
-        m.classList.add('hidden'); m.classList.remove('flex');
-    }
-
-    function confirmDeleteSeries(seriesId, seriesName) {
-        if (!confirm(`⚠️ ¿Eliminar la colección «${seriesName}»?`)) return;
-        window.location.href = `/economy/bazar/series/delete/${seriesId}/`;
-    }
-    function confirmDeleteFigure(figureId, figureName) {
-        if (!confirm(`¿Eliminar la figura «${figureName}»?`)) return;
-        window.location.href = `/economy/bazar/figure/delete/${figureId}/`;
-    }
-
-    function previewBatchFigures(input) {
-        const c = document.getElementById('batch-preview-container'); c.innerHTML = '';
-        if (!input.files) return;
-        Array.from(input.files).forEach((f, idx) => {
-            const r = new FileReader();
-            r.onload = e => {
-                const d = document.createElement('div');
-                d.className = "bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col items-center gap-1";
-                d.innerHTML = `
-                    <img src="${e.target.result}" class="w-16 h-16 object-contain rounded-lg">
-                    <input type="text" name="figure_names" value="${f.name.split('.')[0]}" class="w-full bg-stone-900 border border-white/20 rounded px-1.5 py-1 text-[8px] text-white">
-                    <label class="flex items-center gap-1 text-[7px] text-amber-300 font-bold"><input type="checkbox" name="is_secret_index" value="${idx}"> Chase ⭐</label>
-                `;
-                c.appendChild(d);
-            };
-            r.readAsDataURL(f);
-        });
+        const modal = document.getElementById('add-figure-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
     }
 
     function previewAddFigures(input) {
-        const c = document.getElementById('add-figure-preview-container'); c.innerHTML = '';
-        if (!input.files) return;
-        Array.from(input.files).forEach((f, idx) => {
-            const r = new FileReader();
-            r.onload = e => {
-                const d = document.createElement('div');
-                d.className = "bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col items-center gap-1";
-                d.innerHTML = `
-                    <img src="${e.target.result}" class="w-12 h-12 object-contain rounded-lg">
-                    <input type="text" name="figure_names" value="${f.name.split('.')[0]}" class="w-full bg-stone-900 border border-white/20 rounded px-1 text-[8px] text-white">
-                    <label class="flex items-center gap-1 text-[7px] text-amber-300 font-bold"><input type="checkbox" name="is_secret_index" value="${idx}"> Chase ⭐</label>
+        const container = document.getElementById('add-figure-preview-container');
+        container.innerHTML = '';
+        if (!input.files || input.files.length === 0) return;
+        Array.from(input.files).forEach((file, index) => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const card = document.createElement('div');
+                card.className = "bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col items-center gap-1";
+                card.innerHTML = `
+                    <img src="${e.target.result}" class="w-14 h-14 object-contain rounded-lg bg-stone-900 border border-white/10">
+                    <input type="text" name="figure_names" placeholder="Nombre" value="${file.name.split('.')[0]}"
+                           class="w-full bg-stone-900 border border-white/20 rounded px-1.5 py-1 text-[8px] text-white focus:outline-none">
+                    <label class="flex items-center gap-1 text-[7px] text-amber-300 font-bold w-full cursor-pointer">
+                        <input type="checkbox" name="is_secret_index" value="${index}" class="rounded text-amber-500">
+                        <span>¿Chase?</span>
+                    </label>
                 `;
-                c.appendChild(d);
+                container.appendChild(card);
             };
-            r.readAsDataURL(f);
+            reader.readAsDataURL(file);
         });
     }
+
+    function confirmDeleteSeries(seriesId, seriesName) {
+        if (!confirm(`⚠️ ¿Estás seguro de que deseas eliminar la colección «${seriesName}» de la Boutique?\n\nLas figuras ya conseguidas por los usuarios seguirán en sus vitrinas, pero la serie se retirará de la tienda.`)) {
+            return;
+        }
+        window.location.href = `/economy/bazar/series/delete/${seriesId}/`;
+    }
+
+    function confirmDeleteFigure(figureId, figureName) {
+        if (!confirm(`¿Deseas retirar la figura «${figureName}» del estante de esta colección?`)) {
+            return;
+        }
+        window.location.href = `/economy/bazar/figure/delete/${figureId}/`;
+    }
+
+    // Previsualizador en vivo para el creador inicial de colecciones Pop Mart
+    function previewBatchFigures(input) {
+        const container = document.getElementById('batch-preview-container');
+        container.innerHTML = '';
+        if (!input.files || input.files.length === 0) return;
+
+        Array.from(input.files).forEach((file, index) => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const card = document.createElement('div');
+                card.className = "bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col items-center gap-1.5";
+                card.innerHTML = `
+                    <img src="${e.target.result}" class="w-16 h-16 object-contain rounded-lg bg-stone-900 border border-white/10">
+                    <input type="text" name="figure_names" placeholder="Nombre (ej: Nayeon)" value="${file.name.split('.')[0]}"
+                           class="w-full bg-stone-900 border border-white/20 rounded px-1.5 py-1 text-[9px] text-white focus:outline-none">
+                    <label class="flex items-center gap-1 text-[8px] text-amber-300 font-bold w-full cursor-pointer">
+                        <input type="checkbox" name="is_secret_index" value="${index}" class="rounded text-amber-500">
+                        <span>¿Es Secreta / Chase?</span>
+                    </label>
+                `;
+                container.appendChild(card);
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Modales Auxiliares
+    function openCustomTitleModal(price) {
+        document.getElementById('custom-title-modal').classList.remove('hidden');
+        document.getElementById('custom-title-modal').classList.add('flex');
+    }
+    function closeCustomTitleModal() {
+        document.getElementById('custom-title-modal').classList.add('hidden');
+        document.getElementById('custom-title-modal').classList.remove('flex');
+    }
+    async function confirmCustomTitle() {
+        const text = document.getElementById('custom-title-input').value.trim();
+        if (!text) return alert('Debes escribir un título.');
+        const formData = new FormData();
+        formData.append('item_code', 'custom_title');
+        formData.append('custom_title_text', text);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        const resp = await fetch("/economy/bazar/buy/", {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        });
+        const data = await resp.json();
+        closeCustomTitleModal();
+        if (data.success) {
+            alert(data.message);
+            window.location.reload();
+        } else alert(data.error);
+    }
+
+    function openTributeModal(price) {
+        document.getElementById('tribute-modal').classList.remove('hidden');
+        document.getElementById('tribute-modal').classList.add('flex');
+    }
+    function closeTributeModal() {
+        document.getElementById('tribute-modal').classList.add('hidden');
+        document.getElementById('tribute-modal').classList.remove('flex');
+    }
+    async function confirmTribute() {
+        const idolId = document.getElementById('tribute-idol-select').value;
+        const formData = new FormData();
+        formData.append('item_code', 'tribute_gift');
+        formData.append('target_idol_id', idolId);
+        formData.append('ajax', '1');
+        formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+        const resp = await fetch("/economy/bazar/buy/", {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        });
+        const data = await resp.json();
+        closeTributeModal();
+        if (data.success) {
+            alert(data.message);
+            window.location.reload();
+        } else alert(data.error);
+    }
+
+    // ==============================================================
+    // 🎛️ CONTROLES AVANZADOS DE LA VITRINA POP MART
+    // ==============================================================
+    let currentVitrinaFilter = 'all';
+    let isCardFlipped = false;
+
+    function setVitrinaLed(mode) {
+        triggerHaptic('selection');
+        const cab = document.getElementById('vitrina-cabinet');
+        if (!cab) return;
+        cab.classList.remove('cabinet-led-palace', 'cabinet-led-neon', 'cabinet-led-diamond', 'cabinet-led-stealth');
+        cab.classList.add('cabinet-led-' + mode);
+
+        ['palace', 'neon', 'diamond', 'stealth'].forEach(m => {
+            const btn = document.getElementById('led-btn-' + m);
+            if (!btn) return;
+            if (m === mode) {
+                btn.className = 'px-1.5 py-0.5 text-[8px] font-bold rounded-md bg-amber-500 text-black shadow transition-all';
+            } else {
+                btn.className = 'px-1.5 py-0.5 text-[8px] font-bold rounded-md text-stone-400 hover:text-white transition-all';
+            }
+        });
+    }
+
+    function setVitrinaViewMode(mode) {
+        triggerHaptic('selection');
+        const container = document.getElementById('vitrina-cards-container');
+        const shelfBar = document.getElementById('vitrina-shelf-bar');
+        const btnShelves = document.getElementById('view-btn-shelves');
+        const btnGrid = document.getElementById('view-btn-grid');
+        if (!container) return;
+
+        if (mode === 'shelves') {
+            container.className = 'grid grid-cols-3 gap-3 relative z-10';
+            if (shelfBar) shelfBar.classList.remove('hidden');
+            if (btnShelves) btnShelves.className = 'px-2 py-0.5 rounded-md text-[8px] font-bold bg-purple-600 text-white shadow transition-all flex items-center gap-1';
+            if (btnGrid) btnGrid.className = 'px-2 py-0.5 rounded-md text-[8px] font-bold text-stone-400 hover:text-white transition-all flex items-center gap-1';
+        } else {
+            container.className = 'grid grid-cols-3 gap-2 relative z-10';
+            if (shelfBar) shelfBar.classList.add('hidden');
+            if (btnShelves) btnShelves.className = 'px-2 py-0.5 rounded-md text-[8px] font-bold text-stone-400 hover:text-white transition-all flex items-center gap-1';
+            if (btnGrid) btnGrid.className = 'px-2 py-0.5 rounded-md text-[8px] font-bold bg-purple-600 text-white shadow transition-all flex items-center gap-1';
+        }
+    }
+
+    function setVitrinaFilter(type) {
+        triggerHaptic('selection');
+        currentVitrinaFilter = type;
+        ['all', 'chase', 'duplicates'].forEach(t => {
+            const btn = document.getElementById('filter-btn-' + t);
+            if (!btn) return;
+            if (t === type) {
+                btn.className = 'px-2.5 py-1 rounded-lg bg-amber-500 text-black font-black whitespace-nowrap transition-all';
+            } else {
+                btn.className = 'px-2.5 py-1 rounded-lg bg-black/50 text-stone-400 border border-white/5 whitespace-nowrap transition-all flex items-center gap-1';
+            }
+        });
+        filterVitrinaCards();
+    }
+
+    function filterVitrinaCards() {
+        const query = (document.getElementById('vitrina-search-input')?.value || '').toLowerCase().trim();
+        const cards = document.querySelectorAll('.vitrina-card');
+
+        cards.forEach(card => {
+            const name = card.dataset.name || '';
+            const series = card.dataset.series || '';
+            const isSecret = card.dataset.secret === '1';
+            const qty = parseInt(card.dataset.qty || '1', 10);
+
+            let matchesQuery = !query || name.includes(query) || series.includes(query);
+            let matchesFilter = true;
+
+            if (currentVitrinaFilter === 'chase') {
+                matchesFilter = isSecret;
+            } else if (currentVitrinaFilter === 'duplicates') {
+                matchesFilter = qty > 1;
+            }
+
+            if (matchesQuery && matchesFilter) {
+                card.classList.remove('hidden');
+            } else {
+                card.classList.add('hidden');
+            }
+        });
+    }
+
+    function sortVitrinaCards() {
+        const sortVal = document.getElementById('vitrina-sort-select')?.value || 'default';
+        const container = document.getElementById('vitrina-cards-container');
+        if (!container) return;
+        const cards = Array.from(container.querySelectorAll('.vitrina-card'));
+
+        cards.sort((a, b) => {
+            if (sortVal === 'chase') {
+                return (b.dataset.secret === '1' ? 1 : 0) - (a.dataset.secret === '1' ? 1 : 0);
+            } else if (sortVal === 'qty') {
+                return parseInt(b.dataset.qty || '1', 10) - parseInt(a.dataset.qty || '1', 10);
+            } else if (sortVal === 'name') {
+                return (a.dataset.name || '').localeCompare(b.dataset.name || '');
+            }
+            return 0;
+        });
+
+        cards.forEach(card => container.appendChild(card));
+    }
+
+    function toggleDetailModalCardFlip() {
+        triggerHaptic('impact');
+        const flipper = document.getElementById('detail-card-flipper');
+        if (!flipper) return;
+        isCardFlipped = !isCardFlipped;
+        if (isCardFlipped) {
+            flipper.classList.add('rotate-y-180');
+        } else {
+            flipper.classList.remove('rotate-y-180');
+        }
+    }
+
+    function setCenterpieceFromModal() {
+        if (!currentDetailItem) return;
+        triggerHaptic('success');
+        const nameEl = document.getElementById('centerpiece-name');
+        const seriesEl = document.getElementById('centerpiece-series');
+        const imgEl = document.getElementById('centerpiece-img');
+        const chaseBadge = document.getElementById('centerpiece-chase-badge');
+
+        if (nameEl) nameEl.textContent = currentDetailItem.name;
+        if (seriesEl) seriesEl.textContent = currentDetailItem.seriesName || 'Pop Mart';
+        if (imgEl && currentDetailItem.imgUrl) imgEl.src = currentDetailItem.imgUrl;
+        if (chaseBadge) {
+            if (currentDetailItem.isSecret) chaseBadge.classList.remove('hidden');
+            else chaseBadge.classList.add('hidden');
+        }
+        closeFigureDetailModal();
+        showFeedbackPopup('👑 ¡Figura colocada en el Pedestal de Honor!');
+    }
+
 </script>
 {% endblock %}
