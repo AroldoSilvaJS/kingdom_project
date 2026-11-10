@@ -12,7 +12,10 @@ urlpatterns = [
     path('blackjack/', views.blackjack_game, name='blackjack'),
     path('mines/', views.mines_game, name='mines'),
     path('bazar/', views.bazar_shop, name='bazar'),
+
+    # Rutas de compra con alias compatibles
     path('bazar/buy/', views.bazar_buy_action, name='bazar_buy'),
+    path('bazar/buy/action/', views.bazar_buy_action, name='bazar_buy_action'),
 
     # Labores de la Corte
     path('jobs/', views.court_jobs_view, name='jobs'),
@@ -23,11 +26,12 @@ urlpatterns = [
     path('bazar/collectible/buy/<int:item_id>/', views.buy_collectible_action, name='buy_collectible'),
     path('bazar/collectible/add/', views.admin_add_collectible, name='add_collectible'),
     path('bazar/collectible/delete/<int:item_id>/', views.admin_delete_collectible, name='delete_collectible'),
-    # Pop Mart: Creación por lote y Blind Box
+
+    # Pop Mart: Creación por lote y Blind Box con alias de seguridad
     path('bazar/series/create-batch/', views.admin_create_series_batch, name='create_series_batch'),
+    path('bazar/series/admin-create-batch/', views.admin_create_series_batch, name='admin_create_series_batch'),
     path('bazar/series/blind-box/<int:series_id>/', views.buy_blind_box_action, name='buy_blind_box'),
 
-    
     path('scratch/', views.scratch_card_view, name='scratch'),
     path('scratch/play/', views.scratch_card_play_ajax, name='scratch_play'),
 ]

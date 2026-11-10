@@ -878,78 +878,111 @@ BAZAR_ITEMS = [
 
 
 def bazar_shop(request):
-    tg_id = get_safe_tg_id(request)
-    wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-    profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    
-    # Inventario actual del usuario
-    inventory_items = UserInventoryItem.objects.filter(telegram_user_id=tg_id)
-    inv_dict = {item.item_code: item.quantity for item in inventory_items}
-    
-    # Coleccionables y Colecciones Pop Mart disponibles en la Boutique (Defensivo contra migraciones pendientes)
     try:
-        collectibles = list(BazarCollectible.objects.filter(is_active=True).select_related('series').order_by('-created_at'))
-    except Exception:
-        collectibles = []
-
-    try:
-        series_list = list(CollectibleSeries.objects.filter(is_active=True).prefetch_related('items').order_by('-created_at'))
-    except Exception:
-        series_list = []
-
-    try:
-        user_collectibles = list(UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item', 'item__series'))
-        user_item_ids = set(uc.item_id for uc in user_collectibles)
-    except Exception:
-        user_collectibles = []
-        user_item_ids = set()
-
-    # Progreso de cada serie para el usuario (ej: 3/9)
-    for s in series_list:
+        tg_id = get_safe_tg_id(request)
+        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+        profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
+        
+        # Inventario actual del usuario
         try:
-            s_items = [it for it in s.items.all() if it.is_active]
-            s.items_cache = s_items
-            s.owned_count = sum(1 for it in s_items if it.id in user_item_ids)
+            inventory_items = UserInventoryItem.objects.filter(telegram_user_id=tg_id)
+            inv_dict = {item.item_code: item.quantity for item in inventory_items}
         except Exception:
-            s.items_cache = []
-            s.owned_count = 0
-
-    is_staff = check_is_staff_or_admin(tg_id)
-    from idols.models import IdolProfile
-    todas_idols = IdolProfile.objects.all().order_by('stage_name')
-    mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).order_by('stage_name') if tg_id else IdolProfile.objects.none()
-
-    # Detección limpia de rol Idol para desbloquear pestaña exclusiva
-    is_idol = False
-    if tg_id:
+            inv_dict = {}
+        
+        # Coleccionables y Colecciones Pop Mart disponibles en la Boutique
         try:
-            role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
-            if (role_obj and role_obj.role == 'idol') or mis_idols.exists():
-                is_idol = True
+            collectibles = list(BazarCollectible.objects.filter(is_active=True).select_related('series').order_by('-created_at'))
         except Exception:
-            is_idol = mis_idols.exists()
+            collectibles = []
 
-    return render(request, 'economy/bazar.html', {
-        'tg_id': tg_id,
-        'wallet': wallet,
-        'profile': profile,
-        'bazar_items': BAZAR_ITEMS,
-        'inventory': inv_dict,
-        'collectibles': collectibles,
-        'boutique_items': collectibles,
-        'user_collectibles': user_collectibles,
-        'my_collectibles': user_collectibles,
-        'todas_idols': todas_idols,
-        'mis_idols': mis_idols,
-        'is_idol': is_idol,
-        'inv_priority': inv_dict.get('priority_antojo', 0),
-        'inv_lucky': inv_dict.get('lucky_charm', 0),
-        'inv_market': inv_dict.get('free_market', 0),
-        'is_staff': is_staff,
-        'is_admin': is_staff,
-        'series_list': series_list,
-        'user_item_ids': user_item_ids,
-    })
+        try:
+            series_list = list(CollectibleSeries.objects.filter(is_active=True).prefetch_related('items').order_by('-created_at'))
+        except Exception:
+            series_list = []
+
+        try:
+            user_collectibles = list(UserCollectible.objects.filter(telegram_user_id=tg_id).select_related('item', 'item__series'))
+            user_qty_dict = {uc.item_id: uc.quantity for uc in user_collectibles}
+            user_item_ids = set(user_qty_dict.keys())
+        except Exception:
+            user_collectibles = []
+            user_qty_dict = {}
+            user_item_ids = set()
+
+        # Enriquecer directamente en Python cada figura con flags booleanos (evita sintaxis compleja en Django)
+        for s in series_list:
+            try:
+                s_items = [it for it in s.items.all() if it.is_active]
+                for it in s_items:
+                    it.is_owned = (it.id in user_item_ids)
+                    it.user_qty = user_qty_dict.get(it.id, 0)
+                s.items_cache = s_items
+                s.owned_count = sum(1 for it in s_items if it.is_owned)
+                s.total_count = len(s_items)
+                s.progress_pct = int(round((s.owned_count / s.total_count) * 100)) if s.total_count > 0 else 0
+            except Exception:
+                s.items_cache = []
+                s.owned_count = 0
+                s.total_count = 0
+                s.progress_pct = 0
+
+        for c in collectibles:
+            c.is_owned = (c.id in user_item_ids)
+            c.user_qty = user_qty_dict.get(c.id, 0)
+
+        is_staff = check_is_staff_or_admin(tg_id)
+        
+        try:
+            from idols.models import IdolProfile
+            todas_idols = IdolProfile.objects.all().order_by('stage_name')
+            mis_idols = IdolProfile.objects.filter(telegram_user_id=tg_id).order_by('stage_name') if tg_id else IdolProfile.objects.none()
+        except Exception:
+            todas_idols = []
+            mis_idols = []
+
+        is_idol = False
+        if tg_id:
+            try:
+                role_obj = UserRole.objects.filter(telegram_id=tg_id).first()
+                if (role_obj and role_obj.role == 'idol') or (mis_idols and mis_idols.exists()):
+                    is_idol = True
+            except Exception:
+                is_idol = False
+
+        return render(request, 'economy/bazar.html', {
+            'tg_id': tg_id,
+            'wallet': wallet,
+            'profile': profile,
+            'bazar_items': BAZAR_ITEMS,
+            'inventory': inv_dict,
+            'collectibles': collectibles,
+            'boutique_items': collectibles,
+            'user_collectibles': user_collectibles,
+            'my_collectibles': user_collectibles,
+            'todas_idols': todas_idols,
+            'mis_idols': mis_idols,
+            'is_idol': is_idol,
+            'inv_priority': inv_dict.get('priority_antojo', 0),
+            'inv_lucky': inv_dict.get('lucky_charm', 0),
+            'inv_market': inv_dict.get('free_market', 0),
+            'is_staff': is_staff,
+            'is_admin': is_staff,
+            'series_list': series_list,
+            'user_item_ids': user_item_ids,
+        })
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error en bazar_shop: %s", e)
+        from django.http import HttpResponse
+        return HttpResponse(f"""
+            <div style="background:#0f0919; color:#f3e8ff; font-family:sans-serif; padding:28px; text-align:center; min-height:100vh;">
+                <h1 style="color:#f59e0b; margin-bottom:10px;">🏛️ Boutique Real en Ajuste</h1>
+                <p style="color:#d8b4fe; max-width:480px; margin:0 auto 16px auto;">Error interno controlado: {e}</p>
+                <p style="font-size:12px; color:#9ca3af; margin-bottom:24px;">Si agregaste campos nuevos, ejecuta en tu terminal de Render: <code>python manage.py migrate</code></p>
+                <a href="/?tg_id={request.GET.get('tg_id', '')}" style="display:inline-block; background:#f59e0b; color:#000; font-weight:bold; padding:12px 24px; border-radius:12px; text-decoration:none;">Volver al Palacio</a>
+            </div>
+        """, status=200)
 
 
 def bazar_buy_action(request):
