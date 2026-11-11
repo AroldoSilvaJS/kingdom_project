@@ -1,3 +1,5 @@
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 import json
 from urllib.parse import quote as encode_param
 from django.shortcuts import render, redirect, get_object_or_404
@@ -910,4 +912,56 @@ def notifications_inbox(request):
         'is_idol': is_idol,
         'notifications': notifications,
         'total_notif': len(notifications)
+    })
+
+@require_POST
+def toggle_pin_item(request):
+    """Permite al usuario fijar o desanclar un coleccionable o photocard en su perfil nobiliario."""
+    tg_id = resolve_secure_tg_id(request)
+    if not tg_id:
+        return JsonResponse({'success': False, 'error': 'No autorizado'}, status=401)
+    
+    item_type = request.POST.get('type', 'photocard')
+    item_id = str(request.POST.get('id', '0'))
+    item_name = request.POST.get('name', 'Coleccionable')
+    item_image = request.POST.get('image', '')
+    item_rarity = request.POST.get('rarity', 'Común')
+    item_series = request.POST.get('series', '')
+    
+    profile = get_object_or_404(UserProfile, telegram_user_id=tg_id)
+    pinned = list(getattr(profile, 'pinned_items', []) or [])
+    
+    # Comprobar si ya está anclada
+    match_idx = -1
+    for idx, it in enumerate(pinned):
+        if it.get('type') == item_type and str(it.get('id')) == item_id:
+            match_idx = idx
+            break
+            
+    if match_idx != -1:
+        pinned.pop(match_idx)
+        is_pinned = False
+        msg = f"«{item_name}» desanclada de tu perfil."
+    else:
+        if len(pinned) >= 3:
+            pinned.pop(0)
+        pinned.append({
+            'type': item_type,
+            'id': item_id,
+            'name': item_name,
+            'image': item_image,
+            'rarity': item_rarity,
+            'series': item_series,
+        })
+        is_pinned = True
+        msg = f"✨ «{item_name}» fijada en tu Expositor de Honor."
+        
+    profile.pinned_items = pinned
+    profile.save()
+    
+    return JsonResponse({
+        'success': True,
+        'is_pinned': is_pinned,
+        'pinned_count': len(pinned),
+        'message': msg
     })

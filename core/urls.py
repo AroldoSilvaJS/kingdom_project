@@ -9,6 +9,7 @@ urlpatterns = [
     path('admin-panel/', views.admin_panel, name='admin_panel'),
     path('salon-de-la-fama/', views.leaderboard, name='leaderboard'),
     path('profile/', views.my_profile, name='my_profile'),
+    path('profile/pin-item/', views.toggle_pin_item, name='toggle_pin_item'),
     path('telegram-webhook/', views.telegram_webhook, name='telegram_webhook'),
     path('buzon/', views.notifications_inbox, name='inbox'),
 ]

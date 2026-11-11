@@ -191,6 +191,11 @@ class UserProfile(models.Model):
     custom_title_text = models.CharField(max_length=60, null=True, blank=True, verbose_name="Título Personalizado de Rol")
     has_vip_badge = models.BooleanField(default=False, verbose_name="Insignia de Linaje VIP")
     has_custom_avatar_frame = models.BooleanField(default=False, verbose_name="Acceso a Marcos Imperiales")
+    pinned_items = models.JSONField(default=list, blank=True, verbose_name="Coleccionables Fijados en Perfil")
+
+    def get_pinned_items(self):
+        items = getattr(self, "pinned_items", [])
+        return items if isinstance(items, list) else []
 
     @property
     def is_shield_active(self):

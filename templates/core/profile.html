@@ -68,6 +68,91 @@
         {% endif %}
     </div>
 
+        <!-- 🏆 EXPOSITOR DE HONOR NOBILIARIO (PINS DE COLECCIÓN ESTILO TELEGRAM) -->
+    <div class="vip-panel p-4 rounded-3xl border border-vip-gold/40 bg-gradient-to-br from-[#1c0c28] via-[#090212] to-black shadow-2xl flex flex-col gap-3 relative overflow-hidden">
+        <div class="flex items-center justify-between border-b border-vip-gold/20 pb-2 relative z-10">
+            <div class="flex items-center gap-2">
+                <span class="text-base animate-pulse">👑</span>
+                <div>
+                    <h3 class="text-xs font-black text-white uppercase tracking-wider">Expositor de Honor</h3>
+                    <p class="text-[8.5px] text-stone-400">Tus photocards y trofeos fijados ante la corte</p>
+                </div>
+            </div>
+            <span class="text-[8px] font-mono text-amber-300 bg-amber-950/70 border border-amber-500/30 px-2 py-0.5 rounded-lg">
+                {{ pinned_items|length }}/3 Fijadas
+            </span>
+        </div>
+
+        <!-- Los 3 Pedestales de Trofeo -->
+        <div class="grid grid-cols-3 gap-2 relative z-10">
+            {% for item in pinned_items %}
+            <div class="rounded-2xl p-2 bg-radial-[at_50%_120%] from-amber-500/25 via-purple-950/40 to-black border border-amber-400/50 flex flex-col items-center text-center shadow-lg relative group">
+                <div class="w-full aspect-[5/7] rounded-xl overflow-hidden mb-1.5 relative border border-white/20 bg-black/60 shadow-inner">
+                    <img src="{{ item.image }}" alt="{{ item.name }}" class="w-full h-full object-cover">
+                    {% if item.rarity %}
+                    <span class="absolute bottom-1 right-1 text-[6.5px] font-mono font-black uppercase bg-black/80 text-amber-300 px-1 rounded border border-amber-400/30">
+                        {{ item.rarity }}
+                    </span>
+                    {% endif %}
+                </div>
+                <span class="text-[9px] font-black text-white truncate w-full leading-tight">{{ item.name }}</span>
+                <span class="text-[7.5px] text-purple-300 truncate w-full mt-0.5">{{ item.series|default:"Colección Real" }}</span>
+            </div>
+            {% endfor %}
+
+            <!-- Ranuras Vacías Disponibles -->
+            {% if pinned_items|length < 1 %}
+            <div onclick="universalNav('/idols/photocards/album/')"
+                 class="rounded-2xl p-2.5 border-2 border-dashed border-white/10 bg-black/40 flex flex-col items-center justify-center text-center cursor-pointer hover:border-vip-gold/40 transition-all aspect-[5/7]">
+                <span class="text-xl opacity-40 mb-1">🎴</span>
+                <span class="text-[8px] font-bold text-stone-400 uppercase leading-tight">+ Fijar Carta o Trofeo</span>
+            </div>
+            {% endif %}
+            {% if pinned_items|length < 2 %}
+            <div onclick="universalNav('/idols/photocards/album/')"
+                 class="rounded-2xl p-2.5 border-2 border-dashed border-white/10 bg-black/40 flex flex-col items-center justify-center text-center cursor-pointer hover:border-vip-gold/40 transition-all aspect-[5/7]">
+                <span class="text-xl opacity-40 mb-1">💎</span>
+                <span class="text-[8px] font-bold text-stone-400 uppercase leading-tight">+ Ranura Disponible</span>
+            </div>
+            {% endif %}
+            {% if pinned_items|length < 3 %}
+            <div onclick="universalNav('/economy/bazar/')"
+                 class="rounded-2xl p-2.5 border-2 border-dashed border-white/10 bg-black/40 flex flex-col items-center justify-center text-center cursor-pointer hover:border-vip-gold/40 transition-all aspect-[5/7]">
+                <span class="text-xl opacity-40 mb-1">🎎</span>
+                <span class="text-[8px] font-bold text-stone-400 uppercase leading-tight">+ Figura Pop Mart</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- 🌹 ACCESO DIRECTO A SUS MUSAS (SI GESTIONA 1 O 2 IDOLS) -->
+        {% if mis_idols %}
+        <div class="mt-1 pt-2.5 border-t border-white/10 flex flex-col gap-1.5 relative z-10">
+            <span class="text-[8px] uppercase tracking-wider text-purple-300 font-black">
+                🌹 Musas Bajo tu Custodia ({% if mis_idols|length == 2 %}2 Idols Activas{% else %}1 Idol Activa{% endif %}):
+            </span>
+            <div class="grid grid-cols-{{ mis_idols|length }} gap-2">
+                {% for idol in mis_idols %}
+                <button type="button" onclick="universalNav('/idols/{{ idol.id }}/')"
+                        class="p-2 rounded-2xl bg-black/70 border border-purple-500/40 hover:border-vip-gold flex items-center gap-2 transition-all text-left">
+                    <div class="w-8 h-8 rounded-xl overflow-hidden border border-vip-gold/40 shrink-0 bg-black">
+                        {% if idol.photo %}
+                        <img src="{{ idol.photo.url }}" class="w-full h-full object-cover">
+                        {% else %}
+                        <span class="text-sm">🌹</span>
+                        {% endif %}
+                    </div>
+                    <div class="min-w-0">
+                        <span class="text-[9.5px] font-black text-white truncate block">{{ idol.stage_name }}</span>
+                        <span class="text-[7.5px] text-amber-300/80 font-mono">⭐ {{ idol.rating }} • Ver Perfil</span>
+                    </div>
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+
     <!-- PESTAÑAS: LOGROS vs PERSONALIZACIÓN -->
     <div class="grid grid-cols-2 gap-1.5 p-1 bg-black/70 border border-vip-gold/30 rounded-2xl text-xs font-bold uppercase text-center shadow-lg">
         <button type="button" onclick="switchProfileTab('logros')" id="p-tab-btn-logros" 

@@ -1,4 +1,3 @@
-
 import random
 import os
 import sys
@@ -1743,9 +1742,16 @@ def photocards_market(request):
 
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
-    market_cards = UserPhotocard.objects.filter(
+    market_cards = list(UserPhotocard.objects.filter(
         is_for_sale=True
-    ).exclude(telegram_user_id=tg_id).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at')
+    ).exclude(telegram_user_id=tg_id).select_related('photocard', 'photocard__idol', 'photocard__box').order_by('-obtained_at'))
+    
+    # 🌟 Cruzar con el inventario del usuario para saber si ya la tiene
+    user_pcs = UserPhotocard.objects.filter(telegram_user_id=tg_id)
+    user_card_counts = Counter(user_pcs.values_list('photocard_id', flat=True))
+    for mc in market_cards:
+        mc.already_owned = (mc.photocard_id in user_card_counts)
+        mc.owned_qty = user_card_counts.get(mc.photocard_id, 0)
 
     my_sales = UserPhotocard.objects.filter(
         telegram_user_id=tg_id,
@@ -1857,7 +1863,7 @@ def photocard_buy_action(request, user_card_id):
             )
 
         messages.success(request, f"🎉 ¡Compraste «{carta_nombre}» por {price} 🪙! Ya está en tu Álbum.")
-        return redirect('/idols/photocards/album/')
+        return redirect(f'/idols/photocards/market/?tg_id={tg_id}')
 
     return redirect('/idols/photocards/market/')
 

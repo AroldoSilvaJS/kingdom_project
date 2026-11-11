@@ -111,7 +111,21 @@
             <div class="market-card-item relative rounded-2xl overflow-hidden aspect-[5/7.2] bg-black border-2 flex flex-col justify-end p-2.5 group shadow-xl active:scale-95 transition-all select-none {% if item.photocard.rarity == 'legendary' or item.photocard.rarity == 'epic' %}holo-card{% endif %}"
                  data-search="{{ item.photocard.name|lower }} {{ item.photocard.display_idol_name|lower }}"
                  data-rarity="{{ item.photocard.rarity }}"
+                 data-owned="{% if item.already_owned %}1{% else %}0{% endif %}"
                  style="border-color: {{ item.photocard.get_color_hex }}; box-shadow: 0 0 16px {{ item.photocard.get_color_hex }}33;">
+                
+                <!-- 🌟 INSIGNIA: SI YA LA TIENE EN SU ÁLBUM O ES NUEVA -->
+                <div class="absolute top-2 right-2 z-10 pointer-events-none">
+                    {% if item.already_owned %}
+                    <span class="text-[7.5px] font-mono font-bold px-2 py-0.5 rounded-full border border-emerald-500/60 bg-emerald-950/90 text-emerald-300 shadow backdrop-blur-md flex items-center gap-1">
+                        <span>✓</span> Álbum (x{{ item.owned_qty }})
+                    </span>
+                    {% else %}
+                    <span class="text-[7.5px] font-mono font-bold px-2 py-0.5 rounded-full border border-amber-400/60 bg-amber-950/90 text-amber-300 shadow backdrop-blur-md animate-pulse flex items-center gap-1">
+                        <span>✨</span> ¡Nueva!
+                    </span>
+                    {% endif %}
+                </div>
                 
                 <img src="{{ item.photocard.image.url }}" alt="{{ item.photocard.name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
                 <div class="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent pointer-events-none"></div>
@@ -300,5 +314,50 @@
             card.style.display = (matchesText && matchesRarity) ? 'flex' : 'none';
         });
     }
+
+    // Filtro por propiedad de carta en el Mercado
+    let marketOwnershipFilter = 'all';
+
+    function setMarketOwnershipFilter(mode) {
+        marketOwnershipFilter = mode;
+        const btnAll = document.getElementById('btn-market-all');
+        const btnMissing = document.getElementById('btn-market-missing');
+        if (btnAll && btnMissing) {
+            if (mode === 'all') {
+                btnAll.className = 'flex-1 py-1.5 text-[9px] font-black uppercase rounded-xl bg-vip-gold text-black shadow transition-all';
+                btnMissing.className = 'flex-1 py-1.5 text-[9px] font-black uppercase rounded-xl text-stone-400 hover:text-white transition-all flex items-center justify-center gap-1';
+            } else {
+                btnMissing.className = 'flex-1 py-1.5 text-[9px] font-black uppercase rounded-xl bg-amber-400 text-black shadow transition-all flex items-center justify-center gap-1';
+                btnAll.className = 'flex-1 py-1.5 text-[9px] font-black uppercase rounded-xl text-stone-400 hover:text-white transition-all';
+            }
+        }
+        applyMarketFilters();
+    }
+
+    function applyMarketFilters() {
+        const cards = document.querySelectorAll('.market-card-item');
+        const q = (document.getElementById('market-search-input')?.value || '').toLowerCase().trim();
+        const rarity = document.getElementById('market-rarity-select')?.value || 'all';
+
+        cards.forEach(card => {
+            const search = card.dataset.search || '';
+            const cardRarity = card.dataset.rarity || '';
+            const isOwned = card.dataset.owned === '1';
+
+            let matchesQuery = !q || search.includes(q);
+            let matchesRarity = rarity === 'all' || cardRarity === rarity;
+            let matchesOwnership = marketOwnershipFilter === 'all' || !isOwned;
+
+            if (matchesQuery && matchesRarity && matchesOwnership) {
+                card.style.display = 'flex';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+
+    document.getElementById('market-search-input')?.addEventListener('input', applyMarketFilters);
+    document.getElementById('market-rarity-select')?.addEventListener('change', applyMarketFilters);
+
 </script>
 {% endblock %}
