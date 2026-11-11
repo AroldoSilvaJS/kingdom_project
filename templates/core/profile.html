@@ -1,3 +1,5 @@
+
+
 {% extends 'base.html' %}
 
 {% block content %}
@@ -79,16 +81,28 @@
                 </div>
             </div>
             <span class="text-[8px] font-mono text-amber-300 bg-amber-950/70 border border-amber-500/30 px-2 py-0.5 rounded-lg">
-                {{ pinned_items|length }}/3 Fijadas
+                {{ pinned_items|default:profile.get_pinned_items|length }}/3 Fijadas
             </span>
         </div>
 
         <!-- Los 3 Pedestales de Trofeo -->
         <div class="grid grid-cols-3 gap-2 relative z-10">
-            {% for item in pinned_items %}
+            {% with items=pinned_items|default:profile.get_pinned_items %}
+            {% for item in items %}
             <div class="rounded-2xl p-2 bg-radial-[at_50%_120%] from-amber-500/25 via-purple-950/40 to-black border border-amber-400/50 flex flex-col items-center text-center shadow-lg relative group">
-                <div class="w-full aspect-[5/7] rounded-xl overflow-hidden mb-1.5 relative border border-white/20 bg-black/60 shadow-inner">
+                <!-- Botón Desanclar Rápido -->
+                <button type="button" 
+                        onclick="event.stopPropagation(); unpinItemFromProfile('{{ item.type|default:'photocard' }}', '{{ item.id }}', '{{ item.name|escapejs }}')" 
+                        title="Desanclar del Expositor"
+                        class="absolute top-1 right-1 z-20 w-5 h-5 rounded-full bg-black/80 hover:bg-rose-900 border border-white/30 hover:border-rose-400 text-stone-300 hover:text-white text-[10px] flex items-center justify-center transition-all opacity-85 hover:opacity-100 shadow cursor-pointer">
+                    ✕
+                </button>
+                <div class="w-full aspect-[5/7] rounded-xl overflow-hidden mb-1.5 relative border border-white/20 bg-black/60 shadow-inner flex items-center justify-center">
+                    {% if item.image %}
                     <img src="{{ item.image }}" alt="{{ item.name }}" class="w-full h-full object-cover">
+                    {% else %}
+                    <span class="text-2xl">🎴</span>
+                    {% endif %}
                     {% if item.rarity %}
                     <span class="absolute bottom-1 right-1 text-[6.5px] font-mono font-black uppercase bg-black/80 text-amber-300 px-1 rounded border border-amber-400/30">
                         {{ item.rarity }}
@@ -101,28 +115,33 @@
             {% endfor %}
 
             <!-- Ranuras Vacías Disponibles -->
-            {% if pinned_items|length < 1 %}
-            <div onclick="universalNav('/idols/photocards/album/')"
-                 class="rounded-2xl p-2.5 border-2 border-dashed border-white/10 bg-black/40 flex flex-col items-center justify-center text-center cursor-pointer hover:border-vip-gold/40 transition-all aspect-[5/7]">
-                <span class="text-xl opacity-40 mb-1">🎴</span>
-                <span class="text-[8px] font-bold text-stone-400 uppercase leading-tight">+ Fijar Carta o Trofeo</span>
+            {% if items|length < 1 %}
+            <div onclick="universalNav('/idols/photocards/album/')" 
+                 class="rounded-2xl p-2.5 border-2 border-dashed border-white/10 bg-black/40 flex flex-col items-center justify-center text-center cursor-pointer hover:border-vip-gold/40 transition-all aspect-[5/7] group">
+                <span class="text-xl opacity-40 mb-1 group-hover:scale-110 transition-transform">🎴</span>
+                <span class="text-[8px] font-bold text-stone-400 uppercase leading-tight">+ Fijar Carta</span>
             </div>
             {% endif %}
-            {% if pinned_items|length < 2 %}
-            <div onclick="universalNav('/idols/photocards/album/')"
-                 class="rounded-2xl p-2.5 border-2 border-dashed border-white/10 bg-black/40 flex flex-col items-center justify-center text-center cursor-pointer hover:border-vip-gold/40 transition-all aspect-[5/7]">
-                <span class="text-xl opacity-40 mb-1">💎</span>
-                <span class="text-[8px] font-bold text-stone-400 uppercase leading-tight">+ Ranura Disponible</span>
+
+            {% if items|length < 2 %}
+            <div onclick="universalNav('/idols/photocards/album/')" 
+                 class="rounded-2xl p-2.5 border-2 border-dashed border-white/10 bg-black/40 flex flex-col items-center justify-center text-center cursor-pointer hover:border-vip-gold/40 transition-all aspect-[5/7] group">
+                <span class="text-xl opacity-40 mb-1 group-hover:scale-110 transition-transform">💎</span>
+                <span class="text-[8px] font-bold text-stone-400 uppercase leading-tight">+ Fijar Carta</span>
             </div>
             {% endif %}
-            {% if pinned_items|length < 3 %}
-            <div onclick="universalNav('/economy/bazar/')"
-                 class="rounded-2xl p-2.5 border-2 border-dashed border-white/10 bg-black/40 flex flex-col items-center justify-center text-center cursor-pointer hover:border-vip-gold/40 transition-all aspect-[5/7]">
-                <span class="text-xl opacity-40 mb-1">🎎</span>
+
+            {% if items|length < 3 %}
+            <div onclick="universalNav('/economy/bazar/')" 
+                 class="rounded-2xl p-2.5 border-2 border-dashed border-white/10 bg-black/40 flex flex-col items-center justify-center text-center cursor-pointer hover:border-vip-gold/40 transition-all aspect-[5/7] group">
+                <span class="text-xl opacity-40 mb-1 group-hover:scale-110 transition-transform">🎎</span>
                 <span class="text-[8px] font-bold text-stone-400 uppercase leading-tight">+ Figura Pop Mart</span>
             </div>
             {% endif %}
+            {% endwith %}
         </div>
+    </div>
+    
 
         <!-- 🌹 ACCESO DIRECTO A SUS MUSAS (SI GESTIONA 1 O 2 IDOLS) -->
         {% if mis_idols %}
@@ -316,6 +335,60 @@
 </div>
 
 <script>
+    function universalNav(targetPath) {
+        let tgId = '{{ tg_id }}';
+        try {
+            if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
+                tgId = window.Telegram.WebApp.initDataUnsafe.user.id || tgId;
+            }
+        } catch(e) {}
+        const sep = targetPath.includes('?') ? '&' : '?';
+        window.location.href = tgId ? `${targetPath}${sep}tg_id=${tgId}` : targetPath;
+    }
+
+    async function unpinItemFromProfile(itemType, itemId, itemName) {
+        if (!confirm(`¿Deseas desanclar «${itemName}» de tu Expositor de Honor?`)) return;
+        try {
+            const formData = new FormData();
+            formData.append('type', itemType);
+            formData.append('id', itemId);
+            formData.append('name', itemName);
+
+            let tgId = '{{ tg_id }}';
+            try {
+                if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
+                    tgId = window.Telegram.WebApp.initDataUnsafe.user.id || tgId;
+                }
+            } catch(e) {}
+            if (tgId) formData.append('tg_id', tgId);
+
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value 
+                || (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] 
+                || '';
+            formData.append('csrfmiddlewaretoken', csrfToken);
+
+            const resp = await fetch('/profile/pin-item/', {
+                method: 'POST',
+                body: formData,
+                headers: { 
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrfToken
+                }
+            });
+
+            const data = await resp.json();
+            if (data.success) {
+                try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('success'); } catch(e) {}
+                window.location.reload();
+            } else {
+                alert(data.error || 'No se pudo desanclar el ítem.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error al desanclar de la corte.');
+        }
+    }
+
     function switchProfileTab(tab) {
         const logros = document.getElementById('p-tab-logros');
         const ajustes = document.getElementById('p-tab-ajustes');
@@ -336,3 +409,4 @@
     }
 </script>
 {% endblock %}
+

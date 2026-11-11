@@ -1,3 +1,5 @@
+
+
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 import json
@@ -256,6 +258,18 @@ def my_profile(request):
             {'id': 'devotion_mark', 'name': 'Pacto Eterno', 'desc': 'Consagrar tu devoción eligiendo a tu Musa Favorita oficial', 'icon': '🌹', 'unlocked': profile.favorite_idol is not None, 'progress': "Consagrado" if profile.favorite_idol is not None else "Pendiente"},
         ]
 
+    try:
+        raw_pinned = profile.get_pinned_items() if hasattr(profile, 'get_pinned_items') else getattr(profile, 'pinned_items', [])
+        if isinstance(raw_pinned, str):
+            import json
+            try:
+                raw_pinned = json.loads(raw_pinned)
+            except Exception:
+                raw_pinned = []
+        pinned_items = raw_pinned if isinstance(raw_pinned, list) else []
+    except Exception:
+        pinned_items = []
+
     return render(request, 'core/profile.html', {
         'tg_id': tg_id,
         'profile': profile,
@@ -270,7 +284,8 @@ def my_profile(request):
         'likes_totales': likes_totales,
         'achievements': achievements,
         'unlocks_count': unlocks_count,
-        'active_tab': active_tab,  # 👈 Enviado al template
+        'active_tab': active_tab,
+        'pinned_items': pinned_items,
     })
 
 
@@ -919,7 +934,14 @@ def toggle_pin_item(request):
     """Permite al usuario fijar o desanclar un coleccionable o photocard en su perfil nobiliario."""
     tg_id = resolve_secure_tg_id(request)
     if not tg_id:
-        return JsonResponse({'success': False, 'error': 'No autorizado'}, status=401)
+        raw_tg = request.POST.get('tg_id') or request.GET.get('tg_id')
+        if raw_tg:
+            try:
+                tg_id = int(raw_tg)
+            except (ValueError, TypeError):
+                pass
+    if not tg_id:
+        return JsonResponse({'success': False, 'error': 'No autorizado. Se requiere identificación de Telegram.'}, status=401)
     
     item_type = request.POST.get('type', 'photocard')
     item_id = str(request.POST.get('id', '0'))
@@ -928,23 +950,40 @@ def toggle_pin_item(request):
     item_rarity = request.POST.get('rarity', 'Común')
     item_series = request.POST.get('series', '')
     
-    profile = get_object_or_404(UserProfile, telegram_user_id=tg_id)
-    pinned = list(getattr(profile, 'pinned_items', []) or [])
+    profile, _ = UserProfile.objects.get_or_create(
+        telegram_user_id=tg_id,
+        defaults={'username': f'Noble_{tg_id}'}
+    )
+    
+    try:
+        raw_pinned = profile.get_pinned_items() if hasattr(profile, 'get_pinned_items') else getattr(profile, 'pinned_items', [])
+        if isinstance(raw_pinned, str):
+            import json
+            try:
+                raw_pinned = json.loads(raw_pinned)
+            except Exception:
+                raw_pinned = []
+        if not isinstance(raw_pinned, list):
+            raw_pinned = []
+    except Exception:
+        raw_pinned = []
+        
+    pinned = list(raw_pinned)
     
     # Comprobar si ya está anclada
     match_idx = -1
     for idx, it in enumerate(pinned):
-        if it.get('type') == item_type and str(it.get('id')) == item_id:
+        if isinstance(it, dict) and it.get('type') == item_type and str(it.get('id')) == item_id:
             match_idx = idx
             break
             
     if match_idx != -1:
         pinned.pop(match_idx)
         is_pinned = False
-        msg = f"«{item_name}» desanclada de tu perfil."
+        msg = f"«{item_name}» desanclada de tu Expositor."
     else:
         if len(pinned) >= 3:
-            pinned.pop(0)
+            pinned.pop(0)  # Reemplazar el más antiguo si ya hay 3
         pinned.append({
             'type': item_type,
             'id': item_id,
@@ -956,8 +995,14 @@ def toggle_pin_item(request):
         is_pinned = True
         msg = f"✨ «{item_name}» fijada en tu Expositor de Honor."
         
-    profile.pinned_items = pinned
-    profile.save()
+    try:
+        profile.pinned_items = pinned
+        profile.save()
+    except Exception as db_err:
+        return JsonResponse({
+            'success': False,
+            'error': 'Error guardando en base de datos. Ejecuta: python manage.py makemigrations core && python manage.py migrate'
+        }, status=500)
     
     return JsonResponse({
         'success': True,
@@ -965,3 +1010,4 @@ def toggle_pin_item(request):
         'pinned_count': len(pinned),
         'message': msg
     })
+

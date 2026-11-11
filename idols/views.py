@@ -1,3 +1,5 @@
+
+
 import random
 import os
 import sys
@@ -1569,6 +1571,20 @@ def my_photocards_album(request):
             telegram_user_id=tg_id
         ).order_by('-level')[:60]
 
+        pinned_card_ids = []
+        try:
+            profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+            raw_pinned = profile.get_pinned_items() if (profile and hasattr(profile, 'get_pinned_items')) else (getattr(profile, 'pinned_items', []) if profile else [])
+            if isinstance(raw_pinned, str):
+                import json
+                try:
+                    raw_pinned = json.loads(raw_pinned)
+                except Exception:
+                    raw_pinned = []
+            pinned_card_ids = [str(it.get('id')) for it in (raw_pinned or []) if isinstance(it, dict) and it.get('type') == 'photocard']
+        except Exception:
+            pinned_card_ids = []
+
         return render(request, 'idols/photocards_album.html', {
             'tg_id': tg_id,
             'user_cards': sorted_all_cards,
@@ -1580,6 +1596,7 @@ def my_photocards_album(request):
             'legendaries': legendaries,
             'epics': epics,
             'members': members,
+            'pinned_card_ids': pinned_card_ids,
         })
     except Exception as e:
         import traceback
@@ -2566,3 +2583,4 @@ def handle_roleplay_request(request, request_id, action):
         messages.info(request, f"Petición rechazada. Fondos reembolsados a @{session_req.client_username}.")
 
     return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+
