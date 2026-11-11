@@ -196,11 +196,11 @@ def idol_list(request):
             with transaction.atomic():
                 req_obj = CustomRequest.objects.select_for_update().filter(id=req_id, idol__telegram_user_id=tg_id).first()
                 if not req_obj:
-                    messages.error(request, "Petición no encontrada.")
+                    messages.error(request, 'Petición no encontrada o no pertenece a tu perfil.')
                     return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
                 
                 if req_obj.status != 'pending':
-                    messages.warning(request, f"Esta petición ya se encuentra {req_obj.get_status_display().lower()}.")
+                    messages.warning(request, f'Esta petición ya se encuentra {req_obj.get_status_display().lower()}.')
                     return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
                 
                 if action == 'reject_request':
@@ -208,47 +208,69 @@ def idol_list(request):
                     client_wallet.add_funds(req_obj.bounty)
                     req_obj.status = 'rejected'
                     req_obj.save()
+                    
+                    try:
+                        reject_text = (
+                            f'⚠️ <b>Petición Especial Rechazada</b>\n\n'
+                            f'{req_obj.idol.stage_name} no pudo atender tu solicitud en este momento.\n'
+                            f'Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos a tu Bóveda.'
+                        )
+                        send_telegram_msg(
+                            chat_id=req_obj.client_telegram_id,
+                            text=reject_text,
+                            button_text='🪙 Revisar Mi Bóveda',
+                            button_url=f'https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={req_obj.client_telegram_id}'
+                        )
+                    except Exception as te:
+                        print(f'Error enviando telegram de rechazo: {te}')
+                        
+                    messages.info(request, f'Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al noble.')
+                    return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
                 
-                send_telegram_msg(
-                    chat_id=req_obj.client_telegram_id,
-                    text=(
-                        f"⚠️ <b>Petición Especial Rechazada</b>\n\n"
-                        f"{req_obj.idol.stage_name} no pudo atender tu solicitud en este momento.\n"
-                        f"Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos a tu Bóveda."
-                    ),
-                    button_text="🪙 Revisar Mi Bóveda",
-                    button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={req_obj.client_telegram_id}"
-                )
-                messages.info(request, f"Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al cliente.")
-                
-        elif action == 'accept_request':
-                delivered_photo = request.FILES.get('delivered_photo')
-                if not delivered_photo:
-                    messages.error(request, "Debes adjuntar la foto para completar la entrega.")
-                else:
-                    req_obj.delivered_photo = optimize_uploaded_image(delivered_photo)
+                elif action == 'accept_request':
+                    delivered_photo = request.FILES.get('delivered_photo')
+                    if not delivered_photo:
+                        messages.error(request, 'Debes adjuntar la foto exclusiva para completar la entrega.')
+                        return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+                    
+                    try:
+                        req_obj.delivered_photo = optimize_uploaded_image(delivered_photo)
+                    except Exception as e:
+                        print(f'Fallo optimización imagen: {e}')
+                        req_obj.delivered_photo = delivered_photo
+                    
+                    delivery_note = request.POST.get('delivery_note', '').strip()
+                    if delivery_note:
+                        req_obj.delivery_note = delivery_note[:250]
+                    
                     req_obj.status = 'accepted'
                     req_obj.save()
                     
                     idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
                     idol_wallet.add_funds(req_obj.bounty)
-                    grant_user_xp(request, tg_id, 25, reason="Entrega de Petición")
+                    grant_user_xp(request, tg_id, 25, reason='Entrega de Petición')
                     
-                    send_telegram_msg(
-                        chat_id=req_obj.client_telegram_id,
-                        text=(
-                            f"✨ <b>¡Tu Petición ha sido entregada!</b>\n\n"
-                            f"🌹 <b>Musa:</b> {req_obj.idol.stage_name}\n"
-                            f"📝 <b>Detalle:</b> <i>«{req_obj.description}»</i>\n\n"
-                            f"La foto exclusiva ya se encuentra en tu Colección Privada."
-                        ),
-                        button_text="💎 Ver Mi Colección",
-                        button_url=f"https://kingdom-pleasure-app.onrender.com/idols/collection/?tg_id={req_obj.client_telegram_id}"
-                    )
-                    messages.success(request, f"¡Petición entregada con éxito! Recibiste +{req_obj.bounty} 🪙 (+25 EXP).")
-                    
-        return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-    
+                    try:
+                        note_line = f'\n💬 <b>Dedicatoria:</b> <i>«{req_obj.delivery_note}»</i>' if req_obj.delivery_note else ''
+                        accept_text = (
+                            f'✨ <b>¡Tu Petición ha sido entregada!</b>\n\n'
+                            f'🌹 <b>Musa:</b> {req_obj.idol.stage_name}\n'
+                            f'📝 <b>Detalle:</b> <i>«{req_obj.description}»</i>'
+                            f'{note_line}\n\n'
+                            f'La foto exclusiva ya se encuentra en tu Colección Privada.'
+                        )
+                        send_telegram_msg(
+                            chat_id=req_obj.client_telegram_id,
+                            text=accept_text,
+                            button_text='💎 Ver Mi Colección',
+                            button_url=f'https://kingdom-pleasure-app.onrender.com/idols/collection/?tg_id={req_obj.client_telegram_id}'
+                        )
+                    except Exception as te:
+                        print(f'Error enviando telegram de entrega: {te}')
+                        
+                    messages.success(request, f'¡Petición entregada con éxito! Recibiste +{req_obj.bounty} 🪙 (+25 EXP).')
+                    return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+        
     idols = list(IdolProfile.objects.filter(telegram_user_id=tg_id))
     pending_requests = CustomRequest.objects.filter(
         idol__telegram_user_id=tg_id,

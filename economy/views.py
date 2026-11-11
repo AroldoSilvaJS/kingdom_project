@@ -1,3 +1,5 @@
+
+
 # 1. Librería estándar de Python
 import random
 from datetime import timedelta
@@ -806,8 +808,11 @@ BAZAR_ITEMS = [
         'code': 'shield_15',
         'name': 'Escudo Protector (15 días)',
         'description': 'Inmunidad total a la pérdida de rango o recompensas durante 15 días en caso de inactividad.',
+        'desc': 'Inmunidad total a la pérdida de rango o recompensas durante 15 días en caso de inactividad.',
         'price': 350,
-        'icon': 'fa-solid fa-shield-halved',
+        'icon': '🛡️',
+        'emoji': '🛡️',
+        'fa_icon': 'fa-solid fa-shield-halved',
         'color': 'border-amber-500/40 text-amber-300',
         'type': 'status'
     },
@@ -815,8 +820,11 @@ BAZAR_ITEMS = [
         'code': 'shield_30',
         'name': 'Escudo Protector Imperial (30 días)',
         'description': 'Un mes entero de protección soberana ante cualquier ausencia de la corte.',
+        'desc': 'Un mes entero de protección soberana ante cualquier ausencia de la corte.',
         'price': 600,
-        'icon': 'fa-solid fa-shield-virus',
+        'icon': '🔰',
+        'emoji': '🔰',
+        'fa_icon': 'fa-solid fa-shield-virus',
         'color': 'border-yellow-500/50 text-yellow-300',
         'type': 'status'
     },
@@ -824,8 +832,11 @@ BAZAR_ITEMS = [
         'code': 'custom_title',
         'name': 'Bula de Título Personalizado',
         'description': 'Graba en tu perfil un epíteto o distinción única redactada por ti.',
+        'desc': 'Graba en tu perfil un epíteto o distinción única redactada por ti.',
         'price': 450,
-        'icon': 'fa-solid fa-feather-pointed',
+        'icon': '📜',
+        'emoji': '📜',
+        'fa_icon': 'fa-solid fa-feather-pointed',
         'color': 'border-rose-500/40 text-rose-300',
         'type': 'customization'
     },
@@ -833,8 +844,11 @@ BAZAR_ITEMS = [
         'code': 'imperial_frame',
         'name': 'Marco de Avatar Imperial',
         'description': 'Engalana tu presencia visual con los marcos de oro pulido y gemas dinásticas.',
+        'desc': 'Engalana tu presencia visual con los marcos de oro pulido y gemas dinásticas.',
         'price': 400,
-        'icon': 'fa-solid fa-gem',
+        'icon': '👑',
+        'emoji': '👑',
+        'fa_icon': 'fa-solid fa-gem',
         'color': 'border-purple-500/40 text-purple-300',
         'type': 'customization'
     },
@@ -842,8 +856,11 @@ BAZAR_ITEMS = [
         'code': 'vip_badge',
         'name': 'Insignia de Linaje VIP',
         'description': 'Una medalla de honor perpetua visible en tu perfil público ante todos los nobles.',
+        'desc': 'Una medalla de honor perpetua visible en tu perfil público ante todos los nobles.',
         'price': 300,
-        'icon': 'fa-solid fa-award',
+        'icon': '🎖️',
+        'emoji': '🎖️',
+        'fa_icon': 'fa-solid fa-award',
         'color': 'border-blue-500/40 text-blue-300',
         'type': 'customization'
     },
@@ -851,8 +868,11 @@ BAZAR_ITEMS = [
         'code': 'priority_antojo',
         'name': 'Sello de Antojo Prioritario',
         'description': 'Tus peticiones de antojos a las Idols reciben respuesta urgente en la cúspide.',
+        'desc': 'Tus peticiones de antojos a las Idols reciben respuesta urgente en la cúspide.',
         'price': 200,
-        'icon': 'fa-solid fa-bell-concierge',
+        'icon': '⚡',
+        'emoji': '⚡',
+        'fa_icon': 'fa-solid fa-bell-concierge',
         'color': 'border-pink-500/40 text-pink-300',
         'type': 'consumable'
     },
@@ -860,8 +880,11 @@ BAZAR_ITEMS = [
         'code': 'lucky_charm',
         'name': 'Talismán de la Fortuna',
         'description': 'Aumenta sutilmente la bendición de tiradas y recompensas en el casino.',
+        'desc': 'Aumenta sutilmente la bendición de tiradas y recompensas en el casino.',
         'price': 250,
-        'icon': 'fa-solid fa-clover',
+        'icon': '🍀',
+        'emoji': '🍀',
+        'fa_icon': 'fa-solid fa-clover',
         'color': 'border-emerald-500/40 text-emerald-300',
         'type': 'consumable'
     },
@@ -869,8 +892,11 @@ BAZAR_ITEMS = [
         'code': 'free_market',
         'name': 'Pase de Libre Comercio',
         'description': 'Exención de tributos del reino en tus próximas compras o ventas.',
+        'desc': 'Exención de tributos del reino en tus próximas compras o ventas.',
         'price': 150,
-        'icon': 'fa-solid fa-coins',
+        'icon': '🪙',
+        'emoji': '🪙',
+        'fa_icon': 'fa-solid fa-coins',
         'color': 'border-yellow-400 text-yellow-300',
         'type': 'consumable'
     },
@@ -2142,3 +2168,4 @@ def scratch_card_play_ajax(request):
                 'patron_vault': wallet.patron_vault,
                 'message': f'💀 Sin suerte esta vez. Tu cartón no obtuvo trío. El 8% ({int(round(cost * 0.08))} 🪙) pasó a tu Cofre del Mecenas.'
             })
+

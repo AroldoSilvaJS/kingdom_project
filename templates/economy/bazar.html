@@ -335,12 +335,16 @@
         {% for item in bazar_items %}
         <div class="popmart-cabinet p-3.5 flex items-center justify-between gap-3">
             <div class="flex items-center gap-3">
-                <div class="w-11 h-11 rounded-xl bg-stone-900 border border-white/10 flex items-center justify-center text-2xl shadow-inner">
-                    {{ item.icon }}
+                <div class="w-11 h-11 rounded-xl bg-stone-900/90 border border-amber-500/20 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                    {% if 'fa-' in item.icon %}
+                        <i class="{{ item.icon }} text-xl text-amber-300"></i>
+                    {% else %}
+                        <span>{{ item.icon }}</span>
+                    {% endif %}
                 </div>
                 <div>
                     <h3 class="text-xs font-black text-white leading-tight">{{ item.name }}</h3>
-                    <p class="text-[9px] text-stone-400 leading-tight max-w-[180px] mt-0.5">{{ item.desc }}</p>
+                    <p class="text-[9px] text-stone-400 leading-tight max-w-[180px] mt-0.5">{{ item.description|default:item.desc }}</p>
                     <span class="text-xs font-black text-amber-300 mt-1 block">{{ item.price }} 🪙</span>
                 </div>
             </div>
