@@ -1,3 +1,4 @@
+
 from django.db import models
 from django.db.models import Avg
 from django.core.exceptions import ValidationError
@@ -281,7 +282,14 @@ class CustomRequest(models.Model):
     
     is_priority = models.BooleanField("¿Prioritario?", default=False)
     
-    delivered_photo = models.ImageField("Foto Entregada", upload_to='custom_antojos/', blank=True, null=True)
+    delivered_photo = models.FileField("Foto o Video Entregado", upload_to='custom_antojos/', blank=True, null=True)
+
+    @property
+    def is_video(self):
+        if not self.delivered_photo:
+            return False
+        name = str(self.delivered_photo.name).lower()
+        return any(name.endswith(ext) for ext in ['.mp4', '.mov', '.webm', '.m4v', '.avi', '.quicktime'])
     delivery_note = models.TextField("Mensaje / Dedicatoria", max_length=250, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -474,3 +482,5 @@ class RoleSessionRequest(models.Model):
 
     def __str__(self):
         return f"Rol: {self.idol.stage_name} con @{self.client_username} ({self.status})"
+
+

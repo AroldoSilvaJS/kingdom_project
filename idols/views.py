@@ -228,16 +228,29 @@ def idol_list(request):
                     return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
                 
                 elif action == 'accept_request':
-                    delivered_photo = request.FILES.get('delivered_photo')
-                    if not delivered_photo:
-                        messages.error(request, 'Debes adjuntar la foto exclusiva para completar la entrega.')
+                    delivered_media = request.FILES.get('delivered_photo')
+                    if not delivered_media:
+                        messages.error(request, 'Debes adjuntar la foto o video exclusivo para completar la entrega.')
                         return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
                     
-                    try:
-                        req_obj.delivered_photo = optimize_uploaded_image(delivered_photo)
-                    except Exception as e:
-                        print(f'Fallo optimización imagen: {e}')
-                        req_obj.delivered_photo = delivered_photo
+                    # Límite de seguridad: 30 MB
+                    if delivered_media.size > 30 * 1024 * 1024:
+                        messages.error(request, 'El archivo adjunto supera el límite máximo permitido de 30 MB.')
+                        return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+                    
+                    file_name = delivered_media.name.lower()
+                    is_video_upload = any(file_name.endswith(ext) for ext in ['.mp4', '.mov', '.webm', '.m4v', '.avi']) or 'video' in getattr(delivered_media, 'content_type', '')
+                    
+                    if is_video_upload:
+                        ext = os.path.splitext(delivered_media.name)[1].lower() or '.mp4'
+                        delivered_media.name = f"antojo_{uuid.uuid4().hex[:10]}{ext}"
+                        req_obj.delivered_photo = delivered_media
+                    else:
+                        try:
+                            req_obj.delivered_photo = optimize_uploaded_image(delivered_media)
+                        except Exception as e:
+                            print(f'Fallo optimización imagen: {e}')
+                            req_obj.delivered_photo = delivered_media
                     
                     delivery_note = request.POST.get('delivery_note', '').strip()
                     if delivery_note:
@@ -251,13 +264,14 @@ def idol_list(request):
                     grant_user_xp(request, tg_id, 25, reason='Entrega de Petición')
                     
                     try:
+                        media_label = '🎬 El video exclusivo' if req_obj.is_video else '📸 La foto exclusiva'
                         note_line = f'\n💬 <b>Dedicatoria:</b> <i>«{req_obj.delivery_note}»</i>' if req_obj.delivery_note else ''
                         accept_text = (
                             f'✨ <b>¡Tu Petición ha sido entregada!</b>\n\n'
                             f'🌹 <b>Musa:</b> {req_obj.idol.stage_name}\n'
                             f'📝 <b>Detalle:</b> <i>«{req_obj.description}»</i>'
                             f'{note_line}\n\n'
-                            f'La foto exclusiva ya se encuentra en tu Colección Privada.'
+                            f'{media_label} ya se encuentra en tu Colección Privada.'
                         )
                         send_telegram_msg(
                             chat_id=req_obj.client_telegram_id,

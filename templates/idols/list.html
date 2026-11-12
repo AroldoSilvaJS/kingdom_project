@@ -100,18 +100,19 @@
                 <input type="hidden" name="action" id="action-input-{{ req.id }}" value="accept_request">
 
                 <div class="bg-black/60 p-3 rounded-2xl border-2 border-dashed border-rose-500/50 flex flex-col items-center text-center relative">
-                    <!-- Vista previa si se selecciona foto -->
-                    <div id="preview-box-{{ req.id }}" class="hidden w-28 h-28 rounded-xl overflow-hidden mb-2 border border-emerald-400 shadow-lg">
-                        <img id="preview-img-{{ req.id }}" src="" class="w-full h-full object-cover">
+                    <!-- Vista previa interactiva si se selecciona foto o video -->
+                    <div id="preview-box-{{ req.id }}" class="hidden w-32 h-32 rounded-xl overflow-hidden mb-2 border-2 border-emerald-400 shadow-xl relative bg-black flex items-center justify-center">
+                        <img id="preview-img-{{ req.id }}" src="" class="hidden w-full h-full object-cover">
+                        <video id="preview-vid-{{ req.id }}" src="" class="hidden w-full h-full object-cover bg-black" controls playsinline></video>
                     </div>
 
                     <label class="block text-[10px] text-rose-300 uppercase font-black mb-1 cursor-pointer">
-                        📸 Adjuntar Foto Exclusiva para la Entrega *
+                        📸 🎬 Adjuntar Foto o Video Exclusivo *
                     </label>
-                    <input type="file" name="delivered_photo" accept="image/*" required
-                           onchange="previewAntojoPhoto(event, '{{ req.id }}')"
+                    <input type="file" name="delivered_photo" accept="image/*,video/mp4,video/quicktime,video/webm,video/m4v" required
+                           onchange="previewAntojoMedia(event, '{{ req.id }}')"
                            class="w-full text-xs text-stone-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-gradient-to-r file:from-rose-600 file:to-pink-600 file:text-white cursor-pointer">
-                    <span id="preview-status-{{ req.id }}" class="text-[8px] text-stone-400 mt-1">Formatos JPG, PNG, WEBP (Hasta 15MB)</span>
+                    <span id="preview-status-{{ req.id }}" class="text-[8px] text-stone-400 mt-1">Fotos (JPG, PNG, WEBP) o Videos (MP4, MOV, WEBM) • Máx. 30MB</span>
                 </div>
 
                 <div>
@@ -124,7 +125,7 @@
                 <button type="submit" id="btn-submit-{{ req.id }}"
                         onclick="document.getElementById('action-input-{{ req.id }}').value='accept_request'"
                         class="w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-green-400 hover:brightness-110 text-black font-black py-3 rounded-xl text-xs uppercase tracking-wider shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
-                    <span>✅</span> <span>Entregar Foto & Cobrar +{{ req.bounty }} 🪙</span>
+                    <span>✅</span> <span>Entregar Foto / Video & Cobrar +{{ req.bounty }} 🪙</span>
                 </button>
 
                 <!-- Botón Secundario de Rechazo (Separado y Seguro) -->
@@ -231,20 +232,48 @@
 </script>
 
 <script>
-function previewAntojoPhoto(event, reqId) {
+function previewAntojoMedia(event, reqId) {
     const file = event.target.files[0];
     if (file) {
+        const maxBytes = 30 * 1024 * 1024; // 30 MB
+        if (file.size > maxBytes) {
+            alert("⚠️ El archivo seleccionado supera el límite de 30 MB.\nPor favor selecciona un archivo más ligero o un clip más corto.");
+            event.target.value = '';
+            return;
+        }
         const previewBox = document.getElementById('preview-box-' + reqId);
         const previewImg = document.getElementById('preview-img-' + reqId);
+        const previewVid = document.getElementById('preview-vid-' + reqId);
         const previewStatus = document.getElementById('preview-status-' + reqId);
-        if (previewBox && previewImg) {
-            previewImg.src = URL.createObjectURL(file);
-            previewBox.classList.remove('hidden');
-        }
-        if (previewStatus) {
-            const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-            previewStatus.innerHTML = `✓ Foto lista: <b>${file.name}</b> (${sizeMb} MB)`;
-            previewStatus.className = "text-[8.5px] text-emerald-400 mt-1 font-bold";
+        const isVideo = file.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi)$/i.test(file.name);
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        const fileUrl = URL.createObjectURL(file);
+
+        if (previewBox) previewBox.classList.remove('hidden');
+
+        if (isVideo) {
+            if (previewImg) previewImg.classList.add('hidden');
+            if (previewVid) {
+                previewVid.src = fileUrl;
+                previewVid.classList.remove('hidden');
+            }
+            if (previewStatus) {
+                previewStatus.innerHTML = `🎬 Video listo: <b>${file.name}</b> (${sizeMb} MB)`;
+                previewStatus.className = "text-[8.5px] text-emerald-400 mt-1 font-bold";
+            }
+        } else {
+            if (previewVid) {
+                previewVid.classList.add('hidden');
+                previewVid.pause();
+            }
+            if (previewImg) {
+                previewImg.src = fileUrl;
+                previewImg.classList.remove('hidden');
+            }
+            if (previewStatus) {
+                previewStatus.innerHTML = `📸 Foto lista: <b>${file.name}</b> (${sizeMb} MB)`;
+                previewStatus.className = "text-[8.5px] text-emerald-400 mt-1 font-bold";
+            }
         }
     }
 }
@@ -252,7 +281,7 @@ function previewAntojoPhoto(event, reqId) {
 function showUploadSpinner(reqId) {
     const btn = document.getElementById('btn-submit-' + reqId);
     if (btn) {
-        btn.innerHTML = `<span class="animate-spin text-sm">⏳</span> <span>Subiendo Foto y Acreditando Oro...</span>`;
+        btn.innerHTML = `<span class="animate-spin text-sm">⏳</span> <span>Subiendo Archivo y Acreditando Oro...</span>`;
         btn.classList.add('opacity-75', 'pointer-events-none');
     }
 }

@@ -1,3 +1,4 @@
+
 {% extends 'base.html' %}
 
 {% block content %}
@@ -18,7 +19,7 @@
     <div class="vip-panel p-3 flex items-center justify-between px-4">
         <span class="text-xs text-vip-text/70 uppercase tracking-wider font-bold">Tesoros Desbloqueados</span>
         <span class="text-xs font-bold text-yellow-400 font-mono bg-black/60 px-2.5 py-1 rounded-lg border border-vip-gold/30">
-            {{ total_items }} fotos 🔞
+            {{ total_items }} tesoros 🔞
         </span>
     </div>
 
@@ -31,14 +32,23 @@
             <div class="grid grid-cols-2 gap-3">
                 {% for ant in antojos %}
                     <div class="relative rounded-2xl overflow-hidden border border-yellow-500/50 aspect-[3/4] bg-black shadow-lg flex flex-col justify-end group">
-                        <img src="{{ ant.delivered_photo.url }}" alt="{{ ant.description }}" 
-                             onclick="openImageLightbox('{{ ant.delivered_photo.url }}', '{{ ant.description|escapejs }}')"
-                             class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
-                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
-                        <div class="relative z-10 p-2.5 flex flex-col">
-                            <span class="text-[9px] bg-yellow-500 text-black font-black uppercase px-1.5 py-0.2 rounded w-fit mb-1">Antojo Exclusivo</span>
-                            <h4 class="text-xs font-bold text-white truncate">{{ ant.idol.stage_name }}</h4>
-                            <p class="text-[10px] text-stone-300 line-clamp-1 italic">"{{ ant.description }}"</p>
+                        {% if ant.is_video %}
+                            <video src="{{ ant.delivered_photo.url }}"
+                                   controls playsinline preload="metadata"
+                                   class="absolute inset-0 w-full h-full object-cover bg-black">
+                            </video>
+                        {% else %}
+                            <img src="{{ ant.delivered_photo.url }}" alt="{{ ant.description }}" 
+                                 onclick="openImageLightbox('{{ ant.delivered_photo.url }}', '{{ ant.description|escapejs }}')"
+                                 class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
+                        {% endif %}
+                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none"></div>
+                        <div class="relative z-10 p-2.5 flex flex-col pointer-events-none">
+                            <span class="text-[9px] bg-yellow-500 text-black font-black uppercase px-1.5 py-0.2 rounded w-fit mb-1 shadow">
+                                {% if ant.is_video %}🎬 Video Exclusivo{% else %}📸 Antojo Exclusivo{% endif %}
+                            </span>
+                            <h4 class="text-xs font-bold text-white truncate drop-shadow">{{ ant.idol.stage_name }}</h4>
+                            <p class="text-[10px] text-stone-300 line-clamp-1 italic drop-shadow">"{{ ant.description }}"</p>
                         </div>
                     </div>
                 {% endfor %}
@@ -99,3 +109,4 @@
 
 </div>
 {% endblock %}
+
