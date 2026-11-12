@@ -698,6 +698,109 @@ def _process_telegram_update(data):
                 user_prof.save(update_fields=['username'])
             IdolProfile.objects.filter(telegram_user_id=user_id).update(owner_username=handle_real)
 
+        # ==============================================================
+        # 👑 COMANDO: /ocupadas (Lista de Idols ocupadas agrupadas por grupo)
+        # ==============================================================
+        is_idols_cmd = (
+            text.startswith(('/ocupadas', '/idols_ocupadas', '/idols', '/reparto', '/elenco', '/lista_idols', '/ocupados', '!ocupadas', '.ocupadas'))
+            or text in ('ocupadas', 'idols ocupadas', 'lista idols', 'elenco', 'reparto')
+        )
+        if is_idols_cmd:
+            is_group = False
+            try:
+                is_group = int(chat_id) < 0
+            except (ValueError, TypeError):
+                is_group = str(chat_id).startswith('-')
+
+            if is_group:
+                app_link = "https://t.me/KingdomPleasure_bot?start=idols"
+            else:
+                app_link = f"https://kingdom-pleasure-app.onrender.com/idols/?tg_id={user_id}&tg_username={encode_param(handle_real)}"
+
+            idols_qs = IdolProfile.objects.all().order_by('group', 'stage_name')
+            total_idols = idols_qs.count()
+
+            if total_idols == 0:
+                empty_msg = (
+                    "👑 <b>ELENCO REAL — MUSAS OCUPADAS</b> 👑\n\n"
+                    "<i>Actualmente no hay ninguna Musa registrada u ocupada en el Reino.</i>\n\n"
+                    "✨ ¡Sé la primera persona en reclamar a tu Idol favorita!"
+                )
+                send_telegram_msg(
+                    chat_id=chat_id,
+                    text=empty_msg,
+                    button_text="🌹 Registrar Mi Idol",
+                    button_url=app_link,
+                    message_thread_id=message_thread_id
+                )
+                return
+
+            from collections import defaultdict
+            import html as py_html
+
+            grouped = defaultdict(list)
+            for idol in idols_qs:
+                raw_group = (idol.group or '').strip()
+                grp_title = raw_group.upper() if raw_group else "SOLISTAS / INDEPENDIENTES"
+                grouped[grp_title].append(idol)
+
+            # Ordenar grupos alfabéticamente dejando SOLISTAS al final
+            sorted_groups = sorted(
+                grouped.keys(),
+                key=lambda g: ('ZZZ_' if 'SOLISTAS' in g else g)
+            )
+
+            chunks = []
+            current_chunk = [
+                "👑 <b>ELENCO REAL — MUSAS OCUPADAS</b> 👑\n",
+                "<i>Catálogo oficial de Idols y sus respectivos dueños</i>\n",
+                f"📊 <b>Total Ocupadas:</b> {total_idols} Musas\n",
+                "━━━━━━━━━━━━━━━━━━━━\n"
+            ]
+            current_len = sum(len(s) for s in current_chunk)
+
+            for grp in sorted_groups:
+                idols_in_grp = grouped[grp]
+                grp_icon = "🌟" if "SOLISTAS" in grp else "🎀"
+                grp_header = f"\n{grp_icon} <b>{grp}</b> ({len(idols_in_grp)})\n"
+                lines_grp = [grp_header]
+                for idol in sorted(idols_in_grp, key=lambda x: x.stage_name.lower()):
+                    owner = idol.get_display_owner()
+                    status_dot = "🟢" if idol.status == 'online' else ("🔥" if idol.status == 'antojos' else "🌙")
+                    rp_badge = " 🎭" if idol.is_roleplay_open else ""
+                    lines_grp.append(f"  • {status_dot} <b>{py_html.escape(idol.stage_name)}</b> — {py_html.escape(owner)}{rp_badge}\n")
+
+                group_text = "".join(lines_grp)
+                if current_len + len(group_text) > 3500:
+                    chunks.append("".join(current_chunk))
+                    current_chunk = [
+                        "👑 <b>ELENCO REAL (Continuación)</b>\n",
+                        "━━━━━━━━━━━━━━━━━━━━\n",
+                        group_text
+                    ]
+                    current_len = sum(len(s) for s in current_chunk)
+                else:
+                    current_chunk.append(group_text)
+                    current_len += len(group_text)
+
+            footer = (
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <i>¿Deseas consultar sus perfiles o solicitar sesiones de rol? Pulsa el botón dorado abajo.</i>"
+            )
+            current_chunk.append(footer)
+            chunks.append("".join(current_chunk))
+
+            for idx, chunk_text in enumerate(chunks):
+                is_last = (idx == len(chunks) - 1)
+                send_telegram_msg(
+                    chat_id=chat_id,
+                    text=chunk_text,
+                    button_text="🌹 Abrir Galería en la App" if is_last else None,
+                    button_url=app_link if is_last else None,
+                    message_thread_id=message_thread_id
+                )
+            return
+
         if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
             is_group = int(chat_id) < 0
             interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/')
