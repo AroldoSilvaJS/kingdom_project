@@ -11,7 +11,31 @@
         box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.2);
         border-radius: 28px;
         position: relative;
+        transition: all 0.3s ease;
     }
+    /* Iluminaciones Dinámicas de la Vitrina */
+    .cabinet-light-palace {
+        background: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.25) 0%, rgba(35, 15, 60, 0.8) 45%, rgba(10, 5, 20, 0.98) 100%);
+        border-color: rgba(245, 158, 11, 0.45);
+        box-shadow: 0 0 35px rgba(245, 158, 11, 0.2), inset 0 2px 4px rgba(255, 230, 160, 0.25);
+    }
+    .cabinet-light-neon {
+        background: radial-gradient(circle at 50% -10%, rgba(217, 70, 239, 0.3) 0%, rgba(30, 10, 50, 0.85) 45%, rgba(6, 2, 14, 0.98) 100%);
+        border-color: rgba(217, 70, 239, 0.5);
+        box-shadow: 0 0 35px rgba(217, 70, 239, 0.25), inset 0 2px 4px rgba(240, 170, 255, 0.3);
+    }
+    .cabinet-light-diamond {
+        background: radial-gradient(circle at 50% -10%, rgba(34, 211, 238, 0.22) 0%, rgba(15, 23, 42, 0.85) 45%, rgba(3, 7, 18, 0.98) 100%);
+        border-color: rgba(56, 189, 248, 0.45);
+        box-shadow: 0 0 35px rgba(56, 189, 248, 0.2), inset 0 2px 4px rgba(186, 230, 253, 0.3);
+    }
+    .cabinet-light-stealth {
+        background: radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.05) 0%, rgba(18, 18, 18, 0.9) 45%, rgba(5, 5, 5, 0.98) 100%);
+        border-color: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.95);
+    }
+
+    /* Peana Acrílica de Museo con Biselado 3D */
     .acrylic-stand {
         position: relative;
         background: radial-gradient(circle at 50% 120%, rgba(212, 175, 55, 0.22) 0%, rgba(255, 255, 255, 0.04) 55%, rgba(10, 5, 20, 0.85) 100%);
@@ -35,6 +59,14 @@
         border: 1.5px solid rgba(245, 158, 11, 0.7);
         box-shadow: 0 0 30px rgba(245, 158, 11, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.5);
     }
+    /* Estante de Cristal Biselado */
+    .glass-shelf {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.03) 100%);
+        border-top: 1px solid rgba(255, 255, 255, 0.4);
+        border-bottom: 2px solid rgba(0, 0, 0, 0.6);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+    }
+
     .blind-box-card {
         background: linear-gradient(135deg, rgba(60, 20, 110, 0.95) 0%, rgba(20, 10, 40, 0.98) 50%, rgba(80, 30, 130, 0.9) 100%);
         border: 1.5px solid rgba(245, 158, 11, 0.5);
@@ -278,17 +310,33 @@
     <!-- Pestaña 2: Mi Vitrina -->
     <div id="section-vitrina" class="hidden flex-col gap-4">
         <div class="popmart-cabinet p-4">
-            <div class="flex items-center justify-between border-b border-amber-500/20 pb-3 mb-3">
-                <div class="flex items-center gap-2">
-                    <span class="text-xl">🎒</span>
-                    <div>
-                        <h2 class="text-xs font-black text-white uppercase tracking-wider">Gabinete de Coleccionista</h2>
-                        <p class="text-[9px] text-stone-400">Tus figuras conseguidas</p>
+            <!-- Barra de Métricas y Selector LED de Coleccionista -->
+            <div class="flex flex-col gap-2.5 border-b border-amber-500/20 pb-3 mb-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-9 h-9 rounded-xl bg-purple-900/60 border border-purple-500/40 flex items-center justify-center text-lg shadow">🎒</div>
+                        <div>
+                            <h2 class="text-xs font-black text-white uppercase tracking-wider">Vitrina de Alta Cúpula</h2>
+                            <span class="text-[8.5px] text-stone-400 font-mono">Gabinete Privado de Reliquias</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[9px] font-mono text-amber-300 font-black bg-black/70 px-2.5 py-1 rounded-xl border border-amber-500/30">
+                            {{ user_collectibles|length }} Piezas
+                        </span>
                     </div>
                 </div>
-                <span class="text-xs font-black text-amber-300 bg-black/60 px-2.5 py-1 rounded-xl border border-amber-500/30">
-                    {{ user_collectibles|length }} Piezas
-                </span>
+
+                <!-- Selector de Iluminación LED del Gabinete -->
+                <div class="flex items-center justify-between gap-1 p-1 bg-black/70 rounded-xl border border-white/10 text-[8.5px] font-mono font-bold">
+                    <span class="text-stone-400 pl-1.5 flex items-center gap-1"><span>💡</span> Luz:</span>
+                    <div class="flex items-center gap-1">
+                        <button type="button" onclick="setCabinetLighting('palace')" id="light-btn-palace" class="px-2 py-0.5 rounded-lg bg-amber-500 text-black font-black transition-all">🌟 Ámbar</button>
+                        <button type="button" onclick="setCabinetLighting('neon')" id="light-btn-neon" class="px-2 py-0.5 rounded-lg text-stone-400 hover:text-white transition-all">🟣 Neón</button>
+                        <button type="button" onclick="setCabinetLighting('diamond')" id="light-btn-diamond" class="px-2 py-0.5 rounded-lg text-stone-400 hover:text-white transition-all">💎 Glacial</button>
+                        <button type="button" onclick="setCabinetLighting('stealth')" id="light-btn-stealth" class="px-2 py-0.5 rounded-lg text-stone-400 hover:text-white transition-all">🌑 Noche</button>
+                    </div>
+                </div>
             </div>
             {% if user_collectibles %}
             <div class="grid grid-cols-3 gap-2.5">
@@ -332,8 +380,16 @@
 
     <!-- Pestaña 3: Bazar Real (Objetos Normales) -->
     <div id="section-bazar" class="hidden flex-col gap-3">
+        <!-- Selector de Categoría en el Bazar -->
+        <div class="grid grid-cols-4 gap-1 p-1 bg-black/70 rounded-xl border border-amber-500/30 text-[8.5px] font-bold text-center">
+            <button type="button" onclick="filterBazarCategory('all')" id="bazar-cat-all" class="bazar-cat-btn py-1.5 rounded-lg bg-amber-500 text-black font-black transition-all">Todas</button>
+            <button type="button" onclick="filterBazarCategory('customization')" id="bazar-cat-customization" class="bazar-cat-btn py-1.5 rounded-lg text-stone-400 hover:text-white transition-all">👑 Linaje</button>
+            <button type="button" onclick="filterBazarCategory('status')" id="bazar-cat-status" class="bazar-cat-btn py-1.5 rounded-lg text-stone-400 hover:text-white transition-all">🛡️ Escudos</button>
+            <button type="button" onclick="filterBazarCategory('consumable')" id="bazar-cat-consumable" class="bazar-cat-btn py-1.5 rounded-lg text-stone-400 hover:text-white transition-all">⚡ Pases</button>
+        </div>
+
         {% for item in bazar_items %}
-        <div class="popmart-cabinet p-3.5 flex items-center justify-between gap-3">
+        <div class="popmart-cabinet bazar-product-item p-3.5 flex items-center justify-between gap-3" data-category="{{ item.type }}">
             <div class="flex items-center gap-3">
                 <div class="w-11 h-11 rounded-xl bg-stone-900/90 border border-amber-500/20 flex items-center justify-center text-2xl shadow-inner shrink-0">
                     {% if 'fa-' in item.icon %}
@@ -522,6 +578,48 @@
                 });
             }
         } catch(e){}
+    }
+
+    
+    // 💡 Control de Iluminación de la Vitrina
+    function setCabinetLighting(mode) {
+        const cabinet = document.querySelector('#section-vitrina .popmart-cabinet');
+        if (!cabinet) return;
+        ['cabinet-light-palace', 'cabinet-light-neon', 'cabinet-light-diamond', 'cabinet-light-stealth'].forEach(cls => cabinet.classList.remove(cls));
+        cabinet.classList.add('cabinet-light-' + mode);
+
+        ['palace', 'neon', 'diamond', 'stealth'].forEach(m => {
+            const btn = document.getElementById('light-btn-' + m);
+            if (btn) {
+                if (m === mode) {
+                    btn.className = 'px-2 py-0.5 rounded-lg bg-amber-500 text-black font-black transition-all';
+                } else {
+                    btn.className = 'px-2 py-0.5 rounded-lg text-stone-400 hover:text-white transition-all';
+                }
+            }
+        });
+    }
+
+    // 🏷️ Filtro de Categorías del Bazar
+    function filterBazarCategory(category) {
+        const items = document.querySelectorAll('.bazar-product-item');
+        items.forEach(el => {
+            if (category === 'all' || el.getAttribute('data-category') === category) {
+                el.classList.remove('hidden');
+            } else {
+                el.classList.add('hidden');
+            }
+        });
+        ['all', 'customization', 'status', 'consumable'].forEach(cat => {
+            const btn = document.getElementById('bazar-cat-' + cat);
+            if (btn) {
+                if (cat === category) {
+                    btn.className = 'bazar-cat-btn py-1.5 rounded-lg bg-amber-500 text-black font-black transition-all';
+                } else {
+                    btn.className = 'bazar-cat-btn py-1.5 rounded-lg text-stone-400 hover:text-white transition-all';
+                }
+            }
+        });
     }
 
     function switchBazarTab(tabName) {
