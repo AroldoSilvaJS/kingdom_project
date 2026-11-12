@@ -2179,4 +2179,3 @@ def scratch_card_play_ajax(request):
             })
 
 
-

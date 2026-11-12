@@ -402,8 +402,9 @@
                 extraParams = '&' + pathAndQuery.substring(queryIndex + 1);
             }
 
-            // ⚡ Navegación instantánea directa sin retardo artificial
-            window.location.href = `${basePath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}${extraParams}${hash}`;
+            setTimeout(() => {
+                window.location.href = `${basePath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}${extraParams}${hash}`;
+            }, 80);
         };
 
         window.navGo = window.universalNav;
@@ -473,6 +474,5 @@
     </script>
 </body>
 </html>
-
 
 

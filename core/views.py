@@ -96,8 +96,7 @@ def main_menu(request):
 
     if user_profile.username and not str(user_profile.username).lower().startswith('noble_'):
         clean_handle = user_profile.username if user_profile.username.startswith('@') else f"@{user_profile.username}"
-        # Solo actualizar en BD si el handle difiere para evitar un UPDATE innecesario en cada carga
-        IdolProfile.objects.filter(telegram_user_id=tg_id).exclude(owner_username=clean_handle).update(owner_username=clean_handle)
+        IdolProfile.objects.filter(telegram_user_id=tg_id).update(owner_username=clean_handle)
 
     return render(request, 'core/menu.html', {
         'tg_id': tg_id,
@@ -1115,6 +1114,5 @@ def toggle_pin_item(request):
         'pinned_count': len(pinned),
         'message': msg
     })
-
 
 

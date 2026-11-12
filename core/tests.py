@@ -250,4 +250,3 @@ class KingdomMasterTestSuite(TestCase):
         self.assertEqual(UserProfile.objects.count(), 1)
 
 
-

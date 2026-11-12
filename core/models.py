@@ -246,24 +246,13 @@ class KingdomSetting(models.Model):
     key = models.CharField(max_length=80, unique=True)
     value = models.TextField()
 
-    _MEMO_CACHE = {}
-
     @classmethod
     def get_val(cls, key, default=''):
-        import time
-        now = time.time()
-        cached = cls._MEMO_CACHE.get(key)
-        if cached and cached[1] > now:
-            return cached[0]
         obj = cls.objects.filter(key=key).first()
-        val = obj.value if obj else default
-        cls._MEMO_CACHE[key] = (val, now + 60)  # ⚡ 60s TTL en memoria para evitar N consultas por petición
-        return val
+        return obj.value if obj else default
 
     @classmethod
     def set_val(cls, key, value):
-        import time
-        cls._MEMO_CACHE[key] = (str(value), time.time() + 60)
         cls.objects.update_or_create(key=key, defaults={'value': str(value)})
 
 
@@ -273,4 +262,3 @@ class AdminAuditLog(models.Model):
     target_tg_id = models.BigIntegerField(blank=True, null=True)
     details = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
-

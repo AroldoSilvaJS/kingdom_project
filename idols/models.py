@@ -324,9 +324,7 @@ class PostComment(models.Model):
 
     @property
     def author_profile(self):
-        """Retorna el perfil nobiliario del autor (con soporte para cache prefetched)."""
-        if hasattr(self, '_prefetched_author_profile'):
-            return self._prefetched_author_profile
+        """Retorna el perfil nobiliario del autor para mostrar nivel, títulos y marco de avatar del Bazar."""
         try:
             from core.models import UserProfile
             return UserProfile.objects.filter(telegram_user_id=self.author_telegram_id).first()
@@ -485,7 +483,6 @@ class RoleSessionRequest(models.Model):
 
     def __str__(self):
         return f"Rol: {self.idol.stage_name} con @{self.client_username} ({self.status})"
-
 
 
 
