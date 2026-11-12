@@ -1,5 +1,6 @@
 
 
+
 {% load static %}
 <!DOCTYPE html>
 <html lang="es">
@@ -401,9 +402,8 @@
                 extraParams = '&' + pathAndQuery.substring(queryIndex + 1);
             }
 
-            setTimeout(() => {
-                window.location.href = `${basePath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}${extraParams}${hash}`;
-            }, 80);
+            // ⚡ Navegación instantánea directa sin retardo artificial
+            window.location.href = `${basePath}?tg_id=${user.id}&tg_username=${encodeURIComponent(user.username)}${extraParams}${hash}`;
         };
 
         window.navGo = window.universalNav;
@@ -473,4 +473,6 @@
     </script>
 </body>
 </html>
+
+
 

@@ -1,5 +1,6 @@
 
 
+
 # 1. Librería estándar de Python
 import random
 from datetime import timedelta
@@ -2176,4 +2177,6 @@ def scratch_card_play_ajax(request):
                 'patron_vault': wallet.patron_vault,
                 'message': f'💀 Sin suerte esta vez. Tu cartón no obtuvo trío. El 8% ({int(round(cost * 0.08))} 🪙) pasó a tu Cofre del Mecenas.'
             })
+
+
 

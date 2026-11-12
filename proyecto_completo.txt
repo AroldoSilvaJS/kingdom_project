@@ -635,18 +635,17 @@ class UserProfile(models.Model):
 
     @property
     def max_bet_allowed(self):
-        """Tope de apuesta en Casino según rango (Rebalanceado)"""
+        """Tope de apuesta en Casino según rango (Ampliados para grandes ganancias)"""
         if self.level >= 30:
-            return 150
+            return 4000
         elif self.level >= 15:
-            return 75
+            return 1500
         elif self.level >= 5:
-            return 35
-        return 15
+            return 500
+        return 150
 
     @property
     def idol_rank_name(self):
-        """Escalafón propio para Idols"""
         if self.level >= 70:
             return "Reina Absoluta del Reino ⚜️"
         elif self.level >= 50:
@@ -968,6 +967,7 @@ def send_telegram_msg(chat_id, text, button_text=None, button_url=None, message_
 ARCHIVO: .\core\tests.py
 ==================================================
 
+
 # core/tests.py
 from datetime import timedelta
 from django.test import TestCase, Client
@@ -1064,11 +1064,11 @@ class KingdomMasterTestSuite(TestCase):
         self.assertEqual(self.user_profile.current_xp, 115)
 
     def test_max_bet_scaling(self):
-        self.assertEqual(self.user_profile.max_bet_allowed, 20)
-        self.user_profile.level = 16
-        self.assertEqual(self.user_profile.max_bet_allowed, 80)
-        self.user_profile.level = 35
         self.assertEqual(self.user_profile.max_bet_allowed, 150)
+        self.user_profile.level = 16
+        self.assertEqual(self.user_profile.max_bet_allowed, 1500)
+        self.user_profile.level = 35
+        self.assertEqual(self.user_profile.max_bet_allowed, 4000)
 
     # --- BLOQUE 3: LAS 10 MASCOTAS Y 3 EVOLUCIONES ---
     def test_all_10_species_registered(self):
@@ -1156,8 +1156,8 @@ class KingdomMasterTestSuite(TestCase):
 
     # --- BLOQUE 5: CASINO Y JUEGOS (RESPETANDO MAX_BET = 20 A LVL 1) ---
     def test_casino_roulette_bet_cap_at_level1(self):
-        # A nivel 1 el max_bet es 20. Una apuesta de 150 debe ser rechazada
-        self.client.post(reverse('economy:casino'), {'tg_id': self.user_id, 'bet_amount': 150, 'bet_choice': 'red'})
+        # A nivel 1 el max_bet es 150. Una apuesta de 500 debe ser rechazada
+        self.client.post(reverse('economy:casino'), {'tg_id': self.user_id, 'bet_amount': 500, 'bet_choice': 'red'})
         self.user_wallet.refresh_from_db()
         self.assertEqual(self.user_wallet.balance, 300)
 
@@ -1216,6 +1216,8 @@ class KingdomMasterTestSuite(TestCase):
         self.assertEqual(UserRole.objects.count(), 3)
         self.assertEqual(Wallet.objects.count(), 2)
         self.assertEqual(UserProfile.objects.count(), 1)
+
+
 
 ==================================================
 ARCHIVO: .\core\urls.py
@@ -1993,6 +1995,109 @@ def _process_telegram_update(data):
                 user_prof.save(update_fields=['username'])
             IdolProfile.objects.filter(telegram_user_id=user_id).update(owner_username=handle_real)
 
+        # ==============================================================
+        # 👑 COMANDO: /ocupadas (Lista de Idols ocupadas agrupadas por grupo)
+        # ==============================================================
+        is_idols_cmd = (
+            text.startswith(('/ocupadas', '/idols_ocupadas', '/idols', '/reparto', '/elenco', '/lista_idols', '/ocupados', '!ocupadas', '.ocupadas'))
+            or text in ('ocupadas', 'idols ocupadas', 'lista idols', 'elenco', 'reparto')
+        )
+        if is_idols_cmd:
+            is_group = False
+            try:
+                is_group = int(chat_id) < 0
+            except (ValueError, TypeError):
+                is_group = str(chat_id).startswith('-')
+
+            if is_group:
+                app_link = "https://t.me/KingdomPleasure_bot?start=idols"
+            else:
+                app_link = f"https://kingdom-pleasure-app.onrender.com/idols/?tg_id={user_id}&tg_username={encode_param(handle_real)}"
+
+            idols_qs = IdolProfile.objects.all().order_by('group', 'stage_name')
+            total_idols = idols_qs.count()
+
+            if total_idols == 0:
+                empty_msg = (
+                    "👑 <b>ELENCO REAL — MUSAS OCUPADAS</b> 👑\n\n"
+                    "<i>Actualmente no hay ninguna Musa registrada u ocupada en el Reino.</i>\n\n"
+                    "✨ ¡Sé la primera persona en reclamar a tu Idol favorita!"
+                )
+                send_telegram_msg(
+                    chat_id=chat_id,
+                    text=empty_msg,
+                    button_text="🌹 Registrar Mi Idol",
+                    button_url=app_link,
+                    message_thread_id=message_thread_id
+                )
+                return
+
+            from collections import defaultdict
+            import html as py_html
+
+            grouped = defaultdict(list)
+            for idol in idols_qs:
+                raw_group = (idol.group or '').strip()
+                grp_title = raw_group.upper() if raw_group else "SOLISTAS / INDEPENDIENTES"
+                grouped[grp_title].append(idol)
+
+            # Ordenar grupos alfabéticamente dejando SOLISTAS al final
+            sorted_groups = sorted(
+                grouped.keys(),
+                key=lambda g: ('ZZZ_' if 'SOLISTAS' in g else g)
+            )
+
+            chunks = []
+            current_chunk = [
+                "👑 <b>ELENCO REAL — MUSAS OCUPADAS</b> 👑\n",
+                "<i>Catálogo oficial de Idols y sus respectivos dueños</i>\n",
+                f"📊 <b>Total Ocupadas:</b> {total_idols} Musas\n",
+                "━━━━━━━━━━━━━━━━━━━━\n"
+            ]
+            current_len = sum(len(s) for s in current_chunk)
+
+            for grp in sorted_groups:
+                idols_in_grp = grouped[grp]
+                grp_icon = "🌟" if "SOLISTAS" in grp else "🎀"
+                grp_header = f"\n{grp_icon} <b>{grp}</b> ({len(idols_in_grp)})\n"
+                lines_grp = [grp_header]
+                for idol in sorted(idols_in_grp, key=lambda x: x.stage_name.lower()):
+                    owner = idol.get_display_owner()
+                    status_dot = "🟢" if idol.status == 'online' else ("🔥" if idol.status == 'antojos' else "🌙")
+                    rp_badge = " 🎭" if idol.is_roleplay_open else ""
+                    lines_grp.append(f"  • {status_dot} <b>{py_html.escape(idol.stage_name)}</b> — {py_html.escape(owner)}{rp_badge}\n")
+
+                group_text = "".join(lines_grp)
+                if current_len + len(group_text) > 3500:
+                    chunks.append("".join(current_chunk))
+                    current_chunk = [
+                        "👑 <b>ELENCO REAL (Continuación)</b>\n",
+                        "━━━━━━━━━━━━━━━━━━━━\n",
+                        group_text
+                    ]
+                    current_len = sum(len(s) for s in current_chunk)
+                else:
+                    current_chunk.append(group_text)
+                    current_len += len(group_text)
+
+            footer = (
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
+                "💡 <i>¿Deseas consultar sus perfiles o solicitar sesiones de rol? Pulsa el botón dorado abajo.</i>"
+            )
+            current_chunk.append(footer)
+            chunks.append("".join(current_chunk))
+
+            for idx, chunk_text in enumerate(chunks):
+                is_last = (idx == len(chunks) - 1)
+                send_telegram_msg(
+                    chat_id=chat_id,
+                    text=chunk_text,
+                    button_text="🌹 Abrir Galería en la App" if is_last else None,
+                    button_url=app_link if is_last else None,
+                    message_thread_id=message_thread_id
+                )
+            return
+
         if text.startswith(('/start', '/id', '/menu', '/app', 'entrar')):
             is_group = int(chat_id) < 0
             interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/')
@@ -2755,7 +2860,7 @@ def casino_game(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     
-    max_bet = max(100, getattr(profile, 'max_bet_allowed', 100))
+    max_bet = getattr(profile, 'max_bet_allowed', 150)
     ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
     NEGROS = [n for n in range(1, 37) if n not in ROJOS]
     roulette_streak = request.session.get('roulette_streak', 0)
@@ -2812,7 +2917,7 @@ def casino_game(request):
                 if eleccion in ['red', 'black', 'zero']:
                     if eleccion == color_ganador:
                         gano = True
-                        multiplicador = 22.0 if eleccion == 'zero' else 2.0
+                        multiplicador = 36.0 if eleccion == 'zero' else 2.0
                 # 2. Apuesta a Par / Impar
                 elif eleccion in ['even', 'odd']:
                     if numero_ganador != 0:
@@ -2826,7 +2931,7 @@ def casino_game(request):
                         num_apostado = int(request.POST.get('target_number', -1))
                         if num_apostado == numero_ganador:
                             gano = True
-                            multiplicador = 30.0
+                            multiplicador = 36.0
                     except ValueError:
                         pass
 
@@ -2887,13 +2992,21 @@ def claim_bonus(request):
             base_bonus = profile.get_daily_bonus_amount()
             multiplier = wallet.get_kitsune_gold_multiplier()
             bonus_amount = int(round(base_bonus * multiplier))
+            
+            # Red de Auxilio de la Corona (Subsidio para nobles o musas en quiebra)
+            relief_extra = 0
+            if wallet.balance < 15:
+                relief_extra = 25
+                bonus_amount += relief_extra
+
             wallet.add_funds(bonus_amount)
             wallet.last_bonus_claim = timezone.now()
             wallet.save()
             
             grant_user_xp(request, tg_id, 25, reason="Ruleta de la Fortuna")
             extra_msg = f" (¡+{int((multiplier-1)*100)}% por tu Zorro Kitsune!)" if multiplier > 1.0 else ""
-            messages.success(request, f"🎡 ¡La Ruleta te ha otorgado +{bonus_amount} 🪙 de oro{extra_msg} y +25 EXP!")
+            relief_msg = " 🛡️ ¡Subsidio Imperial: +25 🪙 extra por auxilio de bancarrota!" if relief_extra > 0 else ""
+            messages.success(request, f"🎡 ¡La Ruleta te ha otorgado +{bonus_amount} 🪙 de oro{extra_msg}{relief_msg} y +25 EXP!")
         else:
             messages.error(request, "Ya has reclamado tu ofrenda de hoy. La Ruleta se reinicia cada día a las 12:00 PM.")
     return redirect(f'/economy/wallet/?tg_id={tg_id}')
@@ -2906,7 +3019,7 @@ def slots_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    max_bet = max(100, getattr(profile, 'max_bet_allowed', 100))
+    max_bet = getattr(profile, 'max_bet_allowed', 150)
     slots_losses = request.session.get('slots_losses', 0)
 
     resultado = None
@@ -2944,7 +3057,7 @@ def slots_game(request):
                 pet = Pet.objects.filter(telegram_user_id=tg_id).first()
 
                 # Alternancia dinámica anti-racha
-                if slots_losses >= 2 and random.random() < 0.65:
+                if slots_losses >= 2 and random.random() < 0.75:
                     sym = random.choice(['🍇', '🍒', '🪙', '⭐'])
                     reels = [sym, sym, random.choice(WEIGHTED_SYMBOLS)]
                 else:
@@ -2961,7 +3074,7 @@ def slots_game(request):
                 # 1. TRÍOS
                 if reels[0] == reels[1] == reels[2]:
                     symbol = reels[0]
-                    multiplicador = {'👑': 25.0, '💎': 15.0, '⭐': 8.0, '🪙': 5.0}.get(symbol, 3.5)
+                    multiplicador = {'👑': 50.0, '💎': 30.0, '⭐': 18.0, '🪙': 12.0}.get(symbol, 7.0)
                     xp_gain = 12 if symbol == '👑' else 4
                     ganancia = int(apuesta * multiplicador)
 
@@ -2978,11 +3091,11 @@ def slots_game(request):
                 elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
                     pair_sym = reels[1] if (reels[0] == reels[1] or reels[1] == reels[2]) else reels[0]
                     if pair_sym in ['👑', '💎', '⭐']:
-                        multiplicador = 1.6
-                        xp_gain = 3
+                        multiplicador = 2.5
+                        xp_gain = 4
                         resultado = "pair_premium"
                     else:
-                        multiplicador = 1.2
+                        multiplicador = 1.5
                         xp_gain = 2
                         resultado = "pair"
 
@@ -2997,7 +3110,7 @@ def slots_game(request):
 
                 # 3. AMORTIGUACIÓN
                 elif '👑' in reels or '💎' in reels:
-                    reintegro = max(1, int(round(apuesta * 0.5)))
+                    reintegro = max(1, int(round(apuesta * 0.6)))
                     wallet.remove_funds(apuesta - reintegro)
                     resultado = "cushion"
                     ganancia = reintegro
@@ -3074,7 +3187,7 @@ def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     prob = 1.0
     for i in range(revealed_count):
         prob *= (safe_tiles - i) / (total_tiles - i)
-    raw_mult = 0.98 / prob
+    raw_mult = 1.05 / prob
     return max(1.04, round(raw_mult, 2))
 
 
@@ -3082,7 +3195,7 @@ def mines_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    max_bet = max(100, getattr(profile, 'max_bet_allowed', 100))
+    max_bet = getattr(profile, 'max_bet_allowed', 150)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
 
     session_mines = request.session.get('mines_state')
@@ -3265,7 +3378,7 @@ def blackjack_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    max_bet = max(100, getattr(profile, 'max_bet_allowed', 100))
+    max_bet = getattr(profile, 'max_bet_allowed', 150)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
     bj_losses = request.session.get('bj_loss_streak', 0)
 
@@ -3484,7 +3597,7 @@ BAZAR_ITEMS = [
         'name': 'Escudo Protector (15 días)',
         'description': 'Inmunidad total a la pérdida de rango o recompensas durante 15 días en caso de inactividad.',
         'desc': 'Inmunidad total a la pérdida de rango o recompensas durante 15 días en caso de inactividad.',
-        'price': 350,
+        'price': 850,
         'icon': '🛡️',
         'emoji': '🛡️',
         'fa_icon': 'fa-solid fa-shield-halved',
@@ -3496,7 +3609,7 @@ BAZAR_ITEMS = [
         'name': 'Escudo Protector Imperial (30 días)',
         'description': 'Un mes entero de protección soberana ante cualquier ausencia de la corte.',
         'desc': 'Un mes entero de protección soberana ante cualquier ausencia de la corte.',
-        'price': 600,
+        'price': 1600,
         'icon': '🔰',
         'emoji': '🔰',
         'fa_icon': 'fa-solid fa-shield-virus',
@@ -3508,7 +3621,7 @@ BAZAR_ITEMS = [
         'name': 'Bula de Título Personalizado',
         'description': 'Graba en tu perfil un epíteto o distinción única redactada por ti.',
         'desc': 'Graba en tu perfil un epíteto o distinción única redactada por ti.',
-        'price': 450,
+        'price': 1200,
         'icon': '📜',
         'emoji': '📜',
         'fa_icon': 'fa-solid fa-feather-pointed',
@@ -3520,7 +3633,7 @@ BAZAR_ITEMS = [
         'name': 'Marco de Avatar Imperial',
         'description': 'Engalana tu presencia visual con los marcos de oro pulido y gemas dinásticas.',
         'desc': 'Engalana tu presencia visual con los marcos de oro pulido y gemas dinásticas.',
-        'price': 400,
+        'price': 1100,
         'icon': '👑',
         'emoji': '👑',
         'fa_icon': 'fa-solid fa-gem',
@@ -3532,7 +3645,7 @@ BAZAR_ITEMS = [
         'name': 'Insignia de Linaje VIP',
         'description': 'Una medalla de honor perpetua visible en tu perfil público ante todos los nobles.',
         'desc': 'Una medalla de honor perpetua visible en tu perfil público ante todos los nobles.',
-        'price': 300,
+        'price': 850,
         'icon': '🎖️',
         'emoji': '🎖️',
         'fa_icon': 'fa-solid fa-award',
@@ -3544,7 +3657,7 @@ BAZAR_ITEMS = [
         'name': 'Sello de Antojo Prioritario',
         'description': 'Tus peticiones de antojos a las Idols reciben respuesta urgente en la cúspide.',
         'desc': 'Tus peticiones de antojos a las Idols reciben respuesta urgente en la cúspide.',
-        'price': 200,
+        'price': 500,
         'icon': '⚡',
         'emoji': '⚡',
         'fa_icon': 'fa-solid fa-bell-concierge',
@@ -3556,7 +3669,7 @@ BAZAR_ITEMS = [
         'name': 'Talismán de la Fortuna',
         'description': 'Aumenta sutilmente la bendición de tiradas y recompensas en el casino.',
         'desc': 'Aumenta sutilmente la bendición de tiradas y recompensas en el casino.',
-        'price': 250,
+        'price': 650,
         'icon': '🍀',
         'emoji': '🍀',
         'fa_icon': 'fa-solid fa-clover',
@@ -3568,7 +3681,7 @@ BAZAR_ITEMS = [
         'name': 'Pase de Libre Comercio',
         'description': 'Exención de tributos del reino en tus próximas compras o ventas.',
         'desc': 'Exención de tributos del reino en tus próximas compras o ventas.',
-        'price': 150,
+        'price': 450,
         'icon': '🪙',
         'emoji': '🪙',
         'fa_icon': 'fa-solid fa-coins',
@@ -10954,7 +11067,31 @@ ARCHIVO: .\templates\economy\bazar.html
         box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.2);
         border-radius: 28px;
         position: relative;
+        transition: all 0.3s ease;
     }
+    /* Iluminaciones Dinámicas de la Vitrina */
+    .cabinet-light-palace {
+        background: radial-gradient(circle at 50% -10%, rgba(245, 158, 11, 0.25) 0%, rgba(35, 15, 60, 0.8) 45%, rgba(10, 5, 20, 0.98) 100%);
+        border-color: rgba(245, 158, 11, 0.45);
+        box-shadow: 0 0 35px rgba(245, 158, 11, 0.2), inset 0 2px 4px rgba(255, 230, 160, 0.25);
+    }
+    .cabinet-light-neon {
+        background: radial-gradient(circle at 50% -10%, rgba(217, 70, 239, 0.3) 0%, rgba(30, 10, 50, 0.85) 45%, rgba(6, 2, 14, 0.98) 100%);
+        border-color: rgba(217, 70, 239, 0.5);
+        box-shadow: 0 0 35px rgba(217, 70, 239, 0.25), inset 0 2px 4px rgba(240, 170, 255, 0.3);
+    }
+    .cabinet-light-diamond {
+        background: radial-gradient(circle at 50% -10%, rgba(34, 211, 238, 0.22) 0%, rgba(15, 23, 42, 0.85) 45%, rgba(3, 7, 18, 0.98) 100%);
+        border-color: rgba(56, 189, 248, 0.45);
+        box-shadow: 0 0 35px rgba(56, 189, 248, 0.2), inset 0 2px 4px rgba(186, 230, 253, 0.3);
+    }
+    .cabinet-light-stealth {
+        background: radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.05) 0%, rgba(18, 18, 18, 0.9) 45%, rgba(5, 5, 5, 0.98) 100%);
+        border-color: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.95);
+    }
+
+    /* Peana Acrílica de Museo con Biselado 3D */
     .acrylic-stand {
         position: relative;
         background: radial-gradient(circle at 50% 120%, rgba(212, 175, 55, 0.22) 0%, rgba(255, 255, 255, 0.04) 55%, rgba(10, 5, 20, 0.85) 100%);
@@ -10978,6 +11115,14 @@ ARCHIVO: .\templates\economy\bazar.html
         border: 1.5px solid rgba(245, 158, 11, 0.7);
         box-shadow: 0 0 30px rgba(245, 158, 11, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.5);
     }
+    /* Estante de Cristal Biselado */
+    .glass-shelf {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.03) 100%);
+        border-top: 1px solid rgba(255, 255, 255, 0.4);
+        border-bottom: 2px solid rgba(0, 0, 0, 0.6);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+    }
+
     .blind-box-card {
         background: linear-gradient(135deg, rgba(60, 20, 110, 0.95) 0%, rgba(20, 10, 40, 0.98) 50%, rgba(80, 30, 130, 0.9) 100%);
         border: 1.5px solid rgba(245, 158, 11, 0.5);
@@ -11221,17 +11366,33 @@ ARCHIVO: .\templates\economy\bazar.html
     <!-- Pestaña 2: Mi Vitrina -->
     <div id="section-vitrina" class="hidden flex-col gap-4">
         <div class="popmart-cabinet p-4">
-            <div class="flex items-center justify-between border-b border-amber-500/20 pb-3 mb-3">
-                <div class="flex items-center gap-2">
-                    <span class="text-xl">🎒</span>
-                    <div>
-                        <h2 class="text-xs font-black text-white uppercase tracking-wider">Gabinete de Coleccionista</h2>
-                        <p class="text-[9px] text-stone-400">Tus figuras conseguidas</p>
+            <!-- Barra de Métricas y Selector LED de Coleccionista -->
+            <div class="flex flex-col gap-2.5 border-b border-amber-500/20 pb-3 mb-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-9 h-9 rounded-xl bg-purple-900/60 border border-purple-500/40 flex items-center justify-center text-lg shadow">🎒</div>
+                        <div>
+                            <h2 class="text-xs font-black text-white uppercase tracking-wider">Vitrina de Alta Cúpula</h2>
+                            <span class="text-[8.5px] text-stone-400 font-mono">Gabinete Privado de Reliquias</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[9px] font-mono text-amber-300 font-black bg-black/70 px-2.5 py-1 rounded-xl border border-amber-500/30">
+                            {{ user_collectibles|length }} Piezas
+                        </span>
                     </div>
                 </div>
-                <span class="text-xs font-black text-amber-300 bg-black/60 px-2.5 py-1 rounded-xl border border-amber-500/30">
-                    {{ user_collectibles|length }} Piezas
-                </span>
+
+                <!-- Selector de Iluminación LED del Gabinete -->
+                <div class="flex items-center justify-between gap-1 p-1 bg-black/70 rounded-xl border border-white/10 text-[8.5px] font-mono font-bold">
+                    <span class="text-stone-400 pl-1.5 flex items-center gap-1"><span>💡</span> Luz:</span>
+                    <div class="flex items-center gap-1">
+                        <button type="button" onclick="setCabinetLighting('palace')" id="light-btn-palace" class="px-2 py-0.5 rounded-lg bg-amber-500 text-black font-black transition-all">🌟 Ámbar</button>
+                        <button type="button" onclick="setCabinetLighting('neon')" id="light-btn-neon" class="px-2 py-0.5 rounded-lg text-stone-400 hover:text-white transition-all">🟣 Neón</button>
+                        <button type="button" onclick="setCabinetLighting('diamond')" id="light-btn-diamond" class="px-2 py-0.5 rounded-lg text-stone-400 hover:text-white transition-all">💎 Glacial</button>
+                        <button type="button" onclick="setCabinetLighting('stealth')" id="light-btn-stealth" class="px-2 py-0.5 rounded-lg text-stone-400 hover:text-white transition-all">🌑 Noche</button>
+                    </div>
+                </div>
             </div>
             {% if user_collectibles %}
             <div class="grid grid-cols-3 gap-2.5">
@@ -11275,8 +11436,16 @@ ARCHIVO: .\templates\economy\bazar.html
 
     <!-- Pestaña 3: Bazar Real (Objetos Normales) -->
     <div id="section-bazar" class="hidden flex-col gap-3">
+        <!-- Selector de Categoría en el Bazar -->
+        <div class="grid grid-cols-4 gap-1 p-1 bg-black/70 rounded-xl border border-amber-500/30 text-[8.5px] font-bold text-center">
+            <button type="button" onclick="filterBazarCategory('all')" id="bazar-cat-all" class="bazar-cat-btn py-1.5 rounded-lg bg-amber-500 text-black font-black transition-all">Todas</button>
+            <button type="button" onclick="filterBazarCategory('customization')" id="bazar-cat-customization" class="bazar-cat-btn py-1.5 rounded-lg text-stone-400 hover:text-white transition-all">👑 Linaje</button>
+            <button type="button" onclick="filterBazarCategory('status')" id="bazar-cat-status" class="bazar-cat-btn py-1.5 rounded-lg text-stone-400 hover:text-white transition-all">🛡️ Escudos</button>
+            <button type="button" onclick="filterBazarCategory('consumable')" id="bazar-cat-consumable" class="bazar-cat-btn py-1.5 rounded-lg text-stone-400 hover:text-white transition-all">⚡ Pases</button>
+        </div>
+
         {% for item in bazar_items %}
-        <div class="popmart-cabinet p-3.5 flex items-center justify-between gap-3">
+        <div class="popmart-cabinet bazar-product-item p-3.5 flex items-center justify-between gap-3" data-category="{{ item.type }}">
             <div class="flex items-center gap-3">
                 <div class="w-11 h-11 rounded-xl bg-stone-900/90 border border-amber-500/20 flex items-center justify-center text-2xl shadow-inner shrink-0">
                     {% if 'fa-' in item.icon %}
@@ -11465,6 +11634,48 @@ ARCHIVO: .\templates\economy\bazar.html
                 });
             }
         } catch(e){}
+    }
+
+    
+    // 💡 Control de Iluminación de la Vitrina
+    function setCabinetLighting(mode) {
+        const cabinet = document.querySelector('#section-vitrina .popmart-cabinet');
+        if (!cabinet) return;
+        ['cabinet-light-palace', 'cabinet-light-neon', 'cabinet-light-diamond', 'cabinet-light-stealth'].forEach(cls => cabinet.classList.remove(cls));
+        cabinet.classList.add('cabinet-light-' + mode);
+
+        ['palace', 'neon', 'diamond', 'stealth'].forEach(m => {
+            const btn = document.getElementById('light-btn-' + m);
+            if (btn) {
+                if (m === mode) {
+                    btn.className = 'px-2 py-0.5 rounded-lg bg-amber-500 text-black font-black transition-all';
+                } else {
+                    btn.className = 'px-2 py-0.5 rounded-lg text-stone-400 hover:text-white transition-all';
+                }
+            }
+        });
+    }
+
+    // 🏷️ Filtro de Categorías del Bazar
+    function filterBazarCategory(category) {
+        const items = document.querySelectorAll('.bazar-product-item');
+        items.forEach(el => {
+            if (category === 'all' || el.getAttribute('data-category') === category) {
+                el.classList.remove('hidden');
+            } else {
+                el.classList.add('hidden');
+            }
+        });
+        ['all', 'customization', 'status', 'consumable'].forEach(cat => {
+            const btn = document.getElementById('bazar-cat-' + cat);
+            if (btn) {
+                if (cat === category) {
+                    btn.className = 'bazar-cat-btn py-1.5 rounded-lg bg-amber-500 text-black font-black transition-all';
+                } else {
+                    btn.className = 'bazar-cat-btn py-1.5 rounded-lg text-stone-400 hover:text-white transition-all';
+                }
+            }
+        });
     }
 
     function switchBazarTab(tabName) {
@@ -13691,6 +13902,7 @@ function playScratchSound() {
 ARCHIVO: .\templates\economy\slots.html
 ==================================================
 
+
 {% extends 'base.html' %}
 
 {% block content %}
@@ -13752,9 +13964,9 @@ ARCHIVO: .\templates\economy\slots.html
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5">Monto de la Tirada (Máx: {{ max_bet }} 🪙)</label>
                 <div class="grid grid-cols-4 gap-1.5 mb-2">
-                    <button type="button" onclick="setBet(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">10</button>
                     <button type="button" onclick="setBet(25)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">25</button>
                     <button type="button" onclick="setBet(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
+                    <button type="button" onclick="setBet(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
                     <button type="button" onclick="setBet({{ max_bet }})" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">{{ max_bet }}</button>
                 </div>
                 <input type="number" id="bet_amount_input" min="1" max="{{ max_bet }}" value="25"
@@ -13775,15 +13987,15 @@ ARCHIVO: .\templates\economy\slots.html
                 <span class="text-[9px] text-yellow-300 font-mono">RTP Equilibrado</span>
             </h4>
             <div class="grid grid-cols-2 gap-2 text-[10px] text-stone-300 font-medium">
-                <span class="flex items-center justify-between">👑👑👑 Triple Corona: <strong class="text-yellow-400 font-mono font-black">x25</strong></span>
-                <span class="flex items-center justify-between">💎💎💎 Triplete Diamante: <strong class="text-purple-300 font-mono font-black">x15</strong></span>
-                <span class="flex items-center justify-between">⭐⭐⭐ Triplete Estrella: <strong class="text-amber-300 font-mono font-bold">x8</strong></span>
-                <span class="flex items-center justify-between">🪙🪙🪙 Monedas de Oro: <strong class="text-yellow-300 font-mono font-bold">x5</strong></span>
-                <span class="flex items-center justify-between">🍇/🍒 Trío de Frutas: <strong class="text-white font-mono">x3.5</strong></span>
-                <span class="flex items-center justify-between">👑/💎/⭐ Par Noble: <strong class="text-emerald-300 font-mono font-bold">x1.6</strong></span>
+                <span class="flex items-center justify-between">👑👑👑 Triple Corona: <strong class="text-yellow-400 font-mono font-black">x50</strong></span>
+                <span class="flex items-center justify-between">💎💎💎 Triplete Diamante: <strong class="text-purple-300 font-mono font-black">x30</strong></span>
+                <span class="flex items-center justify-between">⭐⭐⭐ Triplete Estrella: <strong class="text-amber-300 font-mono font-bold">x18</strong></span>
+                <span class="flex items-center justify-between">🪙🪙🪙 Monedas de Oro: <strong class="text-yellow-300 font-mono font-bold">x12</strong></span>
+                <span class="flex items-center justify-between">🍇/🍒 Trío de Frutas: <strong class="text-white font-mono font-bold">x7</strong></span>
+                <span class="flex items-center justify-between">👑/💎/⭐ Par Noble: <strong class="text-emerald-300 font-mono font-bold">x2.5</strong></span>
             </div>
             <div class="text-[9px] text-stone-500 font-mono mt-2 text-center pt-1 border-t border-white/5">
-                Cualquier Par Básico (Fruta o Moneda) devuelve tu apuesta: <strong class="text-stone-300">x1.2</strong>
+                Cualquier Par Básico (Fruta o Moneda) otorga ganancia neta: <strong class="text-yellow-300 font-bold">x1.5</strong>
             </div>
         </div>
 
@@ -14009,6 +14221,8 @@ ARCHIVO: .\templates\economy\slots.html
     }
 </script>
 {% endblock %}
+
+
 
 ==================================================
 ARCHIVO: .\templates\economy\wallet.html

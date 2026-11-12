@@ -1,4 +1,5 @@
 
+
 # core/tests.py
 from datetime import timedelta
 from django.test import TestCase, Client
@@ -247,4 +248,6 @@ class KingdomMasterTestSuite(TestCase):
         self.assertEqual(UserRole.objects.count(), 3)
         self.assertEqual(Wallet.objects.count(), 2)
         self.assertEqual(UserProfile.objects.count(), 1)
+
+
 

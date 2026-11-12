@@ -6,10 +6,11 @@ from core.models import UserRole
 
 ADMIN_TG_ID = '7474444797'
 
+
 class TelegramSessionMiddleware:
     """
     1. Aísla las sesiones por cada tg_id.
-    2. Blindaje de seguridad: Bloquea a usuarios fuera del grupo.
+    2. Blindaje de seguridad ultrarrápido: Valida membresía de grupo una vez por sesión (o caché).
     3. ⚖️ Mazmorra Imperial: Bloquea a usuarios con ban activo.
     """
     def __init__(self, get_response):
@@ -17,12 +18,13 @@ class TelegramSessionMiddleware:
 
     def __call__(self, request):
         incoming_id = request.GET.get('tg_id') or request.POST.get('tg_id')
-
         if incoming_id and str(incoming_id).strip() not in ['', 'None', 'undefined', 'null']:
             try:
                 clean_id = int(incoming_id)
                 if request.session.get('tg_id') != clean_id:
                     request.session['tg_id'] = clean_id
+                    # Limpiar estado de verificación anterior si cambió de usuario
+                    request.session.pop('is_group_verified', None)
             except (ValueError, TypeError):
                 pass
 
@@ -36,14 +38,19 @@ class TelegramSessionMiddleware:
         if tg_id and str(tg_id).isdigit():
             clean_id = int(tg_id)
             
-            # 1. Filtro de Grupo
-            if str(clean_id) != ADMIN_TG_ID and not is_user_in_group(clean_id):
-                interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/KingdomOfPleasureOf')
-                return render(request, 'core/access_denied.html', {
-                    'tg_id': clean_id,
-                    'interview_url': interview_link,
-                    'hide_bottom_nav': True
-                }, status=403)
+            # 1. Filtro de Grupo optimizado (Sesión HTTP + Caché)
+            if str(clean_id) != ADMIN_TG_ID:
+                is_verified = request.session.get('is_group_verified') == clean_id
+                if not is_verified:
+                    if not is_user_in_group(clean_id):
+                        interview_link = getattr(settings, 'TELEGRAM_INTERVIEW_GROUP_URL', 'https://t.me/KingdomOfPleasureOf')
+                        return render(request, 'core/access_denied.html', {
+                            'tg_id': clean_id,
+                            'interview_url': interview_link,
+                            'hide_bottom_nav': True
+                        }, status=403)
+                    else:
+                        request.session['is_group_verified'] = clean_id
 
             # 2. ⚖️ MAZMORRA REAL: Si está baneado, enviarlo a prisión
             if str(clean_id) != ADMIN_TG_ID:

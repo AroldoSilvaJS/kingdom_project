@@ -1,5 +1,6 @@
 
 
+
 import random
 import os
 import sys
@@ -659,8 +660,14 @@ def social_feed(request):
             liked_ids = []
             user_reactions = {}
 
-    # Inyectar propiedades directamente en cada post
+    # Limitar el feed a las 30 publicaciones más recientes para evitar sobrecarga de render
+    posts = posts[:30]
+
+    # Inyectar propiedades directamente en cada post y recolectar IDs de autores de comentarios
     posts_list = []
+    comment_author_ids = set()
+    all_comments = []
+
     for p in posts:
         # Verificación segura de autoría (Idol propietaria o Admin)
         is_owner = bool(tg_id and p.idol and str(p.idol.telegram_user_id) == str(tg_id))
@@ -669,6 +676,32 @@ def social_feed(request):
         p.is_liked = bool(p.id in liked_ids)
         p.user_reaction = user_reactions.get(p.id, 'like' if p.id in liked_ids else '')
         posts_list.append(p)
+        try:
+            for c in p.comments.all():
+                all_comments.append(c)
+                if c.author_telegram_id:
+                    comment_author_ids.add(c.author_telegram_id)
+        except Exception:
+            pass
+
+    # ⚡ Optimización 1+N: Prefetch en bloque de los perfiles de todos los autores de comentarios en 1 sola consulta
+    if comment_author_ids:
+        try:
+            from core.models import UserProfile
+            author_profiles = {
+                prof.telegram_user_id: prof 
+                for prof in UserProfile.objects.filter(telegram_user_id__in=comment_author_ids)
+            }
+            for c in all_comments:
+                c._prefetched_author_profile = author_profiles.get(c.author_telegram_id)
+                # También para respuestas
+                try:
+                    for rep in c.replies.all():
+                        rep._prefetched_author_profile = author_profiles.get(rep.author_telegram_id)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
     feed_theme = {
@@ -2619,4 +2652,6 @@ def handle_roleplay_request(request, request_id, action):
         messages.info(request, f"Petición rechazada. Fondos reembolsados a @{session_req.client_username}.")
 
     return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+
+
 

@@ -1,3 +1,4 @@
+
 """
 Django settings for config project.
 
@@ -110,7 +111,7 @@ if DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.config(
             default=DATABASE_URL,
-            conn_max_age=0,  # 👈 Cambiar a 0 para que no sature el pooler
+            conn_max_age=int(os.environ.get('DB_CONN_MAX_AGE', 60)),  # ⚡ 60s persistent connection pool to eliminate 150-300ms SSL teardown overhead
             conn_health_checks=True,
         )
     }
@@ -248,3 +249,4 @@ else:
             "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
         },
     }
+
