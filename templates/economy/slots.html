@@ -1,3 +1,4 @@
+
 {% extends 'base.html' %}
 
 {% block content %}
@@ -59,9 +60,9 @@
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1.5">Monto de la Tirada (Máx: {{ max_bet }} 🪙)</label>
                 <div class="grid grid-cols-4 gap-1.5 mb-2">
-                    <button type="button" onclick="setBet(10)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">10</button>
                     <button type="button" onclick="setBet(25)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">25</button>
                     <button type="button" onclick="setBet(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
+                    <button type="button" onclick="setBet(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
                     <button type="button" onclick="setBet({{ max_bet }})" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">{{ max_bet }}</button>
                 </div>
                 <input type="number" id="bet_amount_input" min="1" max="{{ max_bet }}" value="25"
@@ -82,15 +83,15 @@
                 <span class="text-[9px] text-yellow-300 font-mono">RTP Equilibrado</span>
             </h4>
             <div class="grid grid-cols-2 gap-2 text-[10px] text-stone-300 font-medium">
-                <span class="flex items-center justify-between">👑👑👑 Triple Corona: <strong class="text-yellow-400 font-mono font-black">x25</strong></span>
-                <span class="flex items-center justify-between">💎💎💎 Triplete Diamante: <strong class="text-purple-300 font-mono font-black">x15</strong></span>
-                <span class="flex items-center justify-between">⭐⭐⭐ Triplete Estrella: <strong class="text-amber-300 font-mono font-bold">x8</strong></span>
-                <span class="flex items-center justify-between">🪙🪙🪙 Monedas de Oro: <strong class="text-yellow-300 font-mono font-bold">x5</strong></span>
-                <span class="flex items-center justify-between">🍇/🍒 Trío de Frutas: <strong class="text-white font-mono">x3.5</strong></span>
-                <span class="flex items-center justify-between">👑/💎/⭐ Par Noble: <strong class="text-emerald-300 font-mono font-bold">x1.6</strong></span>
+                <span class="flex items-center justify-between">👑👑👑 Triple Corona: <strong class="text-yellow-400 font-mono font-black">x50</strong></span>
+                <span class="flex items-center justify-between">💎💎💎 Triplete Diamante: <strong class="text-purple-300 font-mono font-black">x30</strong></span>
+                <span class="flex items-center justify-between">⭐⭐⭐ Triplete Estrella: <strong class="text-amber-300 font-mono font-bold">x18</strong></span>
+                <span class="flex items-center justify-between">🪙🪙🪙 Monedas de Oro: <strong class="text-yellow-300 font-mono font-bold">x12</strong></span>
+                <span class="flex items-center justify-between">🍇/🍒 Trío de Frutas: <strong class="text-white font-mono font-bold">x7</strong></span>
+                <span class="flex items-center justify-between">👑/💎/⭐ Par Noble: <strong class="text-emerald-300 font-mono font-bold">x2.5</strong></span>
             </div>
             <div class="text-[9px] text-stone-500 font-mono mt-2 text-center pt-1 border-t border-white/5">
-                Cualquier Par Básico (Fruta o Moneda) devuelve tu apuesta: <strong class="text-stone-300">x1.2</strong>
+                Cualquier Par Básico (Fruta o Moneda) otorga ganancia neta: <strong class="text-yellow-300 font-bold">x1.5</strong>
             </div>
         </div>
 
@@ -316,3 +317,4 @@
     }
 </script>
 {% endblock %}
+

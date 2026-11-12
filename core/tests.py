@@ -1,3 +1,4 @@
+
 # core/tests.py
 from datetime import timedelta
 from django.test import TestCase, Client
@@ -94,11 +95,11 @@ class KingdomMasterTestSuite(TestCase):
         self.assertEqual(self.user_profile.current_xp, 115)
 
     def test_max_bet_scaling(self):
-        self.assertEqual(self.user_profile.max_bet_allowed, 20)
-        self.user_profile.level = 16
-        self.assertEqual(self.user_profile.max_bet_allowed, 80)
-        self.user_profile.level = 35
         self.assertEqual(self.user_profile.max_bet_allowed, 150)
+        self.user_profile.level = 16
+        self.assertEqual(self.user_profile.max_bet_allowed, 1500)
+        self.user_profile.level = 35
+        self.assertEqual(self.user_profile.max_bet_allowed, 4000)
 
     # --- BLOQUE 3: LAS 10 MASCOTAS Y 3 EVOLUCIONES ---
     def test_all_10_species_registered(self):
@@ -186,8 +187,8 @@ class KingdomMasterTestSuite(TestCase):
 
     # --- BLOQUE 5: CASINO Y JUEGOS (RESPETANDO MAX_BET = 20 A LVL 1) ---
     def test_casino_roulette_bet_cap_at_level1(self):
-        # A nivel 1 el max_bet es 20. Una apuesta de 150 debe ser rechazada
-        self.client.post(reverse('economy:casino'), {'tg_id': self.user_id, 'bet_amount': 150, 'bet_choice': 'red'})
+        # A nivel 1 el max_bet es 150. Una apuesta de 500 debe ser rechazada
+        self.client.post(reverse('economy:casino'), {'tg_id': self.user_id, 'bet_amount': 500, 'bet_choice': 'red'})
         self.user_wallet.refresh_from_db()
         self.assertEqual(self.user_wallet.balance, 300)
 
@@ -246,3 +247,4 @@ class KingdomMasterTestSuite(TestCase):
         self.assertEqual(UserRole.objects.count(), 3)
         self.assertEqual(Wallet.objects.count(), 2)
         self.assertEqual(UserProfile.objects.count(), 1)
+

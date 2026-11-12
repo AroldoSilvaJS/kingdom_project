@@ -92,18 +92,17 @@ class UserProfile(models.Model):
 
     @property
     def max_bet_allowed(self):
-        """Tope de apuesta en Casino según rango (Rebalanceado)"""
+        """Tope de apuesta en Casino según rango (Ampliados para grandes ganancias)"""
         if self.level >= 30:
-            return 150
+            return 4000
         elif self.level >= 15:
-            return 75
+            return 1500
         elif self.level >= 5:
-            return 35
-        return 15
+            return 500
+        return 150
 
     @property
     def idol_rank_name(self):
-        """Escalafón propio para Idols"""
         if self.level >= 70:
             return "Reina Absoluta del Reino ⚜️"
         elif self.level >= 50:

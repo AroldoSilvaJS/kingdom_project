@@ -80,7 +80,7 @@ def casino_game(request):
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
     
-    max_bet = max(100, getattr(profile, 'max_bet_allowed', 100))
+    max_bet = getattr(profile, 'max_bet_allowed', 150)
     ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]
     NEGROS = [n for n in range(1, 37) if n not in ROJOS]
     roulette_streak = request.session.get('roulette_streak', 0)
@@ -137,7 +137,7 @@ def casino_game(request):
                 if eleccion in ['red', 'black', 'zero']:
                     if eleccion == color_ganador:
                         gano = True
-                        multiplicador = 22.0 if eleccion == 'zero' else 2.0
+                        multiplicador = 36.0 if eleccion == 'zero' else 2.0
                 # 2. Apuesta a Par / Impar
                 elif eleccion in ['even', 'odd']:
                     if numero_ganador != 0:
@@ -151,7 +151,7 @@ def casino_game(request):
                         num_apostado = int(request.POST.get('target_number', -1))
                         if num_apostado == numero_ganador:
                             gano = True
-                            multiplicador = 30.0
+                            multiplicador = 36.0
                     except ValueError:
                         pass
 
@@ -212,13 +212,21 @@ def claim_bonus(request):
             base_bonus = profile.get_daily_bonus_amount()
             multiplier = wallet.get_kitsune_gold_multiplier()
             bonus_amount = int(round(base_bonus * multiplier))
+            
+            # Red de Auxilio de la Corona (Subsidio para nobles o musas en quiebra)
+            relief_extra = 0
+            if wallet.balance < 15:
+                relief_extra = 25
+                bonus_amount += relief_extra
+
             wallet.add_funds(bonus_amount)
             wallet.last_bonus_claim = timezone.now()
             wallet.save()
             
             grant_user_xp(request, tg_id, 25, reason="Ruleta de la Fortuna")
             extra_msg = f" (¡+{int((multiplier-1)*100)}% por tu Zorro Kitsune!)" if multiplier > 1.0 else ""
-            messages.success(request, f"🎡 ¡La Ruleta te ha otorgado +{bonus_amount} 🪙 de oro{extra_msg} y +25 EXP!")
+            relief_msg = " 🛡️ ¡Subsidio Imperial: +25 🪙 extra por auxilio de bancarrota!" if relief_extra > 0 else ""
+            messages.success(request, f"🎡 ¡La Ruleta te ha otorgado +{bonus_amount} 🪙 de oro{extra_msg}{relief_msg} y +25 EXP!")
         else:
             messages.error(request, "Ya has reclamado tu ofrenda de hoy. La Ruleta se reinicia cada día a las 12:00 PM.")
     return redirect(f'/economy/wallet/?tg_id={tg_id}')
@@ -231,7 +239,7 @@ def slots_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    max_bet = max(100, getattr(profile, 'max_bet_allowed', 100))
+    max_bet = getattr(profile, 'max_bet_allowed', 150)
     slots_losses = request.session.get('slots_losses', 0)
 
     resultado = None
@@ -269,7 +277,7 @@ def slots_game(request):
                 pet = Pet.objects.filter(telegram_user_id=tg_id).first()
 
                 # Alternancia dinámica anti-racha
-                if slots_losses >= 2 and random.random() < 0.65:
+                if slots_losses >= 2 and random.random() < 0.75:
                     sym = random.choice(['🍇', '🍒', '🪙', '⭐'])
                     reels = [sym, sym, random.choice(WEIGHTED_SYMBOLS)]
                 else:
@@ -286,7 +294,7 @@ def slots_game(request):
                 # 1. TRÍOS
                 if reels[0] == reels[1] == reels[2]:
                     symbol = reels[0]
-                    multiplicador = {'👑': 25.0, '💎': 15.0, '⭐': 8.0, '🪙': 5.0}.get(symbol, 3.5)
+                    multiplicador = {'👑': 50.0, '💎': 30.0, '⭐': 18.0, '🪙': 12.0}.get(symbol, 7.0)
                     xp_gain = 12 if symbol == '👑' else 4
                     ganancia = int(apuesta * multiplicador)
 
@@ -303,11 +311,11 @@ def slots_game(request):
                 elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
                     pair_sym = reels[1] if (reels[0] == reels[1] or reels[1] == reels[2]) else reels[0]
                     if pair_sym in ['👑', '💎', '⭐']:
-                        multiplicador = 1.6
-                        xp_gain = 3
+                        multiplicador = 2.5
+                        xp_gain = 4
                         resultado = "pair_premium"
                     else:
-                        multiplicador = 1.2
+                        multiplicador = 1.5
                         xp_gain = 2
                         resultado = "pair"
 
@@ -322,7 +330,7 @@ def slots_game(request):
 
                 # 3. AMORTIGUACIÓN
                 elif '👑' in reels or '💎' in reels:
-                    reintegro = max(1, int(round(apuesta * 0.5)))
+                    reintegro = max(1, int(round(apuesta * 0.6)))
                     wallet.remove_funds(apuesta - reintegro)
                     resultado = "cushion"
                     ganancia = reintegro
@@ -399,7 +407,7 @@ def calculate_mines_multiplier(total_tiles, mines_count, revealed_count):
     prob = 1.0
     for i in range(revealed_count):
         prob *= (safe_tiles - i) / (total_tiles - i)
-    raw_mult = 0.98 / prob
+    raw_mult = 1.05 / prob
     return max(1.04, round(raw_mult, 2))
 
 
@@ -407,7 +415,7 @@ def mines_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    max_bet = max(100, getattr(profile, 'max_bet_allowed', 100))
+    max_bet = getattr(profile, 'max_bet_allowed', 150)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
 
     session_mines = request.session.get('mines_state')
@@ -590,7 +598,7 @@ def blackjack_game(request):
     tg_id = get_safe_tg_id(request)
     wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
     profile, _ = UserProfile.objects.get_or_create(telegram_user_id=tg_id)
-    max_bet = max(100, getattr(profile, 'max_bet_allowed', 100))
+    max_bet = getattr(profile, 'max_bet_allowed', 150)
     pet = Pet.objects.filter(telegram_user_id=tg_id).first()
     bj_losses = request.session.get('bj_loss_streak', 0)
 
@@ -809,7 +817,7 @@ BAZAR_ITEMS = [
         'name': 'Escudo Protector (15 días)',
         'description': 'Inmunidad total a la pérdida de rango o recompensas durante 15 días en caso de inactividad.',
         'desc': 'Inmunidad total a la pérdida de rango o recompensas durante 15 días en caso de inactividad.',
-        'price': 350,
+        'price': 850,
         'icon': '🛡️',
         'emoji': '🛡️',
         'fa_icon': 'fa-solid fa-shield-halved',
@@ -821,7 +829,7 @@ BAZAR_ITEMS = [
         'name': 'Escudo Protector Imperial (30 días)',
         'description': 'Un mes entero de protección soberana ante cualquier ausencia de la corte.',
         'desc': 'Un mes entero de protección soberana ante cualquier ausencia de la corte.',
-        'price': 600,
+        'price': 1600,
         'icon': '🔰',
         'emoji': '🔰',
         'fa_icon': 'fa-solid fa-shield-virus',
@@ -833,7 +841,7 @@ BAZAR_ITEMS = [
         'name': 'Bula de Título Personalizado',
         'description': 'Graba en tu perfil un epíteto o distinción única redactada por ti.',
         'desc': 'Graba en tu perfil un epíteto o distinción única redactada por ti.',
-        'price': 450,
+        'price': 1200,
         'icon': '📜',
         'emoji': '📜',
         'fa_icon': 'fa-solid fa-feather-pointed',
@@ -845,7 +853,7 @@ BAZAR_ITEMS = [
         'name': 'Marco de Avatar Imperial',
         'description': 'Engalana tu presencia visual con los marcos de oro pulido y gemas dinásticas.',
         'desc': 'Engalana tu presencia visual con los marcos de oro pulido y gemas dinásticas.',
-        'price': 400,
+        'price': 1100,
         'icon': '👑',
         'emoji': '👑',
         'fa_icon': 'fa-solid fa-gem',
@@ -857,7 +865,7 @@ BAZAR_ITEMS = [
         'name': 'Insignia de Linaje VIP',
         'description': 'Una medalla de honor perpetua visible en tu perfil público ante todos los nobles.',
         'desc': 'Una medalla de honor perpetua visible en tu perfil público ante todos los nobles.',
-        'price': 300,
+        'price': 850,
         'icon': '🎖️',
         'emoji': '🎖️',
         'fa_icon': 'fa-solid fa-award',
@@ -869,7 +877,7 @@ BAZAR_ITEMS = [
         'name': 'Sello de Antojo Prioritario',
         'description': 'Tus peticiones de antojos a las Idols reciben respuesta urgente en la cúspide.',
         'desc': 'Tus peticiones de antojos a las Idols reciben respuesta urgente en la cúspide.',
-        'price': 200,
+        'price': 500,
         'icon': '⚡',
         'emoji': '⚡',
         'fa_icon': 'fa-solid fa-bell-concierge',
@@ -881,7 +889,7 @@ BAZAR_ITEMS = [
         'name': 'Talismán de la Fortuna',
         'description': 'Aumenta sutilmente la bendición de tiradas y recompensas en el casino.',
         'desc': 'Aumenta sutilmente la bendición de tiradas y recompensas en el casino.',
-        'price': 250,
+        'price': 650,
         'icon': '🍀',
         'emoji': '🍀',
         'fa_icon': 'fa-solid fa-clover',
@@ -893,7 +901,7 @@ BAZAR_ITEMS = [
         'name': 'Pase de Libre Comercio',
         'description': 'Exención de tributos del reino en tus próximas compras o ventas.',
         'desc': 'Exención de tributos del reino en tus próximas compras o ventas.',
-        'price': 150,
+        'price': 450,
         'icon': '🪙',
         'emoji': '🪙',
         'fa_icon': 'fa-solid fa-coins',

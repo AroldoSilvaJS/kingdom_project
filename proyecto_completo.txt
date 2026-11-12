@@ -2673,6 +2673,8 @@ urlpatterns = [
 ARCHIVO: .\economy\views.py
 ==================================================
 
+
+
 # 1. Librería estándar de Python
 import random
 from datetime import timedelta
@@ -3481,8 +3483,11 @@ BAZAR_ITEMS = [
         'code': 'shield_15',
         'name': 'Escudo Protector (15 días)',
         'description': 'Inmunidad total a la pérdida de rango o recompensas durante 15 días en caso de inactividad.',
+        'desc': 'Inmunidad total a la pérdida de rango o recompensas durante 15 días en caso de inactividad.',
         'price': 350,
-        'icon': 'fa-solid fa-shield-halved',
+        'icon': '🛡️',
+        'emoji': '🛡️',
+        'fa_icon': 'fa-solid fa-shield-halved',
         'color': 'border-amber-500/40 text-amber-300',
         'type': 'status'
     },
@@ -3490,8 +3495,11 @@ BAZAR_ITEMS = [
         'code': 'shield_30',
         'name': 'Escudo Protector Imperial (30 días)',
         'description': 'Un mes entero de protección soberana ante cualquier ausencia de la corte.',
+        'desc': 'Un mes entero de protección soberana ante cualquier ausencia de la corte.',
         'price': 600,
-        'icon': 'fa-solid fa-shield-virus',
+        'icon': '🔰',
+        'emoji': '🔰',
+        'fa_icon': 'fa-solid fa-shield-virus',
         'color': 'border-yellow-500/50 text-yellow-300',
         'type': 'status'
     },
@@ -3499,8 +3507,11 @@ BAZAR_ITEMS = [
         'code': 'custom_title',
         'name': 'Bula de Título Personalizado',
         'description': 'Graba en tu perfil un epíteto o distinción única redactada por ti.',
+        'desc': 'Graba en tu perfil un epíteto o distinción única redactada por ti.',
         'price': 450,
-        'icon': 'fa-solid fa-feather-pointed',
+        'icon': '📜',
+        'emoji': '📜',
+        'fa_icon': 'fa-solid fa-feather-pointed',
         'color': 'border-rose-500/40 text-rose-300',
         'type': 'customization'
     },
@@ -3508,8 +3519,11 @@ BAZAR_ITEMS = [
         'code': 'imperial_frame',
         'name': 'Marco de Avatar Imperial',
         'description': 'Engalana tu presencia visual con los marcos de oro pulido y gemas dinásticas.',
+        'desc': 'Engalana tu presencia visual con los marcos de oro pulido y gemas dinásticas.',
         'price': 400,
-        'icon': 'fa-solid fa-gem',
+        'icon': '👑',
+        'emoji': '👑',
+        'fa_icon': 'fa-solid fa-gem',
         'color': 'border-purple-500/40 text-purple-300',
         'type': 'customization'
     },
@@ -3517,8 +3531,11 @@ BAZAR_ITEMS = [
         'code': 'vip_badge',
         'name': 'Insignia de Linaje VIP',
         'description': 'Una medalla de honor perpetua visible en tu perfil público ante todos los nobles.',
+        'desc': 'Una medalla de honor perpetua visible en tu perfil público ante todos los nobles.',
         'price': 300,
-        'icon': 'fa-solid fa-award',
+        'icon': '🎖️',
+        'emoji': '🎖️',
+        'fa_icon': 'fa-solid fa-award',
         'color': 'border-blue-500/40 text-blue-300',
         'type': 'customization'
     },
@@ -3526,8 +3543,11 @@ BAZAR_ITEMS = [
         'code': 'priority_antojo',
         'name': 'Sello de Antojo Prioritario',
         'description': 'Tus peticiones de antojos a las Idols reciben respuesta urgente en la cúspide.',
+        'desc': 'Tus peticiones de antojos a las Idols reciben respuesta urgente en la cúspide.',
         'price': 200,
-        'icon': 'fa-solid fa-bell-concierge',
+        'icon': '⚡',
+        'emoji': '⚡',
+        'fa_icon': 'fa-solid fa-bell-concierge',
         'color': 'border-pink-500/40 text-pink-300',
         'type': 'consumable'
     },
@@ -3535,8 +3555,11 @@ BAZAR_ITEMS = [
         'code': 'lucky_charm',
         'name': 'Talismán de la Fortuna',
         'description': 'Aumenta sutilmente la bendición de tiradas y recompensas en el casino.',
+        'desc': 'Aumenta sutilmente la bendición de tiradas y recompensas en el casino.',
         'price': 250,
-        'icon': 'fa-solid fa-clover',
+        'icon': '🍀',
+        'emoji': '🍀',
+        'fa_icon': 'fa-solid fa-clover',
         'color': 'border-emerald-500/40 text-emerald-300',
         'type': 'consumable'
     },
@@ -3544,8 +3567,11 @@ BAZAR_ITEMS = [
         'code': 'free_market',
         'name': 'Pase de Libre Comercio',
         'description': 'Exención de tributos del reino en tus próximas compras o ventas.',
+        'desc': 'Exención de tributos del reino en tus próximas compras o ventas.',
         'price': 150,
-        'icon': 'fa-solid fa-coins',
+        'icon': '🪙',
+        'emoji': '🪙',
+        'fa_icon': 'fa-solid fa-coins',
         'color': 'border-yellow-400 text-yellow-300',
         'type': 'consumable'
     },
@@ -4818,6 +4844,8 @@ def scratch_card_play_ajax(request):
                 'message': f'💀 Sin suerte esta vez. Tu cartón no obtuvo trío. El 8% ({int(round(cost * 0.08))} 🪙) pasó a tu Cofre del Mecenas.'
             })
 
+
+
 ==================================================
 ARCHIVO: .\economy\__init__.py
 ==================================================
@@ -4861,6 +4889,7 @@ class IdolsConfig(AppConfig):
 ==================================================
 ARCHIVO: .\idols\models.py
 ==================================================
+
 
 from django.db import models
 from django.db.models import Avg
@@ -5145,7 +5174,14 @@ class CustomRequest(models.Model):
     
     is_priority = models.BooleanField("¿Prioritario?", default=False)
     
-    delivered_photo = models.ImageField("Foto Entregada", upload_to='custom_antojos/', blank=True, null=True)
+    delivered_photo = models.FileField("Foto o Video Entregado", upload_to='custom_antojos/', blank=True, null=True)
+
+    @property
+    def is_video(self):
+        if not self.delivered_photo:
+            return False
+        name = str(self.delivered_photo.name).lower()
+        return any(name.endswith(ext) for ext in ['.mp4', '.mov', '.webm', '.m4v', '.avi', '.quicktime'])
     delivery_note = models.TextField("Mensaje / Dedicatoria", max_length=250, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -5338,6 +5374,8 @@ class RoleSessionRequest(models.Model):
 
     def __str__(self):
         return f"Rol: {self.idol.stage_name} con @{self.client_username} ({self.status})"
+
+
 
 
 ==================================================
@@ -5598,11 +5636,11 @@ def idol_list(request):
             with transaction.atomic():
                 req_obj = CustomRequest.objects.select_for_update().filter(id=req_id, idol__telegram_user_id=tg_id).first()
                 if not req_obj:
-                    messages.error(request, "Petición no encontrada.")
+                    messages.error(request, 'Petición no encontrada o no pertenece a tu perfil.')
                     return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
                 
                 if req_obj.status != 'pending':
-                    messages.warning(request, f"Esta petición ya se encuentra {req_obj.get_status_display().lower()}.")
+                    messages.warning(request, f'Esta petición ya se encuentra {req_obj.get_status_display().lower()}.')
                     return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
                 
                 if action == 'reject_request':
@@ -5610,47 +5648,83 @@ def idol_list(request):
                     client_wallet.add_funds(req_obj.bounty)
                     req_obj.status = 'rejected'
                     req_obj.save()
+                    
+                    try:
+                        reject_text = (
+                            f'⚠️ <b>Petición Especial Rechazada</b>\n\n'
+                            f'{req_obj.idol.stage_name} no pudo atender tu solicitud en este momento.\n'
+                            f'Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos a tu Bóveda.'
+                        )
+                        send_telegram_msg(
+                            chat_id=req_obj.client_telegram_id,
+                            text=reject_text,
+                            button_text='🪙 Revisar Mi Bóveda',
+                            button_url=f'https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={req_obj.client_telegram_id}'
+                        )
+                    except Exception as te:
+                        print(f'Error enviando telegram de rechazo: {te}')
+                        
+                    messages.info(request, f'Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al noble.')
+                    return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
                 
-                send_telegram_msg(
-                    chat_id=req_obj.client_telegram_id,
-                    text=(
-                        f"⚠️ <b>Petición Especial Rechazada</b>\n\n"
-                        f"{req_obj.idol.stage_name} no pudo atender tu solicitud en este momento.\n"
-                        f"Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos a tu Bóveda."
-                    ),
-                    button_text="🪙 Revisar Mi Bóveda",
-                    button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={req_obj.client_telegram_id}"
-                )
-                messages.info(request, f"Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al cliente.")
-                
-        elif action == 'accept_request':
-                delivered_photo = request.FILES.get('delivered_photo')
-                if not delivered_photo:
-                    messages.error(request, "Debes adjuntar la foto para completar la entrega.")
-                else:
-                    req_obj.delivered_photo = optimize_uploaded_image(delivered_photo)
+                elif action == 'accept_request':
+                    delivered_media = request.FILES.get('delivered_photo')
+                    if not delivered_media:
+                        messages.error(request, 'Debes adjuntar la foto o video exclusivo para completar la entrega.')
+                        return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+                    
+                    # Límite de seguridad: 30 MB
+                    if delivered_media.size > 30 * 1024 * 1024:
+                        messages.error(request, 'El archivo adjunto supera el límite máximo permitido de 30 MB.')
+                        return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+                    
+                    file_name = delivered_media.name.lower()
+                    is_video_upload = any(file_name.endswith(ext) for ext in ['.mp4', '.mov', '.webm', '.m4v', '.avi']) or 'video' in getattr(delivered_media, 'content_type', '')
+                    
+                    if is_video_upload:
+                        ext = os.path.splitext(delivered_media.name)[1].lower() or '.mp4'
+                        delivered_media.name = f"antojo_{uuid.uuid4().hex[:10]}{ext}"
+                        req_obj.delivered_photo = delivered_media
+                    else:
+                        try:
+                            req_obj.delivered_photo = optimize_uploaded_image(delivered_media)
+                        except Exception as e:
+                            print(f'Fallo optimización imagen: {e}')
+                            req_obj.delivered_photo = delivered_media
+                    
+                    delivery_note = request.POST.get('delivery_note', '').strip()
+                    if delivery_note:
+                        req_obj.delivery_note = delivery_note[:250]
+                    
                     req_obj.status = 'accepted'
                     req_obj.save()
                     
                     idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
                     idol_wallet.add_funds(req_obj.bounty)
-                    grant_user_xp(request, tg_id, 25, reason="Entrega de Petición")
+                    grant_user_xp(request, tg_id, 25, reason='Entrega de Petición')
                     
-                    send_telegram_msg(
-                        chat_id=req_obj.client_telegram_id,
-                        text=(
-                            f"✨ <b>¡Tu Petición ha sido entregada!</b>\n\n"
-                            f"🌹 <b>Musa:</b> {req_obj.idol.stage_name}\n"
-                            f"📝 <b>Detalle:</b> <i>«{req_obj.description}»</i>\n\n"
-                            f"La foto exclusiva ya se encuentra en tu Colección Privada."
-                        ),
-                        button_text="💎 Ver Mi Colección",
-                        button_url=f"https://kingdom-pleasure-app.onrender.com/idols/collection/?tg_id={req_obj.client_telegram_id}"
-                    )
-                    messages.success(request, f"¡Petición entregada con éxito! Recibiste +{req_obj.bounty} 🪙 (+25 EXP).")
-                    
-        return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-    
+                    try:
+                        media_label = '🎬 El video exclusivo' if req_obj.is_video else '📸 La foto exclusiva'
+                        note_line = f'\n💬 <b>Dedicatoria:</b> <i>«{req_obj.delivery_note}»</i>' if req_obj.delivery_note else ''
+                        accept_text = (
+                            f'✨ <b>¡Tu Petición ha sido entregada!</b>\n\n'
+                            f'🌹 <b>Musa:</b> {req_obj.idol.stage_name}\n'
+                            f'📝 <b>Detalle:</b> <i>«{req_obj.description}»</i>'
+                            f'{note_line}\n\n'
+                            f'{media_label} ya se encuentra en tu Colección Privada.'
+                        )
+                        send_telegram_msg(
+                            chat_id=req_obj.client_telegram_id,
+                            text=accept_text,
+                            button_text='💎 Ver Mi Colección',
+                            button_url=f'https://kingdom-pleasure-app.onrender.com/idols/collection/?tg_id={req_obj.client_telegram_id}'
+                        )
+                    except Exception as te:
+                        print(f'Error enviando telegram de entrega: {te}')
+                        
+                    messages.success(request, f'¡Petición entregada con éxito! Recibiste +{req_obj.bounty} 🪙 (+25 EXP).')
+                    return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+        
     idols = list(IdolProfile.objects.filter(telegram_user_id=tg_id))
     pending_requests = CustomRequest.objects.filter(
         idol__telegram_user_id=tg_id,
@@ -8608,6 +8682,8 @@ ARCHIVO: .\templates\base.html
 
     <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome 6 (Iconos Premium) -->
+    <link rel=stylesheet href=https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css integrity=sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA== crossorigin=anonymous referrerpolicy=no-referrer />
     
     <!-- Script Oficial de Telegram WebApps -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -11202,12 +11278,16 @@ ARCHIVO: .\templates\economy\bazar.html
         {% for item in bazar_items %}
         <div class="popmart-cabinet p-3.5 flex items-center justify-between gap-3">
             <div class="flex items-center gap-3">
-                <div class="w-11 h-11 rounded-xl bg-stone-900 border border-white/10 flex items-center justify-center text-2xl shadow-inner">
-                    {{ item.icon }}
+                <div class="w-11 h-11 rounded-xl bg-stone-900/90 border border-amber-500/20 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                    {% if 'fa-' in item.icon %}
+                        <i class="{{ item.icon }} text-xl text-amber-300"></i>
+                    {% else %}
+                        <span>{{ item.icon }}</span>
+                    {% endif %}
                 </div>
                 <div>
                     <h3 class="text-xs font-black text-white leading-tight">{{ item.name }}</h3>
-                    <p class="text-[9px] text-stone-400 leading-tight max-w-[180px] mt-0.5">{{ item.desc }}</p>
+                    <p class="text-[9px] text-stone-400 leading-tight max-w-[180px] mt-0.5">{{ item.description|default:item.desc }}</p>
                     <span class="text-xs font-black text-amber-300 mt-1 block">{{ item.price }} 🪙</span>
                 </div>
             </div>
@@ -12393,6 +12473,8 @@ ARCHIVO: .\templates\economy\casino.html
 ARCHIVO: .\templates\economy\jobs.html
 ==================================================
 
+
+
 {% extends 'base.html' %}
 {% load static %}
 
@@ -12690,6 +12772,8 @@ ARCHIVO: .\templates\economy\jobs.html
     {% endif %}
 </script>
 {% endblock %}
+
+
 
 ==================================================
 ARCHIVO: .\templates\economy\mines.html
@@ -14786,6 +14870,7 @@ ARCHIVO: .\templates\idols\choose_role.html
 ARCHIVO: .\templates\idols\collection.html
 ==================================================
 
+
 {% extends 'base.html' %}
 
 {% block content %}
@@ -14806,7 +14891,7 @@ ARCHIVO: .\templates\idols\collection.html
     <div class="vip-panel p-3 flex items-center justify-between px-4">
         <span class="text-xs text-vip-text/70 uppercase tracking-wider font-bold">Tesoros Desbloqueados</span>
         <span class="text-xs font-bold text-yellow-400 font-mono bg-black/60 px-2.5 py-1 rounded-lg border border-vip-gold/30">
-            {{ total_items }} fotos 🔞
+            {{ total_items }} tesoros 🔞
         </span>
     </div>
 
@@ -14819,14 +14904,23 @@ ARCHIVO: .\templates\idols\collection.html
             <div class="grid grid-cols-2 gap-3">
                 {% for ant in antojos %}
                     <div class="relative rounded-2xl overflow-hidden border border-yellow-500/50 aspect-[3/4] bg-black shadow-lg flex flex-col justify-end group">
-                        <img src="{{ ant.delivered_photo.url }}" alt="{{ ant.description }}" 
-                             onclick="openImageLightbox('{{ ant.delivered_photo.url }}', '{{ ant.description|escapejs }}')"
-                             class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
-                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
-                        <div class="relative z-10 p-2.5 flex flex-col">
-                            <span class="text-[9px] bg-yellow-500 text-black font-black uppercase px-1.5 py-0.2 rounded w-fit mb-1">Antojo Exclusivo</span>
-                            <h4 class="text-xs font-bold text-white truncate">{{ ant.idol.stage_name }}</h4>
-                            <p class="text-[10px] text-stone-300 line-clamp-1 italic">"{{ ant.description }}"</p>
+                        {% if ant.is_video %}
+                            <video src="{{ ant.delivered_photo.url }}"
+                                   controls playsinline preload="metadata"
+                                   class="absolute inset-0 w-full h-full object-cover bg-black">
+                            </video>
+                        {% else %}
+                            <img src="{{ ant.delivered_photo.url }}" alt="{{ ant.description }}" 
+                                 onclick="openImageLightbox('{{ ant.delivered_photo.url }}', '{{ ant.description|escapejs }}')"
+                                 class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 cursor-zoom-in active:opacity-90">
+                        {% endif %}
+                        <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none"></div>
+                        <div class="relative z-10 p-2.5 flex flex-col pointer-events-none">
+                            <span class="text-[9px] bg-yellow-500 text-black font-black uppercase px-1.5 py-0.2 rounded w-fit mb-1 shadow">
+                                {% if ant.is_video %}🎬 Video Exclusivo{% else %}📸 Antojo Exclusivo{% endif %}
+                            </span>
+                            <h4 class="text-xs font-bold text-white truncate drop-shadow">{{ ant.idol.stage_name }}</h4>
+                            <p class="text-[10px] text-stone-300 line-clamp-1 italic drop-shadow">"{{ ant.description }}"</p>
                         </div>
                     </div>
                 {% endfor %}
@@ -14887,6 +14981,8 @@ ARCHIVO: .\templates\idols\collection.html
 
 </div>
 {% endblock %}
+
+
 
 ==================================================
 ARCHIVO: .\templates\idols\confirm_delete.html
@@ -17403,6 +17499,8 @@ ARCHIVO: .\templates\idols\gallery.html
 ARCHIVO: .\templates\idols\list.html
 ==================================================
 
+
+
 <!-- templates/idols/list.html -->
 {% extends 'base.html' %}
 
@@ -17496,24 +17594,26 @@ ARCHIVO: .\templates\idols\list.html
             </div>
 
             <!-- Formulario de Entrega con Vista Previa de Foto -->
-            <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5 mt-0.5" id="antojo-form-{{ req.id }}" onsubmit="showUploadSpinner('{{ req.id }}')">
+            <form action="/idols/?tg_id={{ tg_id }}&tg_username={{ tg_username|urlencode }}" method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5 mt-0.5" id="antojo-form-{{ req.id }}" onsubmit="showUploadSpinner('{{ req.id }}')">
                 {% csrf_token %}
                 <input type="hidden" name="request_id" value="{{ req.id }}">
                 <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <input type="hidden" name="action" id="action-input-{{ req.id }}" value="accept_request">
 
                 <div class="bg-black/60 p-3 rounded-2xl border-2 border-dashed border-rose-500/50 flex flex-col items-center text-center relative">
-                    <!-- Vista previa si se selecciona foto -->
-                    <div id="preview-box-{{ req.id }}" class="hidden w-28 h-28 rounded-xl overflow-hidden mb-2 border border-emerald-400 shadow-lg">
-                        <img id="preview-img-{{ req.id }}" src="" class="w-full h-full object-cover">
+                    <!-- Vista previa interactiva si se selecciona foto o video -->
+                    <div id="preview-box-{{ req.id }}" class="hidden w-32 h-32 rounded-xl overflow-hidden mb-2 border-2 border-emerald-400 shadow-xl relative bg-black flex items-center justify-center">
+                        <img id="preview-img-{{ req.id }}" src="" class="hidden w-full h-full object-cover">
+                        <video id="preview-vid-{{ req.id }}" src="" class="hidden w-full h-full object-cover bg-black" controls playsinline></video>
                     </div>
 
                     <label class="block text-[10px] text-rose-300 uppercase font-black mb-1 cursor-pointer">
-                        📸 Adjuntar Foto Exclusiva para la Entrega *
+                        📸 🎬 Adjuntar Foto o Video Exclusivo *
                     </label>
-                    <input type="file" name="delivered_photo" accept="image/*" required
-                           onchange="previewAntojoPhoto(event, '{{ req.id }}')"
+                    <input type="file" name="delivered_photo" accept="image/*,video/mp4,video/quicktime,video/webm,video/m4v" required
+                           onchange="previewAntojoMedia(event, '{{ req.id }}')"
                            class="w-full text-xs text-stone-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-[10px] file:font-black file:bg-gradient-to-r file:from-rose-600 file:to-pink-600 file:text-white cursor-pointer">
-                    <span id="preview-status-{{ req.id }}" class="text-[8px] text-stone-400 mt-1">Formatos JPG, PNG, WEBP (Hasta 15MB)</span>
+                    <span id="preview-status-{{ req.id }}" class="text-[8px] text-stone-400 mt-1">Fotos (JPG, PNG, WEBP) o Videos (MP4, MOV, WEBM) • Máx. 30MB</span>
                 </div>
 
                 <div>
@@ -17523,16 +17623,17 @@ ARCHIVO: .\templates\idols\list.html
                 </div>
 
                 <!-- Botón Principal de Entrega -->
-                <button type="submit" name="action" value="accept_request" id="btn-submit-{{ req.id }}"
-                        class="w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-green-400 hover:brightness-110 text-black font-black py-3 rounded-xl text-xs uppercase tracking-wider shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5">
-                    <span>✅</span> <span>Entregar Foto & Cobrar +{{ req.bounty }} 🪙</span>
+                <button type="submit" id="btn-submit-{{ req.id }}"
+                        onclick="document.getElementById('action-input-{{ req.id }}').value='accept_request'"
+                        class="w-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-green-400 hover:brightness-110 text-black font-black py-3 rounded-xl text-xs uppercase tracking-wider shadow-lg active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span>✅</span> <span>Entregar Foto / Video & Cobrar +{{ req.bounty }} 🪙</span>
                 </button>
 
                 <!-- Botón Secundario de Rechazo (Separado y Seguro) -->
                 <div class="text-center pt-1">
-                    <button type="submit" name="action" value="reject_request" 
-                            onclick="return confirm('¿Rechazar este antojo?\nLos {{ req.bounty }} 🪙 serán devueltos íntegros a la Bóveda del cliente.')"
-                            class="text-[9px] text-stone-400 hover:text-rose-300 transition-colors uppercase font-bold tracking-wider underline">
+                    <button type="submit"
+                            onclick="document.getElementById('action-input-{{ req.id }}').value='reject_request'; return confirm('¿Rechazar este antojo?\nLos {{ req.bounty }} 🪙 serán devueltos íntegros a la Bóveda del cliente.')"
+                            class="text-[9px] text-stone-400 hover:text-rose-300 transition-colors uppercase font-bold tracking-wider underline cursor-pointer">
                         ¿No puedes atender la sesión? ❌ Rechazar y reembolsar oro
                     </button>
                 </div>
@@ -17632,20 +17733,48 @@ ARCHIVO: .\templates\idols\list.html
 </script>
 
 <script>
-function previewAntojoPhoto(event, reqId) {
+function previewAntojoMedia(event, reqId) {
     const file = event.target.files[0];
     if (file) {
+        const maxBytes = 30 * 1024 * 1024; // 30 MB
+        if (file.size > maxBytes) {
+            alert("⚠️ El archivo seleccionado supera el límite de 30 MB.\nPor favor selecciona un archivo más ligero o un clip más corto.");
+            event.target.value = '';
+            return;
+        }
         const previewBox = document.getElementById('preview-box-' + reqId);
         const previewImg = document.getElementById('preview-img-' + reqId);
+        const previewVid = document.getElementById('preview-vid-' + reqId);
         const previewStatus = document.getElementById('preview-status-' + reqId);
-        if (previewBox && previewImg) {
-            previewImg.src = URL.createObjectURL(file);
-            previewBox.classList.remove('hidden');
-        }
-        if (previewStatus) {
-            const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-            previewStatus.innerHTML = `✓ Foto lista: <b>${file.name}</b> (${sizeMb} MB)`;
-            previewStatus.className = "text-[8.5px] text-emerald-400 mt-1 font-bold";
+        const isVideo = file.type.startsWith('video/') || /\.(mp4|mov|webm|m4v|avi)$/i.test(file.name);
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        const fileUrl = URL.createObjectURL(file);
+
+        if (previewBox) previewBox.classList.remove('hidden');
+
+        if (isVideo) {
+            if (previewImg) previewImg.classList.add('hidden');
+            if (previewVid) {
+                previewVid.src = fileUrl;
+                previewVid.classList.remove('hidden');
+            }
+            if (previewStatus) {
+                previewStatus.innerHTML = `🎬 Video listo: <b>${file.name}</b> (${sizeMb} MB)`;
+                previewStatus.className = "text-[8.5px] text-emerald-400 mt-1 font-bold";
+            }
+        } else {
+            if (previewVid) {
+                previewVid.classList.add('hidden');
+                previewVid.pause();
+            }
+            if (previewImg) {
+                previewImg.src = fileUrl;
+                previewImg.classList.remove('hidden');
+            }
+            if (previewStatus) {
+                previewStatus.innerHTML = `📸 Foto lista: <b>${file.name}</b> (${sizeMb} MB)`;
+                previewStatus.className = "text-[8.5px] text-emerald-400 mt-1 font-bold";
+            }
         }
     }
 }
@@ -17653,14 +17782,15 @@ function previewAntojoPhoto(event, reqId) {
 function showUploadSpinner(reqId) {
     const btn = document.getElementById('btn-submit-' + reqId);
     if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = `<span class="animate-spin text-sm">⏳</span> <span>Subiendo Foto y Acreditando Oro...</span>`;
-        btn.classList.add('opacity-75');
+        btn.innerHTML = `<span class="animate-spin text-sm">⏳</span> <span>Subiendo Archivo y Acreditando Oro...</span>`;
+        btn.classList.add('opacity-75', 'pointer-events-none');
     }
 }
 </script>
 
 {% endblock %}
+
+
 
 ==================================================
 ARCHIVO: .\templates\idols\photocards_album.html
@@ -18395,6 +18525,8 @@ ARCHIVO: .\templates\idols\photocards_album.html
 ARCHIVO: .\templates\idols\photocards_market.html
 ==================================================
 
+
+
 {% extends 'base.html' %}
 {% load static %}
 
@@ -18758,6 +18890,8 @@ ARCHIVO: .\templates\idols\photocards_market.html
 
 </script>
 {% endblock %}
+
+
 
 ==================================================
 ARCHIVO: .\templates\idols\photocard_boxes.html
