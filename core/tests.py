@@ -291,6 +291,35 @@ class KingdomMasterTestSuite(TestCase):
         self.client.post(f"/idols/photocards/admin/?tg_id={self.admin_id}", {"action": "delete_upcoming_box"})
         self.assertEqual(KingdomSetting.get_val("upcoming_box_title", ""), "")
 
+    def test_popmart_batch_index_locked_names_and_edit_figure(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from economy.models import CollectibleSeries, BazarCollectible
+        f1 = SimpleUploadedFile("alpha.png", b"\x89PNG\r\n\x1a\n", content_type="image/png")
+        f2 = SimpleUploadedFile("beta.png", b"\x89PNG\r\n\x1a\n", content_type="image/png")
+        res = self.client.post(f"/economy/bazar/series/create-batch/?tg_id={self.admin_id}", {
+            "series_name": "Test Series",
+            "blind_box_price": 160,
+            "single_price": 260,
+            "figures": [f1, f2],
+            "figure_name_0": "Alpha Correct",
+            "figure_name_1": "Beta Correct",
+            "is_secret_index": ["1"],
+        })
+        self.assertEqual(res.status_code, 302)
+        items = list(BazarCollectible.objects.filter(series__name="Test Series").order_by("id"))
+        self.assertEqual([it.name for it in items], ["Alpha Correct", "Beta Correct"])
+        self.assertFalse(items[0].is_secret)
+        self.assertTrue(items[1].is_secret)
+
+        # Renombrar figura existente
+        self.client.post(f"/economy/bazar/figure/edit/{items[0].id}/?tg_id={self.admin_id}", {
+            "name": "Alpha Renamed",
+            "is_secret": "1",
+        })
+        items[0].refresh_from_db()
+        self.assertEqual(items[0].name, "Alpha Renamed")
+        self.assertTrue(items[0].is_secret)
+
     def test_final_system_integrity(self):
         self.assertEqual(UserRole.objects.count(), 3)
         self.assertEqual(Wallet.objects.count(), 2)

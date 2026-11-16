@@ -243,12 +243,20 @@
                     {% for fig in series.items_cache %}
                     <div class="acrylic-stand rounded-2xl p-2 flex flex-col items-center text-center relative {% if fig.is_owned %}acrylic-stand-owned{% endif %} {% if fig.is_secret %}acrylic-stand-chase{% endif %}">
                         {% if is_staff or is_admin %}
-                        <button type="button" 
-                                onclick="event.stopPropagation(); confirmDeleteFigure({{ fig.id }}, '{{ fig.name|escapejs }}')"
-                                title="Eliminar figura"
-                                class="absolute top-1 left-1 z-20 w-4 h-4 bg-red-600/80 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-[8px] font-black">
-                            ✕
-                        </button>
+                        <div class="absolute top-1 left-1 z-20 flex items-center gap-1">
+                            <button type="button" 
+                                    onclick="event.stopPropagation(); confirmDeleteFigure({{ fig.id }}, '{{ fig.name|escapejs }}')"
+                                    title="Eliminar figura"
+                                    class="w-4 h-4 bg-red-600/80 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-[8px] font-black">
+                                ✕
+                            </button>
+                            <button type="button" 
+                                    onclick="event.stopPropagation(); openEditFigureModal({{ fig.id }}, '{{ fig.name|escapejs }}', {{ fig.is_secret|yesno:'true,false' }})"
+                                    title="Renombrar / Editar figura"
+                                    class="w-4 h-4 bg-amber-500/90 hover:bg-amber-400 text-black rounded-full flex items-center justify-center text-[8px] font-black shadow">
+                                ✏️
+                            </button>
+                        </div>
                         {% endif %}
 
                         {% if fig.is_secret %}
@@ -502,6 +510,34 @@
             <div class="flex gap-2 mt-2">
                 <button type="button" onclick="closeAddFigureModal()" class="w-1/2 py-2 bg-stone-800 text-stone-300 rounded-xl text-xs font-bold">Cancelar</button>
                 <button type="submit" class="w-1/2 py-2 bg-emerald-500 text-black rounded-xl text-xs font-black">Añadir</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ✏️ MODAL RENOMBRAR / EDITAR FIGURA EXISTENTE -->
+<div id="edit-figure-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="popmart-cabinet p-5 w-full max-w-sm flex flex-col gap-3 border border-amber-500/50">
+        <div class="flex items-center justify-between border-b border-amber-500/20 pb-2">
+            <h3 class="text-xs font-black text-amber-300 uppercase">✏️ Renombrar / Editar Figura</h3>
+            <button type="button" onclick="closeEditFigureModal()" class="text-stone-400 hover:text-white text-xs">✕</button>
+        </div>
+        <form id="edit-figure-form" action="" method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
+            {% csrf_token %}
+            <div>
+                <label class="block text-[10px] text-amber-300 uppercase font-bold mb-1">Nombre Correcto de la Figura *</label>
+                <input type="text" id="edit-figure-name" name="name" required class="w-full bg-black/70 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
+            </div>
+            <label class="flex items-center gap-2 text-xs text-amber-300 font-bold cursor-pointer bg-black/40 p-2 rounded-xl border border-white/10">
+                <input type="checkbox" id="edit-figure-secret" name="is_secret" value="1"> Figura Secreta (Chase ⭐)
+            </label>
+            <div>
+                <label class="block text-[10px] text-stone-400 uppercase font-bold mb-1">Reemplazar Foto (Opcional)</label>
+                <input type="file" name="image" accept="image/*" class="text-[9px] text-stone-400 w-full">
+            </div>
+            <div class="flex gap-2 mt-2">
+                <button type="button" onclick="closeEditFigureModal()" class="w-1/2 py-2 bg-stone-800 text-stone-300 rounded-xl text-xs font-bold">Cancelar</button>
+                <button type="submit" class="w-1/2 py-2 bg-amber-500 text-black rounded-xl text-xs font-black">Guardar Nombre</button>
             </div>
         </form>
     </div>
@@ -775,42 +811,62 @@
         window.location.href = `/economy/bazar/figure/delete/${figureId}/`;
     }
 
-    function previewBatchFigures(input) {
-        const c = document.getElementById('batch-preview-container'); c.innerHTML = '';
+    function openEditFigureModal(figId, figName, isSecret) {
+        document.getElementById('edit-figure-form').action = `/economy/bazar/figure/edit/${figId}/?tg_id={{ tg_id }}`;
+        document.getElementById('edit-figure-name').value = figName;
+        document.getElementById('edit-figure-secret').checked = Boolean(isSecret);
+        const m = document.getElementById('edit-figure-modal');
+        m.classList.remove('hidden'); m.classList.add('flex');
+    }
+    function closeEditFigureModal() {
+        const m = document.getElementById('edit-figure-modal');
+        m.classList.add('hidden'); m.classList.remove('flex');
+    }
+
+    function renderOrderedFigurePreviews(input, containerId, imgSizeClass) {
+        const c = document.getElementById(containerId);
+        c.innerHTML = '';
         if (!input.files) return;
+        // Crear tarjetas EN ORDEN SÍNCRONO exacto (idx 0, 1, 2...) antes de leer archivos
         Array.from(input.files).forEach((f, idx) => {
+            const d = document.createElement('div');
+            d.className = "bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col items-center gap-1";
+
+            const img = document.createElement('img');
+            img.className = `${imgSizeClass} object-contain rounded-lg bg-black/40`;
+
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.name = `figure_name_${idx}`;
+            nameInput.value = f.name.replace(/\.[^/.]+$/, '');
+            nameInput.className = "w-full bg-stone-900 border border-white/20 rounded px-1.5 py-1 text-[8px] text-white";
+
+            const lbl = document.createElement('label');
+            lbl.className = "flex items-center gap-1 text-[7px] text-amber-300 font-bold";
+            const chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.name = 'is_secret_index';
+            chk.value = String(idx);
+            lbl.appendChild(chk);
+            lbl.appendChild(document.createTextNode(' Chase ⭐'));
+
+            d.appendChild(img);
+            d.appendChild(nameInput);
+            d.appendChild(lbl);
+            c.appendChild(d);
+
             const r = new FileReader();
-            r.onload = e => {
-                const d = document.createElement('div');
-                d.className = "bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col items-center gap-1";
-                d.innerHTML = `
-                    <img src="${e.target.result}" class="w-16 h-16 object-contain rounded-lg">
-                    <input type="text" name="figure_names" value="${f.name.split('.')[0]}" class="w-full bg-stone-900 border border-white/20 rounded px-1.5 py-1 text-[8px] text-white">
-                    <label class="flex items-center gap-1 text-[7px] text-amber-300 font-bold"><input type="checkbox" name="is_secret_index" value="${idx}"> Chase ⭐</label>
-                `;
-                c.appendChild(d);
-            };
+            r.onload = e => { img.src = e.target.result; };
             r.readAsDataURL(f);
         });
     }
 
+    function previewBatchFigures(input) {
+        renderOrderedFigurePreviews(input, 'batch-preview-container', 'w-16 h-16');
+    }
+
     function previewAddFigures(input) {
-        const c = document.getElementById('add-figure-preview-container'); c.innerHTML = '';
-        if (!input.files) return;
-        Array.from(input.files).forEach((f, idx) => {
-            const r = new FileReader();
-            r.onload = e => {
-                const d = document.createElement('div');
-                d.className = "bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col items-center gap-1";
-                d.innerHTML = `
-                    <img src="${e.target.result}" class="w-12 h-12 object-contain rounded-lg">
-                    <input type="text" name="figure_names" value="${f.name.split('.')[0]}" class="w-full bg-stone-900 border border-white/20 rounded px-1 text-[8px] text-white">
-                    <label class="flex items-center gap-1 text-[7px] text-amber-300 font-bold"><input type="checkbox" name="is_secret_index" value="${idx}"> Chase ⭐</label>
-                `;
-                c.appendChild(d);
-            };
-            r.readAsDataURL(f);
-        });
+        renderOrderedFigurePreviews(input, 'add-figure-preview-container', 'w-12 h-12');
     }
 
     async function pinFigureToProfile(id, name, imgUrl, seriesName) {

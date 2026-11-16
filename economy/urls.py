@@ -37,6 +37,7 @@ urlpatterns = [
     path('bazar/series/delete/<int:series_id>/', views.admin_delete_series, name='delete_series'),
     path('bazar/series/add-figure/<int:series_id>/', views.admin_add_figure_to_series, name='add_figure_to_series'),
     path('bazar/figure/delete/<int:figure_id>/', views.admin_delete_figure, name='delete_figure'),
+    path('bazar/figure/edit/<int:figure_id>/', views.admin_edit_figure, name='edit_figure'),
 
     # ♻️ NUEVA RUTA: Empeño de Duplicados
     path('bazar/collectible/recycle/<int:item_id>/', views.recycle_duplicate_action, name='recycle_duplicate'),

@@ -1772,7 +1772,9 @@ def admin_create_series_batch(request):
 
             for idx, img in enumerate(figure_images):
                 opt_img = optimize_uploaded_image(img)
-                fig_name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else f"{series_name} #{idx+1}"
+                indexed_name = request.POST.get(f'figure_name_{idx}', '').strip()
+                fallback_name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else ''
+                fig_name = indexed_name or fallback_name or f"{series_name} #{idx+1}"
                 is_sec = str(idx) in secret_indices
 
                 BazarCollectible.objects.create(
@@ -1907,7 +1909,9 @@ def admin_add_figure_to_series(request, series_id):
         created_count = 0
         for idx, img in enumerate(figure_images):
             opt_img = optimize_uploaded_image(img)
-            name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else f"{series.name} #{series.items.count() + 1}"
+            indexed_name = request.POST.get(f'figure_name_{idx}', '').strip()
+            fallback_name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else ''
+            name = indexed_name or fallback_name or f"{series.name} #{series.items.count() + 1}"
             is_sec = str(idx) in secret_indices
             BazarCollectible.objects.create(
                 series=series,
@@ -1935,6 +1939,30 @@ def admin_delete_figure(request, figure_id):
     fig.is_active = False
     fig.save(update_fields=['is_active'])
     messages.info(request, f"La figura «{fig.name}» fue retirada del estante.")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+def admin_edit_figure(request, figure_id):
+    """Permite al administrador renombrar o actualizar una figura existente sin afectar inventarios."""
+    tg_id = get_safe_tg_id(request)
+    if not check_is_staff_or_admin(tg_id):
+        messages.error(request, "Acceso denegado.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+    fig = get_object_or_404(BazarCollectible, id=figure_id)
+    if request.method == 'POST':
+        new_name = request.POST.get('name', '').strip()
+        is_secret = request.POST.get('is_secret') == '1'
+        new_image = request.FILES.get('image')
+
+        if new_name:
+            fig.name = new_name
+            fig.idol_name = new_name
+        fig.is_secret = is_secret
+        if new_image:
+            fig.image = optimize_uploaded_image(new_image)
+        fig.save()
+        messages.success(request, f"✏️ Figura actualizada a «{fig.name}».")
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
