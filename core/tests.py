@@ -268,6 +268,29 @@ class KingdomMasterTestSuite(TestCase):
         self.assertEqual(KingdomSetting.get_val("feed_theme_active", "false"), "false")
         self.assertEqual(KingdomSetting.get_val("feed_theme_message", ""), "")
 
+    def test_upcoming_box_publish_hide_delete(self):
+        res = self.client.post(f"/idols/photocards/admin/?tg_id={self.admin_id}", {
+            "action": "save_upcoming_box",
+            "publish_now": "1",
+            "upcoming_title": "Colección Celestial 2026",
+            "upcoming_date": "Viernes 21:00 hs",
+            "upcoming_desc": "Edición limitada con hologramas.",
+        })
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("tab=proxima", res["Location"])
+
+        boxes_res = self.client.get(f"/idols/photocards/?tg_id={self.user_id}")
+        self.assertEqual(boxes_res.status_code, 200)
+        self.assertContains(boxes_res, "Colección Celestial 2026")
+        self.assertContains(boxes_res, "Viernes 21:00 hs")
+
+        self.client.post(f"/idols/photocards/admin/?tg_id={self.admin_id}", {"action": "hide_upcoming_box"})
+        boxes_hidden = self.client.get(f"/idols/photocards/?tg_id={self.user_id}")
+        self.assertNotContains(boxes_hidden, "Colección Celestial 2026")
+
+        self.client.post(f"/idols/photocards/admin/?tg_id={self.admin_id}", {"action": "delete_upcoming_box"})
+        self.assertEqual(KingdomSetting.get_val("upcoming_box_title", ""), "")
+
     def test_final_system_integrity(self):
         self.assertEqual(UserRole.objects.count(), 3)
         self.assertEqual(Wallet.objects.count(), 2)

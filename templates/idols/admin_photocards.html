@@ -286,12 +286,24 @@
             <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
                 <span>📢</span> Anuncio de Próximo Lanzamiento
             </h3>
-            <span class="text-[9px] font-mono text-yellow-300 font-bold">Sneak Peek VIP</span>
+            {% if upcoming.is_active %}
+                <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500 text-emerald-300">🟢 VISIBLE EN TIENDA</span>
+            {% elif upcoming.has_content %}
+                <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-950/90 border border-amber-500 text-amber-300">⏸️ GUARDADO (OCULTO)</span>
+            {% else %}
+                <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-stone-900 border border-white/20 text-stone-400">⚫ SIN ANUNCIO</span>
+            {% endif %}
         </div>
 
         <p class="text-[11px] text-stone-300 leading-relaxed">
             Configura el banner de expectativa que verán los usuarios en la tienda de cajas anunciando la próxima colección y su fecha.
         </p>
+
+        {% if not upcoming.is_active and upcoming.has_content %}
+        <div class="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/50 text-[10.5px] text-amber-200 leading-snug">
+            ⚠️ Tienes un anuncio guardado pero está <strong>oculto</strong>. Pulsa <strong>«📢 Publicar en la Tienda»</strong> para mostrarlo.
+        </div>
+        {% endif %}
 
         <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3 mt-1">
             {% csrf_token %}
@@ -305,20 +317,20 @@
                     <span class="text-[10px] text-stone-400">Si está activo, aparecerá arriba de las cajas.</span>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" name="upcoming_active" value="1" class="sr-only peer" {% if upcoming.is_active %}checked{% endif %}>
+                    <input type="checkbox" name="upcoming_active" value="1" class="sr-only peer" {% if upcoming.is_active or not upcoming.has_content %}checked{% endif %}>
                     <div class="w-11 h-6 bg-stone-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                 </label>
             </div>
 
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Próxima Caja *</label>
-                <input type="text" name="upcoming_title" value="{{ upcoming.title }}" required placeholder="Ej: Colección K-Pop Cyberpunk 2026"
+                <input type="text" name="upcoming_title" value="{{ upcoming.title }}" placeholder="Ej: Colección K-Pop Cyberpunk 2026"
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
             </div>
 
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Fecha o Horario de Estreno *</label>
-                <input type="text" name="upcoming_date" value="{{ upcoming.release_date }}" required placeholder="Ej: Sábado 15 de Octubre • 21:00 hs"
+                <input type="text" name="upcoming_date" value="{{ upcoming.release_date }}" placeholder="Ej: Sábado 15 de Octubre • 21:00 hs"
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
             </div>
 
@@ -342,9 +354,20 @@
                        class="w-full bg-black/80 border border-white/20 rounded-xl p-2 text-xs text-stone-300">
             </div>
 
-            <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
-                💾 Guardar Anuncio Promocional
+            <button type="submit" name="publish_now" value="1" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
+                📢 Publicar en la Tienda
             </button>
+
+            <div class="grid grid-cols-2 gap-2">
+                <button type="submit" name="action" value="hide_upcoming_box" formnovalidate
+                        class="bg-amber-950/70 hover:bg-amber-900 border border-amber-600/60 text-amber-200 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider">
+                    ⏸️ Ocultar sin borrar
+                </button>
+                <button type="submit" name="action" value="delete_upcoming_box" formnovalidate onclick="return confirm('¿Retirar y borrar el anuncio de próxima caja?')"
+                        class="bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider">
+                    🚫 Retirar y Borrar
+                </button>
+            </div>
         </form>
     </div>
 
