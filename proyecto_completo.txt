@@ -53,6 +53,7 @@ application = get_asgi_application()
 ARCHIVO: .\config\settings.py
 ==================================================
 
+
 """
 Django settings for config project.
 
@@ -304,6 +305,7 @@ else:
         },
     }
 
+
 ==================================================
 ARCHIVO: .\config\urls.py
 ==================================================
@@ -474,6 +476,7 @@ def kingdom_notifications(request):
 ARCHIVO: .\core\middleware.py
 ==================================================
 
+
 # core/middleware.py
 from django.shortcuts import render
 from django.conf import settings
@@ -537,9 +540,11 @@ class TelegramSessionMiddleware:
         response = self.get_response(request)
         return response
 
+
 ==================================================
 ARCHIVO: .\core\models.py
 ==================================================
+
 
 from django.db import models
 from idols.models import IdolProfile
@@ -805,9 +810,11 @@ class AdminAuditLog(models.Model):
     details = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
+
 ==================================================
 ARCHIVO: .\core\telegram_auth.py
 ==================================================
+
 
 # core/telegram_auth.py
 import json
@@ -876,6 +883,7 @@ def is_user_in_group(user_tg_id: int) -> bool:
         print(f"⚠️ Error general getChatMember para {user_tg_id}: {e}")
     # Solo en timeouts transitorios de red se permite pasar temporalmente
     return True
+
 
 ==================================================
 ARCHIVO: .\core\telegram_notify.py
@@ -966,6 +974,7 @@ def send_telegram_msg(chat_id, text, button_text=None, button_url=None, message_
 ==================================================
 ARCHIVO: .\core\tests.py
 ==================================================
+
 
 
 # core/tests.py
@@ -1219,9 +1228,11 @@ class KingdomMasterTestSuite(TestCase):
 
 
 
+
 ==================================================
 ARCHIVO: .\core\urls.py
 ==================================================
+
 
 from django.urls import path
 from . import views
@@ -1238,6 +1249,7 @@ urlpatterns = [
     path('telegram-webhook/', views.telegram_webhook, name='telegram_webhook'),
     path('buzon/', views.notifications_inbox, name='inbox'),
 ]
+
 
 ==================================================
 ARCHIVO: .\core\utils.py
@@ -1294,6 +1306,7 @@ def grant_user_xp(request, tg_id, xp_amount, reason=""):
 ==================================================
 ARCHIVO: .\core\views.py
 ==================================================
+
 
 
 
@@ -2413,6 +2426,7 @@ def toggle_pin_item(request):
 
 
 
+
 ==================================================
 ARCHIVO: .\core\__init__.py
 ==================================================
@@ -2777,6 +2791,7 @@ urlpatterns = [
 ==================================================
 ARCHIVO: .\economy\views.py
 ==================================================
+
 
 
 
@@ -4959,6 +4974,7 @@ def scratch_card_play_ajax(request):
 
 
 
+
 ==================================================
 ARCHIVO: .\economy\__init__.py
 ==================================================
@@ -5002,6 +5018,7 @@ class IdolsConfig(AppConfig):
 ==================================================
 ARCHIVO: .\idols\models.py
 ==================================================
+
 
 
 from django.db import models
@@ -5491,6 +5508,7 @@ class RoleSessionRequest(models.Model):
 
 
 
+
 ==================================================
 ARCHIVO: .\idols\tests.py
 ==================================================
@@ -5550,6 +5568,7 @@ urlpatterns = [
 ==================================================
 ARCHIVO: .\idols\views.py
 ==================================================
+
 
 
 
@@ -8175,6 +8194,7 @@ def handle_roleplay_request(request, request_id, action):
 
 
 
+
 ==================================================
 ARCHIVO: .\idols\__init__.py
 ==================================================
@@ -8780,6 +8800,7 @@ ARCHIVO: .\templates\base.html
 
 
 
+
 {% load static %}
 <!DOCTYPE html>
 <html lang="es">
@@ -9253,6 +9274,7 @@ ARCHIVO: .\templates\base.html
     </script>
 </body>
 </html>
+
 
 
 
@@ -10240,6 +10262,7 @@ ARCHIVO: .\templates\core\leaderboard.html
 
 
 
+
 {% extends 'base.html' %}
 
 {% block content %}
@@ -10386,9 +10409,11 @@ ARCHIVO: .\templates\core\leaderboard.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\core\menu.html
 ==================================================
+
 
 
 
@@ -10632,9 +10657,11 @@ ARCHIVO: .\templates\core\menu.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\core\profile.html
 ==================================================
+
 
 
 
@@ -11050,9 +11077,11 @@ ARCHIVO: .\templates\core\profile.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\economy\bazar.html
 ==================================================
+
 
 
 
@@ -11933,6 +11962,7 @@ ARCHIVO: .\templates\economy\bazar.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\economy\blackjack.html
 ==================================================
@@ -12686,6 +12716,7 @@ ARCHIVO: .\templates\economy\jobs.html
 
 
 
+
 {% extends 'base.html' %}
 {% load static %}
 
@@ -12983,6 +13014,7 @@ ARCHIVO: .\templates\economy\jobs.html
     {% endif %}
 </script>
 {% endblock %}
+
 
 
 
@@ -13903,6 +13935,7 @@ ARCHIVO: .\templates\economy\slots.html
 ==================================================
 
 
+
 {% extends 'base.html' %}
 
 {% block content %}
@@ -14224,9 +14257,11 @@ ARCHIVO: .\templates\economy\slots.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\economy\wallet.html
 ==================================================
+
 
 
 
@@ -14510,6 +14545,7 @@ ARCHIVO: .\templates\economy\wallet.html
     });
 </script>
 {% endblock %}
+
 
 
 
@@ -15085,6 +15121,7 @@ ARCHIVO: .\templates\idols\collection.html
 ==================================================
 
 
+
 {% extends 'base.html' %}
 
 {% block content %}
@@ -15195,6 +15232,7 @@ ARCHIVO: .\templates\idols\collection.html
 
 </div>
 {% endblock %}
+
 
 
 
@@ -16017,6 +16055,7 @@ ARCHIVO: .\templates\idols\edit_post.html
 ==================================================
 ARCHIVO: .\templates\idols\feed.html
 ==================================================
+
 
 <!-- templates/idols/feed.html -->
 {% extends 'base.html' %}
@@ -17084,6 +17123,7 @@ ARCHIVO: .\templates\idols\feed.html
 </script>
 {% endblock %}
 
+
 ==================================================
 ARCHIVO: .\templates\idols\form.html
 ==================================================
@@ -17715,6 +17755,7 @@ ARCHIVO: .\templates\idols\list.html
 
 
 
+
 <!-- templates/idols/list.html -->
 {% extends 'base.html' %}
 
@@ -18006,9 +18047,11 @@ function showUploadSpinner(reqId) {
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\idols\photocards_album.html
 ==================================================
+
 
 
 
@@ -18735,9 +18778,11 @@ ARCHIVO: .\templates\idols\photocards_album.html
 </script>
 {% endblock %}
 
+
 ==================================================
 ARCHIVO: .\templates\idols\photocards_market.html
 ==================================================
+
 
 
 
@@ -19104,6 +19149,7 @@ ARCHIVO: .\templates\idols\photocards_market.html
 
 </script>
 {% endblock %}
+
 
 
 

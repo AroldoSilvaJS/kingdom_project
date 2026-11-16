@@ -1,4 +1,3 @@
-
 """
 Django settings for config project.
 
@@ -249,3 +248,4 @@ else:
             "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
         },
     }
+

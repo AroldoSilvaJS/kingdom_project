@@ -326,8 +326,20 @@
         <h3 class="text-xs font-black text-yellow-300 uppercase tracking-wider flex items-center gap-1.5">
           <span>🎭</span> Temática Semanal del Muro
         </h3>
-        <span class="text-[9px] font-mono text-stone-400">Cartel & Evento</span>
+        {% if feed_theme.is_active %}
+          <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500 text-emerald-300">🟢 VISIBLE EN EL MURO</span>
+        {% elif feed_theme.has_content %}
+          <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-950/90 border border-amber-500 text-amber-300">⏸️ GUARDADA (OCULTA)</span>
+        {% else %}
+          <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-stone-900 border border-white/20 text-stone-400">⚫ SIN TEMÁTICA</span>
+        {% endif %}
       </div>
+
+      {% if not feed_theme.is_active and feed_theme.has_content %}
+      <div class="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/50 text-[10.5px] text-amber-200 leading-snug">
+        ⚠️ Tienes una temática guardada pero actualmente está <strong>oculta</strong>. Pulsa <strong>«📢 Publicar en el Muro»</strong> para mostrarla.
+      </div>
+      {% endif %}
 
       <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
         {% csrf_token %}
@@ -337,7 +349,7 @@
         <div class="flex items-center justify-between p-2 rounded-xl bg-black/60 border border-white/10">
           <span class="text-xs text-stone-300 font-bold">¿Mostrar Cartel en el Muro?</span>
           <label class="text-[10px] text-yellow-300 flex items-center gap-1.5 cursor-pointer font-bold">
-            <input type="checkbox" name="theme_active" value="1" {% if feed_theme.is_active %}checked{% endif %}> Activo en el Muro
+            <input type="checkbox" name="theme_active" value="1" {% if feed_theme.is_active or not feed_theme.has_content %}checked{% endif %}> Activo en el Muro
           </label>
         </div>
 
@@ -349,7 +361,7 @@
 
         <div>
           <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Mensaje para las Musas</label>
-          <textarea name="theme_message" rows="2" class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white resize-none">{{ feed_theme.message }}</textarea>
+          <textarea name="theme_message" rows="3" placeholder="Escribe las indicaciones o detalles del evento semanal..." class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white resize-none">{{ feed_theme.message }}</textarea>
         </div>
 
         <div class="bg-black/50 p-2.5 rounded-xl border border-white/10 flex flex-col gap-1">
@@ -362,13 +374,18 @@
           <input type="file" name="theme_banner" accept="image/*" class="text-xs text-stone-400">
         </div>
 
-        <div class="grid grid-cols-2 gap-2 mt-1">
-          <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-            💾 Guardar Temática
+        <button type="submit" name="publish_now" value="1" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
+          📢 Publicar en el Muro
+        </button>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button type="submit" name="accion" value="hide_feed_theme"
+                  class="bg-amber-950/70 hover:bg-amber-900 border border-amber-600/60 text-amber-200 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider">
+            ⏸️ Ocultar sin borrar
           </button>
           <button type="submit" name="accion" value="delete_feed_theme" onclick="return confirm('¿Retirar y borrar la temática del Muro?')"
-                  class="bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider">
-            🚫 Retirar
+                  class="bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider">
+            🚫 Retirar y Borrar
           </button>
         </div>
       </form>
@@ -707,6 +724,14 @@
     function universalNav(targetPath) {
       window.location.href = `${targetPath}?tg_id=${adminId}`;
     }
+
+    // Mantener pestaña activa tras guardar formularios
+    document.addEventListener('DOMContentLoaded', () => {
+      const initialTab = '{{ active_tab|default:"censo"|escapejs }}';
+      if (initialTab && initialTab !== 'censo') {
+        switchAdminTab(initialTab);
+      }
+    });
   </script>
 
 </body>

@@ -1,6 +1,3 @@
-
-
-
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 import json
@@ -564,22 +561,40 @@ def admin_panel(request, admin_tg_id):
         elif accion == 'save_feed_theme':
             title = request.POST.get('theme_title', '').strip()
             msg = request.POST.get('theme_message', '').strip()
-            is_active = request.POST.get('theme_active') == '1'
+            publish_now = request.POST.get('publish_now') == '1'
+            is_active = publish_now or (request.POST.get('theme_active') == '1')
+
+            banner_uploaded = 'theme_banner' in request.FILES and request.FILES['theme_banner']
+            existing_banner = KingdomSetting.get_val('feed_theme_banner', '').strip()
+
+            if is_active and not title and (msg or banner_uploaded or existing_banner):
+                title = 'Temática de la Semana'
 
             KingdomSetting.set_val('feed_theme_title', title)
             KingdomSetting.set_val('feed_theme_message', msg)
             KingdomSetting.set_val('feed_theme_active', 'true' if is_active else 'false')
 
-            if 'theme_banner' in request.FILES:
-                from idols.views import optimize_uploaded_image
-                from django.core.files.storage import default_storage
-                file_obj = optimize_uploaded_image(request.FILES['theme_banner'])
-                saved_path = default_storage.save(f'themes/banner_{file_obj.name}', file_obj)
-                image_url = default_storage.url(saved_path)
-                KingdomSetting.set_val('feed_theme_banner', image_url)
+            if banner_uploaded:
+                try:
+                    from idols.views import optimize_uploaded_image
+                    from django.core.files.storage import default_storage
+                    file_obj = optimize_uploaded_image(request.FILES['theme_banner'])
+                    saved_path = default_storage.save(f'themes/banner_{file_obj.name}', file_obj)
+                    image_url = default_storage.url(saved_path)
+                    KingdomSetting.set_val('feed_theme_banner', image_url)
+                except Exception as e:
+                    messages.warning(request, f"⚠️ Texto guardado, pero hubo un error al subir el banner: {e}")
 
-            messages.success(request, "🎭 ¡Temática semanal del Muro actualizada con éxito!")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+            if is_active:
+                messages.success(request, "🎭 ¡Temática semanal PUBLICADA en el Muro con éxito!")
+            else:
+                messages.warning(request, "💾 Temática guardada como borrador (oculta). Pulsa Publicar para mostrarla en el Muro.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}&tab=decretos")
+
+        elif accion == 'hide_feed_theme':
+            KingdomSetting.set_val('feed_theme_active', 'false')
+            messages.warning(request, "⏸️ Temática del Muro ocultada (tu texto se conserva para volver a publicarla).")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}&tab=decretos")
 
         elif accion == 'delete_feed_theme':
             KingdomSetting.set_val('feed_theme_active', 'false')
@@ -587,7 +602,7 @@ def admin_panel(request, admin_tg_id):
             KingdomSetting.set_val('feed_theme_message', '')
             KingdomSetting.set_val('feed_theme_banner', '')
             messages.success(request, "🗑️ Temática del Muro desactivada y eliminada con éxito.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}&tab=decretos")
 
     all_known_ids = set(UserProfile.objects.values_list('telegram_user_id', flat=True)).union(
         set(IdolProfile.objects.values_list('telegram_user_id', flat=True)),
@@ -652,12 +667,22 @@ def admin_panel(request, admin_tg_id):
     audit_logs = AdminAuditLog.objects.all().order_by('-created_at')[:20]
     total_cards = UserPhotocard.objects.count()
 
+    feed_theme_title = KingdomSetting.get_val('feed_theme_title', '').strip()
+    feed_theme_msg = KingdomSetting.get_val('feed_theme_message', '').strip()
+    feed_theme_banner = KingdomSetting.get_val('feed_theme_banner', '').strip()
+    feed_theme_active = KingdomSetting.get_val('feed_theme_active', 'false').strip().lower() in ('true', '1', 'yes', 'si')
+
     feed_theme = {
-        'is_active': KingdomSetting.get_val('feed_theme_active', 'false') == 'true',
-        'title': KingdomSetting.get_val('feed_theme_title', 'Temática de la Semana'),
-        'message': KingdomSetting.get_val('feed_theme_message', ''),
-        'banner_url': KingdomSetting.get_val('feed_theme_banner', '')
+        'is_active': feed_theme_active,
+        'title': feed_theme_title,
+        'message': feed_theme_msg,
+        'banner_url': feed_theme_banner,
+        'has_content': bool(feed_theme_title or feed_theme_msg or feed_theme_banner),
     }
+
+    active_tab = request.GET.get('tab', 'censo')
+    if active_tab not in ('censo', 'decretos', 'purgas', 'auditoria'):
+        active_tab = 'censo'
 
     return render(request, 'core/admin_panel.html', {
         'admin_tg_id': admin_tg_id,
@@ -672,6 +697,7 @@ def admin_panel(request, admin_tg_id):
         'broadcast_active': broadcast_active,
         'audit_logs': audit_logs,
         'feed_theme': feed_theme,
+        'active_tab': active_tab,
     })
 
 
@@ -1114,5 +1140,6 @@ def toggle_pin_item(request):
         'pinned_count': len(pinned),
         'message': msg
     })
+
 
 

@@ -1,4 +1,3 @@
-
 <!-- templates/idols/feed.html -->
 {% extends 'base.html' %}
 
@@ -48,13 +47,15 @@
             <div class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[#0d0414] to-transparent pointer-events-none"></div>
         </div>
         {% endif %}
-        <div class="p-3.5 flex flex-col gap-1 relative z-10">
+        <div class="p-3.5 flex flex-col gap-1.5 relative z-10">
+            {% if feed_theme.title %}
             <h3 class="font-serif text-sm font-black text-gold-gradient tracking-wide uppercase leading-tight">
                 {{ feed_theme.title }}
             </h3>
+            {% endif %}
             {% if feed_theme.message %}
-            <p class="text-[11.5px] text-stone-200 leading-relaxed font-normal">
-                {{ feed_theme.message }}
+            <p class="text-[11.5px] text-stone-100 leading-relaxed font-normal">
+                {{ feed_theme.message|linebreaksbr }}
             </p>
             {% endif %}
         </div>
@@ -1064,3 +1065,4 @@
     }
 </script>
 {% endblock %}
+

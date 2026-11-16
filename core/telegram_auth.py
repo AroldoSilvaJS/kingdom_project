@@ -1,4 +1,3 @@
-
 # core/telegram_auth.py
 import json
 import urllib.request
@@ -66,3 +65,4 @@ def is_user_in_group(user_tg_id: int) -> bool:
         print(f"⚠️ Error general getChatMember para {user_tg_id}: {e}")
     # Solo en timeouts transitorios de red se permite pasar temporalmente
     return True
+

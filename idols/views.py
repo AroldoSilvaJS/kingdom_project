@@ -1,6 +1,3 @@
-
-
-
 import random
 import os
 import sys
@@ -671,12 +668,16 @@ def social_feed(request):
         p.user_reaction = user_reactions.get(p.id, 'like' if p.id in liked_ids else '')
         posts_list.append(p)
 
-    theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
+    theme_active_raw = KingdomSetting.get_val('feed_theme_active', 'false').strip().lower()
+    theme_title = KingdomSetting.get_val('feed_theme_title', '').strip()
+    theme_message = KingdomSetting.get_val('feed_theme_message', '').strip()
+    theme_banner = KingdomSetting.get_val('feed_theme_banner', '').strip()
+    theme_active = (theme_active_raw in ('true', '1', 'yes', 'si')) and bool(theme_title or theme_message or theme_banner)
     feed_theme = {
         'is_active': theme_active,
-        'title': KingdomSetting.get_val('feed_theme_title', 'Temática Semanal'),
-        'message': KingdomSetting.get_val('feed_theme_message', ''),
-        'banner_url': KingdomSetting.get_val('feed_theme_banner', '')
+        'title': theme_title or 'Temática Semanal',
+        'message': theme_message,
+        'banner_url': theme_banner,
     }
     
     return render(request, 'idols/feed.html', {
@@ -2620,5 +2621,6 @@ def handle_roleplay_request(request, request_id, action):
         messages.info(request, f"Petición rechazada. Fondos reembolsados a @{session_req.client_username}.")
 
     return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+
 
 

@@ -1,4 +1,3 @@
-
 # core/middleware.py
 from django.shortcuts import render
 from django.conf import settings
@@ -61,3 +60,4 @@ class TelegramSessionMiddleware:
 
         response = self.get_response(request)
         return response
+

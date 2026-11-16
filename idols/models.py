@@ -1,5 +1,3 @@
-
-
 from django.db import models
 from django.db.models import Avg
 from django.core.exceptions import ValidationError
@@ -483,6 +481,7 @@ class RoleSessionRequest(models.Model):
 
     def __str__(self):
         return f"Rol: {self.idol.stage_name} con @{self.client_username} ({self.status})"
+
 
 
 

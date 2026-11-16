@@ -1,4 +1,3 @@
-
 from django.db import models
 from idols.models import IdolProfile
 
@@ -262,3 +261,4 @@ class AdminAuditLog(models.Model):
     target_tg_id = models.BigIntegerField(blank=True, null=True)
     details = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+

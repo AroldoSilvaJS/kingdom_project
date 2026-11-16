@@ -1,5 +1,3 @@
-
-
 # core/tests.py
 from datetime import timedelta
 from django.test import TestCase, Client
@@ -244,9 +242,36 @@ class KingdomMasterTestSuite(TestCase):
         self.assertEqual(self.user_wallet.balance, 400)
         self.assertTrue(AdminAuditLog.objects.filter(target_tg_id=self.user_id).exists())
 
+    def test_feed_theme_publish_hide_delete(self):
+        # 1. Publicar temática incluso sin marcar manualmente el checkbox (botón Publicar)
+        res = self.client.post(f"/admin-panel/?tg_id={self.admin_id}", {
+            "accion": "save_feed_theme",
+            "publish_now": "1",
+            "theme_title": "Noche de Gala",
+            "theme_message": "Sube tu mejor outfit dorado.",
+        })
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("tab=decretos", res["Location"])
+
+        feed_res = self.client.get(f"/idols/feed/?tg_id={self.user_id}")
+        self.assertEqual(feed_res.status_code, 200)
+        self.assertContains(feed_res, "Noche de Gala")
+        self.assertContains(feed_res, "Sube tu mejor outfit dorado.")
+
+        # 2. Ocultar sin borrar
+        self.client.post(f"/admin-panel/?tg_id={self.admin_id}", {"accion": "hide_feed_theme"})
+        feed_hidden = self.client.get(f"/idols/feed/?tg_id={self.user_id}")
+        self.assertNotContains(feed_hidden, "Sube tu mejor outfit dorado.")
+
+        # 3. Retirar y borrar
+        self.client.post(f"/admin-panel/?tg_id={self.admin_id}", {"accion": "delete_feed_theme"})
+        self.assertEqual(KingdomSetting.get_val("feed_theme_active", "false"), "false")
+        self.assertEqual(KingdomSetting.get_val("feed_theme_message", ""), "")
+
     def test_final_system_integrity(self):
         self.assertEqual(UserRole.objects.count(), 3)
         self.assertEqual(Wallet.objects.count(), 2)
         self.assertEqual(UserProfile.objects.count(), 1)
+
 
 
