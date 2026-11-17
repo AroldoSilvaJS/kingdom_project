@@ -357,6 +357,8 @@
             🏷️ Publicada en el Mercado por <span class="font-mono font-bold text-yellow-400" id="modal-sale-price-label"></span> 🪙
             <form id="cancel-sale-form" method="POST" action="" class="mt-1">
                 {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <input type="hidden" name="mode" value="cancel">
                 <button type="submit" class="text-[10px] text-rose-400 underline font-bold hover:text-rose-300">
                     Cancelar Publicación
                 </button>
@@ -374,9 +376,10 @@
             <!-- FORMULARIO: PONER A LA VENTA -->
             <form id="sell-form" method="POST" action="" class="w-full flex flex-col gap-1.5 p-2.5 bg-black/50 border border-white/10 rounded-2xl">
                 {% csrf_token %}
-                <span class="text-[10px] font-bold text-stone-300 uppercase tracking-wider text-left">Poner en Venta (Mercado)</span>
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <span class="text-[10px] font-bold text-stone-300 uppercase tracking-wider text-left">Poner en Venta (Mínimo 20 🪙)</span>
                 <div class="flex gap-2">
-                    <input type="number" name="price" min="10" max="5000" placeholder="Precio en 🪙" required 
+                    <input type="number" name="price" min="20" max="5000" placeholder="Precio en 🪙" required 
                            class="flex-1 bg-black/80 border border-vip-gold/30 rounded-xl px-2 py-1 text-xs text-white placeholder-stone-600 focus:outline-none focus:border-yellow-400 font-mono">
                     <button type="submit" class="px-3 py-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xs rounded-xl shadow">
                         Vender
@@ -384,14 +387,16 @@
                 </div>
             </form>
 
-            <!-- FORMULARIO: REGALAR / TRASPASAR -->
+            <!-- FORMULARIO: PROPONER INTERCAMBIO / TRUEQUE -->
             <form id="trade-form" method="POST" action="" class="w-full flex flex-col gap-1.5 p-2.5 bg-black/50 border border-white/10 rounded-2xl">
                 {% csrf_token %}
-                <span class="text-[10px] font-bold text-stone-300 uppercase tracking-wider text-left">Enviar de Regalo a un Noble</span>
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <span class="text-[10px] font-bold text-stone-300 uppercase tracking-wider text-left">Proponer Intercambio (Trueque)</span>
                 <div class="flex gap-2">
-                    <select name="target_tg_id" required 
+                    <select name="target_user" required 
                             class="flex-1 bg-black/80 border border-purple-500/30 rounded-xl px-2 py-1 text-xs text-white focus:outline-none focus:border-purple-400">
                         <option value="">Selecciona destinatario...</option>
+                        <option value="open">📢 Tablón Público (Cualquier Noble)</option>
                         {% for m in members %}
                             <option value="{{ m.telegram_user_id }}">
                                 {{ m.username|default:m.telegram_user_id }} (Nvl {{ m.level }})
@@ -598,8 +603,8 @@
         const tradeForm = document.getElementById('trade-form');
         const cancelForm = document.getElementById('cancel-sale-form');
         sellForm.action = `/idols/photocards/sell/${cardId}/`;
-        tradeForm.action = `/idols/photocards/trade/${cardId}/`;
-        cancelForm.action = `/idols/photocards/cancel_sale/${cardId}/`;
+        tradeForm.action = `/idols/photocards/trade/create/${cardId}/`;
+        cancelForm.action = `/idols/photocards/sell/${cardId}/`;
 
         const saleBox = document.getElementById('modal-is-for-sale-box');
         const actionsBox = document.getElementById('modal-actions-box');
@@ -720,4 +725,5 @@
     }
 </script>
 {% endblock %}
+
 

@@ -61,7 +61,7 @@
                 <div class="grid grid-cols-4 gap-1.5 mb-2">
                     <button type="button" onclick="setBet(25)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">25</button>
                     <button type="button" onclick="setBet(50)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
-                    <button type="button" onclick="setBet(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">50</button>
+                    <button type="button" onclick="setBet(100)" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">100</button>
                     <button type="button" onclick="setBet({{ max_bet }})" class="bg-black/60 border border-vip-gold/30 hover:border-vip-gold text-vip-gold py-1.5 rounded-lg text-xs font-mono font-bold active:scale-95 transition-all">{{ max_bet }}</button>
                 </div>
                 <input type="number" id="bet_amount_input" min="1" max="{{ max_bet }}" value="25"
@@ -293,7 +293,12 @@
                 } else if (data.resultado === 'pair') {
                     resultBox.innerHTML = `
                         <div class="p-2.5 bg-amber-950/80 border border-amber-500/60 rounded-xl text-amber-200 text-xs font-bold w-full">
-                            🍒 ¡Par conseguido! Recuperas tu apuesta (+${data.ganancia} 🪙).
+                            🍒 ¡Par conseguido! Premio total: +${data.ganancia} 🪙.
+                        </div>`;
+                } else if (data.resultado === 'cushion') {
+                    resultBox.innerHTML = `
+                        <div class="p-2.5 bg-sky-950/80 border border-sky-500/60 rounded-xl text-sky-200 text-xs font-bold w-full">
+                            🛡️ ¡Amortiguación Imperial! Conservas ${data.ganancia} 🪙 de tu apuesta.
                         </div>`;
                 } else {
                     try { window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred('error'); } catch(e) {}
@@ -316,6 +321,7 @@
     }
 </script>
 {% endblock %}
+
 
 
 

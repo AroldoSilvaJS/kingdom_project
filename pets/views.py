@@ -201,8 +201,8 @@ def expedition_pet(request):
 
             chance_card = 0.25 if pet.species == 'rabbit' else 0.15
             if random.random() < chance_card:
-                pool = Photocard.objects.filter(rarity__in=['common', 'rare'])
-                if pool.exists():
+                pool = list(Photocard.objects.filter(rarity__in=['common', 'rare']))
+                if pool:
                     c = random.choice(pool)
                     UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=c)
                     card_dropped = {
@@ -219,10 +219,10 @@ def expedition_pet(request):
 
             chance_card = 0.40 if pet.species == 'rabbit' else 0.25
             if random.random() < chance_card:
-                pool = Photocard.objects.filter(rarity__in=['epic', 'legendary'])
-                if not pool.exists():
-                    pool = Photocard.objects.all()
-                if pool.exists():
+                pool = list(Photocard.objects.filter(rarity__in=['epic', 'legendary']))
+                if not pool:
+                    pool = list(Photocard.objects.all())
+                if pool:
                     c = random.choice(pool)
                     UserPhotocard.objects.create(telegram_user_id=tg_id, photocard=c)
                     card_dropped = {
@@ -278,8 +278,8 @@ def expedition_pet(request):
     return redirect('/pets/')
 
 def change_pet(request):
+    tg_id = resolve_tg_id(request)
     if request.method == 'POST':
-        tg_id = resolve_tg_id(request)
         new_species = request.POST.get('new_species') or request.POST.get('species')
         new_name = request.POST.get('new_name', '').strip()
         cost = 300  # Sincronizado a 300 🪙 con el template de forma exacta

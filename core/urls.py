@@ -14,3 +14,4 @@ urlpatterns = [
     path('buzon/', views.notifications_inbox, name='inbox'),
 ]
 
+

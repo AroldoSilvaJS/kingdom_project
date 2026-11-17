@@ -320,10 +320,160 @@ class KingdomMasterTestSuite(TestCase):
         self.assertEqual(items[0].name, "Alpha Renamed")
         self.assertTrue(items[0].is_secret)
 
+    def test_photocard_market_cancel_and_reciprocal_trade(self):
+        from idols.models import PhotocardBox, Photocard, UserPhotocard, PhotocardTrade
+        box = PhotocardBox.objects.create(name="Caja Test", price=100)
+        c1 = Photocard.objects.create(box=box, idol_name="Jennie", name="Carta A", rarity="common")
+        c2 = Photocard.objects.create(box=box, idol_name="Karina", name="Carta B", rarity="rare")
+        uc1 = UserPhotocard.objects.create(telegram_user_id=self.user_id, photocard=c1)
+        uc2 = UserPhotocard.objects.create(telegram_user_id=self.idol_id, photocard=c2)
+        Wallet.objects.get_or_create(telegram_user_id=self.idol_id, defaults={'balance': 200})
+
+        # Poner en venta y cancelar con mode=cancel
+        self.client.post(f"/idols/photocards/sell/{uc1.id}/", {'tg_id': self.user_id, 'price': 50})
+        uc1.refresh_from_db()
+        self.assertTrue(uc1.is_for_sale)
+        res_cancel = self.client.post(f"/idols/photocards/sell/{uc1.id}/", {'tg_id': self.user_id, 'mode': 'cancel', 'next': 'market'})
+        self.assertEqual(res_cancel.status_code, 302)
+        self.assertIn(f"tg_id={self.user_id}", res_cancel["Location"])
+        uc1.refresh_from_db()
+        self.assertFalse(uc1.is_for_sale)
+
+        # Crear oferta de trueque y aceptarla con return_card_id
+        res_trade = self.client.post(f"/idols/photocards/trade/create/{uc1.id}/", {'tg_id': self.user_id, 'target_user': str(self.idol_id)})
+        self.assertEqual(res_trade.status_code, 302)
+        trade = PhotocardTrade.objects.get(sender_card=uc1, status='pending')
+        res_accept = self.client.post(f"/idols/photocards/trade/{trade.id}/accept/", {'tg_id': self.idol_id, 'return_card_id': uc2.id})
+        self.assertEqual(res_accept.status_code, 302)
+        uc1.refresh_from_db()
+        uc2.refresh_from_db()
+        self.assertEqual(uc1.telegram_user_id, self.idol_id)
+        self.assertEqual(uc2.telegram_user_id, self.user_id)
+
+    def test_claim_patron_vault_and_custom_title_ajax(self):
+        self.user_wallet.patron_vault = 45
+        self.user_wallet.balance = 1500
+        self.user_wallet.save()
+        res_vault = self.client.post("/economy/claim-vault/", {'tg_id': self.user_id, 'ajax': '1'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res_vault.status_code, 200)
+        data = res_vault.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['claimed'], 45)
+        self.assertEqual(data['nuevo_saldo'], 1545)
+
+        res_title = self.client.post("/economy/bazar/buy/", {
+            'tg_id': self.user_id,
+            'item_code': 'custom_title',
+            'custom_title_text': 'Duque Dorado',
+            'ajax': '1'
+        }, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res_title.status_code, 200)
+        self.assertTrue(res_title.json()['success'])
+        self.user_profile.refresh_from_db()
+        self.assertEqual(self.user_profile.custom_title_text, 'Duque Dorado')
+
+    def test_roleplay_complete_idempotent(self):
+        from idols.models import IdolProfile, RoleSessionRequest
+        idol = IdolProfile.objects.create(telegram_user_id=self.idol_id, stage_name="Yuna", bio="B", is_roleplay_open=True, roleplay_price=100)
+        req = RoleSessionRequest.objects.create(idol=idol, client_telegram_id=self.user_id, client_username="u", theme="Gala", bounty=100, status='pending')
+        self.client.get(f"/idols/roleplay-request/{req.id}/accept/?tg_id={self.idol_id}")
+        self.client.get(f"/idols/roleplay-request/{req.id}/complete/?tg_id={self.idol_id}")
+        self.client.get(f"/idols/roleplay-request/{req.id}/complete/?tg_id={self.idol_id}")
+        idol_wallet = Wallet.objects.get(telegram_user_id=self.idol_id)
+        self.assertEqual(idol_wallet.balance, 100)
+
+    def test_double_claim_job_and_recycle_idempotent(self):
+        from django.utils import timezone
+        from datetime import timedelta
+        from economy.models import CourtJob, CollectibleSeries, BazarCollectible, UserCollectible
+        job = CourtJob.objects.create(
+            telegram_user_id=self.user_id,
+            job_key='test_job',
+            title='Auditoria Real',
+            role_type='cliente',
+            gold_reward=80,
+            xp_reward=10,
+            duration_minutes=15,
+            finishes_at=timezone.now() - timedelta(minutes=1),
+            is_claimed=False
+        )
+        self.user_wallet.balance = 100
+        self.user_wallet.save()
+        self.client.post("/economy/jobs/claim/", {'tg_id': self.user_id})
+        self.client.post("/economy/jobs/claim/", {'tg_id': self.user_id})
+        self.user_wallet.refresh_from_db()
+        self.assertEqual(self.user_wallet.balance, 180)
+
+        series = CollectibleSeries.objects.create(name="Set R2", single_price=200, blind_box_price=150)
+        fig = BazarCollectible.objects.create(series=series, name="Fig R2", price=200, stock=-1, is_active=True)
+        uc = UserCollectible.objects.create(telegram_user_id=self.user_id, item=fig, quantity=2)
+        self.client.post(f"/economy/bazar/recycle/{fig.id}/", {'tg_id': self.user_id, 'ajax': '1'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        res2 = self.client.post(f"/economy/bazar/recycle/{fig.id}/", {'tg_id': self.user_id, 'ajax': '1'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(res2.status_code, 400)
+        uc.refresh_from_db()
+        self.assertEqual(uc.quantity, 1)
+
+    def test_unlock_post_idempotent_and_imageless_photocard_pages(self):
+        from idols.models import IdolProfile, Post, PhotocardBox, Photocard, UserPhotocard
+        idol = IdolProfile.objects.create(telegram_user_id=self.idol_id, stage_name="Sana'Rose", bio="B")
+        post = Post.objects.create(idol=idol, network='fans', caption="VIP", price=100)
+        self.user_wallet.balance = 500
+        self.user_wallet.save()
+        r1 = self.client.post(f"/idols/post/{post.id}/unlock/", {'tg_id': self.user_id, 'ajax': '1'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        r2 = self.client.post(f"/idols/post/{post.id}/unlock/", {'tg_id': self.user_id, 'ajax': '1'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r2.status_code, 200)
+        self.assertTrue(r2.json().get('already_unlocked'))
+        self.user_wallet.refresh_from_db()
+        self.assertEqual(self.user_wallet.balance, 400)
+
+        box = PhotocardBox.objects.create(name="Box 'Test'", price=50, is_active=True)
+        pc = Photocard.objects.create(box=box, idol_name="Momo", name="Card 'One'", rarity="common")
+        UserPhotocard.objects.create(telegram_user_id=self.user_id, photocard=pc, is_for_sale=True, sale_price=30)
+        UserPhotocard.objects.create(telegram_user_id=self.user_id, photocard=pc, is_for_sale=False)
+        self.assertEqual(self.client.get(f"/idols/photocards/fusion/?tg_id={self.user_id}").status_code, 200)
+        self.assertEqual(self.client.get(f"/idols/photocards/market/?tg_id={self.user_id}").status_code, 200)
+
+    def test_custom_request_full_lifecycle(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from idols.models import IdolProfile, CustomRequest
+        idol = IdolProfile.objects.create(telegram_user_id=self.idol_id, stage_name="Yuna <3", bio="B")
+        self.user_wallet.balance = 500
+        self.user_wallet.save()
+        self.idol_wallet.balance = 0
+        self.idol_wallet.save()
+        # 1. Min < 100 rejected
+        self.client.post(f"/idols/{idol.id}/custom-request/", {'tg_id': self.user_id, 'bounty': '50', 'description': 'Test'})
+        self.assertEqual(CustomRequest.objects.count(), 0)
+        # 2. Valid create deducts 150
+        self.client.post(f"/idols/{idol.id}/custom-request/", {'tg_id': self.user_id, 'bounty': '150', 'description': 'Foto <3'})
+        self.user_wallet.refresh_from_db()
+        self.assertEqual(self.user_wallet.balance, 350)
+        req1 = CustomRequest.objects.first()
+        # 3. Reject without file refunds 150
+        self.client.post(f"/idols/?tg_id={self.idol_id}", {'tg_id': self.idol_id, 'request_id': str(req1.id), 'action': 'reject_request'})
+        req1.refresh_from_db()
+        self.user_wallet.refresh_from_db()
+        self.assertEqual(req1.status, 'rejected')
+        self.assertEqual(self.user_wallet.balance, 500)
+        # 4. Accept requires valid non-empty file, credits Idol once
+        self.client.post(f"/idols/{idol.id}/custom-request/", {'tg_id': self.user_id, 'bounty': '200', 'description': 'Video VIP'})
+        req2 = CustomRequest.objects.filter(status='pending').first()
+        vid = SimpleUploadedFile("clip.mp4", b"fake-mp4-bytes", content_type="video/mp4")
+        self.client.post(f"/idols/?tg_id={self.idol_id}", {'tg_id': self.idol_id, 'request_id': str(req2.id), 'action': 'accept_request', 'delivered_photo': vid, 'delivery_note': 'Con carino <3'})
+        # Duplicate accept ignored
+        vid2 = SimpleUploadedFile("clip2.mp4", b"fake-mp4-bytes", content_type="video/mp4")
+        self.client.post(f"/idols/?tg_id={self.idol_id}", {'tg_id': self.idol_id, 'request_id': str(req2.id), 'action': 'accept_request', 'delivered_photo': vid2})
+        req2.refresh_from_db()
+        self.idol_wallet.refresh_from_db()
+        self.assertEqual(req2.status, 'accepted')
+        self.assertEqual(self.idol_wallet.balance, 200)
+
     def test_final_system_integrity(self):
         self.assertEqual(UserRole.objects.count(), 3)
         self.assertEqual(Wallet.objects.count(), 2)
         self.assertEqual(UserProfile.objects.count(), 1)
+
 
 
 

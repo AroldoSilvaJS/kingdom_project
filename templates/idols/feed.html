@@ -324,7 +324,7 @@
                     </button>
 
                     <!-- BOTÓN 4: BRINDIS / INVITAR UN TRAGO -->
-                    <button type="button" onclick="openTipModal('{{ post.id }}', '{{ post.idol.stage_name }}')" 
+                    <button type="button" onclick="openTipModal('{{ post.id }}', '{{ post.idol.stage_name|escapejs }}')" 
                             class="flex items-center gap-1 text-yellow-300 hover:text-white text-xs font-black bg-gradient-to-r from-amber-950/80 to-yellow-950/80 border border-yellow-500/50 px-3 py-1.5 rounded-full active:scale-95 transition-all shadow-[0_0_10px_rgba(212,175,55,0.2)]">
                         <span>🥂</span> <span>Invitar Trago</span>
                     </button>
@@ -1065,4 +1065,5 @@
     }
 </script>
 {% endblock %}
+
 

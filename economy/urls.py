@@ -45,3 +45,4 @@ urlpatterns = [
     path('scratch/', views.scratch_card_view, name='scratch'),
     path('scratch/play/', views.scratch_card_play_ajax, name='scratch_play'),
 ]
+

@@ -426,8 +426,9 @@
     <div id="section-admin" class="hidden flex-col gap-4">
         <div class="popmart-cabinet p-4 border border-purple-500/40">
             <h2 class="text-xs font-black text-purple-300 uppercase mb-3">👑 Crear Nueva Colección Pop Mart</h2>
-            <form action="/economy/bazar/series/create-batch/" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
+            <form action="/economy/bazar/series/create-batch/?tg_id={{ tg_id }}" method="POST" enctype="multipart/form-data" class="flex flex-col gap-3">
                 {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
                 <input type="text" name="series_name" placeholder="Nombre (Ej: TWICE - Like OOH-AHH)" required class="w-full bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
                 <input type="text" name="tagline" placeholder="Subtítulo / Edición" class="w-full bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
                 <textarea name="description" rows="2" placeholder="Descripción de la colección..." class="w-full bg-black/60 border border-white/20 rounded-xl px-3 py-2 text-xs text-white"></textarea>
@@ -566,6 +567,44 @@
     </div>
 </div>
 
+<!-- Modal Título Personalizado -->
+<div id="custom-title-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 p-4 backdrop-blur-md">
+    <div class="popmart-cabinet max-w-xs w-full p-5 border-2 border-purple-500/60 relative">
+        <button type="button" onclick="closeCustomTitleModal()" class="absolute top-3 right-3 text-stone-400 hover:text-white font-bold">&times;</button>
+        <h3 class="text-sm font-black text-purple-300 uppercase mb-1">📜 Proclamar Título Personalizado</h3>
+        <p class="text-[10px] text-stone-400 mb-3">Graba tu epíteto oficial en el Reino (Costo: <span id="custom-title-price-lbl" class="text-amber-300 font-bold">1200</span> 🪙).</p>
+        <div class="flex flex-col gap-3">
+            <input type="text" id="custom-title-input" maxlength="60" placeholder="Ej: El Sultán Clandestino, Dama de Ébano..."
+                   class="w-full bg-black/80 border border-purple-500/40 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400">
+            <button type="button" onclick="submitCustomTitle()" id="btn-submit-custom-title"
+                    class="w-full py-2.5 bg-gradient-to-r from-purple-600 to-fuchsia-500 text-white font-black text-xs uppercase rounded-xl shadow">
+                ✨ Grabar Título Real
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Tributo a Musa -->
+<div id="tribute-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/90 p-4 backdrop-blur-md">
+    <div class="popmart-cabinet max-w-xs w-full p-5 border-2 border-rose-500/60 relative">
+        <button type="button" onclick="closeTributeModal()" class="absolute top-3 right-3 text-stone-400 hover:text-white font-bold">&times;</button>
+        <h3 class="text-sm font-black text-rose-300 uppercase mb-1">🌹 Entregar Tributo a Musa</h3>
+        <p class="text-[10px] text-stone-400 mb-3">Elige a la Musa que recibirá tu ofrenda (Costo: <span id="tribute-price-lbl" class="text-amber-300 font-bold">350</span> 🪙).</p>
+        <div class="flex flex-col gap-3">
+            <select id="tribute-idol-select" class="w-full bg-black/80 border border-rose-500/40 rounded-xl px-3 py-2 text-xs text-white">
+                <option value="">-- Selecciona una Musa --</option>
+                {% for idol in todas_idols %}
+                <option value="{{ idol.id }}">🌹 {{ idol.stage_name }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" onclick="submitTribute()" id="btn-submit-tribute"
+                    class="w-full py-2.5 bg-gradient-to-r from-rose-600 to-pink-500 text-white font-black text-xs uppercase rounded-xl shadow">
+                💎 Enviar Tributo
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
     function playCollectorAudio(type) {
         try {
@@ -687,14 +726,15 @@
                 </button>
             `;
             if (userQty > 1) {
-                actionsHtml += `<button type="button" onclick="recycleDuplicate(${id}, '${name.replace(/'/g, "\\'")}')" class="w-full py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 text-white font-black text-xs uppercase rounded-xl mt-1.5"><span>♻️</span> Empeñar Duplicado (+150 🪙 de Oro)</button>`;
+                const estRecycle = Math.max(120, Math.floor((singlePrice || 260) * 0.6));
+                actionsHtml += `<button type="button" onclick="recycleDuplicate(${id}, '${name.replace(/'/g, "\\'")}')" class="w-full py-2.5 bg-gradient-to-r from-amber-600 to-amber-500 text-white font-black text-xs uppercase rounded-xl mt-1.5"><span>♻️</span> Empeñar Duplicado (+${estRecycle} 🪙)</button>`;
             }
             actionsContainer.innerHTML = actionsHtml;
         } else {
             statusContainer.innerHTML = `<div class="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-900 border border-white/20 rounded-xl text-stone-400 text-xs font-bold"><span>🔒</span> No descubierta aún</div>`;
             actionsContainer.innerHTML = `
-                <button type="button" onclick="closeFigureDetailModal(); buyBoutiqueItem(${id}, '${name.replace(/'/g, "\\\\'")}', ${singlePrice})" class="w-full py-2.5 bg-gradient-to-r from-yellow-500 to-amber-400 text-black font-black text-xs uppercase rounded-xl">✨ Compra Directa (${singlePrice} 🪙)</button>
-                ${seriesId ? `<button type="button" onclick="closeFigureDetailModal(); openBlindBox(${seriesId}, '${seriesName.replace(/'/g, "\\\\'")}', ${blindPrice})" class="w-full py-2 bg-purple-950 border border-purple-500/40 text-purple-200 font-bold text-xs uppercase rounded-xl">🎲 Abrir Caja Sorpresa (${blindPrice} 🪙)</button>` : ''}
+                <button type="button" onclick="closeFigureDetailModal(); buyBoutiqueItem(${id}, '${name.replace(/'/g, "\\'")}', ${singlePrice})" class="w-full py-2.5 bg-gradient-to-r from-yellow-500 to-amber-400 text-black font-black text-xs uppercase rounded-xl">✨ Compra Directa (${singlePrice} 🪙)</button>
+                ${seriesId ? `<button type="button" onclick="closeFigureDetailModal(); openBlindBox(${seriesId}, '${(seriesName || 'Pop Mart').replace(/'/g, "\\'")}', ${blindPrice})" class="w-full py-2 bg-purple-950 border border-purple-500/40 text-purple-200 font-bold text-xs uppercase rounded-xl">🎲 Abrir Caja Sorpresa (${blindPrice} 🪙)</button>` : ''}
             `;
         }
         const modal = document.getElementById('figure-detail-modal');
@@ -708,9 +748,14 @@
     async function recycleDuplicate(itemId, itemName) {
         if (!confirm(`¿Deseas empeñar 1 duplicado de «${itemName}» por oro?`)) return;
         const formData = new FormData();
+        formData.append('tg_id', '{{ tg_id }}');
         formData.append('ajax', '1');
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        const resp = await fetch(`/economy/bazar/collectible/recycle/${itemId}/`, { method: 'POST', body: formData });
+        const resp = await fetch(`/economy/bazar/collectible/recycle/${itemId}/`, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
         const data = await resp.json();
         if (data.success) {
             playCollectorAudio('recycle');
@@ -729,9 +774,14 @@
         anim.classList.remove('hidden'); res.classList.add('hidden');
 
         const formData = new FormData();
+        formData.append('tg_id', '{{ tg_id }}');
         formData.append('ajax', '1');
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        const resp = await fetch(`/economy/bazar/series/blind-box/${seriesId}/`, { method: 'POST', body: formData });
+        const resp = await fetch(`/economy/bazar/series/blind-box/${seriesId}/`, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
         const data = await resp.json();
         setTimeout(() => {
             if (data.success) {
@@ -757,9 +807,14 @@
     async function buyBoutiqueItem(itemId, itemName, price) {
         if (!confirm(`¿Comprar directamente «${itemName}» por ${price} 🪙?`)) return;
         const formData = new FormData();
+        formData.append('tg_id', '{{ tg_id }}');
         formData.append('ajax', '1');
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        const resp = await fetch(`/economy/bazar/collectible/buy/${itemId}/`, { method: 'POST', body: formData });
+        const resp = await fetch(`/economy/bazar/collectible/buy/${itemId}/`, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
         const data = await resp.json();
         if (data.success) { alert(data.message); window.location.reload(); }
         else alert(data.error);
@@ -768,17 +823,106 @@
     async function buyStandardItem(itemCode, itemName, price) {
         if (!confirm(`¿Comprar «${itemName}» por ${price} 🪙?`)) return;
         const formData = new FormData();
+        formData.append('tg_id', '{{ tg_id }}');
         formData.append('item_code', itemCode);
         formData.append('ajax', '1');
         formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
-        const resp = await fetch("/economy/bazar/buy/", { method: 'POST', body: formData });
+        const resp = await fetch("/economy/bazar/buy/", {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
         const data = await resp.json();
         if (data.success) { alert(data.message); window.location.reload(); }
         else alert(data.error);
     }
 
+    function openCustomTitleModal(price) {
+        const lbl = document.getElementById('custom-title-price-lbl');
+        if (lbl) lbl.textContent = price || 1200;
+        const inp = document.getElementById('custom-title-input');
+        if (inp) inp.value = '';
+        const m = document.getElementById('custom-title-modal');
+        m.classList.remove('hidden'); m.classList.add('flex');
+    }
+    function closeCustomTitleModal() {
+        const m = document.getElementById('custom-title-modal');
+        m.classList.add('hidden'); m.classList.remove('flex');
+    }
+    async function submitCustomTitle() {
+        const txt = (document.getElementById('custom-title-input')?.value || '').trim();
+        if (!txt) { alert('Debes escribir tu título personalizado.'); return; }
+        const btn = document.getElementById('btn-submit-custom-title');
+        if (btn) btn.disabled = true;
+        try {
+            const formData = new FormData();
+            formData.append('tg_id', '{{ tg_id }}');
+            formData.append('item_code', 'custom_title');
+            formData.append('custom_title_text', txt);
+            formData.append('ajax', '1');
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+            const resp = await fetch("/economy/bazar/buy/", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+            if (data.success) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                alert(data.error || 'No se pudo proclamar el título.');
+            }
+        } catch(e) {
+            alert('Error de conexión con la corte.');
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    function openTributeModal(price) {
+        const lbl = document.getElementById('tribute-price-lbl');
+        if (lbl) lbl.textContent = price || 350;
+        const m = document.getElementById('tribute-modal');
+        m.classList.remove('hidden'); m.classList.add('flex');
+    }
+    function closeTributeModal() {
+        const m = document.getElementById('tribute-modal');
+        m.classList.add('hidden'); m.classList.remove('flex');
+    }
+    async function submitTribute() {
+        const idolId = document.getElementById('tribute-idol-select')?.value;
+        if (!idolId) { alert('Selecciona una Musa para enviar el tributo.'); return; }
+        const btn = document.getElementById('btn-submit-tribute');
+        if (btn) btn.disabled = true;
+        try {
+            const formData = new FormData();
+            formData.append('tg_id', '{{ tg_id }}');
+            formData.append('item_code', 'tribute_gift');
+            formData.append('target_idol_id', idolId);
+            formData.append('ajax', '1');
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+            const resp = await fetch("/economy/bazar/buy/", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await resp.json();
+            if (data.success) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                alert(data.error || 'No se pudo entregar el tributo.');
+            }
+        } catch(e) {
+            alert('Error de conexión con la corte.');
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
     function openEditSeriesModal(id, name, tagline, desc, blindPrice, singlePrice) {
-        document.getElementById('edit-series-form').action = `/economy/bazar/series/edit/${id}/`;
+        document.getElementById('edit-series-form').action = `/economy/bazar/series/edit/${id}/?tg_id={{ tg_id }}`;
         document.getElementById('edit-series-name').value = name;
         document.getElementById('edit-series-tagline').value = tagline;
         document.getElementById('edit-series-desc').value = desc;
@@ -793,7 +937,7 @@
     }
 
     function openAddFigureModal(seriesId, seriesName) {
-        document.getElementById('add-figure-form').action = `/economy/bazar/series/add-figure/${seriesId}/`;
+        document.getElementById('add-figure-form').action = `/economy/bazar/series/add-figure/${seriesId}/?tg_id={{ tg_id }}`;
         const m = document.getElementById('add-figure-modal');
         m.classList.remove('hidden'); m.classList.add('flex');
     }
@@ -804,11 +948,11 @@
 
     function confirmDeleteSeries(seriesId, seriesName) {
         if (!confirm(`⚠️ ¿Eliminar la colección «${seriesName}»?`)) return;
-        window.location.href = `/economy/bazar/series/delete/${seriesId}/`;
+        window.location.href = `/economy/bazar/series/delete/${seriesId}/?tg_id={{ tg_id }}`;
     }
     function confirmDeleteFigure(figureId, figureName) {
         if (!confirm(`¿Eliminar la figura «${figureName}»?`)) return;
-        window.location.href = `/economy/bazar/figure/delete/${figureId}/`;
+        window.location.href = `/economy/bazar/figure/delete/${figureId}/?tg_id={{ tg_id }}`;
     }
 
     function openEditFigureModal(figId, figName, isSecret) {
@@ -928,6 +1072,7 @@
     }
 </script>
 {% endblock %}
+
 
 
 

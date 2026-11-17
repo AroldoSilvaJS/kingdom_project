@@ -53,7 +53,6 @@ application = get_asgi_application()
 ARCHIVO: .\config\settings.py
 ==================================================
 
-
 """
 Django settings for config project.
 
@@ -306,6 +305,7 @@ else:
     }
 
 
+
 ==================================================
 ARCHIVO: .\config\urls.py
 ==================================================
@@ -476,7 +476,6 @@ def kingdom_notifications(request):
 ARCHIVO: .\core\middleware.py
 ==================================================
 
-
 # core/middleware.py
 from django.shortcuts import render
 from django.conf import settings
@@ -541,10 +540,10 @@ class TelegramSessionMiddleware:
         return response
 
 
+
 ==================================================
 ARCHIVO: .\core\models.py
 ==================================================
-
 
 from django.db import models
 from idols.models import IdolProfile
@@ -811,10 +810,10 @@ class AdminAuditLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+
 ==================================================
 ARCHIVO: .\core\telegram_auth.py
 ==================================================
-
 
 # core/telegram_auth.py
 import json
@@ -883,6 +882,7 @@ def is_user_in_group(user_tg_id: int) -> bool:
         print(f"⚠️ Error general getChatMember para {user_tg_id}: {e}")
     # Solo en timeouts transitorios de red se permite pasar temporalmente
     return True
+
 
 
 ==================================================
@@ -974,8 +974,6 @@ def send_telegram_msg(chat_id, text, button_text=None, button_url=None, message_
 ==================================================
 ARCHIVO: .\core\tests.py
 ==================================================
-
-
 
 # core/tests.py
 from datetime import timedelta
@@ -1221,6 +1219,84 @@ class KingdomMasterTestSuite(TestCase):
         self.assertEqual(self.user_wallet.balance, 400)
         self.assertTrue(AdminAuditLog.objects.filter(target_tg_id=self.user_id).exists())
 
+    def test_feed_theme_publish_hide_delete(self):
+        # 1. Publicar temática incluso sin marcar manualmente el checkbox (botón Publicar)
+        res = self.client.post(f"/admin-panel/?tg_id={self.admin_id}", {
+            "accion": "save_feed_theme",
+            "publish_now": "1",
+            "theme_title": "Noche de Gala",
+            "theme_message": "Sube tu mejor outfit dorado.",
+        })
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("tab=decretos", res["Location"])
+
+        feed_res = self.client.get(f"/idols/feed/?tg_id={self.user_id}")
+        self.assertEqual(feed_res.status_code, 200)
+        self.assertContains(feed_res, "Noche de Gala")
+        self.assertContains(feed_res, "Sube tu mejor outfit dorado.")
+
+        # 2. Ocultar sin borrar
+        self.client.post(f"/admin-panel/?tg_id={self.admin_id}", {"accion": "hide_feed_theme"})
+        feed_hidden = self.client.get(f"/idols/feed/?tg_id={self.user_id}")
+        self.assertNotContains(feed_hidden, "Sube tu mejor outfit dorado.")
+
+        # 3. Retirar y borrar
+        self.client.post(f"/admin-panel/?tg_id={self.admin_id}", {"accion": "delete_feed_theme"})
+        self.assertEqual(KingdomSetting.get_val("feed_theme_active", "false"), "false")
+        self.assertEqual(KingdomSetting.get_val("feed_theme_message", ""), "")
+
+    def test_upcoming_box_publish_hide_delete(self):
+        res = self.client.post(f"/idols/photocards/admin/?tg_id={self.admin_id}", {
+            "action": "save_upcoming_box",
+            "publish_now": "1",
+            "upcoming_title": "Colección Celestial 2026",
+            "upcoming_date": "Viernes 21:00 hs",
+            "upcoming_desc": "Edición limitada con hologramas.",
+        })
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("tab=proxima", res["Location"])
+
+        boxes_res = self.client.get(f"/idols/photocards/?tg_id={self.user_id}")
+        self.assertEqual(boxes_res.status_code, 200)
+        self.assertContains(boxes_res, "Colección Celestial 2026")
+        self.assertContains(boxes_res, "Viernes 21:00 hs")
+
+        self.client.post(f"/idols/photocards/admin/?tg_id={self.admin_id}", {"action": "hide_upcoming_box"})
+        boxes_hidden = self.client.get(f"/idols/photocards/?tg_id={self.user_id}")
+        self.assertNotContains(boxes_hidden, "Colección Celestial 2026")
+
+        self.client.post(f"/idols/photocards/admin/?tg_id={self.admin_id}", {"action": "delete_upcoming_box"})
+        self.assertEqual(KingdomSetting.get_val("upcoming_box_title", ""), "")
+
+    def test_popmart_batch_index_locked_names_and_edit_figure(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from economy.models import CollectibleSeries, BazarCollectible
+        f1 = SimpleUploadedFile("alpha.png", b"\x89PNG\r\n\x1a\n", content_type="image/png")
+        f2 = SimpleUploadedFile("beta.png", b"\x89PNG\r\n\x1a\n", content_type="image/png")
+        res = self.client.post(f"/economy/bazar/series/create-batch/?tg_id={self.admin_id}", {
+            "series_name": "Test Series",
+            "blind_box_price": 160,
+            "single_price": 260,
+            "figures": [f1, f2],
+            "figure_name_0": "Alpha Correct",
+            "figure_name_1": "Beta Correct",
+            "is_secret_index": ["1"],
+        })
+        self.assertEqual(res.status_code, 302)
+        items = list(BazarCollectible.objects.filter(series__name="Test Series").order_by("id"))
+        self.assertEqual([it.name for it in items], ["Alpha Correct", "Beta Correct"])
+        self.assertFalse(items[0].is_secret)
+        self.assertTrue(items[1].is_secret)
+
+        # Renombrar figura existente
+        self.client.post(f"/economy/bazar/figure/edit/{items[0].id}/?tg_id={self.admin_id}", {
+            "name": "Alpha Renamed",
+            "is_secret": "1",
+        })
+        items[0].refresh_from_db()
+        self.assertEqual(items[0].name, "Alpha Renamed")
+        self.assertTrue(items[0].is_secret)
+
     def test_final_system_integrity(self):
         self.assertEqual(UserRole.objects.count(), 3)
         self.assertEqual(Wallet.objects.count(), 2)
@@ -1229,10 +1305,10 @@ class KingdomMasterTestSuite(TestCase):
 
 
 
+
 ==================================================
 ARCHIVO: .\core\urls.py
 ==================================================
-
 
 from django.urls import path
 from . import views
@@ -1249,6 +1325,7 @@ urlpatterns = [
     path('telegram-webhook/', views.telegram_webhook, name='telegram_webhook'),
     path('buzon/', views.notifications_inbox, name='inbox'),
 ]
+
 
 
 ==================================================
@@ -1306,9 +1383,6 @@ def grant_user_xp(request, tg_id, xp_amount, reason=""):
 ==================================================
 ARCHIVO: .\core\views.py
 ==================================================
-
-
-
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
@@ -1873,22 +1947,40 @@ def admin_panel(request, admin_tg_id):
         elif accion == 'save_feed_theme':
             title = request.POST.get('theme_title', '').strip()
             msg = request.POST.get('theme_message', '').strip()
-            is_active = request.POST.get('theme_active') == '1'
+            publish_now = request.POST.get('publish_now') == '1'
+            is_active = publish_now or (request.POST.get('theme_active') == '1')
+
+            banner_uploaded = 'theme_banner' in request.FILES and request.FILES['theme_banner']
+            existing_banner = KingdomSetting.get_val('feed_theme_banner', '').strip()
+
+            if is_active and not title and (msg or banner_uploaded or existing_banner):
+                title = 'Temática de la Semana'
 
             KingdomSetting.set_val('feed_theme_title', title)
             KingdomSetting.set_val('feed_theme_message', msg)
             KingdomSetting.set_val('feed_theme_active', 'true' if is_active else 'false')
 
-            if 'theme_banner' in request.FILES:
-                from idols.views import optimize_uploaded_image
-                from django.core.files.storage import default_storage
-                file_obj = optimize_uploaded_image(request.FILES['theme_banner'])
-                saved_path = default_storage.save(f'themes/banner_{file_obj.name}', file_obj)
-                image_url = default_storage.url(saved_path)
-                KingdomSetting.set_val('feed_theme_banner', image_url)
+            if banner_uploaded:
+                try:
+                    from idols.views import optimize_uploaded_image
+                    from django.core.files.storage import default_storage
+                    file_obj = optimize_uploaded_image(request.FILES['theme_banner'])
+                    saved_path = default_storage.save(f'themes/banner_{file_obj.name}', file_obj)
+                    image_url = default_storage.url(saved_path)
+                    KingdomSetting.set_val('feed_theme_banner', image_url)
+                except Exception as e:
+                    messages.warning(request, f"⚠️ Texto guardado, pero hubo un error al subir el banner: {e}")
 
-            messages.success(request, "🎭 ¡Temática semanal del Muro actualizada con éxito!")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+            if is_active:
+                messages.success(request, "🎭 ¡Temática semanal PUBLICADA en el Muro con éxito!")
+            else:
+                messages.warning(request, "💾 Temática guardada como borrador (oculta). Pulsa Publicar para mostrarla en el Muro.")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}&tab=decretos")
+
+        elif accion == 'hide_feed_theme':
+            KingdomSetting.set_val('feed_theme_active', 'false')
+            messages.warning(request, "⏸️ Temática del Muro ocultada (tu texto se conserva para volver a publicarla).")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}&tab=decretos")
 
         elif accion == 'delete_feed_theme':
             KingdomSetting.set_val('feed_theme_active', 'false')
@@ -1896,7 +1988,7 @@ def admin_panel(request, admin_tg_id):
             KingdomSetting.set_val('feed_theme_message', '')
             KingdomSetting.set_val('feed_theme_banner', '')
             messages.success(request, "🗑️ Temática del Muro desactivada y eliminada con éxito.")
-            return redirect(f"{request.path}?tg_id={admin_tg_id}")
+            return redirect(f"{request.path}?tg_id={admin_tg_id}&tab=decretos")
 
     all_known_ids = set(UserProfile.objects.values_list('telegram_user_id', flat=True)).union(
         set(IdolProfile.objects.values_list('telegram_user_id', flat=True)),
@@ -1961,12 +2053,22 @@ def admin_panel(request, admin_tg_id):
     audit_logs = AdminAuditLog.objects.all().order_by('-created_at')[:20]
     total_cards = UserPhotocard.objects.count()
 
+    feed_theme_title = KingdomSetting.get_val('feed_theme_title', '').strip()
+    feed_theme_msg = KingdomSetting.get_val('feed_theme_message', '').strip()
+    feed_theme_banner = KingdomSetting.get_val('feed_theme_banner', '').strip()
+    feed_theme_active = KingdomSetting.get_val('feed_theme_active', 'false').strip().lower() in ('true', '1', 'yes', 'si')
+
     feed_theme = {
-        'is_active': KingdomSetting.get_val('feed_theme_active', 'false') == 'true',
-        'title': KingdomSetting.get_val('feed_theme_title', 'Temática de la Semana'),
-        'message': KingdomSetting.get_val('feed_theme_message', ''),
-        'banner_url': KingdomSetting.get_val('feed_theme_banner', '')
+        'is_active': feed_theme_active,
+        'title': feed_theme_title,
+        'message': feed_theme_msg,
+        'banner_url': feed_theme_banner,
+        'has_content': bool(feed_theme_title or feed_theme_msg or feed_theme_banner),
     }
+
+    active_tab = request.GET.get('tab', 'censo')
+    if active_tab not in ('censo', 'decretos', 'purgas', 'auditoria'):
+        active_tab = 'censo'
 
     return render(request, 'core/admin_panel.html', {
         'admin_tg_id': admin_tg_id,
@@ -1981,6 +2083,7 @@ def admin_panel(request, admin_tg_id):
         'broadcast_active': broadcast_active,
         'audit_logs': audit_logs,
         'feed_theme': feed_theme,
+        'active_tab': active_tab,
     })
 
 
@@ -2427,6 +2530,7 @@ def toggle_pin_item(request):
 
 
 
+
 ==================================================
 ARCHIVO: .\core\__init__.py
 ==================================================
@@ -2780,6 +2884,7 @@ urlpatterns = [
     path('bazar/series/delete/<int:series_id>/', views.admin_delete_series, name='delete_series'),
     path('bazar/series/add-figure/<int:series_id>/', views.admin_add_figure_to_series, name='add_figure_to_series'),
     path('bazar/figure/delete/<int:figure_id>/', views.admin_delete_figure, name='delete_figure'),
+    path('bazar/figure/edit/<int:figure_id>/', views.admin_edit_figure, name='edit_figure'),
 
     # ♻️ NUEVA RUTA: Empeño de Duplicados
     path('bazar/collectible/recycle/<int:item_id>/', views.recycle_duplicate_action, name='recycle_duplicate'),
@@ -2788,12 +2893,10 @@ urlpatterns = [
     path('scratch/play/', views.scratch_card_play_ajax, name='scratch_play'),
 ]
 
+
 ==================================================
 ARCHIVO: .\economy\views.py
 ==================================================
-
-
-
 
 # 1. Librería estándar de Python
 import random
@@ -4569,7 +4672,9 @@ def admin_create_series_batch(request):
 
             for idx, img in enumerate(figure_images):
                 opt_img = optimize_uploaded_image(img)
-                fig_name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else f"{series_name} #{idx+1}"
+                indexed_name = request.POST.get(f'figure_name_{idx}', '').strip()
+                fallback_name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else ''
+                fig_name = indexed_name or fallback_name or f"{series_name} #{idx+1}"
                 is_sec = str(idx) in secret_indices
 
                 BazarCollectible.objects.create(
@@ -4704,7 +4809,9 @@ def admin_add_figure_to_series(request, series_id):
         created_count = 0
         for idx, img in enumerate(figure_images):
             opt_img = optimize_uploaded_image(img)
-            name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else f"{series.name} #{series.items.count() + 1}"
+            indexed_name = request.POST.get(f'figure_name_{idx}', '').strip()
+            fallback_name = figure_names[idx].strip() if idx < len(figure_names) and figure_names[idx].strip() else ''
+            name = indexed_name or fallback_name or f"{series.name} #{series.items.count() + 1}"
             is_sec = str(idx) in secret_indices
             BazarCollectible.objects.create(
                 series=series,
@@ -4732,6 +4839,30 @@ def admin_delete_figure(request, figure_id):
     fig.is_active = False
     fig.save(update_fields=['is_active'])
     messages.info(request, f"La figura «{fig.name}» fue retirada del estante.")
+    return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+
+def admin_edit_figure(request, figure_id):
+    """Permite al administrador renombrar o actualizar una figura existente sin afectar inventarios."""
+    tg_id = get_safe_tg_id(request)
+    if not check_is_staff_or_admin(tg_id):
+        messages.error(request, "Acceso denegado.")
+        return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+    fig = get_object_or_404(BazarCollectible, id=figure_id)
+    if request.method == 'POST':
+        new_name = request.POST.get('name', '').strip()
+        is_secret = request.POST.get('is_secret') == '1'
+        new_image = request.FILES.get('image')
+
+        if new_name:
+            fig.name = new_name
+            fig.idol_name = new_name
+        fig.is_secret = is_secret
+        if new_image:
+            fig.image = optimize_uploaded_image(new_image)
+        fig.save()
+        messages.success(request, f"✏️ Figura actualizada a «{fig.name}».")
     return redirect(f'/economy/bazar/?tg_id={tg_id}')
 
 
@@ -4975,6 +5106,7 @@ def scratch_card_play_ajax(request):
 
 
 
+
 ==================================================
 ARCHIVO: .\economy\__init__.py
 ==================================================
@@ -5018,8 +5150,6 @@ class IdolsConfig(AppConfig):
 ==================================================
 ARCHIVO: .\idols\models.py
 ==================================================
-
-
 
 from django.db import models
 from django.db.models import Avg
@@ -5509,6 +5639,7 @@ class RoleSessionRequest(models.Model):
 
 
 
+
 ==================================================
 ARCHIVO: .\idols\tests.py
 ==================================================
@@ -5568,9 +5699,6 @@ urlpatterns = [
 ==================================================
 ARCHIVO: .\idols\views.py
 ==================================================
-
-
-
 
 import random
 import os
@@ -6242,12 +6370,16 @@ def social_feed(request):
         p.user_reaction = user_reactions.get(p.id, 'like' if p.id in liked_ids else '')
         posts_list.append(p)
 
-    theme_active = KingdomSetting.get_val('feed_theme_active', 'false') == 'true'
+    theme_active_raw = KingdomSetting.get_val('feed_theme_active', 'false').strip().lower()
+    theme_title = KingdomSetting.get_val('feed_theme_title', '').strip()
+    theme_message = KingdomSetting.get_val('feed_theme_message', '').strip()
+    theme_banner = KingdomSetting.get_val('feed_theme_banner', '').strip()
+    theme_active = (theme_active_raw in ('true', '1', 'yes', 'si')) and bool(theme_title or theme_message or theme_banner)
     feed_theme = {
         'is_active': theme_active,
-        'title': KingdomSetting.get_val('feed_theme_title', 'Temática Semanal'),
-        'message': KingdomSetting.get_val('feed_theme_message', ''),
-        'banner_url': KingdomSetting.get_val('feed_theme_banner', '')
+        'title': theme_title or 'Temática Semanal',
+        'message': theme_message,
+        'banner_url': theme_banner,
     }
     
     return render(request, 'idols/feed.html', {
@@ -6877,13 +7009,18 @@ def photocard_boxes_view(request):
     is_admin = check_is_staff_or_admin(tg_id)
     my_cards_count = UserPhotocard.objects.filter(telegram_user_id=tg_id).count()
 
-    upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
+    up_active_raw = KingdomSetting.get_val('upcoming_box_active', 'false').strip().lower()
+    up_title = KingdomSetting.get_val('upcoming_box_title', '').strip()
+    up_date = KingdomSetting.get_val('upcoming_box_date', '').strip()
+    up_desc = KingdomSetting.get_val('upcoming_box_desc', '').strip()
+    up_image = KingdomSetting.get_val('upcoming_box_image', '').strip()
+    upcoming_active = (up_active_raw in ('true', '1', 'yes', 'si')) and bool(up_title or up_date or up_desc or up_image)
     upcoming_data = {
         'is_active': upcoming_active,
-        'title': KingdomSetting.get_val('upcoming_box_title', ''),
-        'release_date': KingdomSetting.get_val('upcoming_box_date', ''),
-        'description': KingdomSetting.get_val('upcoming_box_desc', ''),
-        'image_url': KingdomSetting.get_val('upcoming_box_image', '')
+        'title': up_title or 'Próximo Relicario VIP',
+        'release_date': up_date,
+        'description': up_desc,
+        'image_url': up_image,
     }
 
     return render(request, 'idols/photocard_boxes.html', {
@@ -7221,31 +7358,45 @@ def admin_photocards_manage(request):
         messages.error(request, "Solo los administradores pueden gestionar Photocards.")
         return redirect('/idols/photocards/')
 
+    target_tab = 'subir'
+
     if request.method == 'POST':
         action = request.POST.get('action')
+        target_tab = request.POST.get('target_tab', 'subir')
 
         try:
             if action == 'create_box':
+                target_tab = 'cajas'
                 name = request.POST.get('name', '').strip()
                 description = request.POST.get('description', '').strip()
                 price = int(request.POST.get('price', 120))
-                cover_image = optimize_uploaded_image(request.FILES.get('cover_image'))
+                cover_file = request.FILES.get('cover_image')
+                cover_url = request.POST.get('cover_url', '').strip()
+                if not cover_file and cover_url:
+                    cover_file = download_image_from_url(cover_url, default_filename=f"box_{name[:12]}.webp")
+                cover_image = optimize_uploaded_image(cover_file) if cover_file else None
                 if name:
                     PhotocardBox.objects.create(name=name, description=description, price=price, cover_image=cover_image)
                     messages.success(request, f"✨ Caja «{name}» creada.")
 
             elif action == 'edit_box':
+                target_tab = 'cajas'
                 box_id = request.POST.get('box_id')
                 box = get_object_or_404(PhotocardBox, id=box_id)
                 box.name = request.POST.get('name', box.name).strip()
                 box.description = request.POST.get('description', box.description).strip()
                 box.price = int(request.POST.get('price', box.price))
-                if 'cover_image' in request.FILES:
-                    box.cover_image = optimize_uploaded_image(request.FILES['cover_image'])
+                cover_file = request.FILES.get('cover_image')
+                cover_url = request.POST.get('cover_url', '').strip()
+                if not cover_file and cover_url:
+                    cover_file = download_image_from_url(cover_url, default_filename=f"box_{box.id}.webp")
+                if cover_file:
+                    box.cover_image = optimize_uploaded_image(cover_file)
                 box.save()
                 messages.success(request, f"💾 Caja «{box.name}» actualizada.")
 
             elif action == 'delete_box':
+                target_tab = 'cajas'
                 box_id = request.POST.get('box_id')
                 box = get_object_or_404(PhotocardBox, id=box_id)
                 box_name = box.name
@@ -7261,6 +7412,7 @@ def admin_photocards_manage(request):
                     messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
 
             elif action == 'toggle_box':
+                target_tab = 'cajas'
                 box_id = request.POST.get('box_id')
                 box = get_object_or_404(PhotocardBox, id=box_id)
                 box.is_active = not box.is_active
@@ -7269,18 +7421,22 @@ def admin_photocards_manage(request):
                 messages.info(request, f"Caja {box.name} {estado}.")
 
             elif action == 'upload_card':
+                target_tab = 'subir'
                 box_id = request.POST.get('box_id')
                 idol_name = request.POST.get('idol_name', '').strip()
                 name = request.POST.get('name', '').strip()
                 rarity = request.POST.get('rarity', 'common')
                 raw_image = request.FILES.get('image')
+                card_url = request.POST.get('card_url', '').strip()
+                if not raw_image and card_url:
+                    raw_image = download_image_from_url(card_url, default_filename=f"card_{name[:12]}.webp")
 
                 if not raw_image or not name or not box_id:
-                    messages.error(request, "Debes adjuntar el archivo de Canva, asignar un nombre y una caja.")
+                    messages.error(request, "Debes adjuntar el archivo de Canva (o su enlace), asignar un nombre y una caja.")
                 else:
                     box_obj = get_object_or_404(PhotocardBox, id=box_id)
                     optimized_img = optimize_uploaded_image(raw_image)
-                    
+
                     Photocard.objects.create(
                         box=box_obj,
                         idol_name=idol_name or "K-Pop Idol",
@@ -7292,18 +7448,24 @@ def admin_photocards_manage(request):
                     messages.success(request, f"🎴 Photocard «{name}» ({idol_name}) subida con éxito.")
 
             elif action == 'edit_card':
+                target_tab = 'cartas'
                 card_id = request.POST.get('card_id')
                 card = get_object_or_404(Photocard, id=card_id)
                 card.box_id = request.POST.get('box_id', card.box_id)
                 card.idol_name = request.POST.get('idol_name', card.idol_name).strip()
                 card.name = request.POST.get('name', card.name).strip()
                 card.rarity = request.POST.get('rarity', card.rarity)
-                if 'image' in request.FILES:
-                    card.image = optimize_uploaded_image(request.FILES['image'])
+                new_img = request.FILES.get('image')
+                new_url = request.POST.get('card_url', '').strip()
+                if not new_img and new_url:
+                    new_img = download_image_from_url(new_url, default_filename=f"card_{card.id}.webp")
+                if new_img:
+                    card.image = optimize_uploaded_image(new_img)
                 card.save()
                 messages.success(request, f"💾 Photocard «{card.name}» actualizada.")
 
             elif action == 'delete_card':
+                target_tab = 'cartas'
                 card_id = request.POST.get('card_id')
                 card = get_object_or_404(Photocard, id=card_id)
                 c_name = card.name
@@ -7311,23 +7473,53 @@ def admin_photocards_manage(request):
                 messages.warning(request, f"🗑️ Photocard «{c_name}» eliminada.")
 
             elif action == 'save_upcoming_box':
+                target_tab = 'proxima'
                 title = request.POST.get('upcoming_title', '').strip()
                 date = request.POST.get('upcoming_date', '').strip()
                 desc = request.POST.get('upcoming_desc', '').strip()
-                is_active = request.POST.get('upcoming_active') == '1'
+                publish_now = request.POST.get('publish_now') == '1'
+                is_active = publish_now or (request.POST.get('upcoming_active') == '1')
+
+                if is_active and not title and (date or desc):
+                    title = 'Próximo Relicario VIP'
 
                 KingdomSetting.set_val('upcoming_box_title', title)
                 KingdomSetting.set_val('upcoming_box_date', date)
                 KingdomSetting.set_val('upcoming_box_desc', desc)
                 KingdomSetting.set_val('upcoming_box_active', 'true' if is_active else 'false')
 
-                if 'upcoming_image' in request.FILES:
-                    file_obj = optimize_uploaded_image(request.FILES['upcoming_image'])
-                    saved_path = default_storage.save(f'photocard_boxes/upcoming_{file_obj.name}', file_obj)
-                    image_url = default_storage.url(saved_path)
-                    KingdomSetting.set_val('upcoming_box_image', image_url)
+                file_obj = request.FILES.get('upcoming_image')
+                url_obj = request.POST.get('upcoming_image_url', '').strip()
+                if not file_obj and url_obj:
+                    file_obj = download_image_from_url(url_obj, default_filename='upcoming.webp')
 
-                messages.success(request, "📢 ¡Anuncio de Próximo Lanzamiento guardado con éxito!")
+                if file_obj:
+                    try:
+                        file_opt = optimize_uploaded_image(file_obj)
+                        saved_path = default_storage.save(f'photocard_boxes/upcoming_{file_opt.name}', file_opt)
+                        image_url = default_storage.url(saved_path)
+                        KingdomSetting.set_val('upcoming_box_image', image_url)
+                    except Exception as img_err:
+                        messages.warning(request, f"⚠️ Texto guardado, pero hubo un error al subir la imagen: {img_err}")
+
+                if is_active:
+                    messages.success(request, "📢 ¡Anuncio de Próximo Lanzamiento PUBLICADO en la Tienda!")
+                else:
+                    messages.warning(request, "💾 Anuncio guardado como borrador (OCULTO en la Tienda).")
+
+            elif action == 'hide_upcoming_box':
+                target_tab = 'proxima'
+                KingdomSetting.set_val('upcoming_box_active', 'false')
+                messages.warning(request, "⏸️ Anuncio ocultado de la Tienda (se conservan los datos).")
+
+            elif action == 'delete_upcoming_box':
+                target_tab = 'proxima'
+                KingdomSetting.set_val('upcoming_box_active', 'false')
+                KingdomSetting.set_val('upcoming_box_title', '')
+                KingdomSetting.set_val('upcoming_box_date', '')
+                KingdomSetting.set_val('upcoming_box_desc', '')
+                KingdomSetting.set_val('upcoming_box_image', '')
+                messages.success(request, "🗑️ Anuncio de próxima caja retirado y borrado.")
 
         except Exception as e:
             err_str = str(e)
@@ -7336,20 +7528,30 @@ def admin_photocards_manage(request):
             else:
                 messages.error(request, f"⚠️ Error al procesar archivo: {err_str}")
 
-        return redirect(f'/idols/photocards/admin/?tg_id={tg_id}')
+        return redirect(f'/idols/photocards/admin/?tg_id={tg_id}&tab={target_tab}')
 
     boxes = PhotocardBox.objects.all().prefetch_related('cards')
     all_idols = IdolProfile.objects.all().order_by('stage_name')
     all_cards = Photocard.objects.all().select_related('box').order_by('-created_at')
 
-    upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
+    up_active_raw = KingdomSetting.get_val('upcoming_box_active', 'false').strip().lower()
+    up_title = KingdomSetting.get_val('upcoming_box_title', '').strip()
+    up_date = KingdomSetting.get_val('upcoming_box_date', '').strip()
+    up_desc = KingdomSetting.get_val('upcoming_box_desc', '').strip()
+    up_image = KingdomSetting.get_val('upcoming_box_image', '').strip()
+
     upcoming_data = {
-        'is_active': upcoming_active,
-        'title': KingdomSetting.get_val('upcoming_box_title', ''),
-        'release_date': KingdomSetting.get_val('upcoming_box_date', ''),
-        'description': KingdomSetting.get_val('upcoming_box_desc', ''),
-        'image_url': KingdomSetting.get_val('upcoming_box_image', '')
+        'is_active': up_active_raw in ('true', '1', 'yes', 'si'),
+        'title': up_title,
+        'release_date': up_date,
+        'description': up_desc,
+        'image_url': up_image,
+        'has_content': bool(up_title or up_date or up_desc or up_image),
     }
+
+    current_tab = request.GET.get('tab', 'subir')
+    if current_tab not in ('subir', 'cajas', 'proxima', 'cartas'):
+        current_tab = 'subir'
 
     return render(request, 'idols/admin_photocards.html', {
         'tg_id': tg_id,
@@ -7357,8 +7559,8 @@ def admin_photocards_manage(request):
         'all_idols': all_idols,
         'all_cards': all_cards,
         'upcoming': upcoming_data,
+        'current_tab': current_tab,
     })
-
 
 def photocards_market(request):
     tg_id = resolve_safe_tg(request)
@@ -7845,192 +8047,7 @@ def handle_trade_offer(request, trade_id, action):
 
     return redirect('/idols/photocards/market/')
 
-    tg_id = resolve_safe_tg(request)
-    is_admin = check_is_staff_or_admin(tg_id)
-    if not is_admin:
-        messages.error(request, "Solo los administradores pueden gestionar Photocards.")
-        return redirect('/idols/photocards/')
-
-    target_tab = 'subir'
-
-    if request.method == 'POST':
-        action = request.POST.get('action')
-        target_tab = request.POST.get('target_tab', 'subir')
-        try:
-            if action == 'create_box':
-                target_tab = 'cajas'
-                name = request.POST.get('name', '').strip()
-                description = request.POST.get('description', '').strip()
-                price = int(request.POST.get('price', 120))
-                
-                # Permite archivo de galería O enlace directo
-                cover_file = request.FILES.get('cover_image')
-                cover_url = request.POST.get('cover_url', '').strip()
-                if not cover_file and cover_url:
-                    cover_file = download_image_from_url(cover_url, default_filename=f"box_{name[:12]}.webp")
-                
-                cover_image = optimize_uploaded_image(cover_file)
-                if name:
-                    PhotocardBox.objects.create(name=name, description=description, price=price, cover_image=cover_image)
-                    messages.success(request, f"✨ Caja «{name}» creada exitosamente.")
-
-            elif action == 'edit_box':
-                target_tab = 'cajas'
-                box_id = request.POST.get('box_id')
-                box = get_object_or_404(PhotocardBox, id=box_id)
-                box.name = request.POST.get('name', box.name).strip()
-                box.description = request.POST.get('description', box.description).strip()
-                box.price = int(request.POST.get('price', box.price))
-                
-                cover_file = request.FILES.get('cover_image')
-                cover_url = request.POST.get('cover_url', '').strip()
-                if not cover_file and cover_url:
-                    cover_file = download_image_from_url(cover_url, default_filename=f"box_{box.id}.webp")
-                
-                if cover_file:
-                    box.cover_image = optimize_uploaded_image(cover_file)
-                box.save()
-                messages.success(request, f"💾 Caja «{box.name}» actualizada.")
-
-            elif action == 'delete_box':
-                target_tab = 'cajas'
-                box_id = request.POST.get('box_id')
-                box = get_object_or_404(PhotocardBox, id=box_id)
-                box_name = box.name
-                owned_cards = UserPhotocard.objects.filter(photocard__box=box).count()
-                if owned_cards > 0:
-                    box.is_active = False
-                    box.save()
-                    messages.error(request, f"⚠️ La caja «{box_name}» no se puede eliminar porque los usuarios ya tienen {owned_cards} cartas en sus álbumes. La caja fue PAUSADA.")
-                else:
-                    box.cards.all().delete()
-                    box.delete()
-                    messages.warning(request, f"🗑️ Caja «{box_name}» eliminada.")
-
-            elif action == 'toggle_box':
-                target_tab = 'cajas'
-                box_id = request.POST.get('box_id')
-                box = get_object_or_404(PhotocardBox, id=box_id)
-                box.is_active = not box.is_active
-                box.save()
-                estado = "Activada" if box.is_active else "Pausada"
-                messages.info(request, f"Caja {box.name} {estado}.")
-
-            elif action == 'upload_card':
-                target_tab = 'subir'
-                box_id = request.POST.get('box_id')
-                idol_name = request.POST.get('idol_name', '').strip()
-                name = request.POST.get('name', '').strip()
-                rarity = request.POST.get('rarity', 'common')
-                
-                raw_image = request.FILES.get('image')
-                card_url = request.POST.get('card_url', '').strip()
-                if not raw_image and card_url:
-                    raw_image = download_image_from_url(card_url, default_filename=f"card_{name[:12]}.webp")
-                
-                if not raw_image or not name or not box_id:
-                    messages.error(request, "Debes adjuntar el archivo de Canva (o su enlace), asignar un nombre y una caja.")
-                else:
-                    box_obj = get_object_or_404(PhotocardBox, id=box_id)
-                    optimized_img = optimize_uploaded_image(raw_image)
-                    
-                    Photocard.objects.create(
-                        box=box_obj,
-                        idol_name=idol_name or "K-Pop Idol",
-                        name=name,
-                        rarity=rarity,
-                        image=optimized_img,
-                        created_by_tg_id=tg_id
-                    )
-                    messages.success(request, f"🎴 Photocard «{name}» ({idol_name}) subida con éxito.")
-
-            elif action == 'edit_card':
-                target_tab = 'cartas'
-                card_id = request.POST.get('card_id')
-                card = get_object_or_404(Photocard, id=card_id)
-                card.box_id = request.POST.get('box_id', card.box_id)
-                card.name = request.POST.get('name', card.name).strip()
-                card.idol_name = request.POST.get('idol_name', card.idol_name).strip()
-                card.rarity = request.POST.get('rarity', card.rarity)
-                
-                new_img = request.FILES.get('image')
-                new_url = request.POST.get('card_url', '').strip()
-                if not new_img and new_url:
-                    new_img = download_image_from_url(new_url, default_filename=f"card_{card.id}.webp")
-                if new_img:
-                    card.image = optimize_uploaded_image(new_img)
-                card.save()
-                messages.success(request, f"💾 Photocard «{card.name}» actualizada.")
-
-            elif action == 'delete_card':
-                target_tab = 'cartas'
-                card_id = request.POST.get('card_id')
-                card = get_object_or_404(Photocard, id=card_id)
-                card_name = card.name
-                card.delete()
-                messages.warning(request, f"🗑️ Photocard «{card_name}» eliminada.")
-
-            elif action == 'save_upcoming_box':
-                target_tab = 'proxima'
-                title = request.POST.get('upcoming_title', '').strip()
-                date = request.POST.get('upcoming_date', '').strip()
-                desc = request.POST.get('upcoming_desc', '').strip()
-                is_active = request.POST.get('upcoming_active') == '1'
-
-                KingdomSetting.set_val('upcoming_box_title', title)
-                KingdomSetting.set_val('upcoming_box_date', date)
-                KingdomSetting.set_val('upcoming_box_desc', desc)
-                KingdomSetting.set_val('upcoming_box_active', 'true' if is_active else 'false')
-
-                file_obj = request.FILES.get('upcoming_image')
-                url_obj = request.POST.get('upcoming_image_url', '').strip()
-                if not file_obj and url_obj:
-                    file_obj = download_image_from_url(url_obj, default_filename='upcoming.webp')
-
-                if file_obj:
-                    file_opt = optimize_uploaded_image(file_obj)
-                    saved_path = default_storage.save(f'photocard_boxes/upcoming_{file_opt.name}', file_opt)
-                    image_url = default_storage.url(saved_path)
-                    KingdomSetting.set_val('upcoming_box_image', image_url)
-
-                messages.success(request, "📢 ¡Anuncio de Próximo Lanzamiento guardado con éxito!")
-
-        except Exception as e:
-            err_str = str(e)
-            if "File size too large" in err_str:
-                messages.error(request, "⚠️ La imagen supera el límite de carga permitido (10 MB). Por favor comprímela antes de subir.")
-            else:
-                messages.error(request, f"⚠️ Error al procesar archivo: {err_str}")
-
-        return redirect(f'/idols/photocards/admin/?tg_id={tg_id}&tab={target_tab}')
-
-    boxes = PhotocardBox.objects.all().prefetch_related('cards')
-    all_idols = IdolProfile.objects.all().order_by('stage_name')
-    all_cards = Photocard.objects.all().select_related('box').order_by('-created_at')
-
-    upcoming_active = KingdomSetting.get_val('upcoming_box_active', 'false') == 'true'
-    upcoming_data = {
-        'is_active': upcoming_active,
-        'title': KingdomSetting.get_val('upcoming_box_title', ''),
-        'release_date': KingdomSetting.get_val('upcoming_box_date', ''),
-        'description': KingdomSetting.get_val('upcoming_box_desc', ''),
-        'image_url': KingdomSetting.get_val('upcoming_box_image', '')
-    }
-
-    current_tab = request.GET.get('tab', 'subir')
-
-    return render(request, 'idols/admin_photocards.html', {
-        'boxes': boxes,
-        'all_idols': all_idols,
-        'all_cards': all_cards,
-        'upcoming': upcoming_data,
-        'current_tab': current_tab,
-        'tg_id': tg_id
-    })
-
-
-
-# ==============================================================================
+ # ==============================================================================
 # 🎭 MÓDULO DE DISPONIBILIDAD & SOLICITUDES DE ROL
 # ==============================================================================
 def toggle_roleplay_status(request, idol_id):
@@ -8191,6 +8208,7 @@ def handle_roleplay_request(request, request_id, action):
         messages.info(request, f"Petición rechazada. Fondos reembolsados a @{session_req.client_username}.")
 
     return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+
 
 
 
@@ -8798,9 +8816,6 @@ ARCHIVO: .\pets\__init__.py
 ARCHIVO: .\templates\base.html
 ==================================================
 
-
-
-
 {% load static %}
 <!DOCTYPE html>
 <html lang="es">
@@ -9278,6 +9293,7 @@ ARCHIVO: .\templates\base.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\core\access_denied.html
 ==================================================
@@ -9684,8 +9700,20 @@ ARCHIVO: .\templates\core\admin_panel.html
         <h3 class="text-xs font-black text-yellow-300 uppercase tracking-wider flex items-center gap-1.5">
           <span>🎭</span> Temática Semanal del Muro
         </h3>
-        <span class="text-[9px] font-mono text-stone-400">Cartel & Evento</span>
+        {% if feed_theme.is_active %}
+          <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500 text-emerald-300">🟢 VISIBLE EN EL MURO</span>
+        {% elif feed_theme.has_content %}
+          <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-950/90 border border-amber-500 text-amber-300">⏸️ GUARDADA (OCULTA)</span>
+        {% else %}
+          <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-stone-900 border border-white/20 text-stone-400">⚫ SIN TEMÁTICA</span>
+        {% endif %}
       </div>
+
+      {% if not feed_theme.is_active and feed_theme.has_content %}
+      <div class="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/50 text-[10.5px] text-amber-200 leading-snug">
+        ⚠️ Tienes una temática guardada pero actualmente está <strong>oculta</strong>. Pulsa <strong>«📢 Publicar en el Muro»</strong> para mostrarla.
+      </div>
+      {% endif %}
 
       <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
         {% csrf_token %}
@@ -9695,7 +9723,7 @@ ARCHIVO: .\templates\core\admin_panel.html
         <div class="flex items-center justify-between p-2 rounded-xl bg-black/60 border border-white/10">
           <span class="text-xs text-stone-300 font-bold">¿Mostrar Cartel en el Muro?</span>
           <label class="text-[10px] text-yellow-300 flex items-center gap-1.5 cursor-pointer font-bold">
-            <input type="checkbox" name="theme_active" value="1" {% if feed_theme.is_active %}checked{% endif %}> Activo en el Muro
+            <input type="checkbox" name="theme_active" value="1" {% if feed_theme.is_active or not feed_theme.has_content %}checked{% endif %}> Activo en el Muro
           </label>
         </div>
 
@@ -9707,7 +9735,7 @@ ARCHIVO: .\templates\core\admin_panel.html
 
         <div>
           <label class="block text-[10px] text-yellow-400 uppercase font-bold mb-1">Mensaje para las Musas</label>
-          <textarea name="theme_message" rows="2" class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white resize-none">{{ feed_theme.message }}</textarea>
+          <textarea name="theme_message" rows="3" placeholder="Escribe las indicaciones o detalles del evento semanal..." class="w-full bg-black/80 border border-white/20 rounded-xl px-3 py-2 text-xs text-white resize-none">{{ feed_theme.message }}</textarea>
         </div>
 
         <div class="bg-black/50 p-2.5 rounded-xl border border-white/10 flex flex-col gap-1">
@@ -9720,13 +9748,18 @@ ARCHIVO: .\templates\core\admin_panel.html
           <input type="file" name="theme_banner" accept="image/*" class="text-xs text-stone-400">
         </div>
 
-        <div class="grid grid-cols-2 gap-2 mt-1">
-          <button type="submit" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow">
-            💾 Guardar Temática
+        <button type="submit" name="publish_now" value="1" class="btn-gold py-2.5 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
+          📢 Publicar en el Muro
+        </button>
+
+        <div class="grid grid-cols-2 gap-2">
+          <button type="submit" name="accion" value="hide_feed_theme"
+                  class="bg-amber-950/70 hover:bg-amber-900 border border-amber-600/60 text-amber-200 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider">
+            ⏸️ Ocultar sin borrar
           </button>
           <button type="submit" name="accion" value="delete_feed_theme" onclick="return confirm('¿Retirar y borrar la temática del Muro?')"
-                  class="bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider">
-            🚫 Retirar
+                  class="bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider">
+            🚫 Retirar y Borrar
           </button>
         </div>
       </form>
@@ -10065,10 +10098,19 @@ ARCHIVO: .\templates\core\admin_panel.html
     function universalNav(targetPath) {
       window.location.href = `${targetPath}?tg_id=${adminId}`;
     }
+
+    // Mantener pestaña activa tras guardar formularios
+    document.addEventListener('DOMContentLoaded', () => {
+      const initialTab = '{{ active_tab|default:"censo"|escapejs }}';
+      if (initialTab && initialTab !== 'censo') {
+        switchAdminTab(initialTab);
+      }
+    });
   </script>
 
 </body>
 </html>
+
 
 ==================================================
 ARCHIVO: .\templates\core\dungeon.html
@@ -10260,9 +10302,6 @@ ARCHIVO: .\templates\core\inbox.html
 ARCHIVO: .\templates\core\leaderboard.html
 ==================================================
 
-
-
-
 {% extends 'base.html' %}
 
 {% block content %}
@@ -10410,12 +10449,10 @@ ARCHIVO: .\templates\core\leaderboard.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\core\menu.html
 ==================================================
-
-
-
 
 {% extends 'base.html' %}
 
@@ -10658,12 +10695,10 @@ ARCHIVO: .\templates\core\menu.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\core\profile.html
 ==================================================
-
-
-
 
 {% extends 'base.html' %}
 
@@ -11078,12 +11113,10 @@ ARCHIVO: .\templates\core\profile.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\economy\bazar.html
 ==================================================
-
-
-
 
 <!-- templates/economy/bazar.html -->
 {% extends 'base.html' %}
@@ -11330,12 +11363,20 @@ ARCHIVO: .\templates\economy\bazar.html
                     {% for fig in series.items_cache %}
                     <div class="acrylic-stand rounded-2xl p-2 flex flex-col items-center text-center relative {% if fig.is_owned %}acrylic-stand-owned{% endif %} {% if fig.is_secret %}acrylic-stand-chase{% endif %}">
                         {% if is_staff or is_admin %}
-                        <button type="button" 
-                                onclick="event.stopPropagation(); confirmDeleteFigure({{ fig.id }}, '{{ fig.name|escapejs }}')"
-                                title="Eliminar figura"
-                                class="absolute top-1 left-1 z-20 w-4 h-4 bg-red-600/80 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-[8px] font-black">
-                            ✕
-                        </button>
+                        <div class="absolute top-1 left-1 z-20 flex items-center gap-1">
+                            <button type="button" 
+                                    onclick="event.stopPropagation(); confirmDeleteFigure({{ fig.id }}, '{{ fig.name|escapejs }}')"
+                                    title="Eliminar figura"
+                                    class="w-4 h-4 bg-red-600/80 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-[8px] font-black">
+                                ✕
+                            </button>
+                            <button type="button" 
+                                    onclick="event.stopPropagation(); openEditFigureModal({{ fig.id }}, '{{ fig.name|escapejs }}', {{ fig.is_secret|yesno:'true,false' }})"
+                                    title="Renombrar / Editar figura"
+                                    class="w-4 h-4 bg-amber-500/90 hover:bg-amber-400 text-black rounded-full flex items-center justify-center text-[8px] font-black shadow">
+                                ✏️
+                            </button>
+                        </div>
                         {% endif %}
 
                         {% if fig.is_secret %}
@@ -11589,6 +11630,34 @@ ARCHIVO: .\templates\economy\bazar.html
             <div class="flex gap-2 mt-2">
                 <button type="button" onclick="closeAddFigureModal()" class="w-1/2 py-2 bg-stone-800 text-stone-300 rounded-xl text-xs font-bold">Cancelar</button>
                 <button type="submit" class="w-1/2 py-2 bg-emerald-500 text-black rounded-xl text-xs font-black">Añadir</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ✏️ MODAL RENOMBRAR / EDITAR FIGURA EXISTENTE -->
+<div id="edit-figure-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="popmart-cabinet p-5 w-full max-w-sm flex flex-col gap-3 border border-amber-500/50">
+        <div class="flex items-center justify-between border-b border-amber-500/20 pb-2">
+            <h3 class="text-xs font-black text-amber-300 uppercase">✏️ Renombrar / Editar Figura</h3>
+            <button type="button" onclick="closeEditFigureModal()" class="text-stone-400 hover:text-white text-xs">✕</button>
+        </div>
+        <form id="edit-figure-form" action="" method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
+            {% csrf_token %}
+            <div>
+                <label class="block text-[10px] text-amber-300 uppercase font-bold mb-1">Nombre Correcto de la Figura *</label>
+                <input type="text" id="edit-figure-name" name="name" required class="w-full bg-black/70 border border-white/20 rounded-xl px-3 py-2 text-xs text-white">
+            </div>
+            <label class="flex items-center gap-2 text-xs text-amber-300 font-bold cursor-pointer bg-black/40 p-2 rounded-xl border border-white/10">
+                <input type="checkbox" id="edit-figure-secret" name="is_secret" value="1"> Figura Secreta (Chase ⭐)
+            </label>
+            <div>
+                <label class="block text-[10px] text-stone-400 uppercase font-bold mb-1">Reemplazar Foto (Opcional)</label>
+                <input type="file" name="image" accept="image/*" class="text-[9px] text-stone-400 w-full">
+            </div>
+            <div class="flex gap-2 mt-2">
+                <button type="button" onclick="closeEditFigureModal()" class="w-1/2 py-2 bg-stone-800 text-stone-300 rounded-xl text-xs font-bold">Cancelar</button>
+                <button type="submit" class="w-1/2 py-2 bg-amber-500 text-black rounded-xl text-xs font-black">Guardar Nombre</button>
             </div>
         </form>
     </div>
@@ -11862,42 +11931,62 @@ ARCHIVO: .\templates\economy\bazar.html
         window.location.href = `/economy/bazar/figure/delete/${figureId}/`;
     }
 
-    function previewBatchFigures(input) {
-        const c = document.getElementById('batch-preview-container'); c.innerHTML = '';
+    function openEditFigureModal(figId, figName, isSecret) {
+        document.getElementById('edit-figure-form').action = `/economy/bazar/figure/edit/${figId}/?tg_id={{ tg_id }}`;
+        document.getElementById('edit-figure-name').value = figName;
+        document.getElementById('edit-figure-secret').checked = Boolean(isSecret);
+        const m = document.getElementById('edit-figure-modal');
+        m.classList.remove('hidden'); m.classList.add('flex');
+    }
+    function closeEditFigureModal() {
+        const m = document.getElementById('edit-figure-modal');
+        m.classList.add('hidden'); m.classList.remove('flex');
+    }
+
+    function renderOrderedFigurePreviews(input, containerId, imgSizeClass) {
+        const c = document.getElementById(containerId);
+        c.innerHTML = '';
         if (!input.files) return;
+        // Crear tarjetas EN ORDEN SÍNCRONO exacto (idx 0, 1, 2...) antes de leer archivos
         Array.from(input.files).forEach((f, idx) => {
+            const d = document.createElement('div');
+            d.className = "bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col items-center gap-1";
+
+            const img = document.createElement('img');
+            img.className = `${imgSizeClass} object-contain rounded-lg bg-black/40`;
+
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.name = `figure_name_${idx}`;
+            nameInput.value = f.name.replace(/\.[^/.]+$/, '');
+            nameInput.className = "w-full bg-stone-900 border border-white/20 rounded px-1.5 py-1 text-[8px] text-white";
+
+            const lbl = document.createElement('label');
+            lbl.className = "flex items-center gap-1 text-[7px] text-amber-300 font-bold";
+            const chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.name = 'is_secret_index';
+            chk.value = String(idx);
+            lbl.appendChild(chk);
+            lbl.appendChild(document.createTextNode(' Chase ⭐'));
+
+            d.appendChild(img);
+            d.appendChild(nameInput);
+            d.appendChild(lbl);
+            c.appendChild(d);
+
             const r = new FileReader();
-            r.onload = e => {
-                const d = document.createElement('div');
-                d.className = "bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col items-center gap-1";
-                d.innerHTML = `
-                    <img src="${e.target.result}" class="w-16 h-16 object-contain rounded-lg">
-                    <input type="text" name="figure_names" value="${f.name.split('.')[0]}" class="w-full bg-stone-900 border border-white/20 rounded px-1.5 py-1 text-[8px] text-white">
-                    <label class="flex items-center gap-1 text-[7px] text-amber-300 font-bold"><input type="checkbox" name="is_secret_index" value="${idx}"> Chase ⭐</label>
-                `;
-                c.appendChild(d);
-            };
+            r.onload = e => { img.src = e.target.result; };
             r.readAsDataURL(f);
         });
     }
 
+    function previewBatchFigures(input) {
+        renderOrderedFigurePreviews(input, 'batch-preview-container', 'w-16 h-16');
+    }
+
     function previewAddFigures(input) {
-        const c = document.getElementById('add-figure-preview-container'); c.innerHTML = '';
-        if (!input.files) return;
-        Array.from(input.files).forEach((f, idx) => {
-            const r = new FileReader();
-            r.onload = e => {
-                const d = document.createElement('div');
-                d.className = "bg-black/60 border border-white/10 rounded-xl p-2 flex flex-col items-center gap-1";
-                d.innerHTML = `
-                    <img src="${e.target.result}" class="w-12 h-12 object-contain rounded-lg">
-                    <input type="text" name="figure_names" value="${f.name.split('.')[0]}" class="w-full bg-stone-900 border border-white/20 rounded px-1 text-[8px] text-white">
-                    <label class="flex items-center gap-1 text-[7px] text-amber-300 font-bold"><input type="checkbox" name="is_secret_index" value="${idx}"> Chase ⭐</label>
-                `;
-                c.appendChild(d);
-            };
-            r.readAsDataURL(f);
-        });
+        renderOrderedFigurePreviews(input, 'add-figure-preview-container', 'w-12 h-12');
     }
 
     async function pinFigureToProfile(id, name, imgUrl, seriesName) {
@@ -11959,6 +12048,7 @@ ARCHIVO: .\templates\economy\bazar.html
     }
 </script>
 {% endblock %}
+
 
 
 
@@ -12714,9 +12804,6 @@ ARCHIVO: .\templates\economy\casino.html
 ARCHIVO: .\templates\economy\jobs.html
 ==================================================
 
-
-
-
 {% extends 'base.html' %}
 {% load static %}
 
@@ -13014,6 +13101,7 @@ ARCHIVO: .\templates\economy\jobs.html
     {% endif %}
 </script>
 {% endblock %}
+
 
 
 
@@ -13934,8 +14022,6 @@ function playScratchSound() {
 ARCHIVO: .\templates\economy\slots.html
 ==================================================
 
-
-
 {% extends 'base.html' %}
 
 {% block content %}
@@ -14258,12 +14344,10 @@ ARCHIVO: .\templates\economy\slots.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\economy\wallet.html
 ==================================================
-
-
-
 
 <!-- templates/economy/wallet.html -->
 {% extends 'base.html' %}
@@ -14545,6 +14629,7 @@ ARCHIVO: .\templates\economy\wallet.html
     });
 </script>
 {% endblock %}
+
 
 
 
@@ -14841,12 +14926,24 @@ ARCHIVO: .\templates\idols\admin_photocards.html
             <h3 class="font-serif text-xs font-black text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
                 <span>📢</span> Anuncio de Próximo Lanzamiento
             </h3>
-            <span class="text-[9px] font-mono text-yellow-300 font-bold">Sneak Peek VIP</span>
+            {% if upcoming.is_active %}
+                <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500 text-emerald-300">🟢 VISIBLE EN TIENDA</span>
+            {% elif upcoming.has_content %}
+                <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-amber-950/90 border border-amber-500 text-amber-300">⏸️ GUARDADO (OCULTO)</span>
+            {% else %}
+                <span class="text-[9px] font-mono font-black px-2 py-0.5 rounded-full bg-stone-900 border border-white/20 text-stone-400">⚫ SIN ANUNCIO</span>
+            {% endif %}
         </div>
 
         <p class="text-[11px] text-stone-300 leading-relaxed">
             Configura el banner de expectativa que verán los usuarios en la tienda de cajas anunciando la próxima colección y su fecha.
         </p>
+
+        {% if not upcoming.is_active and upcoming.has_content %}
+        <div class="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/50 text-[10.5px] text-amber-200 leading-snug">
+            ⚠️ Tienes un anuncio guardado pero está <strong>oculto</strong>. Pulsa <strong>«📢 Publicar en la Tienda»</strong> para mostrarlo.
+        </div>
+        {% endif %}
 
         <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-3 mt-1">
             {% csrf_token %}
@@ -14860,20 +14957,20 @@ ARCHIVO: .\templates\idols\admin_photocards.html
                     <span class="text-[10px] text-stone-400">Si está activo, aparecerá arriba de las cajas.</span>
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" name="upcoming_active" value="1" class="sr-only peer" {% if upcoming.is_active %}checked{% endif %}>
+                    <input type="checkbox" name="upcoming_active" value="1" class="sr-only peer" {% if upcoming.is_active or not upcoming.has_content %}checked{% endif %}>
                     <div class="w-11 h-6 bg-stone-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                 </label>
             </div>
 
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Nombre de la Próxima Caja *</label>
-                <input type="text" name="upcoming_title" value="{{ upcoming.title }}" required placeholder="Ej: Colección K-Pop Cyberpunk 2026"
+                <input type="text" name="upcoming_title" value="{{ upcoming.title }}" placeholder="Ej: Colección K-Pop Cyberpunk 2026"
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
             </div>
 
             <div>
                 <label class="block text-[11px] text-vip-gold uppercase font-bold mb-1">Fecha o Horario de Estreno *</label>
-                <input type="text" name="upcoming_date" value="{{ upcoming.release_date }}" required placeholder="Ej: Sábado 15 de Octubre • 21:00 hs"
+                <input type="text" name="upcoming_date" value="{{ upcoming.release_date }}" placeholder="Ej: Sábado 15 de Octubre • 21:00 hs"
                        class="w-full bg-black/80 border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white">
             </div>
 
@@ -14897,9 +14994,20 @@ ARCHIVO: .\templates\idols\admin_photocards.html
                        class="w-full bg-black/80 border border-white/20 rounded-xl p-2 text-xs text-stone-300">
             </div>
 
-            <button type="submit" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
-                💾 Guardar Anuncio Promocional
+            <button type="submit" name="publish_now" value="1" class="btn-gold py-3 rounded-xl text-xs font-black uppercase tracking-wider shadow mt-1">
+                📢 Publicar en la Tienda
             </button>
+
+            <div class="grid grid-cols-2 gap-2">
+                <button type="submit" name="action" value="hide_upcoming_box" formnovalidate
+                        class="bg-amber-950/70 hover:bg-amber-900 border border-amber-600/60 text-amber-200 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider">
+                    ⏸️ Ocultar sin borrar
+                </button>
+                <button type="submit" name="action" value="delete_upcoming_box" formnovalidate onclick="return confirm('¿Retirar y borrar el anuncio de próxima caja?')"
+                        class="bg-rose-950 hover:bg-rose-900 border border-rose-600 text-rose-200 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider">
+                    🚫 Retirar y Borrar
+                </button>
+            </div>
         </form>
     </div>
 
@@ -15054,6 +15162,7 @@ ARCHIVO: .\templates\idols\admin_photocards.html
 </script>
 {% endblock %}
 
+
 ==================================================
 ARCHIVO: .\templates\idols\choose_role.html
 ==================================================
@@ -15119,8 +15228,6 @@ ARCHIVO: .\templates\idols\choose_role.html
 ==================================================
 ARCHIVO: .\templates\idols\collection.html
 ==================================================
-
-
 
 {% extends 'base.html' %}
 
@@ -15232,6 +15339,7 @@ ARCHIVO: .\templates\idols\collection.html
 
 </div>
 {% endblock %}
+
 
 
 
@@ -16056,7 +16164,6 @@ ARCHIVO: .\templates\idols\edit_post.html
 ARCHIVO: .\templates\idols\feed.html
 ==================================================
 
-
 <!-- templates/idols/feed.html -->
 {% extends 'base.html' %}
 
@@ -16106,13 +16213,15 @@ ARCHIVO: .\templates\idols\feed.html
             <div class="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-[#0d0414] to-transparent pointer-events-none"></div>
         </div>
         {% endif %}
-        <div class="p-3.5 flex flex-col gap-1 relative z-10">
+        <div class="p-3.5 flex flex-col gap-1.5 relative z-10">
+            {% if feed_theme.title %}
             <h3 class="font-serif text-sm font-black text-gold-gradient tracking-wide uppercase leading-tight">
                 {{ feed_theme.title }}
             </h3>
+            {% endif %}
             {% if feed_theme.message %}
-            <p class="text-[11.5px] text-stone-200 leading-relaxed font-normal">
-                {{ feed_theme.message }}
+            <p class="text-[11.5px] text-stone-100 leading-relaxed font-normal">
+                {{ feed_theme.message|linebreaksbr }}
             </p>
             {% endif %}
         </div>
@@ -17124,6 +17233,7 @@ ARCHIVO: .\templates\idols\feed.html
 {% endblock %}
 
 
+
 ==================================================
 ARCHIVO: .\templates\idols\form.html
 ==================================================
@@ -17753,9 +17863,6 @@ ARCHIVO: .\templates\idols\gallery.html
 ARCHIVO: .\templates\idols\list.html
 ==================================================
 
-
-
-
 <!-- templates/idols/list.html -->
 {% extends 'base.html' %}
 
@@ -18048,12 +18155,10 @@ function showUploadSpinner(reqId) {
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\idols\photocards_album.html
 ==================================================
-
-
-
 
 {% extends 'base.html' %}
 
@@ -18779,12 +18884,10 @@ ARCHIVO: .\templates\idols\photocards_album.html
 {% endblock %}
 
 
+
 ==================================================
 ARCHIVO: .\templates\idols\photocards_market.html
 ==================================================
-
-
-
 
 {% extends 'base.html' %}
 {% load static %}
@@ -19153,6 +19256,7 @@ ARCHIVO: .\templates\idols\photocards_market.html
 
 
 
+
 ==================================================
 ARCHIVO: .\templates\idols\photocard_boxes.html
 ==================================================
@@ -19207,6 +19311,47 @@ ARCHIVO: .\templates\idols\photocard_boxes.html
             </div>
         </div>
     </div>
+
+    <!-- 📢 ANUNCIO DE PRÓXIMA CAJA (SNEAK PEEK VIP) -->
+    {% if upcoming.is_active %}
+    <div class="relative rounded-3xl overflow-hidden border-2 border-purple-500/70 bg-gradient-to-br from-[#230b3d] via-[#10041e] to-black shadow-[0_10px_35px_rgba(168,85,247,0.3)] p-4 flex flex-col gap-3">
+        <div class="absolute -top-10 -right-10 w-36 h-36 bg-amber-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="flex items-center justify-between gap-2 relative z-10 border-b border-white/10 pb-2">
+            <span class="inline-flex items-center gap-1.5 text-[9px] font-mono font-black uppercase tracking-widest bg-purple-950/90 text-purple-200 border border-purple-400/50 px-2.5 py-0.5 rounded-full shadow">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                <span>Próximo Lanzamiento ✨</span>
+            </span>
+            {% if upcoming.release_date %}
+            <span class="text-[9.5px] font-mono font-black text-amber-300 bg-black/70 px-2.5 py-0.5 rounded-lg border border-amber-500/40">
+                🗓️ {{ upcoming.release_date }}
+            </span>
+            {% endif %}
+        </div>
+
+        <div class="flex items-center gap-3.5 relative z-10">
+            <div class="w-20 h-20 min-w-[80px] rounded-2xl bg-black/90 border border-amber-500/50 overflow-hidden flex items-center justify-center flex-shrink-0 shadow-[0_0_20px_rgba(212,175,55,0.2)] p-1">
+                {% if upcoming.image_url %}
+                    <img src="{{ upcoming.image_url }}" alt="{{ upcoming.title }}" class="w-full h-full object-contain block">
+                {% else %}
+                    <span class="text-3xl animate-pulse">🎁</span>
+                {% endif %}
+            </div>
+            <div class="flex flex-col min-w-0 flex-1">
+                {% if upcoming.title %}
+                <h3 class="font-serif text-sm font-black text-gold-gradient uppercase tracking-wide leading-tight">
+                    {{ upcoming.title }}
+                </h3>
+                {% endif %}
+                {% if upcoming.description %}
+                <p class="text-[11px] text-stone-200 leading-relaxed mt-1">
+                    {{ upcoming.description|linebreaksbr }}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- LISTA DE CAJAS DISPONIBLES -->
     <div class="flex flex-col gap-4">
@@ -19920,6 +20065,7 @@ ARCHIVO: .\templates\idols\photocard_boxes.html
     window.startReelSpin = startMultiReelSequence;
 </script>
 {% endblock %}
+
 
 ==================================================
 ARCHIVO: .\templates\idols\photocard_fusion.html

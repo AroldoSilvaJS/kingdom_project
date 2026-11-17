@@ -237,6 +237,7 @@
                     </div>
                     <form method="POST" class="m-0">
                         {% csrf_token %}
+                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
                         <input type="hidden" name="action" value="toggle_box">
                         <input type="hidden" name="target_tab" value="cajas">
                         <input type="hidden" name="box_id" value="{{ b.id }}">
@@ -250,6 +251,7 @@
                     <summary class="cursor-pointer text-vip-gold font-bold">✏️ Editar Caja</summary>
                     <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2 mt-2">
                         {% csrf_token %}
+                        <input type="hidden" name="tg_id" value="{{ tg_id }}">
                         <input type="hidden" name="action" value="edit_box">
                         <input type="hidden" name="target_tab" value="cajas">
                         <input type="hidden" name="box_id" value="{{ b.id }}">
@@ -268,8 +270,9 @@
                     </form>
                 </details>
 
-                <form method="POST" class="m-0 self-end" onsubmit="return confirm('¿Seguro que deseas eliminar la caja {{ b.name }} y todas sus cartas?')">
+                <form method="POST" class="m-0 self-end" onsubmit="return confirm('¿Seguro que deseas eliminar la caja {{ b.name|escapejs }} y todas sus cartas?')">
                     {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
                     <input type="hidden" name="action" value="delete_box">
                     <input type="hidden" name="target_tab" value="cajas">
                     <input type="hidden" name="box_id" value="{{ b.id }}">
@@ -377,7 +380,7 @@
         {% for c in all_cards %}
         <div class="bg-black/60 border border-vip-gold/30 p-3 rounded-2xl flex items-center justify-between gap-3 shadow">
             <div class="flex items-center gap-3 min-w-0">
-                <img src="{{ c.image.url }}" class="w-12 h-16 object-cover rounded-xl border flex-shrink-0" style="border-color: {{ c.get_color_hex }};">
+                {% if c.image %}<img src="{{ c.image.url }}" class="w-12 h-16 object-cover rounded-xl border flex-shrink-0" style="border-color: {{ c.get_color_hex }};">{% else %}<div class="w-12 h-16 rounded-xl border flex-shrink-0 bg-stone-900 flex items-center justify-center text-base" style="border-color: {{ c.get_color_hex }};">🎴</div>{% endif %}
                 <div class="flex flex-col min-w-0">
                     <span class="text-xs font-black text-white truncate">{{ c.name }}</span>
                     <span class="text-[11px] text-yellow-400 font-bold truncate">Idol: {{ c.display_idol_name }}</span>
@@ -389,8 +392,9 @@
                 <button type="button" onclick="openEditCardModal({{ c.id }}, '{{ c.name|escapejs }}', '{{ c.display_idol_name|escapejs }}', '{{ c.rarity }}', {{ c.box.id }})" 
                         class="text-xs bg-yellow-500/20 border border-yellow-500/40 text-yellow-300 px-2 py-1 rounded-lg font-bold" title="Editar">✏️</button>
 
-                <form method="POST" class="m-0" onsubmit="return confirm('¿Eliminar la carta {{ c.name }}?')">
+                <form method="POST" class="m-0" onsubmit="return confirm('¿Eliminar la carta {{ c.name|escapejs }}?')">
                     {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
                     <input type="hidden" name="action" value="delete_card">
                     <input type="hidden" name="target_tab" value="cartas">
                     <input type="hidden" name="card_id" value="{{ c.id }}">
@@ -413,6 +417,7 @@
 
         <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-2.5">
             {% csrf_token %}
+            <input type="hidden" name="tg_id" value="{{ tg_id }}">
             <input type="hidden" name="action" value="edit_card">
             <input type="hidden" name="target_tab" value="cartas">
             <input type="hidden" name="card_id" id="modal-card-id">
@@ -521,3 +526,4 @@
     });
 </script>
 {% endblock %}
+

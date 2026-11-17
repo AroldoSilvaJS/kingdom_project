@@ -789,7 +789,7 @@ def _process_telegram_update(data):
             for grp in sorted_groups:
                 idols_in_grp = grouped[grp]
                 grp_icon = "🌟" if "SOLISTAS" in grp else "🎀"
-                grp_header = f"\n{grp_icon} <b>{grp}</b> ({len(idols_in_grp)})\n"
+                grp_header = f"\n{grp_icon} <b>{py_html.escape(grp)}</b> ({len(idols_in_grp)})\n"
                 lines_grp = [grp_header]
                 for idol in sorted(idols_in_grp, key=lambda x: x.stage_name.lower()):
                     owner = idol.get_display_owner()
@@ -999,8 +999,8 @@ def notifications_inbox(request):
                 'cta_text': 'Ver Post'
             })
 
-    else:
-        mis_antojos = CustomRequest.objects.filter(client_telegram_id=tg_id).select_related('idol').order_by('-created_at')[:20]
+    mis_antojos = CustomRequest.objects.filter(client_telegram_id=tg_id).select_related('idol').order_by('-created_at')[:20]
+    if mis_antojos:
         for ant in mis_antojos:
             if ant.status == 'accepted':
                 title = f"¡Tu antojo de {ant.idol.stage_name} fue entregado!"
@@ -1140,6 +1140,7 @@ def toggle_pin_item(request):
         'pinned_count': len(pinned),
         'message': msg
     })
+
 
 
 

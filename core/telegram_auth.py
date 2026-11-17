@@ -66,3 +66,4 @@ def is_user_in_group(user_tg_id: int) -> bool:
     # Solo en timeouts transitorios de red se permite pasar temporalmente
     return True
 
+

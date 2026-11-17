@@ -58,15 +58,27 @@ def wallet_dashboard(request):
 
 def claim_patron_vault(request):
     tg_id = get_safe_tg_id(request)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
     if request.method == 'POST':
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         if wallet.patron_vault > 0:
             cobrado = wallet.claim_patron_vault()
             grant_user_xp(request, tg_id, max(1, cobrado // 10), reason="Cofre del Mecenas")
+            if is_ajax:
+                return JsonResponse({
+                    'success': True,
+                    'claimed': cobrado,
+                    'nuevo_saldo': wallet.balance,
+                    'message': f"💎 ¡Has reclamado {cobrado} 🪙 del Cofre del Mecenas!"
+                })
             messages.success(request, f"💎 ¡Has reclamado {cobrado} 🪙 del Cofre del Mecenas!")
         else:
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': "Tu Cofre del Mecenas está vacío actualmente."}, status=400)
             messages.warning(request, "Tu Cofre del Mecenas está vacío actualmente.")
-            
+    elif is_ajax:
+        return JsonResponse({'success': False, 'error': "Método no permitido."}, status=405)
+
     return redirect(f'/economy/wallet/?tg_id={tg_id}')
 
 
@@ -1581,44 +1593,45 @@ def claim_court_job(request):
         messages.error(request, 'Sesión no válida.')
         return redirect('economy:jobs')
 
-    job = None
-    try:
-        job = CourtJob.objects.filter(
-            telegram_user_id=tg_id,
-            is_claimed=False
-        ).order_by('-created_at').first()
-    except Exception:
+    with transaction.atomic():
         try:
-            job = CourtJob.objects.filter(
+            job = CourtJob.objects.select_for_update().filter(
                 telegram_user_id=tg_id,
                 is_claimed=False
-            ).first()
+            ).order_by('-created_at').first()
         except Exception:
-            job = None
+            try:
+                job = CourtJob.objects.select_for_update().filter(
+                    telegram_user_id=tg_id,
+                    is_claimed=False
+                ).first()
+            except Exception:
+                job = None
 
-    if not job:
-        messages.warning(request, 'No tienes ninguna labor para reclamar.')
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        if not job:
+            messages.warning(request, 'No tienes ninguna labor para reclamar.')
+            return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
-    now = timezone.now()
-    finishes = getattr(job, 'finishes_at', None)
-    if finishes and timezone.is_naive(finishes):
-        finishes = timezone.make_aware(finishes)
+        now = timezone.now()
+        finishes = getattr(job, 'finishes_at', None)
+        if finishes and timezone.is_naive(finishes):
+            finishes = timezone.make_aware(finishes)
 
-    if finishes and now < finishes:
-        messages.error(request, 'Esta labor aún no ha finalizado.')
-        return redirect(f'/economy/jobs/?tg_id={tg_id}')
+        if finishes and now < finishes:
+            messages.error(request, 'Esta labor aún no ha finalizado.')
+            return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
-    # 🪙 1. Acreditación de Oro
-    try:
+        # Marcar cobrada primero bajo bloqueo transaccional para evitar doble pago
+        job.is_claimed = True
+        job.save(update_fields=['is_claimed'])
+
+        # 🪙 1. Acreditación de Oro
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
         if hasattr(wallet, 'add_funds'):
             wallet.add_funds(job.gold_reward)
         else:
             wallet.balance += job.gold_reward
             wallet.save()
-    except Exception as e:
-        messages.error(request, f'Error al acreditar oro: {str(e)}')
 
     # ✨ 2. Acreditación de XP
     try:
@@ -1632,13 +1645,7 @@ def claim_court_job(request):
         except Exception:
             pass
 
-    # 3. Marcar como cobrada
-    try:
-        job.is_claimed = True
-        job.save()
-        messages.success(request, f'✨ ¡Tributo reclamado! +{job.gold_reward} Oro acreditados a tu Bóveda y +{job.xp_reward} EXP.')
-    except Exception as e:
-        messages.error(request, f'Error al actualizar labor: {str(e)}')
+    messages.success(request, f'✨ ¡Tributo reclamado! +{job.gold_reward} Oro acreditados a tu Bóveda y +{job.xp_reward} EXP.')
 
     return redirect(f'/economy/jobs/?tg_id={tg_id}')
 
@@ -1973,18 +1980,27 @@ def recycle_duplicate_action(request, item_id):
     
     tg_id = get_safe_tg_id(request)
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
-    uc = get_object_or_404(UserCollectible, telegram_user_id=tg_id, item_id=item_id)
-    
-    if uc.quantity <= 1:
-        err = "Solo puedes empeñar figuras repetidas (debes conservar al menos una en tu vitrina)."
-        if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
-        messages.error(request, err)
-        return redirect(f'/economy/bazar/?tg_id={tg_id}')
-    
-    item_price = uc.item.price or (uc.item.series.single_price if uc.item.series else 260)
-    recycle_gold = max(120, int(item_price * 0.6))
-    
+
     with transaction.atomic():
+        uc = UserCollectible.objects.select_for_update().select_related('item', 'item__series').filter(
+            telegram_user_id=tg_id,
+            item_id=item_id
+        ).first()
+        if not uc:
+            err = "No se encontró esa figura en tu vitrina."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=404)
+            messages.error(request, err)
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+        if uc.quantity <= 1:
+            err = "Solo puedes empeñar figuras repetidas (debes conservar al menos una en tu vitrina)."
+            if is_ajax: return JsonResponse({'success': False, 'error': err}, status=400)
+            messages.error(request, err)
+            return redirect(f'/economy/bazar/?tg_id={tg_id}')
+
+        item_price = uc.item.price or (uc.item.series.single_price if uc.item.series else 260)
+        recycle_gold = max(120, int(item_price * 0.6))
+
         uc.quantity -= 1
         uc.save(update_fields=['quantity'])
         wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
@@ -2202,6 +2218,7 @@ def scratch_card_play_ajax(request):
                 'patron_vault': wallet.patron_vault,
                 'message': f'💀 Sin suerte esta vez. Tu cartón no obtuvo trío. El 8% ({int(round(cost * 0.08))} 🪙) pasó a tu Cofre del Mecenas.'
             })
+
 
 
 

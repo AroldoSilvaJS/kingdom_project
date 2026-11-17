@@ -139,6 +139,7 @@
 
                 <form action="{% url 'idols:toggle_roleplay_status' idol.id %}" method="POST" class="flex flex-col gap-2">
                     {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
                     <div class="flex items-center gap-2">
                         <label class="flex items-center gap-1.5 text-[10px] font-bold text-white cursor-pointer bg-stone-900 border border-white/10 px-2.5 py-1.5 rounded-xl">
                             <input type="checkbox" name="is_roleplay_open" value="1" {% if idol.is_roleplay_open %}checked{% endif %} class="rounded text-emerald-500">
@@ -168,23 +169,84 @@
                         <p class="text-[9px] text-stone-300 italic leading-tight">«{{ req.theme }}»</p>
                         <div class="flex items-center gap-1.5 mt-1">
                             {% if req.status == 'pending' %}
-                            <a href="{% url 'idols:handle_roleplay_request' req.id 'accept' %}" class="w-1/2 py-1 text-center bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[8px] uppercase rounded-lg">
+                            <a href="{% url 'idols:handle_roleplay_request' req.id 'accept' %}?tg_id={{ tg_id }}" class="w-1/2 py-1 text-center bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[8px] uppercase rounded-lg">
                                 ✅ Aceptar
                             </a>
-                            <a href="{% url 'idols:handle_roleplay_request' req.id 'reject' %}" class="w-1/2 py-1 text-center bg-rose-900 hover:bg-rose-800 text-rose-200 font-bold text-[8px] uppercase rounded-lg">
+                            <a href="{% url 'idols:handle_roleplay_request' req.id 'reject' %}?tg_id={{ tg_id }}" class="w-1/2 py-1 text-center bg-rose-900 hover:bg-rose-800 text-rose-200 font-bold text-[8px] uppercase rounded-lg">
                                 ✕ Rechazar
                             </a>
                             {% elif req.status == 'accepted' %}
-                            <button type="button" onclick="contactIdol('{{ req.client_username }}', '{{ req.client_telegram_id }}')" class="w-1/2 py-1 bg-purple-600 text-white font-bold text-[8px] uppercase rounded-lg">
+                            <button type="button" onclick="contactIdol('{{ req.client_username|escapejs }}', '{{ req.client_telegram_id }}')" class="w-1/2 py-1 bg-purple-600 text-white font-bold text-[8px] uppercase rounded-lg">
                                 💬 Abrir Chat
                             </button>
-                            <a href="{% url 'idols:handle_roleplay_request' req.id 'complete' %}" class="w-1/2 py-1 text-center bg-amber-500 hover:bg-amber-400 text-black font-black text-[8px] uppercase rounded-lg">
+                            <a href="{% url 'idols:handle_roleplay_request' req.id 'complete' %}?tg_id={{ tg_id }}" class="w-1/2 py-1 text-center bg-amber-500 hover:bg-amber-400 text-black font-black text-[8px] uppercase rounded-lg">
                                 ⭐ Completar Rol
                             </a>
                             {% else %}
                             <span class="text-[8px] font-mono text-stone-400 uppercase">Estado: {{ req.get_status_display }}</span>
                             {% endif %}
                         </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <!-- Bandeja de Antojos Especiales Pendientes para esta Musa -->
+                {% if pending_custom_requests %}
+                <div class="mt-2 border-t border-rose-500/30 pt-2.5 flex flex-col gap-2.5 text-left">
+                    <span class="text-[9px] font-black uppercase text-rose-300 flex items-center justify-between">
+                        <span>💌 Antojos Especiales Pendientes ({{ pending_custom_requests|length }})</span>
+                        <span class="text-[8px] font-mono text-yellow-300">Oro en custodia</span>
+                    </span>
+                    {% for ant in pending_custom_requests %}
+                    <div class="p-3 rounded-2xl bg-stone-950/90 border {% if ant.is_priority %}border-yellow-400{% else %}border-rose-500/40{% endif %} flex flex-col gap-2">
+                        <div class="flex items-center justify-between text-[10px]">
+                            <span class="font-bold text-white flex items-center gap-1">
+                                {% if ant.is_priority %}<span class="bg-yellow-400 text-black text-[8px] px-1.5 rounded font-black">⚡ PRIORIDAD</span>{% endif %}
+                                {{ ant.client_username }}
+                            </span>
+                            <span class="text-yellow-300 font-black font-mono">+{{ ant.bounty }} 🪙</span>
+                        </div>
+                        <p class="text-[10px] text-stone-300 italic bg-black/60 p-2 rounded-xl border border-white/10 leading-snug">«{{ ant.description }}»</p>
+
+                        <form action="/idols/?tg_id={{ tg_id }}&tg_username={{ tg_username|urlencode }}" method="POST" enctype="multipart/form-data" class="flex flex-col gap-1.5" onsubmit="return lockDetailDeliverBtn(this, '{{ ant.id }}')">
+                            {% csrf_token %}
+                            <input type="hidden" name="request_id" value="{{ ant.id }}">
+                            <input type="hidden" name="next_idol_id" value="{{ idol.id }}">
+                            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                            <input type="hidden" name="tg_username" value="{{ tg_username }}">
+                            <input type="hidden" name="action" value="accept_request">
+
+                            <input type="file" name="delivered_photo" id="detail-antojo-file-{{ ant.id }}" accept="image/*,video/*,.mp4,.mov,.webm,.m4v" required
+                                   class="w-full text-[10px] text-stone-300 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[9px] file:font-black file:bg-rose-600 file:text-white cursor-pointer">
+                            <input type="text" name="delivery_note" maxlength="250" placeholder="Dedicatoria opcional..."
+                                   class="w-full bg-black border border-white/15 rounded-xl px-2.5 py-1 text-[10px] text-white placeholder-stone-500">
+                            <button type="submit" id="detail-deliver-btn-{{ ant.id }}"
+                                    class="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-black text-[9.5px] uppercase rounded-xl shadow">
+                                ✅ Entregar & Cobrar +{{ ant.bounty }} 🪙
+                            </button>
+                        </form>
+
+                        <form action="/idols/?tg_id={{ tg_id }}&tg_username={{ tg_username|urlencode }}" method="POST" class="text-center">
+                            {% csrf_token %}
+                            <input type="hidden" name="request_id" value="{{ ant.id }}">
+                            <input type="hidden" name="next_idol_id" value="{{ idol.id }}">
+                            <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                            <input type="hidden" name="tg_username" value="{{ tg_username }}">
+                            <input type="hidden" name="action" value="reject_request">
+
+                            <button type="button" id="detail-reject-trigger-{{ ant.id }}" onclick="toggleDetailRejectConfirm('{{ ant.id }}', true)"
+                                    class="text-[9px] text-stone-400 hover:text-rose-300 underline font-bold uppercase">
+                                ❌ Rechazar y reembolsar {{ ant.bounty }} 🪙
+                            </button>
+                            <div id="detail-reject-confirm-{{ ant.id }}" class="hidden mt-1.5 p-2 rounded-xl bg-rose-950/70 border border-rose-500/40 flex flex-col gap-1.5">
+                                <span class="text-[9px] text-rose-200 font-bold">¿Rechazar y devolver {{ ant.bounty }} 🪙 al cliente?</span>
+                                <div class="flex gap-1.5">
+                                    <button type="button" onclick="toggleDetailRejectConfirm('{{ ant.id }}', false)" class="w-1/2 py-1 rounded-lg bg-black/70 text-[9px] text-stone-300 font-bold uppercase">Cancelar</button>
+                                    <button type="submit" class="w-1/2 py-1 rounded-lg bg-rose-600 text-white text-[9px] font-black uppercase">Sí, Rechazar</button>
+                                </div>
+                            </div>
+                        </form>
                     </div>
                     {% endfor %}
                 </div>
@@ -210,21 +272,22 @@
 
             <!-- BOTONES DE ACCIÓN PRINCIPALES -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full mt-3">
-                <button type="button" onclick="contactIdol('{{ idol.owner_username }}', '{{ idol.telegram_user_id }}')" 
+                <button type="button" onclick="contactIdol('{{ idol.owner_username|escapejs }}', '{{ idol.telegram_user_id }}')" 
                         class="w-full bg-gradient-to-r from-purple-900 via-fuchsia-900 to-purple-950 hover:brightness-110 border border-purple-400 text-white py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-95 transition-all">
                     <span>💬</span> <span>Abrir Chat Telegram</span>
                 </button>
 
-                {% if not can_edit and idol.is_roleplay_open %}
-                <button type="button" onclick="toggleRoleplayModal()" 
-                        class="w-full bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 text-white py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95 transition-all">
-                    <span>🎭</span> <span>Solicitar Rol ({{ idol.roleplay_price }} 🪙)</span>
-                </button>
-                {% else %}
-                <button type="button" onclick="toggleCustomRequestModal()" 
-                        class="w-full btn-gold py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
-                    <span>💌</span> <span>Pedir Antojo Privado</span>
-                </button>
+                {% if not can_edit %}
+                    {% if idol.is_roleplay_open %}
+                    <button type="button" onclick="toggleRoleplayModal()" 
+                            class="w-full bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 text-white py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.4)] active:scale-95 transition-all">
+                        <span>🎭</span> <span>Solicitar Rol ({{ idol.roleplay_price }} 🪙)</span>
+                    </button>
+                    {% endif %}
+                    <button type="button" onclick="toggleCustomRequestModal()" 
+                            class="w-full btn-gold py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(212,175,55,0.4)] active:scale-95 transition-all">
+                        <span>💌</span> <span>Pedir Antojo Privado</span>
+                    </button>
                 {% endif %}
             </div>
 
@@ -241,6 +304,7 @@
                 </p>
                 <form action="{% url 'idols:request_roleplay_session' idol.id %}" method="POST" class="flex flex-col gap-2.5">
                     {% csrf_token %}
+                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
                     <input type="hidden" name="client_username" value="{{ tg_username }}">
                     <div>
                         <label class="block text-[9px] text-emerald-400 uppercase font-bold mb-1">Temática / Trama Deseada *</label>
@@ -272,20 +336,29 @@
                     Tu oro queda en custodia. Si la Musa no entrega la foto, se te reembolsa de inmediato.
                 </p>
 
-                <form action="{% url 'idols:create_custom_request' idol.id %}" method="POST" class="flex flex-col gap-3">
+                {% if has_priority_antojo %}
+                <div class="mb-2.5 p-2 rounded-xl bg-yellow-500/15 border border-yellow-400/50 text-[10px] text-yellow-300 font-bold text-center">
+                    ⚡ Tienes un Sello Prioritario activo: tu antojo aparecerá primero.
+                </div>
+                {% endif %}
+
+                <form action="{% url 'idols:create_custom_request' idol.id %}" method="POST" class="flex flex-col gap-3" onsubmit="const b=this.querySelector('button[type=submit]'); if(b){b.disabled=true; b.innerText='⏳ Enviando petición...';}">
                     {% csrf_token %}
                     <input type="hidden" name="tg_id" value="{{ tg_id }}">
                     <input type="hidden" name="tg_username" value="{{ tg_username }}">
 
                     <div>
-                        <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1">Recompensa en Oro (🪙)</label>
-                        <input type="number" name="bounty" min="50" value="100" required
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-[10px] text-vip-gold uppercase font-bold">Recompensa en Oro (🪙 • Mín. 100)</label>
+                            <span class="text-[9.5px] font-mono text-stone-400">Saldo: <strong class="text-yellow-300">{{ client_wallet_balance|default:0 }} 🪙</strong></span>
+                        </div>
+                        <input type="number" name="bounty" min="100" value="100" required
                                class="w-full bg-black border border-vip-gold/40 rounded-xl p-2.5 text-white font-mono text-center text-sm font-bold focus:outline-none focus:border-yellow-400">
                     </div>
 
                     <div>
                         <label class="block text-[10px] text-vip-gold uppercase font-bold mb-1">Detalle del Antojo</label>
-                        <textarea name="description" rows="3" required placeholder="Describe el atuendo, dedicatoria o pose deseada..."
+                        <textarea name="description" rows="3" maxlength="300" required placeholder="Describe el atuendo, dedicatoria o pose deseada..."
                                   class="w-full bg-black border border-vip-gold/40 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-yellow-400 resize-none"></textarea>
                     </div>
 
@@ -493,8 +566,32 @@
     }
 
     function toggleRoleplayModal() {
-    const m = document.getElementById('roleplay-request-modal');
-    if (m) m.classList.toggle('hidden');
+        const m = document.getElementById('roleplay-request-modal');
+        if (m) m.classList.toggle('hidden');
+    }
+
+    function toggleDetailRejectConfirm(antId, show) {
+        const trg = document.getElementById('detail-reject-trigger-' + antId);
+        const box = document.getElementById('detail-reject-confirm-' + antId);
+        if (trg && box) {
+            trg.classList.toggle('hidden', show);
+            box.classList.toggle('hidden', !show);
+        }
+    }
+
+    function lockDetailDeliverBtn(form, antId) {
+        const inp = document.getElementById('detail-antojo-file-' + antId);
+        if (!inp || !inp.files || inp.files.length === 0) return false;
+        if (inp.files[0].size > 30 * 1024 * 1024) {
+            if (typeof showVipAlert === 'function') showVipAlert('El archivo supera el límite de 30 MB.', 'Archivo Demasiado Grande', '⚠️');
+            return false;
+        }
+        const btn = document.getElementById('detail-deliver-btn-' + antId);
+        if (btn) {
+            btn.disabled = true;
+            btn.innerText = '⏳ Subiendo entrega...';
+        }
+        return true;
     }
 </script>
 {% endblock %}

@@ -42,16 +42,16 @@
 
     <!-- PESTAÑAS: EN VENTA vs INTERCAMBIOS -->
     <div class="grid grid-cols-2 gap-1 bg-black/80 p-1 rounded-2xl border border-vip-gold/30 text-xs font-bold uppercase text-center shadow-inner">
-        <button type="button" onclick="switchMarketTab('cards')" id="tab-btn-cards" class="py-2.5 rounded-xl bg-vip-gold text-black font-black shadow transition-all">
-            🏷️ En Venta ({{ market_cards.count }})
+        <button type="button" onclick="switchMarketTab('cards')" id="tab-btn-cards" class="py-2.5 rounded-xl {% if active_tab != 'trades' %}bg-vip-gold text-black font-black shadow{% else %}text-stone-400 hover:text-white{% endif %} transition-all">
+            🏷️ En Venta ({{ market_cards|length }})
         </button>
-        <button type="button" onclick="switchMarketTab('trades')" id="tab-btn-trades" class="py-2.5 rounded-xl text-stone-400 hover:text-white transition-all">
+        <button type="button" onclick="switchMarketTab('trades')" id="tab-btn-trades" class="py-2.5 rounded-xl {% if active_tab == 'trades' %}bg-vip-gold text-black font-black shadow{% else %}text-stone-400 hover:text-white{% endif %} transition-all">
             🤝 Trueques ({{ received_trades.count }})
         </button>
     </div>
 
     <!-- SECCIÓN 1: CARTAS A LA VENTA -->
-    <div id="market-cards-tab" class="flex flex-col gap-3.5">
+    <div id="market-cards-tab" class="{% if active_tab == 'trades' %}hidden {% endif %}flex flex-col gap-3.5">
         
         <!-- TUS PUBLICACIONES ACTIVAS (CON BOTÓN DE RETIRO RÁPIDO) -->
         {% if my_sales %}
@@ -67,7 +67,7 @@
                 {% for item in my_sales %}
                 <div class="bg-black/80 border border-white/10 rounded-2xl p-2.5 flex flex-col justify-between shadow">
                     <div class="flex items-center gap-2 mb-2">
-                        <img src="{{ item.photocard.image.url }}" class="w-10 h-14 object-cover rounded-xl border flex-shrink-0" style="border-color: {{ item.photocard.get_color_hex }};">
+                        {% if item.photocard.image %}<img src="{{ item.photocard.image.url }}" class="w-10 h-14 object-cover rounded-xl border flex-shrink-0" style="border-color: {{ item.photocard.get_color_hex }};">{% else %}<div class="w-10 h-14 rounded-xl border flex-shrink-0 bg-stone-900 flex items-center justify-center text-sm" style="border-color: {{ item.photocard.get_color_hex }};">🎴</div>{% endif %}
                         <div class="overflow-hidden min-w-0">
                             <span class="text-xs font-black truncate text-white block">{{ item.photocard.name }}</span>
                             <span class="text-[11px] text-yellow-400 font-mono font-black mt-0.5 block">🪙 {{ item.sale_price }}</span>
@@ -77,6 +77,7 @@
                         {% csrf_token %}
                         <input type="hidden" name="tg_id" value="{{ tg_id }}">
                         <input type="hidden" name="mode" value="cancel">
+                        <input type="hidden" name="next" value="market">
                         <button type="submit" class="w-full py-1.5 text-[10px] bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 rounded-xl font-black uppercase tracking-wider active:scale-95 transition-all">
                             Retirar Venta
                         </button>
@@ -103,6 +104,17 @@
                 <button type="button" onclick="setRarityFilter('epic')" class="py-1.5 rounded-lg text-purple-400 hover:text-white m-rarity-btn" id="m-f-epic">Épica</button>
                 <button type="button" onclick="setRarityFilter('legendary')" class="py-1.5 rounded-lg text-yellow-400 hover:text-white m-rarity-btn" id="m-f-legendary">👑</button>
             </div>
+
+            <div class="flex gap-1 p-0.5 bg-black/80 border border-white/10 rounded-xl">
+                <button type="button" id="btn-market-all" onclick="setMarketOwnershipFilter('all')"
+                        class="flex-1 py-1.5 text-[9px] font-black uppercase rounded-xl bg-vip-gold text-black shadow transition-all">
+                    Todas las Cartas
+                </button>
+                <button type="button" id="btn-market-missing" onclick="setMarketOwnershipFilter('missing')"
+                        class="flex-1 py-1.5 text-[9px] font-black uppercase rounded-xl text-stone-400 hover:text-white transition-all flex items-center justify-center gap-1">
+                    <span>✨</span> Solo las que me faltan
+                </button>
+            </div>
         </div>
 
         {% if market_cards %}
@@ -127,7 +139,7 @@
                     {% endif %}
                 </div>
                 
-                <img src="{{ item.photocard.image.url }}" alt="{{ item.photocard.name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                {% if item.photocard.image %}<img src="{{ item.photocard.image.url }}" alt="{{ item.photocard.name }}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">{% else %}<div class="absolute inset-0 flex items-center justify-center text-3xl bg-stone-900 text-stone-500">🎴</div>{% endif %}
                 <div class="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent pointer-events-none"></div>
 
                 <!-- Insignia de Rareza Superior -->
@@ -179,7 +191,7 @@
     </div>
 
     <!-- SECCIÓN 2: TABLÓN DE INTERCAMBIOS Y TRUEQUES -->
-    <div id="market-trades-tab" class="hidden flex flex-col gap-3">
+    <div id="market-trades-tab" class="{% if active_tab != 'trades' %}hidden {% endif %}flex flex-col gap-3">
         
         <div class="flex items-center justify-between px-1">
             <h3 class="text-xs font-bold text-purple-300 uppercase tracking-wider">Ofertas Disponibles</h3>
@@ -202,7 +214,7 @@
 
             <!-- Carta Ofrecida -->
             <div class="flex items-center gap-3 bg-purple-950/30 p-2.5 rounded-2xl border border-purple-500/30">
-                <img src="{{ trade.sender_card.photocard.image.url }}" class="w-12 h-16 object-cover rounded-xl border flex-shrink-0" style="border-color: {{ trade.sender_card.photocard.get_color_hex }};">
+                {% if trade.sender_card.photocard.image %}<img src="{{ trade.sender_card.photocard.image.url }}" class="w-12 h-16 object-cover rounded-xl border flex-shrink-0" style="border-color: {{ trade.sender_card.photocard.get_color_hex }};">{% else %}<div class="w-12 h-16 rounded-xl border flex-shrink-0 bg-stone-900 flex items-center justify-center text-lg" style="border-color: {{ trade.sender_card.photocard.get_color_hex }};">🎴</div>{% endif %}
                 <div class="flex flex-col min-w-0">
                     <span class="text-[8.5px] font-mono uppercase font-bold" style="color: {{ trade.sender_card.photocard.get_color_hex }};">
                         {{ trade.sender_card.photocard.get_rarity_display }}
@@ -213,16 +225,35 @@
             </div>
 
             <!-- Acciones Aceptar / Rechazar -->
-            <div class="grid grid-cols-2 gap-2 pt-1">
-                <form action="/idols/photocards/trade/{{ trade.id }}/accept/" method="POST" class="m-0">
-                    {% csrf_token %}
-                    <input type="hidden" name="tg_id" value="{{ tg_id }}">
+            {% if tradable_cards %}
+            <form action="/idols/photocards/trade/{{ trade.id }}/accept/" method="POST" class="m-0 flex flex-col gap-2 pt-1">
+                {% csrf_token %}
+                <input type="hidden" name="tg_id" value="{{ tg_id }}">
+                <div>
+                    <label class="block text-[9px] font-bold uppercase tracking-wider text-amber-300 mb-1">Tu carta a entregar a cambio:</label>
+                    <select name="return_card_id" required class="w-full bg-black border border-purple-500/40 rounded-xl px-2.5 py-2 text-[11px] text-white focus:outline-none focus:border-amber-400">
+                        <option value="">-- Elige una Photocard de tu Álbum --</option>
+                        {% for tc in tradable_cards %}
+                        <option value="{{ tc.id }}">{{ tc.photocard.name }} ({{ tc.photocard.display_idol_name }} • {{ tc.photocard.get_rarity_display }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
                     <button type="submit" 
                             class="w-full btn-gold py-2.5 rounded-xl text-center text-[10px] font-black uppercase tracking-wider shadow active:scale-95 transition-all">
                         ✅ Aceptar Trueque
                     </button>
-                </form>
-
+                    <button type="submit" formaction="/idols/photocards/trade/{{ trade.id }}/reject/" formnovalidate
+                            class="w-full bg-rose-950 border border-rose-600 text-rose-200 py-2.5 rounded-xl text-center text-[10px] font-bold uppercase active:scale-95 transition-all">
+                        ❌ Rechazar
+                    </button>
+                </div>
+            </form>
+            {% else %}
+            <div class="flex flex-col gap-2 pt-1">
+                <p class="text-[10px] text-amber-300/90 bg-amber-950/40 border border-amber-500/30 rounded-xl p-2 text-center">
+                    Necesitas al menos 1 Photocard disponible en tu Álbum (sin estar en venta) para aceptar un intercambio.
+                </p>
                 <form action="/idols/photocards/trade/{{ trade.id }}/reject/" method="POST" class="m-0">
                     {% csrf_token %}
                     <input type="hidden" name="tg_id" value="{{ tg_id }}">
@@ -232,6 +263,7 @@
                     </button>
                 </form>
             </div>
+            {% endif %}
         </div>
         {% empty %}
         <div class="vip-panel p-8 rounded-3xl text-center text-xs text-stone-500">
@@ -246,7 +278,7 @@
             {% for st in sent_trades %}
             <div class="bg-black/70 border border-white/10 p-3 rounded-2xl flex items-center justify-between gap-2 text-xs">
                 <div class="flex items-center gap-2 min-w-0">
-                    <img src="{{ st.sender_card.photocard.image.url }}" class="w-8 h-11 object-cover rounded-lg border border-vip-gold/30">
+                    {% if st.sender_card.photocard.image %}<img src="{{ st.sender_card.photocard.image.url }}" class="w-8 h-11 object-cover rounded-lg border border-vip-gold/30">{% else %}<div class="w-8 h-11 rounded-lg border border-vip-gold/30 bg-stone-900 flex items-center justify-center text-xs">🎴</div>{% endif %}
                     <div class="flex flex-col min-w-0">
                         <span class="font-bold text-white truncate">{{ st.sender_card.photocard.name }}</span>
                         <span class="text-[9.5px] text-stone-400 truncate">Para: {{ st.receiver_username }}</span>
@@ -300,22 +332,6 @@
         filterMarketCards();
     }
 
-    function filterMarketCards() {
-        const query = (document.getElementById('marketSearchInput')?.value || '').toLowerCase().trim();
-        const items = document.querySelectorAll('.market-card-item');
-
-        items.forEach(card => {
-            const text = card.getAttribute('data-search') || '';
-            const cardRarity = card.getAttribute('data-rarity') || '';
-
-            const matchesText = text.includes(query);
-            const matchesRarity = (selectedMarketRarity === 'all' || cardRarity === selectedMarketRarity);
-
-            card.style.display = (matchesText && matchesRarity) ? 'flex' : 'none';
-        });
-    }
-
-    // Filtro por propiedad de carta en el Mercado
     let marketOwnershipFilter = 'all';
 
     function setMarketOwnershipFilter(mode) {
@@ -331,36 +347,29 @@
                 btnAll.className = 'flex-1 py-1.5 text-[9px] font-black uppercase rounded-xl text-stone-400 hover:text-white transition-all';
             }
         }
-        applyMarketFilters();
+        filterMarketCards();
     }
 
-    function applyMarketFilters() {
-        const cards = document.querySelectorAll('.market-card-item');
-        const q = (document.getElementById('market-search-input')?.value || '').toLowerCase().trim();
-        const rarity = document.getElementById('market-rarity-select')?.value || 'all';
+    function filterMarketCards() {
+        const query = (document.getElementById('marketSearchInput')?.value || '').toLowerCase().trim();
+        const items = document.querySelectorAll('.market-card-item');
 
-        cards.forEach(card => {
-            const search = card.dataset.search || '';
-            const cardRarity = card.dataset.rarity || '';
+        items.forEach(card => {
+            const text = card.getAttribute('data-search') || '';
+            const cardRarity = card.getAttribute('data-rarity') || '';
             const isOwned = card.dataset.owned === '1';
 
-            let matchesQuery = !q || search.includes(q);
-            let matchesRarity = rarity === 'all' || cardRarity === rarity;
-            let matchesOwnership = marketOwnershipFilter === 'all' || !isOwned;
+            const matchesText = !query || text.includes(query);
+            const matchesRarity = (selectedMarketRarity === 'all' || cardRarity === selectedMarketRarity);
+            const matchesOwnership = (marketOwnershipFilter === 'all' || !isOwned);
 
-            if (matchesQuery && matchesRarity && matchesOwnership) {
-                card.style.display = 'flex';
-            } else {
-                card.style.display = 'none';
-            }
+            card.style.display = (matchesText && matchesRarity && matchesOwnership) ? 'flex' : 'none';
         });
     }
 
-    document.getElementById('market-search-input')?.addEventListener('input', applyMarketFilters);
-    document.getElementById('market-rarity-select')?.addEventListener('change', applyMarketFilters);
-
 </script>
 {% endblock %}
+
 
 
 

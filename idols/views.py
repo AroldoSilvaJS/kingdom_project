@@ -1,6 +1,7 @@
 import random
 import os
 import sys
+import html as py_html
 import uuid
 import urllib.request
 from io import BytesIO
@@ -70,6 +71,10 @@ def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
     if not file_obj:
         return file_obj
     try:
+        try:
+            file_obj.seek(0)
+        except Exception:
+            pass
         img = Image.open(file_obj)
 
         # Corregir rotación automática de celular
@@ -107,6 +112,17 @@ def optimize_uploaded_image(file_obj, max_dimension=1080, quality=78):
         )
     except Exception as e:
         print(f"Error optimizando imagen: {e}")
+        try:
+            file_obj.seek(0)
+        except Exception:
+            pass
+        try:
+            orig_name = getattr(file_obj, 'name', '') or ''
+            if len(orig_name) > 80:
+                ext = os.path.splitext(orig_name)[1].lower()[:10] or '.jpg'
+                file_obj.name = f"musa_raw_{uuid.uuid4().hex[:10]}{ext}"
+        except Exception:
+            pass
         return file_obj
 
 
@@ -191,26 +207,43 @@ def idol_list(request):
             
         elif action in ['accept_request', 'reject_request']:
             req_id = request.POST.get('request_id')
+            next_idol_id = request.POST.get('next_idol_id', '').strip()
+            back_url = (
+                f'/idols/{next_idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}'
+                if next_idol_id.isdigit()
+                else f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}'
+            )
+
+            if not req_id or not str(req_id).isdigit():
+                messages.error(request, 'Identificador de petición inválido.')
+                return redirect(back_url)
+
+            is_admin = check_is_staff_or_admin(tg_id)
             with transaction.atomic():
-                req_obj = CustomRequest.objects.select_for_update().filter(id=req_id, idol__telegram_user_id=tg_id).first()
+                qs = CustomRequest.objects.select_for_update().select_related('idol').filter(id=int(req_id))
+                if not is_admin:
+                    qs = qs.filter(idol__telegram_user_id=tg_id)
+                req_obj = qs.first()
+
                 if not req_obj:
                     messages.error(request, 'Petición no encontrada o no pertenece a tu perfil.')
-                    return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-                
+                    return redirect(back_url)
+
                 if req_obj.status != 'pending':
                     messages.warning(request, f'Esta petición ya se encuentra {req_obj.get_status_display().lower()}.')
-                    return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-                
+                    return redirect(back_url)
+
                 if action == 'reject_request':
                     client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=req_obj.client_telegram_id)
                     client_wallet.add_funds(req_obj.bounty)
                     req_obj.status = 'rejected'
-                    req_obj.save()
-                    
+                    req_obj.save(update_fields=['status'])
+
                     try:
+                        safe_idol = py_html.escape(req_obj.idol.stage_name)
                         reject_text = (
                             f'⚠️ <b>Petición Especial Rechazada</b>\n\n'
-                            f'{req_obj.idol.stage_name} no pudo atender tu solicitud en este momento.\n'
+                            f'{safe_idol} no pudo atender tu solicitud en este momento.\n'
                             f'Tus <b>{req_obj.bounty} 🪙 de oro</b> han sido devueltos a tu Bóveda.'
                         )
                         send_telegram_msg(
@@ -221,24 +254,25 @@ def idol_list(request):
                         )
                     except Exception as te:
                         print(f'Error enviando telegram de rechazo: {te}')
-                        
+
                     messages.info(request, f'Petición rechazada. Se devolvieron los {req_obj.bounty} 🪙 al noble.')
-                    return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-                
+                    return redirect(back_url)
+
                 elif action == 'accept_request':
                     delivered_media = request.FILES.get('delivered_photo')
-                    if not delivered_media:
-                        messages.error(request, 'Debes adjuntar la foto o video exclusivo para completar la entrega.')
-                        return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-                    
+                    if not delivered_media or getattr(delivered_media, 'size', 0) <= 0:
+                        messages.error(request, 'Debes adjuntar una foto o video válido para completar la entrega.')
+                        return redirect(back_url)
+
                     # Límite de seguridad: 30 MB
                     if delivered_media.size > 30 * 1024 * 1024:
                         messages.error(request, 'El archivo adjunto supera el límite máximo permitido de 30 MB.')
-                        return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
-                    
-                    file_name = delivered_media.name.lower()
-                    is_video_upload = any(file_name.endswith(ext) for ext in ['.mp4', '.mov', '.webm', '.m4v', '.avi']) or 'video' in getattr(delivered_media, 'content_type', '')
-                    
+                        return redirect(back_url)
+
+                    file_name = (delivered_media.name or '').lower()
+                    content_type = (getattr(delivered_media, 'content_type', '') or '').lower()
+                    is_video_upload = any(file_name.endswith(ext) for ext in ['.mp4', '.mov', '.webm', '.m4v', '.avi']) or 'video' in content_type
+
                     if is_video_upload:
                         ext = os.path.splitext(delivered_media.name)[1].lower() or '.mp4'
                         delivered_media.name = f"antojo_{uuid.uuid4().hex[:10]}{ext}"
@@ -248,26 +282,37 @@ def idol_list(request):
                             req_obj.delivered_photo = optimize_uploaded_image(delivered_media)
                         except Exception as e:
                             print(f'Fallo optimización imagen: {e}')
+                            try:
+                                delivered_media.seek(0)
+                            except Exception:
+                                pass
+                            if len(getattr(delivered_media, 'name', '') or '') > 80:
+                                ext = os.path.splitext(delivered_media.name)[1].lower()[:10] or '.jpg'
+                                delivered_media.name = f"antojo_{uuid.uuid4().hex[:10]}{ext}"
                             req_obj.delivered_photo = delivered_media
-                    
+
                     delivery_note = request.POST.get('delivery_note', '').strip()
                     if delivery_note:
                         req_obj.delivery_note = delivery_note[:250]
-                    
+
                     req_obj.status = 'accepted'
                     req_obj.save()
-                    
-                    idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+
+                    owner_tg_id = req_obj.idol.telegram_user_id
+                    idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=owner_tg_id)
                     idol_wallet.add_funds(req_obj.bounty)
-                    grant_user_xp(request, tg_id, 25, reason='Entrega de Petición')
-                    
+                    grant_user_xp(request if owner_tg_id == tg_id else None, owner_tg_id, 25, reason='Entrega de Petición')
+
                     try:
                         media_label = '🎬 El video exclusivo' if req_obj.is_video else '📸 La foto exclusiva'
-                        note_line = f'\n💬 <b>Dedicatoria:</b> <i>«{req_obj.delivery_note}»</i>' if req_obj.delivery_note else ''
+                        safe_idol = py_html.escape(req_obj.idol.stage_name)
+                        safe_desc = py_html.escape(req_obj.description or '')
+                        safe_note = py_html.escape(req_obj.delivery_note or '')
+                        note_line = f'\n💬 <b>Dedicatoria:</b> <i>«{safe_note}»</i>' if safe_note else ''
                         accept_text = (
                             f'✨ <b>¡Tu Petición ha sido entregada!</b>\n\n'
-                            f'🌹 <b>Musa:</b> {req_obj.idol.stage_name}\n'
-                            f'📝 <b>Detalle:</b> <i>«{req_obj.description}»</i>'
+                            f'🌹 <b>Musa:</b> {safe_idol}\n'
+                            f'📝 <b>Detalle:</b> <i>«{safe_desc}»</i>'
                             f'{note_line}\n\n'
                             f'{media_label} ya se encuentra en tu Colección Privada.'
                         )
@@ -279,9 +324,9 @@ def idol_list(request):
                         )
                     except Exception as te:
                         print(f'Error enviando telegram de entrega: {te}')
-                        
+
                     messages.success(request, f'¡Petición entregada con éxito! Recibiste +{req_obj.bounty} 🪙 (+25 EXP).')
-                    return redirect(f'/idols/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
+                    return redirect(back_url)
         
     idols = list(IdolProfile.objects.filter(telegram_user_id=tg_id))
     pending_requests = CustomRequest.objects.filter(
@@ -577,13 +622,31 @@ def idol_detail(request, idol_id):
 
         return redirect(f'/idols/{idol_id}/?tg_id={tg_id}&tg_username={encode_param(tg_username)}')
 
-    # Solicitudes de Rol para la dueña de la Idol
+    # Solicitudes de Rol y Antojos Pendientes para la dueña de la Idol
     roleplay_requests = []
+    pending_custom_requests = []
     if can_edit:
         try:
             roleplay_requests = list(RoleSessionRequest.objects.filter(idol=idol).order_by('-created_at')[:8])
         except Exception:
             roleplay_requests = []
+        try:
+            pending_custom_requests = list(CustomRequest.objects.filter(idol=idol, status='pending').order_by('-is_priority', '-created_at'))
+        except Exception:
+            pending_custom_requests = []
+
+    client_wallet_balance = 0
+    has_priority_antojo = False
+    if tg_id:
+        w = Wallet.objects.filter(telegram_user_id=tg_id).first()
+        client_wallet_balance = w.balance if w else 0
+        try:
+            from economy.models import UserInventoryItem
+            has_priority_antojo = UserInventoryItem.objects.filter(
+                telegram_user_id=tg_id, item_code='priority_antojo', quantity__gt=0
+            ).exists()
+        except Exception:
+            has_priority_antojo = False
 
     context = {
         'idol': idol,
@@ -598,6 +661,9 @@ def idol_detail(request, idol_id):
         'can_edit': can_edit,
         'active_tab': active_tab,
         'roleplay_requests': roleplay_requests,
+        'pending_custom_requests': pending_custom_requests,
+        'client_wallet_balance': client_wallet_balance,
+        'has_priority_antojo': has_priority_antojo,
     }
     return render(request, 'idols/detail.html', context)
 
@@ -771,6 +837,11 @@ def unlock_post(request, post_id):
     if request.method == 'POST':
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         tg_id = resolve_safe_tg(request)
+        if not tg_id:
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': 'Sesión no identificada.'}, status=400)
+            messages.error(request, "Sesión no identificada.")
+            return redirect('/idols/feed/')
         post = get_object_or_404(Post, id=post_id)
         
         if tg_id and tg_id == post.idol.telegram_user_id:
@@ -785,72 +856,88 @@ def unlock_post(request, post_id):
             messages.info(request, "Esta publicación es de tu Idol, ya la tienes desbloqueada.")
             return redirect(f'/idols/feed/?tg_id={tg_id}')
         
-        wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-        
         if post.network == 'fans':
-            pet = Pet.objects.filter(telegram_user_id=tg_id).first()
-            precio_final = post.price
+            with transaction.atomic():
+                wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+                wallet = Wallet.objects.select_for_update().get(id=wallet.id)
 
-            if pet and pet.species == 'viper':
-                discount_rates = {1: 0.85, 2: 0.78, 3: 0.70}
-                rate = discount_rates.get(pet.evolution_stage_number, 0.85)
-                precio_final = max(1, int(post.price * rate))
+                if PostUnlock.objects.filter(post=post, client_telegram_id=tg_id).exists():
+                    if is_ajax:
+                        return JsonResponse({
+                            'success': True,
+                            'already_unlocked': True,
+                            'new_balance': wallet.balance,
+                            'media_urls': post.all_images,
+                            'is_video': post.is_video,
+                            'video_url': post.video.url if post.video else '',
+                            'message': "Ya habías desbloqueado esta publicación."
+                        })
+                    messages.info(request, "Ya habías desbloqueado esta publicación.")
+                    return redirect(f'/idols/feed/?tg_id={tg_id}')
 
-            if wallet.balance >= precio_final:
-                wallet.remove_funds(precio_final)
-                
-                if pet and pet.species == 'scorpion':
-                    cb_rates = {1: 0.05, 2: 0.10, 3: 0.15}
-                    reembolso = int(precio_final * cb_rates.get(pet.evolution_stage_number, 0.05))
-                    if reembolso > 0:
-                        wallet.add_funds(reembolso)
+                pet = Pet.objects.filter(telegram_user_id=tg_id).first()
+                precio_final = post.price
 
-                PostUnlock.objects.get_or_create(post=post, client_telegram_id=tg_id)
-                
-                idol_profile = UserProfile.objects.filter(telegram_user_id=post.idol.telegram_user_id).first()
-                tasa_idol = idol_profile.idol_commission_rate if idol_profile else 0.85
-                ganancia_idol = int(precio_final * tasa_idol)
-                
-                idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
-                idol_wallet.add_funds(ganancia_idol)
-                
-                grant_user_xp(request, tg_id, max(5, precio_final // 10), reason="Desbloqueo VIP")
-                grant_user_xp(None, post.idol.telegram_user_id, max(5, precio_final // 10), reason="Venta de Contenido VIP")
+                if pet and pet.species == 'viper':
+                    discount_rates = {1: 0.85, 2: 0.78, 3: 0.70}
+                    rate = discount_rates.get(pet.evolution_stage_number, 0.85)
+                    precio_final = max(1, int(post.price * rate))
 
-                client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
-                comprador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
-                
-                send_telegram_msg(
-                    chat_id=post.idol.telegram_user_id,
-                    text=(
-                        f"💎 <b>¡Venta VIP en KingdomFans!</b>\n\n"
-                        f"🌹 <b>Musa:</b> {post.idol.stage_name}\n"
-                        f"👤 <b>Comprador:</b> {comprador}\n"
-                        f"🪙 <b>Precio:</b> {precio_final} 🪙\n"
-                        f"💰 <b>Ganancia neta:</b> <b>+{ganancia_idol} 🪙</b> ({int(tasa_idol*100)}%)\n\n"
-                        f"Tu oro ya se encuentra disponible en tu Bóveda."
-                    ),
-                    button_text="🪙 Ver Mi Bóveda",
-                    button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={post.idol.telegram_user_id}"
-                )
-                
-                desc_txt = f" (con descuento por tu {pet.evolved_name})" if (pet and pet.species == 'viper') else ""
-                
-                if is_ajax:
-                    return JsonResponse({
-                        'success': True,
-                        'new_balance': wallet.balance,
-                        'precio_pagado': precio_final,
-                        'media_urls': post.all_images,
-                        'is_video': post.is_video,
-                        'video_url': post.video.url if post.video else '',
-                        'message': f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt})"
-                    })
-                messages.success(request, f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt})")
-            else:
-                if is_ajax:
-                    return JsonResponse({'success': False, 'error': 'No tienes suficiente oro en tu Bóveda.'}, status=400)
-                messages.error(request, "No tienes suficiente oro en tu Bóveda.")
+                if wallet.balance >= precio_final:
+                    wallet.remove_funds(precio_final)
+                    
+                    if pet and pet.species == 'scorpion':
+                        cb_rates = {1: 0.05, 2: 0.10, 3: 0.15}
+                        reembolso = int(precio_final * cb_rates.get(pet.evolution_stage_number, 0.05))
+                        if reembolso > 0:
+                            wallet.add_funds(reembolso)
+
+                    PostUnlock.objects.get_or_create(post=post, client_telegram_id=tg_id)
+
+                    idol_profile = UserProfile.objects.filter(telegram_user_id=post.idol.telegram_user_id).first()
+                    tasa_idol = idol_profile.idol_commission_rate if idol_profile else 0.85
+                    ganancia_idol = int(precio_final * tasa_idol)
+
+                    idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=post.idol.telegram_user_id)
+                    idol_wallet.add_funds(ganancia_idol)
+
+                    grant_user_xp(request, tg_id, max(5, precio_final // 10), reason="Desbloqueo VIP")
+                    grant_user_xp(None, post.idol.telegram_user_id, max(5, precio_final // 10), reason="Venta de Contenido VIP")
+
+                    client_prof = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+                    comprador = client_prof.username if (client_prof and client_prof.username) else f"Noble_{tg_id}"
+
+                    send_telegram_msg(
+                        chat_id=post.idol.telegram_user_id,
+                        text=(
+                            f"💎 <b>¡Venta VIP en KingdomFans!</b>\n\n"
+                            f"🌹 <b>Musa:</b> {post.idol.stage_name}\n"
+                            f"👤 <b>Comprador:</b> {comprador}\n"
+                            f"🪙 <b>Precio:</b> {precio_final} 🪙\n"
+                            f"💰 <b>Ganancia neta:</b> <b>+{ganancia_idol} 🪙</b> ({int(tasa_idol*100)}%)\n\n"
+                            f"Tu oro ya se encuentra disponible en tu Bóveda."
+                        ),
+                        button_text="🪙 Ver Mi Bóveda",
+                        button_url=f"https://kingdom-pleasure-app.onrender.com/economy/wallet/?tg_id={post.idol.telegram_user_id}"
+                    )
+
+                    desc_txt = f" (con descuento por tu {pet.evolved_name})" if (pet and pet.species == 'viper') else ""
+
+                    if is_ajax:
+                        return JsonResponse({
+                            'success': True,
+                            'new_balance': wallet.balance,
+                            'precio_pagado': precio_final,
+                            'media_urls': post.all_images,
+                            'is_video': post.is_video,
+                            'video_url': post.video.url if post.video else '',
+                            'message': f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt})"
+                        })
+                    messages.success(request, f"¡Foto desbloqueada con éxito! (-{precio_final} 🪙{desc_txt})")
+                else:
+                    if is_ajax:
+                        return JsonResponse({'success': False, 'error': 'No tienes suficiente oro en tu Bóveda.'}, status=400)
+                    messages.error(request, "No tienes suficiente oro en tu Bóveda.")
         else:
             if is_ajax:
                 return JsonResponse({
@@ -1065,7 +1152,7 @@ def my_collection(request):
         delivered_antojos = CustomRequest.objects.filter(
             client_telegram_id=tg_id,
             status='accepted'
-        ).exclude(delivered_photo='').select_related('idol').order_by('-created_at')
+        ).exclude(delivered_photo='').exclude(delivered_photo__isnull=True).select_related('idol').order_by('-created_at')
         
     return render(request, 'idols/collection.html', {
         'tg_id': tg_id, 
@@ -1080,6 +1167,11 @@ def send_tip(request, post_id):
     if request.method == 'POST':
         is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
         tg_id = resolve_safe_tg(request)
+        if not tg_id:
+            if is_ajax:
+                return JsonResponse({'success': False, 'error': 'Sesión no identificada.'}, status=400)
+            messages.error(request, "Sesión no identificada.")
+            return redirect('/idols/feed/')
         post = get_object_or_404(Post, id=post_id)
         
         try:
@@ -1152,7 +1244,10 @@ def send_tip(request, post_id):
 def create_custom_request(request, idol_id):
     if request.method == 'POST':
         tg_id = resolve_safe_tg(request)
-        profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
+        if not tg_id:
+            messages.error(request, "Sesión no identificada.")
+            return redirect(f'/idols/{idol_id}/')
+        profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
         tg_username = request.POST.get('tg_username') or (profile.username if profile else 'Noble')
         idol = get_object_or_404(IdolProfile, id=idol_id)
         
@@ -1170,34 +1265,39 @@ def create_custom_request(request, idol_id):
             messages.error(request, "La ofrenda mínima para un antojo es de 100 🪙 y requiere una descripción.")
             return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
             
-        client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
-        if not client_wallet.remove_funds(bounty):
-            messages.error(request, f"No tienes suficiente oro ({bounty} 🪙) en tu Bóveda.")
-            return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
+        with transaction.atomic():
+            client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
+            client_wallet = Wallet.objects.select_for_update().get(id=client_wallet.id)
+            if not client_wallet.remove_funds(bounty):
+                messages.error(request, f"No tienes suficiente oro ({bounty} 🪙) en tu Bóveda (tienes {client_wallet.balance} 🪙).")
+                return redirect(f'/idols/{idol_id}/?tg_id={tg_id}')
 
-        from economy.models import UserInventoryItem
-        has_priority_stamp = UserInventoryItem.consume_item(tg_id, 'priority_antojo', 1)
-            
-        CustomRequest.objects.create(
-            idol=idol,
-            client_telegram_id=tg_id,
-            client_username=tg_username,
-            description=description,
-            bounty=bounty,
-            is_priority=has_priority_stamp,
-            status='pending'
-        )
+            from economy.models import UserInventoryItem
+            has_priority_stamp = UserInventoryItem.consume_item(tg_id, 'priority_antojo', 1)
+
+            CustomRequest.objects.create(
+                idol=idol,
+                client_telegram_id=tg_id,
+                client_username=tg_username,
+                description=description,
+                bounty=bounty,
+                is_priority=has_priority_stamp,
+                status='pending'
+            )
 
         extra_pri_msg = "⚡ (¡Sello Prioritario aplicado! Tu solicitud aparecerá primera en su bandeja)" if has_priority_stamp else ""
 
+        safe_idol = py_html.escape(idol.stage_name)
+        safe_user = py_html.escape(tg_username)
+        safe_desc = py_html.escape(description)
         send_telegram_msg(
             chat_id=idol.telegram_user_id,
             text=(
                 f"{'⚡ <b>¡PETICIÓN PRIORITARIA DE ANTOJO!</b> ⚡' if has_priority_stamp else '📬 <b>¡Nueva Petición Especial!</b>'}\n\n"
-                f"🌹 <b>Para tu Musa:</b> {idol.stage_name}\n"
-                f"👤 <b>Solicitante:</b> {tg_username}\n"
+                f"🌹 <b>Para tu Musa:</b> {safe_idol}\n"
+                f"👤 <b>Solicitante:</b> {safe_user}\n"
                 f"🪙 <b>Recompensa en custodia:</b> <b>+{bounty} 🪙</b>\n"
-                f"📝 <b>Detalle:</b> <i>«{description}»</i>\n\n"
+                f"📝 <b>Detalle:</b> <i>«{safe_desc}»</i>\n\n"
                 f"Ingresa a tu panel de Idols para atenderla."
             ),
             button_text=f"📸 Atender Petición de {idol.stage_name}",
@@ -1893,6 +1993,15 @@ def photocards_market(request):
         status='pending'
     ).select_related('sender_card__photocard', 'receiver_card__photocard').order_by('-created_at')
 
+    tradable_cards = UserPhotocard.objects.filter(
+        telegram_user_id=tg_id,
+        is_for_sale=False
+    ).select_related('photocard').order_by('photocard__name')
+
+    active_tab = request.GET.get('tab', 'cards')
+    if active_tab not in ('cards', 'trades'):
+        active_tab = 'cards'
+
     return render(request, 'idols/photocards_market.html', {
         'tg_id': tg_id,
         'wallet': wallet,
@@ -1900,12 +2009,14 @@ def photocards_market(request):
         'my_sales': my_sales,
         'received_trades': received_trades,
         'sent_trades': sent_trades,
+        'tradable_cards': tradable_cards,
+        'active_tab': active_tab,
     })
 
 
 def photocard_sell_action(request, user_card_id):
+    tg_id = resolve_safe_tg(request)
     if request.method == 'POST':
-        tg_id = resolve_safe_tg(request)
         user_card = get_object_or_404(UserPhotocard, id=user_card_id, telegram_user_id=tg_id)
         mode = request.POST.get('mode', 'list')
 
@@ -1927,28 +2038,34 @@ def photocard_sell_action(request, user_card_id):
             user_card.save()
             messages.info(request, f"Venta de «{user_card.photocard.name}» cancelada. Regresó a tu Álbum.")
 
-    return redirect('/idols/photocards/album/')
+        if request.POST.get('next') == 'market':
+            return redirect(f'/idols/photocards/market/?tg_id={tg_id}' if tg_id else '/idols/photocards/market/')
+
+    return redirect(f'/idols/photocards/album/?tg_id={tg_id}' if tg_id else '/idols/photocards/album/')
 
 
 def photocard_buy_action(request, user_card_id):
     if request.method == 'POST':
         tg_id = resolve_safe_tg(request)
+        if not tg_id:
+            messages.error(request, "Sesión no identificada.")
+            return redirect('/idols/photocards/market/')
         buyer_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=tg_id)
 
         with transaction.atomic():
             user_card = UserPhotocard.objects.select_for_update().filter(id=user_card_id, is_for_sale=True).first()
             if not user_card:
                 messages.error(request, "Esta carta ya ha sido adquirida por otro noble o retirada del mercado.")
-                return redirect('/idols/photocards/market/')
+                return redirect(f'/idols/photocards/market/?tg_id={tg_id}' if tg_id else '/idols/photocards/market/')
 
             if user_card.telegram_user_id == tg_id:
                 messages.info(request, "No puedes comprar tu propia carta.")
-                return redirect('/idols/photocards/market/')
+                return redirect(f'/idols/photocards/market/?tg_id={tg_id}' if tg_id else '/idols/photocards/market/')
 
             price = user_card.sale_price or 50
             if buyer_wallet.balance < price:
                 messages.error(request, f"No tienes suficiente oro ({price} 🪙 necesarios).")
-                return redirect('/idols/photocards/market/')
+                return redirect(f'/idols/photocards/market/?tg_id={tg_id}' if tg_id else '/idols/photocards/market/')
 
             buyer_wallet.remove_funds(price)
             vendedor_id = user_card.telegram_user_id
@@ -2202,11 +2319,11 @@ def photocard_fusion(request):
 # ==========================================
 
 def create_trade_offer(request, user_card_id):
+    tg_id = resolve_safe_tg(request)
     if request.method == 'POST':
-        tg_id = resolve_safe_tg(request)
         sender_card = get_object_or_404(UserPhotocard, id=user_card_id, telegram_user_id=tg_id, is_for_sale=False)
         
-        target_raw = request.POST.get('target_user', '').strip()
+        target_raw = (request.POST.get('target_user') or request.POST.get('target_tg_id') or '').strip()
         receiver_id = None
         receiver_name = 'Noble'
 
@@ -2226,7 +2343,7 @@ def create_trade_offer(request, user_card_id):
 
         if receiver_id is None or receiver_id == tg_id:
             messages.error(request, "Debes seleccionar a un destinatario válido.")
-            return redirect('/idols/photocards/album/')
+            return redirect(f'/idols/photocards/album/?tg_id={tg_id}' if tg_id else '/idols/photocards/album/')
 
         sender_profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
         s_name = sender_profile.username if (sender_profile and sender_profile.username) else f"Noble_{tg_id}"
@@ -2258,9 +2375,9 @@ def create_trade_offer(request, user_card_id):
         else:
             messages.success(request, "📢 ¡Tu carta ha sido publicada en el Tablón de Intercambios del Mercado para cualquiera!")
 
-        return redirect('/idols/photocards/market/')
+        return redirect(f'/idols/photocards/market/?tg_id={tg_id}&tab=trades' if tg_id else '/idols/photocards/market/?tab=trades')
 
-    return redirect('/idols/photocards/album/')
+    return redirect(f'/idols/photocards/album/?tg_id={tg_id}' if tg_id else '/idols/photocards/album/')
 
 
 def handle_trade_offer(request, trade_id, action):
@@ -2279,7 +2396,7 @@ def handle_trade_offer(request, trade_id, action):
                 trade.status = 'cancelled'
                 trade.save()
                 messages.error(request, "⚠️ El intercambio no se pudo completar: el emisor ya no posee esta carta o la puso a la venta.")
-                return redirect('/idols/photocards/market/')
+                return redirect(f'/idols/photocards/market/?tg_id={tg_id}&tab=trades' if tg_id else '/idols/photocards/market/?tab=trades')
 
             receiver_card = None
             if return_card_id and str(return_card_id).isdigit():
@@ -2291,7 +2408,7 @@ def handle_trade_offer(request, trade_id, action):
 
             if not receiver_card:
                 messages.error(request, "⚠️ Debes seleccionar una carta válida de tu colección para completar el intercambio recíproco.")
-                return redirect('/idols/photocards/market/')
+                return redirect(f'/idols/photocards/market/?tg_id={tg_id}&tab=trades' if tg_id else '/idols/photocards/market/?tab=trades')
 
             sender_card.telegram_user_id = tg_id
             sender_card.is_for_sale = False
@@ -2343,7 +2460,7 @@ def handle_trade_offer(request, trade_id, action):
         trade.save()
         messages.info(request, "Propuesta de intercambio cancelada.")
 
-    return redirect('/idols/photocards/market/')
+    return redirect(f'/idols/photocards/market/?tg_id={tg_id}&tab=trades' if tg_id else '/idols/photocards/market/?tab=trades')
 
  # ==============================================================================
 # 🎭 MÓDULO DE DISPONIBILIDAD & SOLICITUDES DE ROL
@@ -2388,10 +2505,14 @@ def request_roleplay_session(request, idol_id):
         return redirect(f'/idols/{idol_id}/')
     
     tg_id = resolve_safe_tg(request)
-    idol = get_object_or_404(IdolProfile, id=idol_id)
-    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first() if tg_id else None
-    client_username = request.POST.get('client_username') or (profile.username if profile else 'Noble')
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('ajax') == '1'
+    if not tg_id:
+        if is_ajax: return JsonResponse({'success': False, 'error': 'Sesión no identificada.'}, status=400)
+        messages.error(request, "Sesión no identificada.")
+        return redirect(f'/idols/{idol_id}/')
+    idol = get_object_or_404(IdolProfile, id=idol_id)
+    profile = UserProfile.objects.filter(telegram_user_id=tg_id).first()
+    client_username = request.POST.get('client_username') or (profile.username if profile else 'Noble')
 
     if tg_id and tg_id == idol.telegram_user_id:
         err = "No puedes solicitarte una sesión de rol a ti misma."
@@ -2472,18 +2593,27 @@ def handle_roleplay_request(request, request_id, action):
     from economy.models import Wallet
 
     if action == 'accept' and (is_owner or is_admin):
-        session_req.status = 'accepted'
-        session_req.save(update_fields=['status', 'updated_at'])
+        with transaction.atomic():
+            locked_req = RoleSessionRequest.objects.select_for_update().get(id=session_req.id)
+            if locked_req.status != 'pending':
+                messages.info(request, "Esta solicitud ya fue procesada anteriormente.")
+                return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+            locked_req.status = 'accepted'
+            locked_req.save(update_fields=['status', 'updated_at'])
         client_msg = f"✨ <b>¡{idol.stage_name} ha ACEPTADO tu solicitud de rol!</b>\nTemática: {session_req.theme}\nTe contactará en breve por Telegram."
         send_telegram_msg(chat_id=session_req.client_telegram_id, text=client_msg)
         messages.success(request, f"¡Petición aceptada! Ya puedes abrir chat con @{session_req.client_username}.")
 
     elif action == 'complete' and (is_owner or is_admin):
         with transaction.atomic():
-            session_req.status = 'completed'
-            session_req.save(update_fields=['status', 'updated_at'])
+            locked_req = RoleSessionRequest.objects.select_for_update().get(id=session_req.id)
+            if locked_req.status not in ('pending', 'accepted'):
+                messages.info(request, "Esta sesión de rol ya fue finalizada o cancelada.")
+                return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+            locked_req.status = 'completed'
+            locked_req.save(update_fields=['status', 'updated_at'])
             idol_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=idol.telegram_user_id)
-            idol_wallet.add_funds(session_req.bounty)
+            idol_wallet.add_funds(locked_req.bounty)
             idol.services_done += 1
             idol.save(update_fields=['services_done'])
         
@@ -2496,16 +2626,21 @@ def handle_roleplay_request(request, request_id, action):
 
     elif action == 'reject' and (is_owner or is_admin):
         with transaction.atomic():
-            session_req.status = 'rejected'
-            session_req.save(update_fields=['status', 'updated_at'])
-            client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=session_req.client_telegram_id)
-            client_wallet.add_funds(session_req.bounty)
+            locked_req = RoleSessionRequest.objects.select_for_update().get(id=session_req.id)
+            if locked_req.status != 'pending':
+                messages.info(request, "Esta solicitud ya fue procesada anteriormente.")
+                return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+            locked_req.status = 'rejected'
+            locked_req.save(update_fields=['status', 'updated_at'])
+            client_wallet, _ = Wallet.objects.get_or_create(telegram_user_id=locked_req.client_telegram_id)
+            client_wallet.add_funds(locked_req.bounty)
 
         rej_msg = f"ℹ️ <b>Tu solicitud de rol para {idol.stage_name} no pudo ser atendida.</b>\nTus {session_req.bounty} 🪙 fueron devueltos a tu bóveda."
         send_telegram_msg(chat_id=session_req.client_telegram_id, text=rej_msg)
         messages.info(request, f"Petición rechazada. Fondos reembolsados a @{session_req.client_username}.")
 
     return redirect(f'/idols/{idol.id}/?tg_id={tg_id}')
+
 
 
 

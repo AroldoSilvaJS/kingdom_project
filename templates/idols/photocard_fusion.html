@@ -120,10 +120,10 @@
         <!-- 1. Cuadrícula Comunes -->
         <div id="grid-common" class="grid grid-cols-3 gap-2.5 cards-pool-grid">
             {% for c in commons %}
-            <div onclick="toggleCardSelection(this, {{ c.id }}, '{{ c.photocard.image.url }}', '{{ c.photocard.name|escapejs }}')" 
+            <div onclick="toggleCardSelection(this, {{ c.id }}, '{% if c.photocard.image %}{{ c.photocard.image.url }}{% endif %}', '{{ c.photocard.name|escapejs }}')" 
                  class="selectable-card relative aspect-[5/7.2] rounded-2xl overflow-hidden border-2 border-stone-600 bg-black cursor-pointer shadow-lg active:scale-95 transition-all select-none group"
-                 data-id="{{ c.id }}" data-tier="common" data-img="{{ c.photocard.image.url }}" data-name="{{ c.photocard.name }}">
-                <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
+                 data-id="{{ c.id }}" data-tier="common" data-img="{% if c.photocard.image %}{{ c.photocard.image.url }}{% endif %}" data-name="{{ c.photocard.name }}">
+                {% if c.photocard.image %}<img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">{% else %}<div class="w-full h-full flex items-center justify-center text-2xl bg-stone-900 text-stone-500">🎴</div>{% endif %}
                 <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
                 <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-purple-600 border border-white text-white flex items-center justify-center text-xs font-black shadow-lg animate-bounce">✓</div>
                 <div class="absolute bottom-1 inset-x-1 bg-black/85 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">
@@ -140,10 +140,10 @@
         <!-- 2. Cuadrícula Raras -->
         <div id="grid-rare" class="hidden grid grid-cols-3 gap-2.5 cards-pool-grid">
             {% for c in rares %}
-            <div onclick="toggleCardSelection(this, {{ c.id }}, '{{ c.photocard.image.url }}', '{{ c.photocard.name|escapejs }}')" 
+            <div onclick="toggleCardSelection(this, {{ c.id }}, '{% if c.photocard.image %}{{ c.photocard.image.url }}{% endif %}', '{{ c.photocard.name|escapejs }}')" 
                  class="selectable-card relative aspect-[5/7.2] rounded-2xl overflow-hidden border-2 border-blue-500 bg-black cursor-pointer shadow-lg active:scale-95 transition-all select-none group"
-                 data-id="{{ c.id }}" data-tier="rare" data-img="{{ c.photocard.image.url }}" data-name="{{ c.photocard.name }}">
-                <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
+                 data-id="{{ c.id }}" data-tier="rare" data-img="{% if c.photocard.image %}{{ c.photocard.image.url }}{% endif %}" data-name="{{ c.photocard.name }}">
+                {% if c.photocard.image %}<img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">{% else %}<div class="w-full h-full flex items-center justify-center text-2xl bg-stone-900 text-stone-500">🎴</div>{% endif %}
                 <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
                 <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-blue-600 border border-white text-white flex items-center justify-center text-xs font-black shadow-lg animate-bounce">✓</div>
                 <div class="absolute bottom-1 inset-x-1 bg-black/85 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">
@@ -160,10 +160,10 @@
         <!-- 3. Cuadrícula Épicas -->
         <div id="grid-epic" class="hidden grid grid-cols-3 gap-2.5 cards-pool-grid">
             {% for c in epics %}
-            <div onclick="toggleCardSelection(this, {{ c.id }}, '{{ c.photocard.image.url }}', '{{ c.photocard.name|escapejs }}')" 
+            <div onclick="toggleCardSelection(this, {{ c.id }}, '{% if c.photocard.image %}{{ c.photocard.image.url }}{% endif %}', '{{ c.photocard.name|escapejs }}')" 
                  class="selectable-card relative aspect-[5/7.2] rounded-2xl overflow-hidden border-2 border-purple-500 bg-black cursor-pointer shadow-lg active:scale-95 transition-all select-none group"
-                 data-id="{{ c.id }}" data-tier="epic" data-img="{{ c.photocard.image.url }}" data-name="{{ c.photocard.name }}">
-                <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
+                 data-id="{{ c.id }}" data-tier="epic" data-img="{% if c.photocard.image %}{{ c.photocard.image.url }}{% endif %}" data-name="{{ c.photocard.name }}">
+                {% if c.photocard.image %}<img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">{% else %}<div class="w-full h-full flex items-center justify-center text-2xl bg-stone-900 text-stone-500">🎴</div>{% endif %}
                 <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
                 <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-purple-600 border border-white text-white flex items-center justify-center text-xs font-black shadow-lg animate-bounce">✓</div>
                 <div class="absolute bottom-1 inset-x-1 bg-black/85 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">
@@ -180,10 +180,10 @@
         <!-- 4. Cuadrícula Legendarias -->
         <div id="grid-legendary" class="hidden grid grid-cols-3 gap-2.5 cards-pool-grid">
             {% for c in legendaries %}
-            <div onclick="toggleCardSelection(this, {{ c.id }}, '{{ c.photocard.image.url }}', '{{ c.photocard.name|escapejs }}')" 
+            <div onclick="toggleCardSelection(this, {{ c.id }}, '{% if c.photocard.image %}{{ c.photocard.image.url }}{% endif %}', '{{ c.photocard.name|escapejs }}')" 
                  class="selectable-card relative aspect-[5/7.2] rounded-2xl overflow-hidden border-2 border-yellow-500 bg-black cursor-pointer shadow-lg active:scale-95 transition-all select-none group"
-                 data-id="{{ c.id }}" data-tier="legendary" data-img="{{ c.photocard.image.url }}" data-name="{{ c.photocard.name }}">
-                <img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">
+                 data-id="{{ c.id }}" data-tier="legendary" data-img="{% if c.photocard.image %}{{ c.photocard.image.url }}{% endif %}" data-name="{{ c.photocard.name }}">
+                {% if c.photocard.image %}<img src="{{ c.photocard.image.url }}" class="w-full h-full object-cover">{% else %}<div class="w-full h-full flex items-center justify-center text-2xl bg-stone-900 text-stone-500">🎴</div>{% endif %}
                 <div class="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors"></div>
                 <div class="check-mark hidden absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-yellow-500 border border-black text-black flex items-center justify-center text-xs font-black shadow-lg animate-bounce">✓</div>
                 <div class="absolute bottom-1 inset-x-1 bg-black/85 backdrop-blur-sm p-1 rounded-xl text-center truncate text-[8.5px] text-white font-bold border border-white/10">

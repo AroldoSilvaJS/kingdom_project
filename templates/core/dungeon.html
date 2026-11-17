@@ -76,12 +76,17 @@
             const formData = new FormData();
             formData.append('tg_id', '{{ tg_id }}');
             formData.append('item_key', 'dungeon_bail');
+            formData.append('ajax', '1');
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
             try {
                 const resp = await fetch("/economy/bazar/buy/", {
                     method: 'POST',
                     body: formData,
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    }
                 });
                 const data = await resp.json();
                 if (data.success) {
