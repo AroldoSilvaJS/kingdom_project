@@ -1,16 +1,22 @@
 <!-- templates/idols/feed.html -->
 {% extends 'base.html' %}
+{% load static %}
 
 {% block content %}
 <div class="flex flex-col gap-4 mt-1 pb-44 max-w-md mx-auto select-none" onclick="dismissAllReactionDocks(event)">
     
     <!-- 👑 ENCABEZADO PRINCIPAL & PUBLICAR -->
     <div class="flex justify-between items-center px-1">
-        <div>
-            <span class="text-[9px] uppercase font-bold tracking-[0.25em] text-vip-gold/80 block">Comunidad de la Corte</span>
-            <h1 class="font-serif text-xl font-black text-gold-gradient uppercase tracking-wider leading-tight">
-                Muro Clandestino
-            </h1>
+        <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-2xl bg-fuchsia-950/70 border border-fuchsia-500/40 flex items-center justify-center p-1.5 shadow-[0_0_12px_rgba(217,70,239,0.25)] shrink-0">
+                <img src="{% static 'img/logo_muro_vip.png' %}" alt="Muro VIP" class="w-full h-full object-contain">
+            </div>
+            <div>
+                <span class="text-[9px] uppercase font-bold tracking-[0.25em] text-vip-gold/80 block">Comunidad de la Corte</span>
+                <h1 class="font-serif text-lg sm:text-xl font-black text-gold-gradient uppercase tracking-wider leading-tight">
+                    Muro Clandestino
+                </h1>
+            </div>
         </div>
         
         <div class="flex items-center gap-2">
